@@ -1,0 +1,106 @@
+:root{
+    --primary-color: #1F1D59;
+    --secundary-color: #2128BF;
+    --terciary-color: #EE1D23;
+    --quartenary-color: #F2F2F2;
+    --descr-color: #55658C;
+    --font-principal: 'Sansation';
+}
+
+body{
+    padding: auto;
+    background-image: url(/public/imgs/Fundo_img.jpg);
+    background-size: cover; /* cobre toda a tela */
+    background-position: center;
+    background-repeat: no-repeat;
+    background-attachment: fixed; /* se quiser o efeito parallax */
+}
+main{
+    padding: auto;
+    height: auto;
+    width: 100%;
+}
+div.back{
+    width: 100%;
+    height: auto;
+    color: var(--quartenary-color);
+    align-items: center;
+    justify-content: center;
+    font-family: 'Sansation';
+    padding: auto;
+}
+
+nav.backgroud{
+    background-color: var(--quartenary-color);
+    box-shadow: 0px 0px 10px var(--quartenary-color);
+}
+
+footer{
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+div.clientes{
+    background-color:#FFFFFF;
+    align-items: center;
+    width: 100%;
+    align-items: center;
+    justify-content: center;
+    height: 65px;
+}
+
+
+
+div.descr{
+    text-align: center;
+    font-family: 'Sansation';
+    font-size: 10px;
+    
+
+}
+
+div.redes{
+    background-color: var(--primary-color);
+    width: 100%;
+    min-height: 155px;
+    justify-content: center;
+    align-items: center;
+    color: var(--quartenary-color);
+    font-family: 'Sansation';
+
+}
+
+
+div.logo-footer{
+    align-items: center;
+    justify-content: center;
+}
+p.neves{
+    font-size: 12px;
+    color: var(--descr-color);
+}
+
+div.background-nav{
+    background-color: var(--secundary-color);
+    padding: 10px;
+    font-family: var(--font-principal);
+    border-radius: 15px;
+}
+div.background-nav > ul > li > a{
+    color: var(--quartenary-color);
+}
+
+a.btn-style{
+    background-color: var(--terciary-color);
+    padding: 10px;
+    text-decoration: none;
+    border-radius: 8px;
+    transition: 0.5s ease;
+}
+a.btn-style:hover{
+    background-color: var(--quartenary-color);
+    color: var(--terciary-color);
+    box-shadow: 0px 0px 8px var(--quartenary-color);
+}

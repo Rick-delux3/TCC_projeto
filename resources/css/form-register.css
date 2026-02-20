@@ -1,0 +1,292 @@
+:root{
+    --primary-color: #1F1D59;
+    --secundary-color: #2128BF;
+    --terciary-color: #EE1D23;
+    --quartenary-color: #F2F2F2;
+    --descr-color: #55658C;
+    --font-principal: 'Sansation';
+}
+
+
+div.back{
+    width: 100%;
+    min-height: calc(100vh - 180px);
+    color: var(--quartenary-color);
+    align-items: center;
+    justify-content: center;
+    font-family: 'Sansation';
+    padding: 32px 16px;
+    animation: slideIn 0.8s ease-out forwards;
+}
+div.form{
+    width: 100%;
+    align-items: center;
+    justify-content: center;
+    max-width: 880px;
+    margin: 0 auto;
+}
+
+div.register-split{
+    display: grid !important;
+    grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+    width: 100%;
+    max-width: 900px;
+    background: linear-gradient(145deg, #1f1d59 0%, #2128bf 100%);
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 20px 45px rgba(31, 29, 89, 0.35);
+}
+
+form.row{
+   padding: 0;
+}
+
+input{
+    border-radius: 4px !important;
+    background-color: var(--quartenary-color) !important;
+    border: 2px solid var(--primary-color) !important;
+    margin-bottom: 10px;
+    color: var(--primary-color) !important;
+}
+
+input::placeholder{
+    color: var(--descr-color) !important;
+    font-weight: bold;
+}
+
+input:focus{
+    box-shadow: 0px 0px 8px var(--primary-color) !important;
+}
+div.contain{
+    background-color: #2128BF;
+    width: 100%;
+    max-width: none;
+    padding: 28px 24px;
+    border-radius: 0;
+    box-shadow: none;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+div.col-13{
+    background-image: linear-gradient(rgba(31, 29, 89, 0.08), rgba(31, 29, 89, 0.18)), url(/public/imgs/segure-chave-a-mao-ao-ar-livre.jpg);
+    width: 100%;
+    max-width: none;
+    min-height: 100%;
+    padding: 0;
+    border-radius: 0;
+    box-shadow: none;
+    background-size: cover; /* cobre toda a tela */
+    background-position: center;
+    background-repeat: no-repeat;
+}
+div.col-12 > h2{
+    background-color: var(--primary-color);
+    text-align: center;
+    font-size: 24px;
+    color: var(--quartenary-color);
+    padding: 10px;
+    font-weight: bold;
+    border-radius: 4px;
+    margin-bottom: 14px;
+}
+
+
+button.botao_cadas{
+    margin: auto;
+    background-color: var(--terciary-color);
+    padding: 10px 14px;
+    width: 100%;
+    border-radius: 4px;
+    transition: 0.4s ease;
+    margin: 8px 0 14px 0;
+    font-weight: bold;
+}
+
+button.botao_cadas:hover{
+    background-color: var(--quartenary-color);
+    color: var(--terciary-color);
+    box-shadow: 0px 0px 3px var(--primary-color);
+}
+
+a.link-login{
+    color: var(--terciary-color);
+    font-weight: bold;
+    transition: 0.3s ease;
+}
+a.link-login:hover{
+    color: var(--quartenary-color) ;
+}
+
+div.form-login{
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    max-width: 430px;
+    margin: 0 auto;
+}
+
+div.col-12_2{
+    font-family: var(--font-principal);
+    background-color: #2128BF;
+    width: 100%;
+    max-width: 430px;
+    padding: 24px;
+    border-radius: 8px;
+    box-shadow: 0px 0px 8px var(--secundary-color);
+}
+
+div.col-12_2 > h2{
+    text-align: center;
+    font-weight: bold;
+    font-size: 24px;
+    color: var(--quartenary-color);
+    background-color: var(--primary-color);
+    padding: 10px;
+    border-radius: 4px;
+}
+
+button.button-login{
+    background-color: var(--terciary-color);
+    padding: 10px 14px;
+    width: 100%;
+    border-radius: 4px;
+    transition: 0.4s ease;
+    font-weight: bold;
+}
+
+button.button-login:hover{
+    color: var(--terciary-color);
+    background-color: var(--quartenary-color);
+}
+
+button.button-login:active{
+    transform: scale(0.9);
+}
+
+a.link-register{
+    transition: 0.5s ease;
+    font-weight: bold;
+    color: var(--terciary-color);
+}
+
+a.link-register:hover{
+    color: var(--quartenary-color);
+}
+
+.password-recovery-box{
+    margin: 8px 0 14px;
+    padding: 10px 12px;
+    border-radius: 6px;
+    border-left: 3px solid var(--terciary-color);
+    background: rgba(31, 29, 89, 0.38);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.password-recovery-label{
+    font-size: 13px;
+    color: var(--quartenary-color);
+    font-weight: 700;
+    letter-spacing: 0.2px;
+}
+
+.password-recovery-link{
+    color: var(--terciary-color);
+    background: var(--quartenary-color);
+    padding: 6px 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 700;
+    text-decoration: none;
+    text-transform: uppercase;
+    transition: 0.3s ease;
+}
+
+.password-recovery-link:hover{
+    color: var(--quartenary-color);
+    background: var(--terciary-color);
+}
+
+select.select{
+    border-radius: 4px;
+    appearance: none;
+    cursor: pointer;
+    font-weight: bold;
+    margin-bottom: 10px;
+    background-color: var(--secundary-color);
+    color: var(--quartenary-color);
+    border: 2px solid var(--primary-color);
+
+
+
+
+}
+
+.select option{
+    color: var(--quartenary-color);
+}
+
+label.form-label{
+    font-size: 14px;
+    margin-bottom: 4px;
+    font-weight: bold;
+}
+
+p{
+    margin-bottom: 8px;
+    font-size: 14px;
+}
+
+@media (max-width: 991px){
+    div.back{
+        min-height: auto;
+        padding: 20px 12px;
+    }
+
+    div.register-split{
+        grid-template-columns: 1fr;
+        max-width: 560px;
+        border-radius: 8px;
+    }
+
+    div.contain{
+        max-width: 560px;
+        border-radius: 8px;
+        padding: 22px 20px;
+    }
+
+    div.col-13{
+        display: none;
+    }
+
+    div.col-12_2{
+        max-width: 520px;
+    }
+}
+
+@media (max-width: 576px){
+    div.contain,
+    div.col-12_2{
+        padding: 16px;
+    }
+
+    div.col-12 > h2,
+    div.col-12_2 > h2{
+        font-size: 20px;
+    }
+}
+
+@keyframes slideIn {
+    0% {
+        opacity: 0;
+        transform: translateY(20px); /* sobe 20px */
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}

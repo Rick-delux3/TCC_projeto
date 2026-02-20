@@ -1,0 +1,116 @@
+:root{
+    --primary-color: #1F1D59;
+    --secundary-color: #2128BF;
+    --terciary-color: #EE1D23;
+    --quartenary-color: #F2F2F2;
+    --descr-color: #55658C;
+    --font-principal: 'Sansation';
+}
+
+
+div.back{
+    width: 100%;
+    height: auto;
+    color: var(--quartenary-color);
+    align-items: center;
+    justify-content: center;
+    font-family: 'Sansation';
+    padding: 50px;
+}
+div.form{
+    align-items: center;
+    justify-content: center;
+}
+
+input{
+    border-radius: 5px !important;
+}
+div.col-12{
+    background-color: #2128BF;
+    width: 600px;
+    padding: 12px;
+    border-radius: 20px;
+    box-shadow: 0px 0px 8px var(--secundary-color);
+}
+div.col-12 > h2{
+    background-color: var(--primary-color);
+    text-align: center;
+    font-size: 30px;
+    color: var(--quartenary-color);
+    padding: 12px;
+}
+
+
+button.botao_cadas{
+    background-color: var(--terciary-color);
+    padding: 10px;
+    width: 100%;
+    border-radius: 10px;
+    transition: 0.4s ease;
+}
+
+button.botao_cadas:hover{
+    background-color: var(--quartenary-color);
+    color: var(--terciary-color);
+    box-shadow: 0px 0px 3px var(--primary-color);
+}
+
+a.link-login{
+    color: var(--terciary-color);
+    font-weight: bold;
+    transition: 0.3s ease;
+}
+a.link-login:hover{
+    color: var(--quartenary-color) ;
+}
+
+div.form-login{
+    align-items: center;
+    justify-content: center;
+}
+
+div.col-12_2{
+    font-family: var(--font-principal);
+    background-color: #2128BF;
+    width: 500px;
+    padding: 15px;
+    border-radius: 20px;
+    box-shadow: 0px 0px 8px var(--secundary-color);
+}
+
+div.col-12_2 > h2{
+    text-align: center;
+    font-weight: bold;
+    font-size: 30px;
+    color: var(--quartenary-color);
+    background-color: var(--primary-color);
+    padding: 12px;
+}
+
+button.button-login{
+    background-color: var(--terciary-color);
+    padding: 12px;
+    width: 100%;
+    border-radius: 10px;
+    transition: 0.4s ease;
+}
+
+button.button-login:hover{
+    color: var(--terciary-color);
+    background-color: var(--quartenary-color);
+}
+
+button.button-login:active{
+    transform: scale(0.9);
+}
+
+a.link-register{
+    transition: 0.5s ease;
+    font-weight: bold;
+    color: var(--terciary-color);
+}
+
+a.link-register:hover{
+    color: var(--quartenary-color);
+}
+

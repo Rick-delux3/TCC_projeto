@@ -1,0 +1,96 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root{
+    --primary-color: #1F1D59;
+    --secundary-color: #2128BF;
+    --terciary-color: #EE1D23;
+    --quartenary-color: #F2F2F2;
+    --descr-color: #55658C;
+    --font-principal: 'Sansation';
+}
+body{
+    padding: auto;
+    background-image: url(/public/imgs/seguro-fianca-locaticia_fundo_login_cadastro.png);
+    background-size: cover; /* cobre toda a tela */
+    background-position: center;
+    background-repeat: no-repeat;
+    background-attachment: fixed; /* se quiser o efeito parallax */
+}
+
+header{
+    height: auto;
+    justify-content: start;
+    align-items: start;
+}
+
+footer{
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;    
+}
+
+main{
+    width: 100%;
+    min-height: auto;
+}
+div.bio{
+    background-color: #55658C;
+    height: auto;
+    width: 100%;
+    padding: 30px;
+    font-family: var(--font-principal);
+    font-weight: bold;
+    font-style: italic;
+
+}
+
+div.clientes{
+    background-color:#FFFFFF;
+    align-items: center;
+    width: 100%;
+    align-items: center;
+    justify-content: center;
+    height: 65px;
+}
+
+
+
+div.descr{
+    text-align: center;
+    font-family: 'Sansation';
+    font-size: 16px;
+    
+
+}
+
+div.redes{
+    background-color: var(--primary-color);
+    width: 100%;
+    min-height: 155px;
+    justify-content: center;
+    align-items: center;
+    color: var(--quartenary-color);
+    font-family: 'Sansation';
+
+}
+
+
+div.logo-footer{
+    align-items: center;
+    justify-content: center;
+}
+p.neves{
+    font-size: 12px;
+    color: var(--descr-color);
+}
+
+div.modal-error{
+    font-family: var(--font-principal);
+}
+
+
+
+
