@@ -9,6 +9,7 @@ use App\Http\Controllers\CompanyRegistrationController;
 use App\Http\Controllers\CompanyAuthController;
 use App\Http\Controllers\TwoFactorController;
 use App\Http\Controllers\TwoFactorLoginController;
+use App\Http\Controllers\AdminsRegistrationController;
 
 Route::get('/analise', function () {
     return view('escolha-analise');
@@ -19,6 +20,12 @@ Route::middleware('auth')->group(function () {
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 });
+
+
+
+
+Route::get('/admin/form', [AdminsRegistrationController::class, 'showRegistrationForm'])->name('admin.register.form');
+Route::post('/admin/register', [AdminsRegistrationController::class, 'store'])->name('admin.register.post');
 
 Route::get('/', [CompanyRegistrationController::class, 'showRegistrationForm'])->name('empresa.register.form');
 Route::post('/empresa/register', [CompanyRegistrationController::class, 'store'])->name('empresa.register.post');
