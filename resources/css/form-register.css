@@ -290,3 +290,213 @@ p{
         transform: translateY(0);
     }
 }
+
+.admin-register-page{
+    width: 100%;
+    min-height: calc(100vh - 180px);
+    padding: 30px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.admin-register-shell{
+    width: 100%;
+    max-width: 1080px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 24px 50px rgba(17, 24, 39, 0.24);
+    border: 1px solid rgba(31, 29, 89, 0.12);
+    background: #ffffff;
+}
+
+.admin-register-aside{
+    position: relative;
+    min-height: 100%;
+}
+
+.admin-register-aside > img{
+    width: 100%;
+    height: 100%;
+    min-height: 560px;
+    object-fit: cover;
+    display: block;
+}
+
+.admin-register-overlay{
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(180deg, rgba(31, 29, 89, 0.78), rgba(31, 29, 89, 0.92));
+    color: #f8fafc;
+    padding: 34px 28px;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+}
+
+.admin-badge{
+    width: fit-content;
+    padding: 4px 10px;
+    border-radius: 100px;
+    background: rgba(238, 29, 35, 0.88);
+    color: #ffffff;
+    font-size: 12px;
+    letter-spacing: 0.3px;
+    text-transform: uppercase;
+    font-weight: 700;
+    margin-bottom: 10px;
+}
+
+.admin-register-overlay h2{
+    font-size: 25px;
+    margin: 0 0 10px 0;
+    line-height: 1.25;
+    font-weight: 700;
+}
+
+.admin-register-overlay p{
+    font-size: 14px;
+    margin: 0 0 14px 0;
+    color: rgba(255, 255, 255, 0.95);
+}
+
+.admin-register-overlay ul{
+    margin: 0;
+    padding-left: 18px;
+}
+
+.admin-register-overlay li{
+    margin-bottom: 8px;
+    font-size: 13px;
+}
+
+.admin-register-card{
+    background: #ffffff;
+    padding: 34px 34px 30px;
+    color: #0f172a;
+}
+
+.admin-register-header h1{
+    margin: 0;
+    font-size: 28px;
+    line-height: 1.2;
+    color: var(--primary-color);
+    font-weight: 800;
+}
+
+.admin-register-header p{
+    margin: 8px 0 24px 0;
+    color: #475569;
+    font-size: 14px;
+}
+
+.admin-register-form{
+    width: 100%;
+}
+
+.admin-grid{
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+}
+
+.admin-field{
+    margin-bottom: 14px;
+}
+
+.admin-label{
+    display: block;
+    margin-bottom: 6px;
+    color: #1e293b;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.admin-input{
+    width: 100%;
+    border: 1px solid #cbd5e1 !important;
+    border-radius: 8px !important;
+    background: #ffffff !important;
+    color: #0f172a !important;
+    margin: 0 !important;
+    padding: 10px 12px;
+    font-size: 14px;
+}
+
+.admin-input::placeholder{
+    color: #94a3b8 !important;
+    font-weight: 500;
+}
+
+.admin-input:focus{
+    border-color: #2128BF !important;
+    box-shadow: 0 0 0 3px rgba(33, 40, 191, 0.18) !important;
+    outline: none;
+}
+
+.admin-actions{
+    margin-top: 10px;
+}
+
+.admin-submit{
+    width: 100%;
+    padding: 11px 16px;
+    border: none;
+    border-radius: 8px;
+    background: linear-gradient(125deg, var(--primary-color), var(--secundary-color));
+    color: #ffffff;
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+    transition: 0.25s ease;
+}
+
+.admin-submit:hover{
+    transform: translateY(-1px);
+    filter: brightness(1.05);
+}
+
+.admin-login-link{
+    display: inline-block;
+    margin-top: 14px;
+    color: var(--primary-color);
+    font-size: 13px;
+    text-decoration: none;
+    font-weight: 700;
+}
+
+.admin-login-link:hover{
+    color: var(--terciary-color);
+}
+
+@media (max-width: 991px){
+    .admin-register-shell{
+        grid-template-columns: 1fr;
+        max-width: 640px;
+    }
+
+    .admin-register-aside > img{
+        min-height: 300px;
+    }
+
+    .admin-register-overlay{
+        padding: 20px;
+    }
+
+    .admin-register-card{
+        padding: 24px 20px;
+    }
+}
+
+@media (max-width: 640px){
+    .admin-grid{
+        grid-template-columns: 1fr;
+        gap: 0;
+    }
+
+    .admin-register-header h1{
+        font-size: 24px;
+    }
+}

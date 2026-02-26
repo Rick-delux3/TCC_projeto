@@ -30,7 +30,10 @@ class AdminsRegistrationController extends Controller
             'cpf' => $data['cpf'],
         ]);
 
-
+        return redirect()->route('admin.login')->with(
+            'success',
+            'Cadastro realizado!! Bem vindo corretor!!'
+        );
 
     }
 

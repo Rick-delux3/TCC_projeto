@@ -10,6 +10,7 @@ use App\Http\Controllers\CompanyAuthController;
 use App\Http\Controllers\TwoFactorController;
 use App\Http\Controllers\TwoFactorLoginController;
 use App\Http\Controllers\AdminsRegistrationController;
+use App\Http\Controllers\AdminAuthController;
 
 Route::get('/analise', function () {
     return view('escolha-analise');
@@ -22,12 +23,13 @@ Route::middleware('auth')->group(function () {
 });
 
 
+Route::get('/admin/login/form',[AdminAuthController::class, 'showLoginForm'])->name('admin.login');
 
+Route::get('/admins/cadastro', [AdminsRegistrationController::class, 'showRegistrationForm'])->name('admin.register.form');
+Route::post('/admins/cadastro', [AdminsRegistrationController::class, 'store'])->name('admin.register.post');
 
-Route::get('/admin/form', [AdminsRegistrationController::class, 'showRegistrationForm'])->name('admin.register.form');
-Route::post('/admin/register', [AdminsRegistrationController::class, 'store'])->name('admin.register.post');
-
-Route::get('/', [CompanyRegistrationController::class, 'showRegistrationForm'])->name('empresa.register.form');
+Route::view('/', 'index')->name('index');
+Route::get('/empresa/cadastro', [CompanyRegistrationController::class, 'showRegistrationForm'])->name('empresa.register.form');
 Route::post('/empresa/register', [CompanyRegistrationController::class, 'store'])->name('empresa.register.post');
 
 Route::get('/empresa/login', [CompanyAuthController::class, 'showLoginForm'])->name('empresa.login');
