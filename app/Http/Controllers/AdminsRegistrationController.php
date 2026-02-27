@@ -32,7 +32,7 @@ class AdminsRegistrationController extends Controller
 
         return redirect()->route('admin.login')->with(
             'success',
-            'Cadastro realizado!! Bem vindo corretor!!'
+            'Cadastro realizado!! Faça login para continuar!!'
         );
 
     }
