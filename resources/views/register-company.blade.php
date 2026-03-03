@@ -1,99 +1,156 @@
 @extends('layout-inicial.app')
 
 @section('content')
+<div class="client-register-page">
+    <section class="client-register-shell">
+        <aside class="client-register-aside">
+            <img src="{{ asset('imgs/seguro-fianca-locaticia_fundo_login_cadastro.png') }}" alt="Cadastro de imobiliaria">
+            <div class="client-register-overlay">
+                <span class="client-badge">Cadastro de Clientes</span>
+                <h2>Crie o acesso da sua imobiliaria</h2>
+                <p>
+                    Cadastre sua empresa para iniciar as analises de seguro fianca
+                    com fluxo digital e acompanhamento centralizado.
+                </p>
+                <ul>
+                    <li>Processo rapido de onboarding.</li>
+                    <li>Painel para envio e consulta de analises.</li>
+                    <li>Integracao com operacao da corretora.</li>
+                </ul>
+            </div>
+        </aside>
 
+        <div class="client-register-card">
+            <header class="client-register-header">
+                <h1>Cadastro da Imobiliaria</h1>
+                <p>Preencha os dados da empresa para liberar o acesso da sua equipe.</p>
+            </header>
 
-<div class="back d-flex">
-
-    
-    <div class="form row d-flex register-split">
-        <div class="col-12 contain">
-            <h2>Cadastro da Imobiliária</h2>
-            <br>
-            <form action="{{ route('empresa.register.post') }}" autocomplete="off" method="POST" class="row">
+            <form action="{{ route('empresa.register.post') }}" method="POST" autocomplete="off" class="client-register-form">
                 @csrf
-                
-                <div class="col-12">
-                    <label for="name" class="form-label">Nome:</label>
-                    <input type="text" name="name" id="name" class="form-control" required>
-                </div>
-            
-                <div class="col-12">
-                    <label for="phone" class="form-label">Telefone:</label>
-                    <input type="tel" name="phone" id="phone" class="form-control" required>
 
-                </div>
-            
-                <div class="col-md-6">
-                    <label for="city" class="form-label">Cidade:</label>
-                    <input type="text" name="city" id="city" class="form-control">
+                <div class="client-field">
+                    <label for="name" class="client-label">Nome da imobiliaria</label>
+                    <input
+                        type="text"
+                        id="name"
+                        name="name"
+                        class="client-input"
+                        value="{{ old('name') }}"
+                        placeholder="Ex.: Nova Casa Imoveis"
+                        required
+                    >
                 </div>
 
-                <div class="col-md-6">
-                    <label for="state" class="form-label">Estado:</label>
-                    <select name="state" id="state" class="form-select select">
-                        <option selected>Selecionar</option>
-                        <option value="SP">SP</option>
-                        <option value="AL">AL</option>
-                        <option value="AP">AP</option>
-                        <option value="AM">AM</option>
-                        <option value="BA">BA</option>
-                        <option value="CE">CE</option>
-                        <option value="DF">DF</option>
-                        <option value="ES">ES</option>
-                        <option value="GO">GO</option>
-                        <option value="MA">MA</option>
-                        <option value="MT">MT</option>
-                        <option value="MS">MS</option>
-                        <option value="MG">MG</option>
-                        <option value="PA">PA</option>
-                        <option value="PB">PB</option>
-                        <option value="PR">PR</option>
-                        <option value="PE">PE</option>
-                        <option value="PI">PI</option>
-                        <option value="RJ">RJ</option>
-                        <option value="RN">RN</option>
-                        <option value="RS">RS</option>
-                        <option value="RR">RR</option>
-                        <option value="RO">RO</option>
-                        <option value="SC">SC</option>
-                        <option value="SE">SE</option>
-                        <option value="TO">TO</option>
-                        <option value="AC">AC</option>
-                    </select>
+                <div class="client-grid">
+                    <div class="client-field">
+                        <label for="phone" class="client-label">Telefone</label>
+                        <input
+                            type="tel"
+                            id="phone"
+                            name="phone"
+                            class="client-input"
+                            value="{{ old('phone') }}"
+                            placeholder="(00) 00000-0000"
+                            required
+                        >
+                    </div>
+
+                    <div class="client-field">
+                        <label for="email" class="client-label">E-mail de acesso</label>
+                        <input
+                            type="email"
+                            id="email"
+                            name="email"
+                            class="client-input"
+                            value="{{ old('email') }}"
+                            placeholder="contato@imobiliaria.com.br"
+                            required
+                        >
+                    </div>
                 </div>
 
+                <div class="client-grid">
+                    <div class="client-field">
+                        <label for="city" class="client-label">Cidade</label>
+                        <input
+                            type="text"
+                            id="city"
+                            name="city"
+                            class="client-input"
+                            value="{{ old('city') }}"
+                            placeholder="Cidade da matriz"
+                            required
+                        >
+                    </div>
 
+                    <div class="client-field">
+                        <label for="state" class="client-label">Estado (UF)</label>
+                        <select name="state" id="state" class="client-input" required>
+                            <option value="" {{ old('state') ? '' : 'selected' }}>Selecione</option>
+                            <option value="SP" {{ old('state') === 'SP' ? 'selected' : '' }}>SP</option>
+                            <option value="AL" {{ old('state') === 'AL' ? 'selected' : '' }}>AL</option>
+                            <option value="AP" {{ old('state') === 'AP' ? 'selected' : '' }}>AP</option>
+                            <option value="AM" {{ old('state') === 'AM' ? 'selected' : '' }}>AM</option>
+                            <option value="BA" {{ old('state') === 'BA' ? 'selected' : '' }}>BA</option>
+                            <option value="CE" {{ old('state') === 'CE' ? 'selected' : '' }}>CE</option>
+                            <option value="DF" {{ old('state') === 'DF' ? 'selected' : '' }}>DF</option>
+                            <option value="ES" {{ old('state') === 'ES' ? 'selected' : '' }}>ES</option>
+                            <option value="GO" {{ old('state') === 'GO' ? 'selected' : '' }}>GO</option>
+                            <option value="MA" {{ old('state') === 'MA' ? 'selected' : '' }}>MA</option>
+                            <option value="MT" {{ old('state') === 'MT' ? 'selected' : '' }}>MT</option>
+                            <option value="MS" {{ old('state') === 'MS' ? 'selected' : '' }}>MS</option>
+                            <option value="MG" {{ old('state') === 'MG' ? 'selected' : '' }}>MG</option>
+                            <option value="PA" {{ old('state') === 'PA' ? 'selected' : '' }}>PA</option>
+                            <option value="PB" {{ old('state') === 'PB' ? 'selected' : '' }}>PB</option>
+                            <option value="PR" {{ old('state') === 'PR' ? 'selected' : '' }}>PR</option>
+                            <option value="PE" {{ old('state') === 'PE' ? 'selected' : '' }}>PE</option>
+                            <option value="PI" {{ old('state') === 'PI' ? 'selected' : '' }}>PI</option>
+                            <option value="RJ" {{ old('state') === 'RJ' ? 'selected' : '' }}>RJ</option>
+                            <option value="RN" {{ old('state') === 'RN' ? 'selected' : '' }}>RN</option>
+                            <option value="RS" {{ old('state') === 'RS' ? 'selected' : '' }}>RS</option>
+                            <option value="RR" {{ old('state') === 'RR' ? 'selected' : '' }}>RR</option>
+                            <option value="RO" {{ old('state') === 'RO' ? 'selected' : '' }}>RO</option>
+                            <option value="SC" {{ old('state') === 'SC' ? 'selected' : '' }}>SC</option>
+                            <option value="SE" {{ old('state') === 'SE' ? 'selected' : '' }}>SE</option>
+                            <option value="TO" {{ old('state') === 'TO' ? 'selected' : '' }}>TO</option>
+                            <option value="AC" {{ old('state') === 'AC' ? 'selected' : '' }}>AC</option>
+                        </select>
+                    </div>
+                </div>
 
-                <div class="col-md-6">
-                    <label for="password" class="form-label">Senha:</label>
-                    <input type="password" name="password" id="password" class="form-control" required>
+                <div class="client-grid">
+                    <div class="client-field">
+                        <label for="password" class="client-label">Senha</label>
+                        <input
+                            type="password"
+                            id="password"
+                            name="password"
+                            class="client-input"
+                            placeholder="Minimo de 6 caracteres"
+                            required
+                        >
+                    </div>
+
+                    <div class="client-field">
+                        <label for="password_confirmation" class="client-label">Confirmar senha</label>
+                        <input
+                            type="password"
+                            id="password_confirmation"
+                            name="password_confirmation"
+                            class="client-input"
+                            placeholder="Repita a senha"
+                            required
+                        >
+                    </div>
                 </div>
-                <div class="col-md-6">
-                    <label for="password-conf" class="form-label">Confirmar Senha:</label>
-                    <input type="password" name="password_confirmation" id="password-conf" class="form-control">
+
+                <div class="client-actions">
+                    <button type="submit" class="client-submit">Cadastrar imobiliaria</button>
+                    <a href="{{ route('empresa.login') }}" class="client-outline-link">Entrar</a>
                 </div>
-            
-                <div class="col-12">
-                    <label for="email" class="form-label">Email:</label>
-                    <input type="email" name="email" id="email" class="form-control" required>
-                </div>
-                
-            
-            
-                <button type="submit" class="botao_cadas">Cadastrar</button>
-                
             </form>
-            <p>Já tem uma conta?
-                <a href="{{ route('empresa.login') }}" class="link-login">Entrar aqui</a>
-            </p>
         </div>
-
-        <div class="col-13"> 
-        </div>
-        
-    </div>
+    </section>
 </div>
-
-
 @endsection

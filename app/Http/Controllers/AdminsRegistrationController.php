@@ -4,7 +4,6 @@ namespace App\Http\Controllers;
 
 use App\Models\Admins;
 use Illuminate\Http\Request;
-use Illuminate\Auth\Events\Registered;
 use Illuminate\Support\Facades\Hash;
 
 class AdminsRegistrationController extends Controller

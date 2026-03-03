@@ -54,7 +54,7 @@ class TwoFactorController extends Controller
         // Cleanup all codes so the challenge cannot be replayed.
         TwoFactorCode::where('user_id', $userId)->delete();
 
-        return redirect('/analise');
+        return redirect('/Dashboard/User');
     }
 
     public function resend(Request $request)

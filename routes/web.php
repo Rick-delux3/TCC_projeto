@@ -8,13 +8,16 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\CompanyRegistrationController;
 use App\Http\Controllers\CompanyAuthController;
 use App\Http\Controllers\TwoFactorController;
-use App\Http\Controllers\TwoFactorLoginController;
 use App\Http\Controllers\AdminsRegistrationController;
 use App\Http\Controllers\AdminAuthController;
 
-Route::get('/analise', function () {
-    return view('escolha-analise');
-})->middleware(['auth', 'verified', '2fa'])->name('analise');
+Route::get('/Dashboard/User', function () {
+    return view('layout-inicial.Dashboard_User');
+})->middleware(['auth', 'verified', '2fa'])->name('Dashboard');
+
+Route::get('/Dashboard/Admin', function (){
+    return view('layout-inicial.Dashboard_Admin');
+})->middleware(['auth:admin', 'admin.2fa'])->name('Dashboard-Admin');
 
 Route::middleware('auth')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
@@ -23,10 +26,21 @@ Route::middleware('auth')->group(function () {
 });
 
 
-Route::get('/admin/login/form',[AdminAuthController::class, 'showLoginForm'])->name('admin.login');
+Route::middleware('guest:admin')->group(function () {
+    Route::get('/admin/login/form', [AdminAuthController::class, 'showLoginForm'])->name('admin.login');
+    Route::post('/admin/login', [AdminAuthController::class, 'login'])->name('admin.login.post');
 
-Route::get('/admins/cadastro', [AdminsRegistrationController::class, 'showRegistrationForm'])->name('admin.register.form');
-Route::post('/admins/cadastro', [AdminsRegistrationController::class, 'store'])->name('admin.register.post');
+    Route::get('/admins/cadastro', [AdminsRegistrationController::class, 'showRegistrationForm'])->name('admin.register.form');
+    Route::post('/admins/cadastro', [AdminsRegistrationController::class, 'store'])->name('admin.register.post');
+});
+
+Route::middleware('auth:admin')->group(function () {
+    Route::get('/admin/2fa', [AdminAuthController::class, 'showTwoFactorForm'])->name('admin.2fa.form');
+    Route::post('/admin/2fa', [AdminAuthController::class, 'verifyTwoFactor'])->name('admin.2fa.verify');
+    Route::post('/admin/2fa/resend', [AdminAuthController::class, 'resendTwoFactor'])->name('admin.2fa.resend');
+
+    Route::post('/admin/logout', [AdminAuthController::class, 'logout'])->name('admin.logout');
+});
 
 Route::view('/', 'index')->name('index');
 Route::get('/empresa/cadastro', [CompanyRegistrationController::class, 'showRegistrationForm'])->name('empresa.register.form');

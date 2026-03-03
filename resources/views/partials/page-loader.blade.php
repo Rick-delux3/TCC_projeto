@@ -64,18 +64,42 @@
 
 <script>
     (function () {
+        let getModal = function () {
+            return document.getElementById('page-loader-modal');
+        };
+
+        var showLoader = function () {
+            var modal = getModal();
+            if (!modal) return;
+            modal.classList.remove('is-hidden');
+        };
+
         var hideLoader = function () {
-            var modal = document.getElementById('page-loader-modal');
+            var modal = getModal();
             if (!modal) return;
             modal.classList.add('is-hidden');
-            setTimeout(function () {
-                if (modal && modal.parentNode) {
-                    modal.parentNode.removeChild(modal);
-                }
-            }, 240);
+        };
+
+        document.addEventListener('submit', function (event) {
+            let form = event.target;
+            if (!form || form.tagName !== 'FORM') return;
+            if (form.hasAttribute('data-no-loader')) return;
+            showLoader();
+        }, true);
+
+        document.addEventListener('click', function (event) {
+            let trigger = event.target.closest('[data-show-loader]');
+            if (!trigger) return;
+            showLoader();
+        });
+
+        window.PageLoader = {
+            show: showLoader,
+            hide: hideLoader,
         };
 
         window.addEventListener('load', hideLoader);
+        window.addEventListener('pageshow', hideLoader);
         setTimeout(hideLoader, 8000);
     })();
 </script>

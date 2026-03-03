@@ -101,7 +101,7 @@
 
                 <div class="admin-actions">
                     <button type="submit" class="admin-submit">Cadastrar administrador</button>
-                    <a href="{{ route('admin.login') }}" class="admin-login-link">Ja possuo acesso administrativo</a>
+                    <a href="{{ route('admin.login') }}" class="admin-outline-link">Entrar</a>
                 </div>
             </form>
         </div>
