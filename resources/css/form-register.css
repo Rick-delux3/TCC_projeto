@@ -70,7 +70,10 @@ div.contain{
     justify-content: center;
 }
 div.col-13{
-    background-image: linear-gradient(rgba(31, 29, 89, 0.08), rgba(31, 29, 89, 0.18)), url(/public/imgs/segure-chave-a-mao-ao-ar-livre.jpg);
+    background:
+        radial-gradient(circle at 82% 10%, rgba(238, 29, 35, 0.28), transparent 40%),
+        radial-gradient(circle at 15% 85%, rgba(242, 242, 242, 0.12), transparent 50%),
+        linear-gradient(145deg, #1f1d59 0%, #2128bf 100%);
     width: 100%;
     max-width: none;
     min-height: 100%;
@@ -298,6 +301,7 @@ p{
     display: flex;
     align-items: center;
     justify-content: center;
+    animation: formPageFade 0.45s ease-out both;
 }
 
 .admin-register-shell{
@@ -310,11 +314,17 @@ p{
     box-shadow: 0 24px 50px rgba(17, 24, 39, 0.24);
     border: 1px solid rgba(31, 29, 89, 0.12);
     background: #ffffff;
+    animation: formShellRise 0.52s ease-out both;
 }
 
 .admin-register-aside{
     position: relative;
-    min-height: 100%;
+    min-height: 560px;
+    animation: formPaneLeft 0.55s ease-out both;
+    background:
+        radial-gradient(circle at 82% 14%, rgba(238, 29, 35, 0.38), transparent 40%),
+        radial-gradient(circle at 18% 80%, rgba(242, 242, 242, 0.14), transparent 52%),
+        linear-gradient(155deg, #1f1d59 0%, #2731c8 100%);
 }
 
 .admin-register-aside > img{
@@ -328,7 +338,7 @@ p{
 .admin-register-overlay{
     position: absolute;
     inset: 0;
-    background: linear-gradient(180deg, rgba(31, 29, 89, 0.78), rgba(31, 29, 89, 0.92));
+    background: linear-gradient(180deg, rgba(31, 29, 89, 0.52), rgba(31, 29, 89, 0.86));
     color: #f8fafc;
     padding: 34px 28px;
     display: flex;
@@ -376,6 +386,7 @@ p{
     background: #ffffff;
     padding: 34px 34px 30px;
     color: #0f172a;
+    animation: formPaneRight 0.55s ease-out 0.08s both;
 }
 
 .admin-register-header h1{
@@ -501,6 +512,7 @@ p{
     display: flex;
     align-items: center;
     justify-content: center;
+    animation: formPageFade 0.45s ease-out both;
 }
 
 .admin-auth-card{
@@ -511,6 +523,7 @@ p{
     border: 1px solid rgba(31, 29, 89, 0.14);
     box-shadow: 0 24px 50px rgba(17, 24, 39, 0.22);
     padding: 26px 24px 24px;
+    animation: formShellRise 0.5s ease-out both;
 }
 
 .admin-auth-header h1{
@@ -555,6 +568,10 @@ p{
         max-width: 640px;
     }
 
+    .admin-register-aside{
+        min-height: 300px;
+    }
+
     .admin-register-aside > img{
         min-height: 300px;
     }
@@ -594,6 +611,7 @@ p{
     display: flex;
     align-items: center;
     justify-content: center;
+    animation: formPageFade 0.45s ease-out both;
 }
 
 .client-register-shell{
@@ -606,12 +624,22 @@ p{
     box-shadow: 0 24px 50px rgba(17, 24, 39, 0.24);
     border: 1px solid rgba(31, 29, 89, 0.12);
     background: #ffffff;
+    animation: formShellRise 0.52s ease-out both;
 }
 
 .client-register-aside,
 .client-auth-aside{
     position: relative;
-    min-height: 100%;
+    min-height: 560px;
+    animation: formPaneLeft 0.55s ease-out both;
+    background:
+        radial-gradient(circle at 85% 12%, rgba(238, 29, 35, 0.32), transparent 42%),
+        radial-gradient(circle at 14% 84%, rgba(242, 242, 242, 0.14), transparent 50%),
+        linear-gradient(150deg, #1f1d59 0%, #2430bd 55%, #2128bf 100%);
+}
+
+.client-auth-aside{
+    min-height: 470px;
 }
 
 .client-register-aside > img{
@@ -622,11 +650,19 @@ p{
     display: block;
 }
 
+.client-auth-aside > img{
+    width: 100%;
+    height: 100%;
+    min-height: 470px;
+    object-fit: cover;
+    display: block;
+}
+
 .client-register-overlay,
 .client-auth-overlay{
     position: absolute;
     inset: 0;
-    background: linear-gradient(180deg, rgba(31, 29, 89, 0.74), rgba(31, 29, 89, 0.9));
+    background: linear-gradient(180deg, rgba(31, 29, 89, 0.48), rgba(31, 29, 89, 0.84));
     color: #f8fafc;
     padding: 34px 28px;
     display: flex;
@@ -677,6 +713,7 @@ p{
     background: #ffffff;
     padding: 34px 34px 30px;
     color: #0f172a;
+    animation: formPaneRight 0.55s ease-out 0.08s both;
 }
 
 .client-register-header h1,
@@ -792,6 +829,7 @@ p{
     display: flex;
     align-items: center;
     justify-content: center;
+    animation: formPageFade 0.45s ease-out both;
 }
 
 .client-auth-shell{
@@ -804,14 +842,68 @@ p{
     box-shadow: 0 24px 50px rgba(17, 24, 39, 0.24);
     border: 1px solid rgba(31, 29, 89, 0.12);
     background: #ffffff;
+    animation: formShellRise 0.5s ease-out both;
 }
 
-.client-auth-aside > img{
-    width: 100%;
-    height: 100%;
-    min-height: 470px;
-    object-fit: cover;
-    display: block;
+@keyframes formPageFade{
+    from{
+        opacity: 0;
+    }
+    to{
+        opacity: 1;
+    }
+}
+
+@keyframes formShellRise{
+    from{
+        opacity: 0;
+        transform: translateY(16px) scale(0.985);
+    }
+    to{
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+@keyframes formPaneLeft{
+    from{
+        opacity: 0;
+        transform: translateX(-12px);
+    }
+    to{
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+@keyframes formPaneRight{
+    from{
+        opacity: 0;
+        transform: translateX(12px);
+    }
+    to{
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+@media (prefers-reduced-motion: reduce){
+    .admin-register-page,
+    .admin-register-shell,
+    .admin-register-aside,
+    .admin-register-card,
+    .admin-auth-page,
+    .admin-auth-card,
+    .client-register-page,
+    .client-register-shell,
+    .client-register-aside,
+    .client-auth-aside,
+    .client-register-card,
+    .client-auth-card,
+    .client-auth-page,
+    .client-auth-shell{
+        animation: none !important;
+    }
 }
 
 .client-recovery-box{
@@ -843,6 +935,11 @@ p{
     .client-auth-shell{
         grid-template-columns: 1fr;
         max-width: 640px;
+    }
+
+    .client-register-aside,
+    .client-auth-aside{
+        min-height: 290px;
     }
 
     .client-register-aside > img,

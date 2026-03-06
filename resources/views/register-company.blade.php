@@ -4,25 +4,25 @@
 <div class="client-register-page">
     <section class="client-register-shell">
         <aside class="client-register-aside">
-            <img src="{{ asset('imgs/seguro-fianca-locaticia_fundo_login_cadastro.png') }}" alt="Cadastro de imobiliaria">
+            <img src="{{ asset('imgs/seguro-fianca-locaticia_fundo_login_cadastro.png') }}" alt="Cadastro de clientes">
             <div class="client-register-overlay">
                 <span class="client-badge">Cadastro de Clientes</span>
-                <h2>Crie o acesso da sua imobiliaria</h2>
+                <h2>Crie o acesso da sua Empresa</h2>
                 <p>
-                    Cadastre sua empresa para iniciar as analises de seguro fianca
+                    Cadastre sua empresa para iniciar as analises de seguro
                     com fluxo digital e acompanhamento centralizado.
                 </p>
                 <ul>
                     <li>Processo rapido de onboarding.</li>
                     <li>Painel para envio e consulta de analises.</li>
-                    <li>Integracao com operacao da corretora.</li>
+                    <li>Integracao com operação da corretora.</li>
                 </ul>
             </div>
         </aside>
 
         <div class="client-register-card">
             <header class="client-register-header">
-                <h1>Cadastro da Imobiliaria</h1>
+                <h1>Cadastro da Empresa</h1>
                 <p>Preencha os dados da empresa para liberar o acesso da sua equipe.</p>
             </header>
 
@@ -30,7 +30,7 @@
                 @csrf
 
                 <div class="client-field">
-                    <label for="name" class="client-label">Nome da imobiliaria</label>
+                    <label for="name" class="client-label">Nome da Empresa</label>
                     <input
                         type="text"
                         id="name"
@@ -146,7 +146,7 @@
                 </div>
 
                 <div class="client-actions">
-                    <button type="submit" class="client-submit">Cadastrar imobiliaria</button>
+                    <button type="submit" class="client-submit">Cadastrar Empresa</button>
                     <a href="{{ route('empresa.login') }}" class="client-outline-link">Entrar</a>
                 </div>
             </form>

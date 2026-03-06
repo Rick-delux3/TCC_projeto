@@ -12,11 +12,11 @@
 }
 body{
     padding: auto;
-    background-image: url(/public/imgs/seguro-fianca-locaticia_fundo_login_cadastro.png);
-    background-size: cover; /* cobre toda a tela */
-    background-position: center;
-    background-repeat: no-repeat;
-    background-attachment: fixed; /* se quiser o efeito parallax */
+    background:
+        radial-gradient(circle at 12% 18%, rgba(33, 40, 191, 0.14), transparent 42%),
+        radial-gradient(circle at 88% 8%, rgba(238, 29, 35, 0.1), transparent 35%),
+        linear-gradient(145deg, #f8f9ff 0%, #eef2ff 55%, #e6ebff 100%);
+    background-attachment: fixed;
 }
 
 header{
@@ -90,7 +90,6 @@ p.neves{
 div.modal-error{
     font-family: var(--font-principal);
 }
-
 
 
 

@@ -4,20 +4,20 @@
 <div class="client-auth-page">
     <section class="client-auth-shell">
         <aside class="client-auth-aside">
-            <img src="{{ asset('imgs/img-cadastro.jpeg') }}" alt="Acesso da imobiliaria">
+            <img src="{{ asset('imgs/img-cadastro.jpeg') }}" alt="Acesso do cliente">
             <div class="client-auth-overlay">
                 <span class="client-badge">Portal do Cliente</span>
-                <h2>Acesse sua area de analises</h2>
+                <h2>Acesse sua area CRM</h2>
                 <p>
-                    Entre com suas credenciais para acompanhar solicitacoes,
-                    consultar resultados e seguir com sua operacao de locacao.
+                    Entre com suas credenciais para acompanhar solicitações,
+                    consultar resultados e seguir com sua operação de locacao.
                 </p>
             </div>
         </aside>
 
         <div class="client-auth-card">
             <header class="client-auth-header">
-                <h1>Login da Imobiliaria</h1>
+                <h1>Login Empresa</h1>
                 <p>Informe seu e-mail e senha para continuar.</p>
             </header>
 

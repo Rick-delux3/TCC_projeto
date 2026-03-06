@@ -5,7 +5,7 @@
                 <img src="{{ asset('imgs/logo-header.jpg') }}" alt="AkiAluga">
                 <div>
                     <strong>AkiAluga</strong>
-                    <span>Plataforma de seguro fianca</span>
+                    <span>Plataforma multi-empresarial</span>
                 </div>
             </a>
 
@@ -26,7 +26,7 @@
             <nav class="index-nav-links" aria-label="Navegacao principal">
                 <a href="{{ route('empresa.login') }}" class="index-link">
                     <i class="bi bi-box-arrow-in-right"></i>
-                    Login Imobiliaria
+                    Login Cliente
                 </a>
                 <a href="{{ route('empresa.register.form') }}" class="index-cta-client">
                     <i class="bi bi-building-add"></i>
