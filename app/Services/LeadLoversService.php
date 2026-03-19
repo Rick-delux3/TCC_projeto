@@ -10,6 +10,9 @@ class LeadLoversService
     private $token;
     private $machineId;
     private $sequence;
+    private $page;
+    private $startdate;
+    private $enddate;
 
     public function __construct()
     {
@@ -41,7 +44,7 @@ class LeadLoversService
         
     }
 
-    // Inserir lead na máquina e funil
+    // Recuperar leads da página
 }
 
 
