@@ -44,7 +44,21 @@ class LeadLoversService
         
     }
 
-    // Recuperar leads da página
+    //Coleção de Tags
+
+    // Adicionar tag
+
+    public function addTag(array $data){
+        return Http::withHeaders([
+            'Content-Type' => 'application/json'
+        ])-> 
+        post($this->baseUrl . 'Tag?token=' . $this->token, [
+            "Email" => $data['Email'],
+            'Tag' => $data['Tag']
+        ])->json();
+    }
+
+
 }
 
 
