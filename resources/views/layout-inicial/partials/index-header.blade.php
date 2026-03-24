@@ -2,9 +2,9 @@
     <div class="container">
         <div class="index-header-wrap">
             <a href="{{ route('index') }}" class="index-brand" aria-label="Ir para a pagina inicial">
-                <img src="{{ asset('imgs/logo-header.jpg') }}" alt="AkiAluga">
+                <img src="{{ asset('imgs/Logo_NVS.png') }}" alt="AkiAluga">
                 <div>
-                    <strong>AkiAluga</strong>
+                    <strong>NVS SEGUROS</strong>
                     <span>Plataforma multi-empresarial</span>
                 </div>
             </a>

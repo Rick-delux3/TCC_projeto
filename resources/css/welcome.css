@@ -1,9 +1,9 @@
 :root{
-    --primary-color: #1F1D59;
-    --secundary-color: #2128BF;
-    --terciary-color: #EE1D23;
-    --quartenary-color: #F2F2F2;
-    --descr-color: #55658C;
+    --primary-color: #030133;
+    --secundary-color: #146FB6;
+    --terciary-color: #FD1E6E;
+    --quartenary-color: #FDFDFD;
+    --descr-color: #55658C; 
     --font-principal: 'Sansation';
 }
 
@@ -109,7 +109,7 @@ a.btn-style:hover{
     position: sticky;
     top: 0;
     z-index: 40;
-    background: linear-gradient(90deg, rgba(31, 29, 89, 0.96), rgba(33, 40, 191, 0.96));
+    background: linear-gradient(90deg, var(--primary-color), var(--secundary-color));
     border-bottom: 1px solid rgba(255, 255, 255, 0.18);
     backdrop-filter: blur(4px);
 }
@@ -203,7 +203,7 @@ a.btn-style:hover{
 
 .index-cta-client{
     color: #ffffff;
-    border: 1px solid rgba(238, 29, 35, 0.85);
+    border: 1px solid var(--terciary-color);
     background: linear-gradient(115deg, #EE1D23, #c5151a);
     box-shadow: 0 8px 20px rgba(238, 29, 35, 0.28);
 }
@@ -226,7 +226,7 @@ a.btn-style:hover{
     margin: 0 auto;
     text-align: center;
     border-radius: 12px;
-    background: rgba(31, 29, 89, 0.78);
+    background: var(--primary-color);
     border: 1px solid rgba(242, 242, 242, 0.14);
     padding: 24px;
     color: #f8fafc;
