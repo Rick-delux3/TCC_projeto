@@ -11,6 +11,12 @@ class WebhookController extends Controller
 {
     public function handle(Request $request)
     {
+
+        
+        Log::info('=== CHEGOU UM NOVO LEAD DO LEADLOVERS ===');
+        Log::info($request->all());
+
+
         $email = $request->input('email');
         $nome = $request->input('name');
         $telefone = $request->input('phone');
