@@ -18,6 +18,8 @@ class CompanyAuthController extends Controller
         return view('company-login');
     }
 
+    
+
     public function login(Request $request)
     {
         $data = $request->validate([

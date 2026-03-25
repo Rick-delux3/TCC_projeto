@@ -13,6 +13,7 @@
         "laravel-lang/lang": "~11.0",
         "laravel/fortify": "^1.32",
         "laravel/framework": "^12.0",
+        "laravel/sanctum": "^4.0",
         "laravel/tinker": "^2.10.1",
         "pragmarx/google2fa-laravel": "^2.3"
     },

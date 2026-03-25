@@ -8,6 +8,7 @@ use Illuminate\Contracts\Auth\CanResetPassword as CanResetPasswordContract;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Notifications\Notifiable;
+use App\Models\Lead;
 
 class Company extends Model implements CanResetPasswordContract
 {
@@ -33,5 +34,10 @@ class Company extends Model implements CanResetPasswordContract
     public function sendPasswordResetNotification($token): void
     {
         $this->notify(new CompanyResetPasswordNotification($token));
+    }
+
+    public function leads()
+    {
+        return $this->hasMany(Lead::class);
     }
 }
