@@ -1,4 +1,4 @@
-@extends('layout-inicial.welcome')
+@extends('layout-inicial.Dashboard_User')
 
 @section('content_w')
 <div class="back">
@@ -14,7 +14,6 @@
         <h1>FAÇA A ANALISE DOS SEUS PRETENDENTES A LOCAÇÃO AGORA!!</h1>
         <div>
             <button>Analise Residencial</button>
-            <button>Analise Comercial</button>
         </div>
     </div>
     

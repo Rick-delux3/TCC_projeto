@@ -15,7 +15,7 @@ class Company extends Model implements CanResetPasswordContract
     use HasFactory, Notifiable, CanResetPassword;
 
 
-    protected $fillable = ['name', 'email', 'phone', 'password', 'city', 'state'];
+    protected $fillable = ['name', 'email', 'phone', 'password', 'city', 'state', 'sincronizado_em'];
 
     protected $hidden = [
         'password',
