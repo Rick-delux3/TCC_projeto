@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use App\Models\Company;
 use App\Models\Lead;
+use Illuminate\Support\Facades\Http;
 
 
 
