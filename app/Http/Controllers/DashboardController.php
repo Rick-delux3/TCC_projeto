@@ -6,6 +6,8 @@ use Illuminate\Http\Request;
 use App\Models\Company;
 use App\Models\Lead;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
+
 
 
 
@@ -23,44 +25,24 @@ class AnaliseController extends Controller
 
     }
 
-
-
-    public function index(){
-        // 1. Recupera a imobiliária correta usando a sessão que você criou no Login
-        $companyId = session('company_id');
-        
-        // Se por algum motivo a sessão não existir, redireciona para o login
-        if (!$companyId) {
-            return redirect()->route('empresa.login');
-        }
-
-        $company = Company::find($companyId);
-
-        // 2. A MÁGICA DA CARGA INICIAL (Roda apenas na primeira vez)
-        if (is_null($company->sincronizado_em)) {
-            $this->buscarLeadsAntigosNaApi($company);
-        }
-
-        // 3. Puxa todos os leads dessa imobiliária do banco de dados local
-        // Usamos o relacionamento $company->leads() que criamos antes
-        $leads = $company->leads()->orderBy('created_at', 'desc')->get();
-
-        return view('DashboardUser', compact('leads'));
-    }
-
     private function buscarLeadsAntigosNaApi($company){
             $token = $this->token;
             $page = $this->page;
 
+            Log::info("INICIANDO SINCRONIZAÇÃO DA EMPRESA: " . $company->name);
+
         do {
+
+            Log::info("Buscando página: " . $page);
             $response = Http::get($this->baseUrl . 'Leads', [
-                'token' => $token,
+                'token' => $token, 
                 'page' => $page
             ])->json();
 
             $leadsDaPagina = $response['Leads'] ?? $response;
 
             if (empty($leadsDaPagina)) {
+                Log::info("Página vazia! Fim da busca.");
                 break; 
             }
 
@@ -88,5 +70,30 @@ class AnaliseController extends Controller
 
         // Marca que a imobiliária já foi sincronizada
         $company->update(['sincronizado_em' => now()]);
+        Log::info("Sincronização FINALIZADA com sucesso!");
     }
+    
+    public function index(){
+        // 1. Recupera a imobiliária correta usando a sessão que você criou no Login
+        $companyId = session('company_id');
+        
+        // Se por algum motivo a sessão não existir, redireciona para o login
+        if (!$companyId) {
+            return redirect()->route('empresa.login');
+        }
+
+        $company = Company::find($companyId);
+
+        // 2. A MÁGICA DA CARGA INICIAL (Roda apenas na primeira vez)
+        if (is_null($company->sincronizado_em)) {
+            $this->buscarLeadsAntigosNaApi($company);
+        }
+
+        // 3. Puxa todos os leads dessa imobiliária do banco de dados local
+        // Usamos o relacionamento $company->leads() que criamos antes
+        $leads = $company->leads()->orderBy('created_at', 'desc')->get();
+
+        return view('DashboardUser', compact('leads'));
+    }
+
 }

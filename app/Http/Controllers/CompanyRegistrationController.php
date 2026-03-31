@@ -21,7 +21,7 @@ class CompanyRegistrationController extends Controller
         $data = $request->validate([
             'name' => 'required|string|max:255|unique:companies,name',
             'email' => 'required|string|lowercase|email:rfc,dns|max:255|unique:companies,email|unique:users,email',
-            'phone' => 'required|string|max:15|unique:companies,phone',
+            'phone' => ['required', 'string', 'max:15', 'regex:/^\(\d{2}\)\s\d{4,5}-\d{4}$/', 'unique:companies,phone'],
             'city' => 'required|string|max:55',
             'state' => 'required|string|max:2',
             'password' => 'required|string|min:6|confirmed',
@@ -37,7 +37,7 @@ class CompanyRegistrationController extends Controller
         ]);
 
         $user = User::create([
-            'name' => $data['name'] . ' - Admin',
+            'name' => $data['name'],
             'email' => $data['email'],
             'password' => Hash::make($data['password']),
             'company_id' => $company->id,

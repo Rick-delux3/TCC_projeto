@@ -51,6 +51,8 @@
                             name="phone"
                             class="client-input"
                             value="{{ old('phone') }}"
+                            inputmode="numeric"
+                            maxlength="15"
                             placeholder="(00) 00000-0000"
                             required
                         >
