@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\Log;
 
 
 
-class AnaliseController extends Controller
+class DashboardController extends Controller
 {
     private $page;
     private $token;
@@ -26,6 +26,9 @@ class AnaliseController extends Controller
     }
 
     private function buscarLeadsAntigosNaApi($company){
+
+            set_time_limit(0);
+
             $token = $this->token;
             $page = $this->page;
 
@@ -34,15 +37,16 @@ class AnaliseController extends Controller
         do {
 
             Log::info("Buscando página: " . $page);
-            $response = Http::get($this->baseUrl . 'Leads', [
-                'token' => $token, 
-                'page' => $page
-            ])->json();
 
-            $leadsDaPagina = $response['Leads'] ?? $response;
+            $response = Http::get($this->baseUrl . 'Leads?token=' . $token . '&page=' . $page)->json();
+
+
+            $leadsDaPagina = $response['Data'] ?? [];
 
             if (empty($leadsDaPagina)) {
+
                 Log::info("Página vazia! Fim da busca.");
+
                 break; 
             }
 
@@ -86,14 +90,14 @@ class AnaliseController extends Controller
 
         // 2. A MÁGICA DA CARGA INICIAL (Roda apenas na primeira vez)
         if (is_null($company->sincronizado_em)) {
-            $this->buscarLeadsAntigosNaApi($company);
+            $this->buscarLeadsAntigosnaApi($company);
         }
 
         // 3. Puxa todos os leads dessa imobiliária do banco de dados local
         // Usamos o relacionamento $company->leads() que criamos antes
         $leads = $company->leads()->orderBy('created_at', 'desc')->get();
 
-        return view('DashboardUser', compact('leads'));
+        return view('DashboardUser', compact('leads'))->with('success', 'Login realizado com SUCESSO!!');
     }
 
 }

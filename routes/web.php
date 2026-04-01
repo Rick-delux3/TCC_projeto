@@ -10,13 +10,14 @@ use App\Http\Controllers\CompanyAuthController;
 use App\Http\Controllers\TwoFactorController;
 use App\Http\Controllers\AdminsRegistrationController;
 use App\Http\Controllers\AdminAuthController;
+use App\Http\Controllers\DashboardController;
 
-Route::get('/Dashboard/User', function () {
-    return view('layout-inicial.Dashboard_User');
-})->middleware(['auth', 'verified', '2fa'])->name('Dashboard');
+Route::get('/Dashboard/User',[DashboardController::class, 'index'])
+->middleware(['auth', '2fa'])
+->name('Dashboard');
 
 Route::get('/Dashboard/Admin', function (){
-    return view('layout-inicial.Dashboard_Admin');
+    return view('DashboardAdmin');
 })->middleware(['auth:admin', 'admin.2fa'])->name('Dashboard-Admin');
 
 Route::middleware('auth')->group(function () {

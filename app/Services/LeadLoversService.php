@@ -47,9 +47,7 @@ class LeadLoversService
     
     //Coleção de Tags
     public function getAllTags(){
-        return Http::get($this->baseUrl . 'Tag', [
-            'token' => $this->token
-        ])->json();
+        return Http::get($this->baseUrl . 'Tag?token=' . $this->token)->json();
     }
 
     //Criar tag

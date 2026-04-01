@@ -31,15 +31,15 @@
 
                 <div class="client-field">
                     <label for="name" class="client-label">Nome da Empresa</label>
-                    <input
-                        type="text"
-                        id="name"
-                        name="name"
-                        class="client-input"
-                        value="{{ old('name') }}"
-                        placeholder="Ex.: Nova Casa Imoveis"
-                        required
-                    >
+                    <select name="name" id="name" class="form-control" required>
+                        <option value="" disabled selected>Selecione sua Imobiliária...</option>
+        
+                        @forelse($tagsOficiais as $tagNome)
+                            <option value="{{ $tagNome }}">{{ $tagNome }}</option>
+                        @empty
+                            <option value="" disabled>Nenhuma tag encontrada no sistema</option>
+                        @endforelse
+                    </select>
                 </div>
 
                 <div class="client-grid">

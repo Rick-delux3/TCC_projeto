@@ -8,13 +8,55 @@ use App\Services\LeadLoversService;
 use Illuminate\Auth\Events\Registered;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Http;
 
 class CompanyRegistrationController extends Controller
 {
+    private $token;
+    private $baseURL;
+
+    function __construct()
+    {
+        $this->token = config('services.leadlovers.token');
+        $this->baseURL = 'https://llapi.leadlovers.com/webapi/';
+
+    }
+
     public function showRegistrationForm()
     {
-        return view('register-company');
+        $response = Http::get($this->baseURL . 'Tags?token=' . $this->token)->json();
+
+        //dd('TAGS DO LEADLOVERS:', $response);
+
+        $tagsOficiais = [];
+
+        $listatags = $response['Tags'] ?? [];
+        
+        // (Assumindo que a API devolve as tags direto num array e o nome fica na chave 'Name')
+        // Nós vamos ajustar essa parte exata assim que você me mandar a foto do dd()!
+        if (is_array($listatags)) {
+            foreach ($listatags as $tag) {
+                if (isset($tag['Title'])) {
+                    $NomedaTag = $tag['Title'];
+
+                    if (str_starts_with($NomedaTag, 'Imobiliária')) {
+                        $tagsOficiais[] = $NomedaTag;
+                    }
+                }
+
+            }
+        }
+
+        sort($tagsOficiais);
+
+        // 4. Manda a lista dinâmica para a View
+        
+        return view('register-company', compact('tagsOficiais'));
+        // Ajuste o nome da view acima para o nome real do seu arquivo blade
     }
+
+
+    
 
     public function store(Request $request, LeadLoversService $leadLovers)
     {
