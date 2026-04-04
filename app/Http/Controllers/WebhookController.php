@@ -6,6 +6,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use App\Models\Company;
 use App\Models\Lead;
+use Illuminate\Support\Str;
 
 class WebhookController extends Controller
 {
@@ -16,31 +17,52 @@ class WebhookController extends Controller
         Log::info('=== CHEGOU UM NOVO LEAD DO LEADLOVERS ===');
         Log::info($request->all());
 
-
+        $cpf = $request->input('cpf');
+        $cpf_casado = $request->input('cpf_casado');
+        $nome = $request->input('nome');
         $email = $request->input('email');
-        $nome = $request->input('name');
-        $telefone = $request->input('phone');
-        $tagsString = $request->input('tags', ''); // Ex: "Imobiliaria_ABC, VIP"
+        $telefone = $request->input('tel');
+        $cidade = $request->input('cidade');
+        $estado = $request->input('estado');
+        $tagsString = $request->input('tags', '');
+        $valor_aluguel = $request->input('valor_aluguel', null);
+        $imobiliaria = $request->input('imobiliaria');
+
+        $textoParaBuscar = $imobiliaria;
+         // Ex: "Imobiliaria_ABC, VIP"
 
         if (!$email) {
             return response()->json(['error' => 'Email vazio'], 400);
         }
 
         // Transforma a string de tags do LeadLovers num array
-        $tagsArray = array_map('trim', explode(',', $tagsString));
+        $nomeLimpoLead = Str::slug($textoParaBuscar);
+        
+        $companies = Company::all();
+        $companyEncontrada = null;
 
-        // Busca qual imobiliária (Company) tem o 'name' dentro das tags que chegaram
-        $company = Company::whereIn('name', $tagsArray)->first();
+        foreach ($companies as $comp) {
+            if (str_contains($nomeLimpoLead, Str::slug($comp->name))) {
+                $companyEncontrada = $comp;
+                break;
+            }
+        }
 
         // Se achou a imobiliária, salva o lead para ela
-        if ($company) {
+        if ($companyEncontrada) {
             Lead::updateOrCreate(
                 ['email' => $email], // Se o email já existir, ele só atualiza os dados
                 [
-                    'name' => $nome,
-                    'phone' => $telefone,
-                    'company_id' => $company->id, // Aqui acontece a mágica do vínculo!
+                    'cpf' => $cpf,
+                    'cpf_casado' => $cpf_casado,
+                    'nome' => $nome,
+                    'tel' => $telefone,
+                    'cidade' => $cidade,
+                    'estado' => $estado,
+                    'company_id' => $companyEncontrada->id, // Aqui acontece a mágica do vínculo!
                     'tags_originais' => $tagsString,
+                    'imobiliaria' => $imobiliaria,
+                    'valor_aluguel' => $valor_aluguel
                 ]
             );
         }

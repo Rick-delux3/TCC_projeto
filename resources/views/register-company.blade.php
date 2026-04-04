@@ -31,7 +31,7 @@
 
                 <div class="client-field">
                     <label for="name" class="client-label">Nome da Empresa</label>
-                    <select name="name" id="name" class="form-control" required>
+                    <select name="name" id="name" class="client-input client-select" required>
                         <option value="" disabled selected>Selecione sua Imobiliária...</option>
         
                         @forelse($tagsOficiais as $tagNome)
@@ -88,7 +88,7 @@
 
                     <div class="client-field">
                         <label for="state" class="client-label">Estado (UF)</label>
-                        <select name="state" id="state" class="client-input" required>
+                        <select name="state" id="state" class="client-input client-select" required>
                             <option value="" {{ old('state') ? '' : 'selected' }}>Selecione</option>
                             <option value="SP" {{ old('state') === 'SP' ? 'selected' : '' }}>SP</option>
                             <option value="AL" {{ old('state') === 'AL' ? 'selected' : '' }}>AL</option>

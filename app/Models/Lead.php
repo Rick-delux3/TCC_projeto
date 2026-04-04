@@ -11,10 +11,16 @@ class Lead extends Model
 
     // Permite salvar dados em massa via Webhook
     protected $fillable = [
-        'company_id', 
-        'name', 
+        'company_id',
+        'cpf',
+        'cpf_casado',
+        'cidade',
+        'estado',
+        'imobiliaria',
+        'nome', 
         'email', 
-        'phone', 
+        'tel',
+        'valor_aluguel',
         'tags_originais', 
         'status'
     ];

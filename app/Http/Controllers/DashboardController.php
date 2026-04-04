@@ -7,6 +7,7 @@ use App\Models\Company;
 use App\Models\Lead;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 
 
 
@@ -38,7 +39,7 @@ class DashboardController extends Controller
 
             Log::info("Buscando página: " . $page);
 
-            $response = Http::get($this->baseUrl . 'Leads?token=' . $token . '&page=' . $page)->json();
+            $response = Http::timeout(120)->get($this->baseUrl . 'Leads?token=' . $token . '&page=' . $page)->json();
 
 
             $leadsDaPagina = $response['Data'] ?? [];
@@ -50,18 +51,36 @@ class DashboardController extends Controller
                 break; 
             }
 
-            foreach ($leadsDaPagina as $leadData) {
-                $tagsDoLead = $leadData['Tags'] ?? '';
-                $tagsArray = is_string($tagsDoLead) ? array_map('trim', explode(',', $tagsDoLead)) : (array) $tagsDoLead;
+            //dd("ESTRUTURA DE 1 LEAD:", $leadsDaPagina[5]);
 
-                if (in_array($company->name, $tagsArray)) {
+            foreach ($leadsDaPagina as $leadData) {
+
+                $tagsDoLead = $leadData['Company'] ?? '';
+
+                // 2. Transforma em texto puro (string) caso a API mande como Array
+                if (is_array($tagsDoLead)) {
+                    $tagsDoLead = implode(', ', $tagsDoLead);
+                }
+
+                $tagLimpa = Str::slug($tagsDoLead);
+                $nomeLimpo = Str::slug($company->name);
+
+                // 3. A MÁGICA DO SELECT: Como o $company->name agora é exato, 
+                // o stripos procura ele no meio do texto de tags do lead.
+                if (str_contains($tagLimpa, $nomeLimpo)) {
+
+                    $fichaCompleta = Http::timeout(60)->get($this->baseUrl . 'Lead?token=' . $this->token . '&email=' . $leadData['Email'])->json();
+
+                    dd("FICHA COMPLETA DO LEAD:", $fichaCompleta);
+                                        
                     Lead::updateOrCreate(
                         ['email' => $leadData['Email']], 
-                        [
-                            'name' => $leadData['Name'] ?? 'Sem Nome',
-                            'phone' => $leadData['Phone'] ?? null,
+                        [   
+                            'nome' => $leadData['Name'] ?? 'Sem Nome',
+                            'tel' => $leadData['Phone'] ?? null,
+                            'cidade' =>$leadData['City'] ?? null,
                             'company_id' => $company->id,
-                            'tags_originais' => is_string($tagsDoLead) ? $tagsDoLead : implode(', ', $tagsArray),
+                            'tags_originais' => $tagsDoLead,
                             'status' => 'novo'
                         ]
                     );
@@ -70,10 +89,13 @@ class DashboardController extends Controller
 
             $page++;
 
+            sleep(1);
+
         } while (count($leadsDaPagina) > 0);
 
         // Marca que a imobiliária já foi sincronizada
         $company->update(['sincronizado_em' => now()]);
+
         Log::info("Sincronização FINALIZADA com sucesso!");
     }
     
@@ -88,16 +110,17 @@ class DashboardController extends Controller
 
         $company = Company::find($companyId);
 
+
         // 2. A MÁGICA DA CARGA INICIAL (Roda apenas na primeira vez)
         if (is_null($company->sincronizado_em)) {
-            $this->buscarLeadsAntigosnaApi($company);
+            $this->buscarLeadsAntigosNaApi($company);
         }
 
         // 3. Puxa todos os leads dessa imobiliária do banco de dados local
         // Usamos o relacionamento $company->leads() que criamos antes
         $leads = $company->leads()->orderBy('created_at', 'desc')->get();
 
-        return view('DashboardUser', compact('leads'))->with('success', 'Login realizado com SUCESSO!!');
+        return view('dashboard-user', compact('leads'))->with('success', 'Login realizado com SUCESSO!!');
     }
 
 }

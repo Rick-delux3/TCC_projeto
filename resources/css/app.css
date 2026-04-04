@@ -10,19 +10,69 @@
     --descr-color: #55658C; 
     --font-principal: 'Sansation';
 }
-body{
-    padding: auto;
-    background:
-        radial-gradient(circle at 12% 18%, rgba(33, 40, 191, 0.14), transparent 42%),
-        radial-gradient(circle at 88% 8%, rgba(238, 29, 35, 0.1), transparent 35%),
-        linear-gradient(145deg, #f8f9ff 0%, #eef2ff 55%, #e6ebff 100%);
-    background-attachment: fixed;
+body.auth-layout-body{
+    min-height: 100vh;
+    margin: 0;
+    background: #cfe4f7;
 }
 
-header{
+.auth-layout-main{
+    min-height: calc(100vh - 92px);
+    background: linear-gradient(180deg, #d8ebfa 0%, #c8e0f3 100%);
+    padding-top: 28px;
+}
+
+.standalone-auth-page{
+    min-height: 100vh;
+    background: #cfe4f7;
+}
+
+.standalone-auth-main{
+    min-height: calc(100vh - 92px);
+    background: linear-gradient(180deg, #d8ebfa 0%, #c8e0f3 100%);
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 46px 16px 28px;
+}
+
+.auth-topbar{
+    width: 100%;
+    min-height: 74px;
+    background: #04013f;
+    box-shadow: 0 3px 10px rgba(3, 1, 51, 0.18);
+    position: relative;
+    z-index: 10;
+}
+
+.auth-topbar__inner{
+    width: 100%;
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 10px 34px 8px;
+    display: flex;
+    align-items: center;
+}
+
+.auth-topbar__brand{
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    text-decoration: none;
+}
+
+.auth-topbar__brand img{
+    width: 54px;
     height: auto;
-    justify-content: start;
-    align-items: start;
+    display: block;
+}
+
+.auth-topbar__brand span{
+    color: #ffffff;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 1.1px;
 }
 
 footer{
@@ -91,5 +141,30 @@ div.modal-error{
     font-family: var(--font-principal);
 }
 
+@media (max-width: 640px){
+    .auth-topbar{
+        min-height: 68px;
+    }
 
+    .auth-topbar__inner{
+        padding: 10px 16px 8px;
+    }
 
+    .auth-topbar__brand img{
+        width: 46px;
+    }
+
+    .auth-topbar__brand span{
+        font-size: 11px;
+    }
+
+    .auth-layout-main{
+        min-height: calc(100vh - 68px);
+        padding-top: 20px;
+    }
+
+    .standalone-auth-main{
+        min-height: calc(100vh - 68px);
+        padding: 30px 12px 18px;
+    }
+}

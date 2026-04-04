@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Verificacao em Duas Etapas - Admin</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
+    @vite(['resources/css/app.css'])
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400..900&family=Press+Start+2P&family=Roboto+Condensed:ital,wght@0,100..900;1,100..900&family=Sansation:ital,wght@0,300;0,400;0,700;1,300;1,400;1,700&family=TASA+Explorer:wght@400..800&display=swap" rel="stylesheet">
@@ -20,10 +21,6 @@
         body {
             min-height: 100vh;
             margin: 0;
-            display: grid;
-            place-items: center;
-            padding: 20px;
-            background: linear-gradient(140deg, #f2f2f2 0%, #dde0f8 100%);
             font-family: var(--font-principal);
         }
 
@@ -150,9 +147,12 @@
     </style>
 </head>
 <body>
+    <div class="standalone-auth-page">
+        @include('auth.partials.auth-topbar')
+        <main class="standalone-auth-main">
     <div class="twofa-card">
         <div class="twofa-head">
-            <img src="{{ asset('imgs/logo-header.jpg') }}" alt="Logo">
+            <img src="{{ asset('imgs/Logo_NVS.png') }}" alt="Logo">
             <h1>Verificacao 2FA - Admin</h1>
             <p>Digite o codigo de 6 digitos enviado para seu e-mail.</p>
         </div>
@@ -200,6 +200,8 @@
 
             <p class="helper">Nao recebeu? Verifique spam ou lixo eletronico.</p>
         </div>
+    </div>
+        </main>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js" integrity="sha384-FKyoEForCGlyvwx9Hj09JcYn3nv7wiPVlz7YYwJrWVcXK/BmnVDxM+D2scQbITxI" crossorigin="anonymous"></script>

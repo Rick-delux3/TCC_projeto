@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Nova Senha</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
+    @vite(['resources/css/app.css'])
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400..900&family=Press+Start+2P&family=Roboto+Condensed:ital,wght@0,100..900;1,100..900&family=Sansation:ital,wght@0,300;0,400;0,700;1,300;1,400;1,700&family=TASA+Explorer:wght@400..800&display=swap" rel="stylesheet">
@@ -20,10 +21,6 @@
         body {
             min-height: 100vh;
             margin: 0;
-            display: grid;
-            place-items: center;
-            padding: 20px;
-            background: linear-gradient(140deg, #f2f2f2 0%, #dde0f8 100%);
             font-family: var(--font-principal);
         }
 
@@ -124,64 +121,69 @@
     </style>
 </head>
 <body>
-    <div class="reset-card">
-        <div class="reset-head">
-            <img src="{{ asset('imgs/logo-header.jpg') }}" alt="Logo">
-            <h1>Definir nova senha</h1>
-            <p>Informe seu e-mail e a nova senha para concluir.</p>
-        </div>
-        <div class="reset-body">
-            @if ($errors->any())
-                <div class="alert alert-danger" role="alert">
-                    {{ $errors->first() }}
+    <div class="standalone-auth-page">
+        @include('auth.partials.auth-topbar')
+        <main class="standalone-auth-main">
+            <div class="reset-card">
+                <div class="reset-head">
+                    <img src="{{ asset('imgs/Logo_NVS.png') }}" alt="Logo">
+                    <h1>Definir nova senha</h1>
+                    <p>Informe seu e-mail e a nova senha para concluir.</p>
                 </div>
-            @endif
+                <div class="reset-body">
+                    @if ($errors->any())
+                        <div class="alert alert-danger" role="alert">
+                            {{ $errors->first() }}
+                        </div>
+                    @endif
 
-            <form method="POST" action="{{ route('company.password.store') }}">
-                @csrf
-                <input type="hidden" name="token" value="{{ $request->route('token') }}">
+                    <form method="POST" action="{{ route('company.password.store') }}">
+                        @csrf
+                        <input type="hidden" name="token" value="{{ $request->route('token') }}">
 
-                <label for="email" class="form-label">E-mail</label>
-                <input
-                    id="email"
-                    type="email"
-                    name="email"
-                    class="form-control"
-                    value="{{ old('email', $request->email) }}"
-                    required
-                    autocomplete="username"
-                    autofocus
-                >
+                        <label for="email" class="form-label">E-mail</label>
+                        <input
+                            id="email"
+                            type="email"
+                            name="email"
+                            class="form-control"
+                            value="{{ old('email', $request->email) }}"
+                            required
+                            autocomplete="username"
+                            autofocus
+                        >
 
-                <label for="password" class="form-label">Nova senha</label>
-                <div class="password-field">
-                    <input
-                        id="password"
-                        type="password"
-                        name="password"
-                        class="form-control"
-                        required
-                        autocomplete="new-password"
-                    >
-                    <button type="button" class="toggle-password" data-toggle-password="password" aria-label="Mostrar senha">Ver</button>
+                        <label for="password" class="form-label">Nova senha</label>
+                        <div class="password-field">
+                            <input
+                                id="password"
+                                type="password"
+                                name="password"
+                                class="form-control"
+                                required
+                                autocomplete="new-password"
+                            >
+                            <button type="button" class="toggle-password" data-toggle-password="password" aria-label="Mostrar senha">Ver</button>
+                        </div>
+
+                        <label for="password_confirmation" class="form-label">Confirmar nova senha</label>
+                        <div class="password-field">
+                            <input
+                                id="password_confirmation"
+                                type="password"
+                                name="password_confirmation"
+                                class="form-control"
+                                required
+                                autocomplete="new-password"
+                            >
+                            <button type="button" class="toggle-password" data-toggle-password="password_confirmation" aria-label="Mostrar senha">Ver</button>
+                        </div>
+
+                        <button type="submit" class="btn-submit">Salvar nova senha</button>
+                    </form>
                 </div>
-
-                <label for="password_confirmation" class="form-label">Confirmar nova senha</label>
-                <div class="password-field">
-                    <input
-                        id="password_confirmation"
-                        type="password"
-                        name="password_confirmation"
-                        class="form-control"
-                        required
-                        autocomplete="new-password"
-                    >
-                    <button type="button" class="toggle-password" data-toggle-password="password_confirmation" aria-label="Mostrar senha">Ver</button>
-                </div>
-
-                <button type="submit" class="btn-submit">Salvar nova senha</button>
-            </form>
-        </div>
+            </div>
+        </main>
     </div>
     @include('partials.page-loader')
     <script>

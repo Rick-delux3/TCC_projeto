@@ -19,9 +19,16 @@ return new class extends Migration
             $table->foreignId('company_id')->constrained('companies')->onDelete('cascade');
             
             // Dados do Cliente
-            $table->string('name')->nullable();
+            $table->string('nome')->nullable();
             $table->string('email')->unique(); // Evita lead duplicado
-            $table->string('phone')->nullable();
+            $table->string('tel')->nullable();
+            $table->string('cpf')->nullable()->unique();
+            $table->string('cpf_casado');
+            $table->string('cidade')->nullable();
+            $table->string('estado')->nullable();
+            $table->string('imobiliaria')->nullable();
+            $table->string('valor_aluguel')->nullable();
+
             
             // Controle do CRM
             $table->text('tags_originais')->nullable(); // Para salvar o que veio no webhook

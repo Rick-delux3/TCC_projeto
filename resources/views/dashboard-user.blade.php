@@ -8,7 +8,6 @@
     <table>
         <thead>
             <tr>
-                <th>ID do Banco</th>
                 <th>Nome</th>
                 <th>E-mail</th>
                 <th>Telefone</th>
@@ -20,7 +19,6 @@
             {{-- O Laravel vai repetir essa linha para cada Lead que encontrar no banco --}}
             @forelse ($leads as $lead)
                 <tr>
-                    <td>{{ $lead->id }}</td>
                     <td>{{ $lead->name }}</td>
                     <td>{{ $lead->email }}</td>
                     <td>{{ $lead->phone ?? 'Sem telefone' }}</td>
