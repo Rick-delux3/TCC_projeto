@@ -17,7 +17,7 @@ Route::get('/Dashboard/User',[DashboardController::class, 'index'])
 ->name('Dashboard');
 
 Route::get('/Dashboard/Admin', function (){
-    return view('DashboardAdmin');
+    return view('dashboard-admin');
 })->middleware(['auth:admin', 'admin.2fa'])->name('Dashboard-Admin');
 
 Route::middleware('auth')->group(function () {

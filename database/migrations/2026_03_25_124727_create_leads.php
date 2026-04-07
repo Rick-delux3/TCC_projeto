@@ -23,7 +23,7 @@ return new class extends Migration
             $table->string('email')->unique(); // Evita lead duplicado
             $table->string('tel')->nullable();
             $table->string('cpf')->nullable()->unique();
-            $table->string('cpf_casado');
+            $table->string('cpf_casado')->nullable();
             $table->string('cidade')->nullable();
             $table->string('estado')->nullable();
             $table->string('imobiliaria')->nullable();
