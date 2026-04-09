@@ -68,12 +68,15 @@ class DashboardController extends Controller
 
                     $fichaCompleta = Http::timeout(60)->get($this->baseUrl . 'Lead?token=' . $token . '&email=' . $leadData['Email'])->json();
 
-                    $statusDaAnalise = $fichaCompleta['Tags'] ?? '';
+                    $Tags = $fichaCompleta['Tags'] ?? [];
+                    $statusDaAnalise = '';
                     
                     // Prevenção caso o Leadlovers mande como Array em vez de texto
-                    if (is_array($statusDaAnalise)) {
-                        $statusDaAnalise = implode(', ', $statusDaAnalise);
+                    if (is_array($Tags) && isset($Tags[0])) {
+                        $statusDaAnalise = $Tags[0]['Title'] ?? '';
                     }
+
+                    if(is_string($Tags)) $statusDaAnalise = $Tags;
                                         
                     Lead::updateOrCreate(
                         ['email' => $leadData['Email']], 
@@ -83,7 +86,7 @@ class DashboardController extends Controller
                             'cidade' => $leadData['City'] ?? null,
                             'company_id' => $company->id,
                             'imobiliaria' => $empresa,
-                            'tags_originais' => '',
+                            'tags_originais' => $statusDaAnalise,
                             'status' => !empty($statusDaAnalise) ? $statusDaAnalise : 'novo'
                         ]
                     );
