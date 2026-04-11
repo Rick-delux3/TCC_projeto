@@ -28,11 +28,11 @@ class DashboardController extends Controller
             $token = $this->token;
             $page = $this->page;
 
-            Log::info("INICIANDO SINCRONIZAÃ‡ÃƒO DA EMPRESA: " . $company->name);
+            Log::info("INICIANDO SINCRONIZAÃƒâ€¡ÃƒÆ’O DA EMPRESA: " . $company->name);
 
         do {
 
-            Log::info("Buscando pÃ¡gina: " . $page);
+            Log::info("Buscando pÃƒÂ¡gina: " . $page);
 
             $response = Http::timeout(120)->get($this->baseUrl . 'Leads?token=' . $token . '&page=' . $page)->json();
 
@@ -41,20 +41,18 @@ class DashboardController extends Controller
 
             if (empty($leadsDaPagina)) {
 
-                Log::info("PÃ¡gina vazia! Fim da busca.");
+                Log::info("PÃƒÂ¡gina vazia! Fim da busca.");
 
                 break; 
             }
 
-            //dd("ESTRUTURA DE 1 LEAD:", $leadsDaPagina[5]);
+          
 
             foreach ($leadsDaPagina as $leadData) {
 
-
-
                 $empresa = $leadData['Company'] ?? '';
 
-                // 2. Transforma em texto puro (string) caso a API mande como Array
+                
                 if (is_array($empresa)) {
                     $empresa = implode(', ', $empresa);
                 }
@@ -62,8 +60,7 @@ class DashboardController extends Controller
                 $tagLimpa = Str::slug($empresa);
                 $nomeLimpo = Str::slug($company->name);
 
-                // 3. A MÃGICA DO SELECT: Como o $company->name agora Ã© exato,
-                // o stripos procura ele no meio do texto de tags do lead.
+               
                 if (str_contains($tagLimpa, $nomeLimpo)) {
 
                     $fichaCompleta = Http::timeout(60)->get($this->baseUrl . 'Lead?token=' . $token . '&email=' . $leadData['Email'])->json();
@@ -71,12 +68,14 @@ class DashboardController extends Controller
                     $Tags = $fichaCompleta['Tags'] ?? [];
                     $statusDaAnalise = '';
                     
-                    // Prevenção caso o Leadlovers mande como Array em vez de texto
+                    
                     if (is_array($Tags) && isset($Tags[0])) {
                         $statusDaAnalise = $Tags[0]['Title'] ?? '';
                     }
 
-                    if(is_string($Tags)) $statusDaAnalise = $Tags;
+                    if (is_string($Tags)) {
+                        $statusDaAnalise = $Tags;
+                    }
                                         
                     Lead::updateOrCreate(
                         ['email' => $leadData['Email']], 
@@ -99,34 +98,46 @@ class DashboardController extends Controller
 
         } while (count($leadsDaPagina) > 0);
 
-        // Marca que a imobiliÃ¡ria jÃ¡ foi sincronizada
         $company->update(['sincronizado_em' => now()]);
 
-        Log::info("SincronizaÃ§Ã£o FINALIZADA com sucesso!");
+        Log::info("SincronizaÃƒÂ§ÃƒÂ£o FINALIZADA com sucesso!");
     }
     
-    public function index(){
-        // 1. Recupera a imobiliÃ¡ria correta usando a sessÃ£o que vocÃª criou no Login
+    public function index(Request $request){
         $companyId = session('company_id');
         
-        // Se por algum motivo a sessÃ£o nÃ£o existir, redireciona para o login
         if (!$companyId) {
             return redirect()->route('empresa.login');
         }
 
         $company = Company::find($companyId);
 
-        // 2. A MÃGICA DA CARGA INICIAL (Roda apenas na primeira vez)
         if (is_null($company->sincronizado_em)) {
             $this->buscarLeadsAntigosNaApi($company);
         }
 
         $recentThreshold = now()->subDays(7);
+        $selectedTag = trim((string) $request->query('tag', ''));
 
-        // 3. Puxa os leads em pÃ¡ginas para manter o painel mais leve
-        $leads = $company->leads()
-            ->orderBy('created_at', 'desc')
-            ->paginate(8)
+        $tagCounts = $company->leads()
+            ->pluck('tags_originais')
+            ->filter()
+            ->flatMap(function ($tags) {
+                return collect(preg_split('/\s*,\s*/', $tags))
+                    ->filter(fn ($tag) => filled($tag))
+                    ->map(fn ($tag) => trim($tag));
+            })
+            ->countBy()
+            ->sortDesc();
+
+        $leadsQuery = $company->leads()->orderBy('created_at', 'desc');
+
+        if (filled($selectedTag)) {
+            $leadsQuery->where('tags_originais', 'like', '%' . addcslashes($selectedTag, '%_\\') . '%');
+        }
+
+        $leads = $leadsQuery
+            ->paginate(6)
             ->withQueryString();
 
         $totalLeads = $company->leads()->count();
@@ -145,17 +156,8 @@ class DashboardController extends Controller
         $latestLead = $company->leads()
             ->latest('created_at')
             ->first();
-        $topTags = $company->leads()
-            ->pluck('tags_originais')
-            ->filter()
-            ->flatMap(function ($tags) {
-                return collect(preg_split('/\s*,\s*/', $tags))
-                    ->filter(fn ($tag) => filled($tag))
-                    ->map(fn ($tag) => trim($tag));
-            })
-            ->countBy()
-            ->sortDesc()
-            ->take(4);
+        $topTags = $tagCounts->take(4);
+        $filterTags = $tagCounts;
 
         $dashboardStats = [
             'totalLeads' => $totalLeads,
@@ -164,9 +166,10 @@ class DashboardController extends Controller
             'withPhone' => $withPhone,
             'withoutPhone' => max($totalLeads - $withPhone, 0),
             'latestLeadAt' => optional($latestLead)->created_at,
+            'filteredLeads' => $leads->total(),
         ];
 
-        return view('dashboard-user', compact('leads', 'dashboardStats', 'topTags'))
+        return view('dashboard-user', compact('leads', 'dashboardStats', 'topTags', 'filterTags', 'selectedTag'))
             ->with('success', 'Login realizado com SUCESSO!!');
     }
 }

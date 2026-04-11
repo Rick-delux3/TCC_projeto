@@ -16,7 +16,11 @@
     $withPhone = $dashboardStats['withPhone'] ?? 0;
     $withoutPhone = $dashboardStats['withoutPhone'] ?? 0;
     $latestLeadAt = $dashboardStats['latestLeadAt'] ?? null;
+    $filteredLeads = $dashboardStats['filteredLeads'] ?? $leads->total();
     $topTags = $topTags ?? collect();
+    $filterTags = $filterTags ?? collect();
+    $selectedTag = $selectedTag ?? '';
+    $isTagFiltered = filled($selectedTag);
     $currentStart = $leads->firstItem() ?? 0;
     $currentEnd = $leads->lastItem() ?? 0;
 @endphp
@@ -106,8 +110,53 @@
                 </div>
 
                 <div class="crm-card__meta">
-                    <span>{{ $totalLeads }} registros</span>
+                    <span>{{ $isTagFiltered ? $filteredLeads . ' filtrados' : $totalLeads . ' registros' }}</span>
                 </div>
+            </div>
+
+            <div class="crm-filter-panel">
+                <form method="GET" action="{{ url()->current() }}" class="crm-filter-form">
+                    <label class="crm-filter-field" for="crm-tag-filter">
+                        <span>Filtrar por tag</span>
+                        <select id="crm-tag-filter" name="tag" class="crm-filter-select">
+                            <option value="">Todas as tags</option>
+                            @foreach ($filterTags as $tag => $count)
+                                <option value="{{ $tag }}" @selected($selectedTag === $tag)>
+                                    {{ $tag }} ({{ $count }})
+                                </option>
+                            @endforeach
+                        </select>
+                    </label>
+
+                    <div class="crm-filter-actions">
+                        <button type="submit" class="crm-filter-submit">Filtrar</button>
+
+                        @if ($isTagFiltered)
+                            <a href="{{ url()->current() }}" class="crm-filter-clear">Limpar</a>
+                        @endif
+                    </div>
+                </form>
+
+                @if ($filterTags->isNotEmpty())
+                    <div class="crm-quick-filters">
+                        @foreach ($filterTags->take(8) as $tag => $count)
+                            <a
+                                href="{{ request()->fullUrlWithQuery(['tag' => $tag, 'page' => 1]) }}"
+                                class="crm-quick-filter {{ $selectedTag === $tag ? 'crm-quick-filter--active' : '' }}"
+                            >
+                                <span>{{ $tag }}</span>
+                                <strong>{{ $count }}</strong>
+                            </a>
+                        @endforeach
+                    </div>
+                @endif
+
+                @if ($isTagFiltered)
+                    <p class="crm-filter-feedback">
+                        Mostrando {{ $filteredLeads }} lead{{ $filteredLeads === 1 ? '' : 's' }} com a tag
+                        <strong>{{ $selectedTag }}</strong>.
+                    </p>
+                @endif
             </div>
 
             @if ($leads->total() > 0)
@@ -172,7 +221,12 @@
                                     <td data-label="Segmentacao">
                                         <div class="crm-tags">
                                             @forelse ($visibleTags as $tag)
-                                                <span class="crm-tag">{{ $tag }}</span>
+                                                <a
+                                                    href="{{ request()->fullUrlWithQuery(['tag' => $tag, 'page' => 1]) }}"
+                                                    class="crm-tag crm-tag--link {{ $selectedTag === $tag ? 'crm-tag--active' : '' }}"
+                                                >
+                                                    {{ $tag }}
+                                                </a>
                                             @empty
                                                 <span class="crm-tag crm-tag--muted">Sem tag</span>
                                             @endforelse
@@ -208,7 +262,7 @@
 
                 <div class="crm-table-footer">
                     <p class="crm-table-footer__summary">
-                        Exibindo {{ $currentStart }} a {{ $currentEnd }} de {{ $totalLeads }} leads
+                        Exibindo {{ $currentStart }} a {{ $currentEnd }} de {{ $filteredLeads }} leads{{ $isTagFiltered ? ' filtrados' : '' }}
                     </p>
 
                     @if ($leads->hasPages())
@@ -220,11 +274,20 @@
             @else
                 <div class="crm-empty">
                     <span class="crm-section-tag">Base vazia</span>
-                    <h3>Nenhum lead encontrado para esta imobiliaria.</h3>
-                    <p>
-                        Assim que a sincronizacao trouxer novos contatos, eles serao exibidos aqui com
-                        indicadores, tags e acoes de acompanhamento.
-                    </p>
+                    @if ($isTagFiltered)
+                        <h3>Nenhum lead encontrado com a tag {{ $selectedTag }}.</h3>
+                        <p>
+                            Tente escolher outra tag ou limpe o filtro para voltar a visualizar toda a base
+                            sincronizada da imobiliaria.
+                        </p>
+                        <a href="{{ url()->current() }}" class="crm-filter-clear crm-filter-clear--inline">Limpar filtro</a>
+                    @else
+                        <h3>Nenhum lead encontrado para esta imobiliaria.</h3>
+                        <p>
+                            Assim que a sincronizacao trouxer novos contatos, eles serao exibidos aqui com
+                            indicadores, tags e acoes de acompanhamento.
+                        </p>
+                    @endif
                 </div>
             @endif
         </div>
@@ -240,14 +303,17 @@
 
                 <div class="crm-source-list">
                     @forelse ($topTags as $tag => $count)
-                        <div class="crm-source-item">
+                        <a
+                            href="{{ request()->fullUrlWithQuery(['tag' => $tag, 'page' => 1]) }}"
+                            class="crm-source-item crm-source-item--link {{ $selectedTag === $tag ? 'crm-source-item--active' : '' }}"
+                        >
                             <div>
                                 <strong>{{ $tag }}</strong>
                                 <span>Leads segmentados por esta tag</span>
                             </div>
 
                             <span class="crm-source-count">{{ $count }}</span>
-                        </div>
+                        </a>
                     @empty
                         <p class="crm-muted-copy">As tags de origem vao aparecer aqui assim que os primeiros leads forem sincronizados.</p>
                     @endforelse

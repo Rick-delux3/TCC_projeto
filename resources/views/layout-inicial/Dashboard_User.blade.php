@@ -23,7 +23,7 @@
         @endif
         });
     </script>
-<body>
+<body class="dashboard-user-body">
     @if (session('success'))
             <div class="modal fade" id="ModalSucess" tabindex="-1">
                 <div class="modal-dialog modal-dialog-centered">

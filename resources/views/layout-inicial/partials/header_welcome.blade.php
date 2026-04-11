@@ -3,7 +3,7 @@
 
         <!-- Logo -->
         <a class="navbar-brand d-flex align-items-center" href="#">
-            <img src="{{ asset('imgs/Logo_NVS.png') }}" alt="Logo" width="110" class="me-2">
+            <img src="{{ asset('imgs/Logo_NVS.png') }}" alt="Logo" class="navbar-brand__logo me-2">
         </a>
 
         <!-- Botão de abrir menu no mobile -->
