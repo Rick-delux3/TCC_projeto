@@ -15,6 +15,18 @@ body{
     background-repeat: no-repeat;
     background-attachment: fixed; /* se quiser o efeito parallax */
 }
+
+.index-body{
+    background-image: none;
+    background-color: #edf4fb;
+    background-attachment: initial;
+}
+
+.index-main{
+    width: 100%;
+    min-height: calc(100vh - 86px);
+    background: linear-gradient(180deg, #edf4fb 0%, #dde8f4 100%);
+}
 main{
     padding: auto;
     height: auto;
