@@ -27,9 +27,14 @@ class WebhookController extends Controller
         $tagsString = $request->input('tags', '');
         $valor_aluguel = $request->input('valor_aluguel', null);
         $imobiliaria = $request->input('imobiliaria');
-
+        
+        if (is_array($imobiliaria)) { $imobiliaria = implode(', ', $imobiliaria); }
+        if (is_array($tagsString)) { $tagsString = implode(', ', $tagsString); }
+        if (is_array($valor_aluguel)) { $valor_aluguel = implode(', ', $valor_aluguel); }
+        if (is_array($cidade)) { $cidade = implode(', ', $cidade); }
+        
         $textoParaBuscar = $imobiliaria;
-         // Ex: "Imobiliaria_ABC, VIP"
+        
 
         if (!$email) {
             return response()->json(['error' => 'Email vazio'], 400);

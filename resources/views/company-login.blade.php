@@ -5,6 +5,7 @@
     <section class="client-auth-shell">
         <aside class="client-auth-aside">
             <img src="{{ asset('imgs/img-cadastro.jpeg') }}" alt="Acesso do cliente">
+            <img src="{{ asset('imgs/Logo_NVS.png') }}" alt="Logo NVS" class="auth-media-logo">
             <div class="client-auth-overlay">
                 <span class="client-badge">Portal do Cliente</span>
                 <h2>Acesse sua area CRM</h2>

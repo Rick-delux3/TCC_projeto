@@ -5,6 +5,7 @@
     <section class="client-register-shell">
         <aside class="client-register-aside">
             <img src="{{ asset('imgs/seguro-fianca-locaticia_fundo_login_cadastro.png') }}" alt="Cadastro de clientes">
+            <img src="{{ asset('imgs/Logo_NVS.png') }}" alt="Logo NVS" class="auth-media-logo">
             <div class="client-register-overlay">
                 <span class="client-badge">Cadastro de Clientes</span>
                 <h2>Crie o acesso da sua Empresa</h2>

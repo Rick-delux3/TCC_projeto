@@ -5,6 +5,7 @@
     <section class="admin-register-shell">
         <aside class="admin-register-aside">
             <img src="{{ asset('imgs/divulgar-imoveis-online-site-para-imobiliaria.jpg') }}" alt="Equipe administrativa de corretora">
+            <img src="{{ asset('imgs/Logo_NVS.png') }}" alt="Logo NVS" class="auth-media-logo">
             <div class="admin-register-overlay">
                 <span class="admin-badge">Area Administrativa</span>
                 <h2>Painel de Cadastro de Corretores Administradores</h2>
