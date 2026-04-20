@@ -43,6 +43,21 @@ if (Senha2) {
     });
 }
 
+document.querySelectorAll('[data-toggle-password]').forEach((button) => {
+    button.addEventListener('click', () => {
+        const input = document.getElementById(button.getAttribute('data-toggle-password'));
+
+        if (!input) {
+            return;
+        }
+
+        const isVisible = input.type === 'text';
+        input.type = isVisible ? 'password' : 'text';
+        button.textContent = isVisible ? 'Ver' : 'Ocultar';
+        button.setAttribute('aria-label', isVisible ? 'Mostrar senha' : 'Ocultar senha');
+    });
+});
+
 document.querySelectorAll('input[type="tel"], input[name="phone"]').forEach((input) => {
     input.setAttribute('inputmode', 'numeric');
     input.setAttribute('maxlength', '15');

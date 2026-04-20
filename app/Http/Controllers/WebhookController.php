@@ -17,20 +17,23 @@ class WebhookController extends Controller
         Log::info('=== CHEGOU UM NOVO LEAD DO LEADLOVERS ===');
         Log::info($request->all());
 
-        $cpf = $request->input('cpf');
-        $cpf_casado = $request->input('cpf_casado');
-        $nome = $request->input('nome');
-        $email = $request->input('email');
-        $telefone = $request->input('tel');
-        $cidade = $request->input('cidade');
-        $estado = $request->input('estado');
-        $tagsString = $request->input('tags', '');
-        $valor_aluguel = $request->input('valor_aluguel', null);
-        $imobiliaria = $request->input('imobiliaria');
+        //$cpf = $request->input('cpf');
+        //$cpf = empty($cpf) ? null : $cpf;
+
+        //$cpf_casado = $request->input('cpf_casado');
+        //$cpf_casado = empty($cpf_casado) ? null : $cpf_casado;
+
+
+        $nome = $request->input('Nome');
+        $email = $request->input('Email');
+        $telefone = $request->input('Telefone');
+        $cidade = $request->input('Cidade');
+        $estado = $request->input('Estado');
+        $tagsString = $request->input('Tags', '');
+        $imobiliaria = $request->input('Empresa');
         
         if (is_array($imobiliaria)) { $imobiliaria = implode(', ', $imobiliaria); }
         if (is_array($tagsString)) { $tagsString = implode(', ', $tagsString); }
-        if (is_array($valor_aluguel)) { $valor_aluguel = implode(', ', $valor_aluguel); }
         if (is_array($cidade)) { $cidade = implode(', ', $cidade); }
         
         $textoParaBuscar = $imobiliaria;
@@ -58,20 +61,22 @@ class WebhookController extends Controller
             Lead::updateOrCreate(
                 ['email' => $email], // Se o email já existir, ele só atualiza os dados
                 [
-                    'cpf' => $cpf,
-                    'cpf_casado' => $cpf_casado,
+                    //'cpf' => $cpf,
+                    //'cpf_casado' => $cpf_casado,
                     'nome' => $nome,
                     'tel' => $telefone,
                     'cidade' => $cidade,
                     'estado' => $estado,
                     'company_id' => $companyEncontrada->id, // Aqui acontece a mágica do vínculo!
                     'tags_originais' => $tagsString,
-                    'imobiliaria' => $imobiliaria,
-                    'valor_aluguel' => $valor_aluguel
+                    'imobiliaria' => $imobiliaria
                 ]
             );
+            Log::info("SUCESSO: Lead vinculado à imobiliária: " . $companyEncontrada->name);
         }
-
+        else {
+            Log::warning("ALERTA: Lead de email {$email} não foi salvo! A imobiliária '{$imobiliaria}' não foi encontrada no banco de dados.");
+        }
         return response()->json(['status' => 'sucesso'], 200);
         
     }

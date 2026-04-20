@@ -6,24 +6,27 @@
         <aside class="admin-register-aside">
             <img src="{{ asset('imgs/divulgar-imoveis-online-site-para-imobiliaria.jpg') }}" alt="Equipe administrativa de corretora">
             <img src="{{ asset('imgs/Logo_NVS.png') }}" alt="Logo NVS" class="auth-media-logo">
+
             <div class="admin-register-overlay">
-                <span class="admin-badge">Area Administrativa</span>
-                <h2>Painel de Cadastro de Corretores Administradores</h2>
+                <span class="admin-badge">Area administrativa</span>
+                <h2>Painel de cadastro de corretores administradores</h2>
                 <p>
-                    Este acesso e exclusivo para cadastro interno de administradores responsaveis
-                    por acompanhar imobiliarias, clientes e analises de seguro fianca.
+                    Este acesso e exclusivo para cadastro interno de administradores
+                    responsaveis por acompanhar imobiliarias, clientes e analises.
                 </p>
-                <ul>
-                    <li>Controle de tags e organizacao de carteiras.</li>
-                    <li>Visibilidade centralizada das analises enviadas.</li>
-                    <li>Gestao de relacionamento com imobiliarias cadastradas.</li>
-                </ul>
+
+                <div class="admin-register-points">
+                    <span>Controle de tags e organizacao de carteiras</span>
+                    <span>Visibilidade centralizada das analises enviadas</span>
+                    <span>Gestao de relacionamento com imobiliarias</span>
+                </div>
             </div>
         </aside>
 
         <div class="admin-register-card">
             <header class="admin-register-header">
-                <h1>Cadastrar Administrador</h1>
+                <span class="admin-register-kicker">Acesso restrito</span>
+                <h1>Cadastrar administrador</h1>
                 <p>Preencha os dados abaixo para criar um novo acesso administrativo.</p>
             </header>
 
@@ -41,6 +44,9 @@
                         placeholder="Ex.: Maria Carolina Souza"
                         required
                     >
+                    @error('name')
+                        <span class="client-field-error">{{ $message }}</span>
+                    @enderror
                 </div>
 
                 <div class="admin-grid">
@@ -53,8 +59,12 @@
                             class="admin-input"
                             value="{{ old('email') }}"
                             placeholder="admin@corretora.com.br"
+                            autocomplete="username"
                             required
                         >
+                        @error('email')
+                            <span class="client-field-error">{{ $message }}</span>
+                        @enderror
                     </div>
 
                     <div class="admin-field">
@@ -71,32 +81,46 @@
                             placeholder="00000000000"
                             required
                         >
+                        @error('cpf')
+                            <span class="client-field-error">{{ $message }}</span>
+                        @enderror
                     </div>
                 </div>
 
                 <div class="admin-grid">
                     <div class="admin-field">
                         <label for="password" class="admin-label">Senha de acesso</label>
-                        <input
-                            type="password"
-                            id="password"
-                            name="password"
-                            class="admin-input"
-                            placeholder="Minimo de 6 caracteres"
-                            required
-                        >
+                        <div class="password-input-wrap">
+                            <input
+                                type="password"
+                                id="password"
+                                name="password"
+                                class="admin-input password-input"
+                                placeholder="Minimo de 6 caracteres"
+                                autocomplete="new-password"
+                                required
+                            >
+                            <button type="button" class="password-toggle-button" data-toggle-password="password" aria-label="Mostrar senha">Ver</button>
+                        </div>
+                        @error('password')
+                            <span class="client-field-error">{{ $message }}</span>
+                        @enderror
                     </div>
 
                     <div class="admin-field">
                         <label for="password_confirmation" class="admin-label">Confirmar senha</label>
-                        <input
-                            type="password"
-                            id="password_confirmation"
-                            name="password_confirmation"
-                            class="admin-input"
-                            placeholder="Repita a senha informada"
-                            required
-                        >
+                        <div class="password-input-wrap">
+                            <input
+                                type="password"
+                                id="password_confirmation"
+                                name="password_confirmation"
+                                class="admin-input password-input"
+                                placeholder="Repita a senha informada"
+                                autocomplete="new-password"
+                                required
+                            >
+                            <button type="button" class="password-toggle-button" data-toggle-password="password_confirmation" aria-label="Mostrar senha">Ver</button>
+                        </div>
                     </div>
                 </div>
 

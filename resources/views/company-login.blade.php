@@ -4,22 +4,30 @@
 <div class="client-auth-page">
     <section class="client-auth-shell">
         <aside class="client-auth-aside">
-            <img src="{{ asset('imgs/img-cadastro.jpeg') }}" alt="Acesso do cliente">
+            <img src="{{ asset('imgs/segure-chave-a-mao-ao-ar-livre.jpg') }}" alt="Acesso da imobiliaria">
             <img src="{{ asset('imgs/Logo_NVS.png') }}" alt="Logo NVS" class="auth-media-logo">
+
             <div class="client-auth-overlay">
-                <span class="client-badge">Portal do Cliente</span>
+                <span class="client-badge">Portal da imobiliaria</span>
                 <h2>Acesse sua area CRM</h2>
                 <p>
-                    Entre com suas credenciais para acompanhar solicitações,
-                    consultar resultados e seguir com sua operação de locacao.
+                    Entre com suas credenciais para acompanhar solicitacoes,
+                    consultar resultados e seguir com sua operacao de locacao.
                 </p>
+
+                <div class="client-auth-points">
+                    <span>Analises centralizadas</span>
+                    <span>Acompanhamento de leads</span>
+                    <span>Fluxo seguro para sua equipe</span>
+                </div>
             </div>
         </aside>
 
         <div class="client-auth-card">
             <header class="client-auth-header">
-                <h1>Login Empresa</h1>
-                <p>Informe seu e-mail e senha para continuar.</p>
+                <span class="client-auth-kicker">Acesso ao portal</span>
+                <h1>Login da empresa</h1>
+                <p>Informe o e-mail e a senha cadastrados para continuar.</p>
             </header>
 
             <form action="{{ route('empresa.login.post') }}" method="POST" autocomplete="off" class="client-auth-form">
@@ -34,20 +42,25 @@
                         class="client-input"
                         value="{{ old('email') }}"
                         placeholder="contato@imobiliaria.com.br"
+                        autocomplete="username"
                         required
                     >
                 </div>
 
                 <div class="client-field">
                     <label for="password" class="client-label">Senha</label>
-                    <input
-                        type="password"
-                        id="password"
-                        name="password"
-                        class="client-input"
-                        placeholder="Sua senha de acesso"
-                        required
-                    >
+                    <div class="password-input-wrap">
+                        <input
+                            type="password"
+                            id="password"
+                            name="password"
+                            class="client-input password-input"
+                            placeholder="Sua senha de acesso"
+                            autocomplete="current-password"
+                            required
+                        >
+                        <button type="button" class="password-toggle-button" data-toggle-password="password" aria-label="Mostrar senha">Ver</button>
+                    </div>
                 </div>
 
                 <div class="client-recovery-box">

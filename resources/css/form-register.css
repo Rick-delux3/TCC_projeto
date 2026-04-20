@@ -337,7 +337,9 @@ p{
 .admin-register-overlay{
     position: absolute;
     inset: 0;
-    background: linear-gradient(180deg, rgba(19, 37, 66, 0.16), rgba(16, 27, 55, 0.88));
+    background:
+        linear-gradient(180deg, rgba(3, 1, 51, 0.16), rgba(3, 1, 51, 0.9)),
+        linear-gradient(135deg, rgba(20, 111, 182, 0.12), rgba(253, 30, 110, 0.14));
     color: #f8fafc;
     padding: 34px 28px;
     display: flex;
@@ -367,25 +369,50 @@ p{
 
 .admin-register-overlay p{
     font-size: 14px;
-    margin: 0 0 14px 0;
+    margin: 0 0 18px 0;
     color: rgba(255, 255, 255, 0.95);
+    line-height: 1.55;
 }
 
-.admin-register-overlay ul{
-    margin: 0;
-    padding-left: 18px;
+.admin-register-points,
+.client-register-points{
+    display: grid;
+    gap: 8px;
 }
 
-.admin-register-overlay li{
-    margin-bottom: 8px;
+.admin-register-points span,
+.client-register-points span{
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 10px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 9px;
+    background: rgba(255, 255, 255, 0.12);
+    backdrop-filter: blur(8px);
     font-size: 13px;
+    font-weight: 700;
+}
+
+.admin-register-points span::before,
+.client-register-points span::before{
+    content: "";
+    width: 8px;
+    height: 8px;
+    flex: 0 0 8px;
+    border-radius: 999px;
+    background: var(--terciary-color);
+    box-shadow: 0 0 0 4px rgba(253, 30, 110, 0.2);
 }
 
 .admin-register-card{
     background: #ffffff;
-    padding: 34px 34px 30px;
+    padding: 34px;
     color: #0f172a;
     animation: formPaneRight 0.55s ease-out 0.08s both;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
 }
 
 .admin-register-header h1{
@@ -400,6 +427,22 @@ p{
     margin: 8px 0 24px 0;
     color: #475569;
     font-size: 14px;
+    line-height: 1.55;
+}
+
+.admin-register-kicker,
+.client-register-kicker{
+    display: inline-flex;
+    width: fit-content;
+    margin-bottom: 10px;
+    padding: 5px 10px;
+    border-radius: 999px;
+    background: rgba(253, 30, 110, 0.12);
+    color: var(--terciary-color);
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0.35px;
+    text-transform: uppercase;
 }
 
 .admin-register-form{
@@ -687,6 +730,11 @@ p{
     animation: formShellRise 0.52s ease-out both;
 }
 
+.client-register-shell--compact{
+    max-width: 980px;
+    grid-template-columns: minmax(0, 0.94fr) minmax(0, 1.06fr);
+}
+
 .client-register-aside,
 .client-auth-aside{
     position: relative;
@@ -699,7 +747,7 @@ p{
 }
 
 .client-auth-aside{
-    min-height: 470px;
+    min-height: 500px;
 }
 
 .client-register-aside > img:not(.auth-media-logo){
@@ -713,7 +761,7 @@ p{
 .client-auth-aside > img:not(.auth-media-logo){
     width: 100%;
     height: 100%;
-    min-height: 470px;
+    min-height: 500px;
     object-fit: cover;
     display: block;
 }
@@ -728,6 +776,18 @@ p{
     display: flex;
     flex-direction: column;
     justify-content: flex-end;
+}
+
+.client-register-overlay{
+    background:
+        linear-gradient(180deg, rgba(3, 1, 51, 0.18), rgba(3, 1, 51, 0.88)),
+        linear-gradient(135deg, rgba(20, 111, 182, 0.12), rgba(253, 30, 110, 0.16));
+}
+
+.client-auth-overlay{
+    background:
+        linear-gradient(180deg, rgba(3, 1, 51, 0.18), rgba(3, 1, 51, 0.88)),
+        linear-gradient(135deg, rgba(20, 111, 182, 0.12), rgba(253, 30, 110, 0.16));
 }
 
 .auth-media-logo{
@@ -787,6 +847,20 @@ p{
     animation: formPaneRight 0.55s ease-out 0.08s both;
 }
 
+.client-register-card{
+    padding: 34px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+.client-auth-card{
+    padding: 34px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
 .client-register-header h1,
 .client-auth-header h1{
     margin: 0;
@@ -801,6 +875,21 @@ p{
     margin: 8px 0 24px 0;
     color: #475569;
     font-size: 14px;
+    line-height: 1.55;
+}
+
+.client-auth-kicker{
+    display: inline-flex;
+    width: fit-content;
+    margin-bottom: 10px;
+    padding: 5px 10px;
+    border-radius: 999px;
+    background: rgba(253, 30, 110, 0.12);
+    color: var(--terciary-color);
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0.35px;
+    text-transform: uppercase;
 }
 
 .client-register-form,
@@ -846,6 +935,14 @@ p{
     border-color: #2128BF !important;
     box-shadow: 0 0 0 3px rgba(33, 40, 191, 0.18) !important;
     outline: none;
+}
+
+.client-field-error{
+    display: block;
+    margin-top: 6px;
+    color: #b91c1c;
+    font-size: 12px;
+    font-weight: 700;
 }
 
 .client-select{
@@ -926,14 +1023,253 @@ p{
 
 .client-auth-shell{
     width: 100%;
-    max-width: 940px;
+    max-width: 980px;
     display: grid;
-    grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
+    grid-template-columns: minmax(0, 0.94fr) minmax(0, 1.06fr);
     border-radius: 12px;
     overflow: hidden;
     box-shadow: 0 24px 50px rgba(17, 24, 39, 0.24);
+    border: 1px solid rgba(31, 29, 89, 0.1);
     background: #ffffff;
     animation: formShellRise 0.5s ease-out both;
+}
+
+.client-auth-points{
+    display: grid;
+    gap: 8px;
+}
+
+.client-auth-points span{
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 10px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 9px;
+    background: rgba(255, 255, 255, 0.12);
+    backdrop-filter: blur(8px);
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.client-auth-points span::before{
+    content: "";
+    width: 8px;
+    height: 8px;
+    flex: 0 0 8px;
+    border-radius: 999px;
+    background: var(--terciary-color);
+    box-shadow: 0 0 0 4px rgba(253, 30, 110, 0.2);
+}
+
+.password-reset-page{
+    width: 100%;
+    min-height: calc(100vh - 180px);
+    padding: 24px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    animation: formPageFade 0.45s ease-out both;
+}
+
+.password-reset-shell{
+    width: 100%;
+    max-width: 980px;
+    display: grid;
+    grid-template-columns: minmax(0, 0.94fr) minmax(0, 1.06fr);
+    border-radius: 12px;
+    overflow: hidden;
+    background: #ffffff;
+    box-shadow: 0 24px 50px rgba(17, 24, 39, 0.24);
+    border: 1px solid rgba(31, 29, 89, 0.1);
+    animation: formShellRise 0.5s ease-out both;
+}
+
+.password-reset-shell--compact{
+    max-width: 940px;
+}
+
+.password-reset-aside{
+    position: relative;
+    min-height: 500px;
+    background:
+        radial-gradient(circle at 80% 14%, rgba(253, 30, 110, 0.32), transparent 42%),
+        radial-gradient(circle at 18% 84%, rgba(20, 111, 182, 0.2), transparent 48%),
+        linear-gradient(150deg, #030133 0%, #143d74 54%, #146FB6 100%);
+    animation: formPaneLeft 0.55s ease-out both;
+}
+
+.password-reset-aside > img:not(.auth-media-logo){
+    width: 100%;
+    height: 100%;
+    min-height: 500px;
+    object-fit: cover;
+    display: block;
+}
+
+.password-reset-overlay{
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    padding: 34px 28px;
+    color: #ffffff;
+    background:
+        linear-gradient(180deg, rgba(3, 1, 51, 0.18), rgba(3, 1, 51, 0.88)),
+        linear-gradient(135deg, rgba(20, 111, 182, 0.12), rgba(253, 30, 110, 0.16));
+}
+
+.password-reset-overlay h2{
+    margin: 0 0 10px 0;
+    color: #ffffff;
+    font-size: 26px;
+    line-height: 1.2;
+    font-weight: 800;
+}
+
+.password-reset-overlay p{
+    margin: 0 0 18px 0;
+    color: rgba(255, 255, 255, 0.94);
+    font-size: 14px;
+    line-height: 1.55;
+}
+
+.password-reset-steps{
+    display: grid;
+    gap: 8px;
+}
+
+.password-reset-steps span{
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 10px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 9px;
+    background: rgba(255, 255, 255, 0.12);
+    backdrop-filter: blur(8px);
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.password-reset-steps span::before{
+    content: "";
+    width: 8px;
+    height: 8px;
+    flex: 0 0 8px;
+    border-radius: 999px;
+    background: var(--terciary-color);
+    box-shadow: 0 0 0 4px rgba(253, 30, 110, 0.2);
+}
+
+.password-reset-card{
+    background: #ffffff;
+    color: #0f172a;
+    padding: 34px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    animation: formPaneRight 0.55s ease-out 0.08s both;
+}
+
+.password-reset-header{
+    margin-bottom: 22px;
+}
+
+.password-reset-kicker{
+    display: inline-flex;
+    width: fit-content;
+    margin-bottom: 10px;
+    padding: 5px 10px;
+    border-radius: 999px;
+    background: rgba(253, 30, 110, 0.12);
+    color: var(--terciary-color);
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0.35px;
+    text-transform: uppercase;
+}
+
+.password-reset-header h1{
+    margin: 0;
+    color: var(--primary-color);
+    font-size: 28px;
+    line-height: 1.2;
+    font-weight: 800;
+}
+
+.password-reset-header p{
+    margin: 8px 0 0 0;
+    color: #475569;
+    font-size: 14px;
+    line-height: 1.55;
+}
+
+.password-reset-form{
+    width: 100%;
+}
+
+.password-reset-alert{
+    margin-bottom: 14px;
+    padding: 11px 12px;
+    border-radius: 9px;
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 1.45;
+}
+
+.password-reset-alert--success{
+    color: #14532d;
+    background: #dcfce7;
+    border: 1px solid #86efac;
+}
+
+.password-reset-alert--danger{
+    color: #7f1d1d;
+    background: #fee2e2;
+    border: 1px solid #fecaca;
+}
+
+.password-reset-note{
+    margin: 14px 0 0 0;
+    padding: 12px;
+    border-radius: 9px;
+    background: #f8fafc;
+    color: #475569;
+    border: 1px solid #e2e8f0;
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.password-input-wrap{
+    position: relative;
+}
+
+.password-input-wrap .password-input{
+    padding-right: 72px;
+}
+
+.password-toggle-button{
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    border: 0;
+    border-radius: 7px;
+    background: #eef2ff;
+    color: var(--secundary-color);
+    font-size: 12px;
+    font-weight: 800;
+    line-height: 1;
+    padding: 8px 10px;
+    cursor: pointer;
+    transition: 0.2s ease;
+}
+
+.password-toggle-button:hover{
+    background: var(--secundary-color);
+    color: #ffffff;
 }
 
 @keyframes formPageFade{
@@ -994,7 +1330,11 @@ p{
     .client-register-card,
     .client-auth-card,
     .client-auth-page,
-    .client-auth-shell{
+    .client-auth-shell,
+    .password-reset-page,
+    .password-reset-shell,
+    .password-reset-aside,
+    .password-reset-card{
         animation: none !important;
     }
 }
@@ -1023,30 +1363,56 @@ p{
     color: var(--terciary-color);
 }
 
+.client-remember-row{
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    margin: 2px 0 12px;
+    color: #475569;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.client-checkbox{
+    width: 16px !important;
+    height: 16px !important;
+    min-width: 16px;
+    margin: 0 !important;
+    border-radius: 4px !important;
+    accent-color: var(--secundary-color);
+    cursor: pointer;
+}
+
 @media (max-width: 991px){
     .client-register-shell,
-    .client-auth-shell{
+    .client-auth-shell,
+    .password-reset-shell{
         grid-template-columns: 1fr;
         max-width: 640px;
     }
 
     .client-register-aside,
-    .client-auth-aside{
+    .client-auth-aside,
+    .password-reset-aside{
         min-height: 290px;
     }
 
     .client-register-aside > img:not(.auth-media-logo),
-    .client-auth-aside > img:not(.auth-media-logo){
+    .client-auth-aside > img:not(.auth-media-logo),
+    .password-reset-aside > img:not(.auth-media-logo){
         min-height: 290px;
     }
 
     .client-register-overlay,
-    .client-auth-overlay{
+    .client-auth-overlay,
+    .password-reset-overlay{
         padding: 20px;
     }
 
     .client-register-card,
-    .client-auth-card{
+    .client-auth-card,
+    .password-reset-card{
         padding: 24px 20px;
     }
 }
@@ -1058,7 +1424,19 @@ p{
     }
 
     .client-register-header h1,
-    .client-auth-header h1{
+    .client-auth-header h1,
+    .password-reset-header h1{
         font-size: 24px;
+    }
+
+    .password-reset-page{
+        padding: 18px 10px;
+    }
+
+    .admin-register-points,
+    .client-register-points,
+    .client-auth-points,
+    .password-reset-steps{
+        display: none;
     }
 }

@@ -39,7 +39,7 @@ class CompanyNewPasswordController extends Controller
         );
 
         return $status === Password::PASSWORD_RESET
-            ? redirect()->route('empresa.login')->with('status', __($status))
+            ? redirect()->route('empresa.login')->with('success', __($status))
             : back()->withInput($request->only('email'))
                 ->withErrors(['email' => __($status)]);
     }
