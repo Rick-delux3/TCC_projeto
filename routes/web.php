@@ -11,6 +11,9 @@ use App\Http\Controllers\TwoFactorController;
 use App\Http\Controllers\AdminsRegistrationController;
 use App\Http\Controllers\AdminAuthController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\PublicLeadController;
+
+
 
 Route::get('/Dashboard/User',[DashboardController::class, 'index'])
 ->middleware(['auth', '2fa'])
@@ -46,6 +49,8 @@ Route::middleware('auth:admin')->group(function () {
 Route::view('/', 'index')->name('index');
 Route::get('/empresa/cadastro', [CompanyRegistrationController::class, 'showRegistrationForm'])->name('empresa.register.form');
 Route::post('/empresa/register', [CompanyRegistrationController::class, 'store'])->name('empresa.register.post');
+Route::post('/lead/create', [PublicLeadController::class, 'store'])->name('lead.create');
+
 
 Route::get('/empresa/login', [CompanyAuthController::class, 'showLoginForm'])->name('empresa.login');
 Route::post('/empresa/login', [CompanyAuthController::class, 'login'])->name('empresa.login.post');

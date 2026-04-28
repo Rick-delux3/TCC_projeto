@@ -17,20 +17,19 @@ class WebhookController extends Controller
         Log::info('=== CHEGOU UM NOVO LEAD DO LEADLOVERS ===');
         Log::info($request->all());
 
-        //$cpf = $request->input('cpf');
-        //$cpf = empty($cpf) ? null : $cpf;
+        $cpf = $request->input('cpf');
+        $cpf = empty($cpf) ? null : $cpf;
 
-        //$cpf_casado = $request->input('cpf_casado');
-        //$cpf_casado = empty($cpf_casado) ? null : $cpf_casado;
+        $cpf_casado = $request->input('cpf_casado');
+        $cpf_casado = empty($cpf_casado) ? null : $cpf_casado;
 
 
-        $nome = $request->input('Nome');
-        $email = $request->input('Email');
-        $telefone = $request->input('Telefone');
-        $cidade = $request->input('Cidade');
-        $estado = $request->input('Estado');
-        $tagsString = $request->input('Tags', '');
-        $imobiliaria = $request->input('Empresa');
+        $nome = $request->input('nome');
+        $email = $request->input('email');
+        $telefone = $request->input('telefone');
+        $cidade = $request->input('cidade');
+        $tagsString = $request->input('tags', '');
+        $imobiliaria = $request->input('imobiliaria');
         
         if (is_array($imobiliaria)) { $imobiliaria = implode(', ', $imobiliaria); }
         if (is_array($tagsString)) { $tagsString = implode(', ', $tagsString); }
@@ -61,12 +60,11 @@ class WebhookController extends Controller
             Lead::updateOrCreate(
                 ['email' => $email], // Se o email já existir, ele só atualiza os dados
                 [
-                    //'cpf' => $cpf,
-                    //'cpf_casado' => $cpf_casado,
+                    'cpf' => $cpf,
+                    'cpf_casado' => $cpf_casado,
                     'nome' => $nome,
                     'tel' => $telefone,
                     'cidade' => $cidade,
-                    'estado' => $estado,
                     'company_id' => $companyEncontrada->id, // Aqui acontece a mágica do vínculo!
                     'tags_originais' => $tagsString,
                     'imobiliaria' => $imobiliaria

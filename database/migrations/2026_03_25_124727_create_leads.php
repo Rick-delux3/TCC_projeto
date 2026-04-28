@@ -28,6 +28,8 @@ return new class extends Migration
             $table->string('estado')->nullable();
             $table->string('imobiliaria')->nullable();
             $table->string('valor_aluguel')->nullable();
+            $table->string('outras_despesas')->nullable();
+            $table->string('nome_responsavel')->nullable();
 
             
             // Controle do CRM
