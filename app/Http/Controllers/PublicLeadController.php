@@ -6,7 +6,7 @@ use Illuminate\Http\Request;
 use App\Models\Lead;
 use App\Models\Company;
 use Illuminate\Support\Facades\Http;
-
+use Illuminate\Support\Facades\Log;
 class PublicLeadController extends Controller
 {
     private $token;
@@ -30,8 +30,8 @@ class PublicLeadController extends Controller
         
         $data = $request->validate([
             'nome' => 'required|string|max:255',
-            'email' => 'required|string|lowercase|email:rfc,dns|max:255|unique:leads,email',
-            'cpf' => 'required|string|regex:/^\d{11}$/|unique:leads,cpf',
+            'email' => 'required|string|lowercase|email:rfc,dns|max:255',
+            'cpf' => 'required|string|regex:/^\d{11}$/',
             'tel' => 'required|string|max:15',
             'cidade' => 'required|string|max:55',
             'cpf_casado' => 'nullable|string|min:11|max:14',
@@ -82,18 +82,30 @@ class PublicLeadController extends Controller
 
     public function enviarParaLeadLovers($lead) {
 
-        $response = http::post($this->baseUrl . 'Lead?token=' . $this->token, [
-            'Email' => $lead->email,
-            'MachineCode' => $this->machine,
-            'EmailSequenceCode' => $this->sequence,
-            'SequenceLevelCode' => $this->step,
-            'Name' => $lead->nome,
-            'Phone' => $lead->tel,
-            'City' => $lead->cidade,
-            'Company' => $lead->imobiliaria,
-        ]);
+       try {
+            $response = Http::post($this->baseUrl . 'Lead?token=' . $this->token, [
+                'Email'             => $lead->email,
+                'MachineCode'       => $this->machine,
+                'EmailSequenceCode' => $this->sequence,
+                'SequenceLevelCode' => $this->step,
+                'Name'              => $lead->nome,
+                'Phone'             => $lead->tel,
+                'City'              => $lead->cidade,
+                'Company'           => $lead->imobiliaria,
+            ]);
 
-        return $response->successful();
+            if ($response->successful()) {
+                Log::info("Sucesso: Lead {$lead->email} integrado na máquina {$this->machine}.");
+            } else {
+                Log::warning("Aviso API LeadLovers: O lead {$lead->email} não foi integrado. Motivo: " . $response->body());
+            }
+
+            return $response->successful();
+
+        } catch (\Exception $e) {
+            Log::error("Falha grave na comunicação com a API do LeadLovers: " . $e->getMessage());
+            return false;
+        }
     }
             
             

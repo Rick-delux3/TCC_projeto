@@ -321,9 +321,10 @@ p{
     min-height: 560px;
     animation: formPaneLeft 0.55s ease-out both;
     background:
-        radial-gradient(circle at 82% 14%, rgba(238, 29, 35, 0.38), transparent 40%),
-        radial-gradient(circle at 18% 80%, rgba(242, 242, 242, 0.14), transparent 52%),
-        linear-gradient(155deg, #1f1d59 0%, #2731c8 100%);
+        radial-gradient(circle at 82% 14%, rgba(253, 30, 110, 0.34), transparent 38%),
+        radial-gradient(circle at 18% 82%, rgba(240, 245, 251, 0.16), transparent 52%),
+        radial-gradient(circle at 72% 72%, rgba(20, 111, 182, 0.18), transparent 36%),
+        linear-gradient(152deg, #030133 0%, #0c1d72 58%, #146fb6 100%);
 }
 
 .admin-register-aside > img:not(.auth-media-logo){
@@ -338,8 +339,8 @@ p{
     position: absolute;
     inset: 0;
     background:
-        linear-gradient(180deg, rgba(3, 1, 51, 0.16), rgba(3, 1, 51, 0.9)),
-        linear-gradient(135deg, rgba(20, 111, 182, 0.12), rgba(253, 30, 110, 0.14));
+        linear-gradient(180deg, rgba(3, 1, 51, 0.18), rgba(3, 1, 51, 0.9)),
+        linear-gradient(135deg, rgba(20, 111, 182, 0.14), rgba(253, 30, 110, 0.12));
     color: #f8fafc;
     padding: 34px 28px;
     display: flex;
@@ -575,9 +576,10 @@ p{
     min-height: 470px;
     animation: formPaneLeft 0.55s ease-out both;
     background:
-        radial-gradient(circle at 84% 12%, rgba(238, 29, 35, 0.28), transparent 40%),
-        radial-gradient(circle at 15% 84%, rgba(242, 242, 242, 0.12), transparent 48%),
-        linear-gradient(150deg, #1a234f 0%, #213579 52%, #305f97 100%);
+        radial-gradient(circle at 84% 12%, rgba(253, 30, 110, 0.28), transparent 38%),
+        radial-gradient(circle at 16% 84%, rgba(240, 245, 251, 0.12), transparent 48%),
+        radial-gradient(circle at 72% 72%, rgba(20, 111, 182, 0.16), transparent 34%),
+        linear-gradient(150deg, #030133 0%, #0c1d72 54%, #146fb6 100%);
 }
 
 .admin-auth-aside > img:not(.auth-media-logo){
@@ -741,9 +743,10 @@ p{
     min-height: 560px;
     animation: formPaneLeft 0.55s ease-out both;
     background:
-        radial-gradient(circle at 85% 12%, rgba(238, 29, 35, 0.32), transparent 42%),
-        radial-gradient(circle at 14% 84%, rgba(242, 242, 242, 0.14), transparent 50%),
-        linear-gradient(150deg, #1f1d59 0%, #2430bd 55%, #2128bf 100%);
+        radial-gradient(circle at 85% 12%, rgba(253, 30, 110, 0.3), transparent 40%),
+        radial-gradient(circle at 14% 84%, rgba(240, 245, 251, 0.14), transparent 50%),
+        radial-gradient(circle at 72% 70%, rgba(20, 111, 182, 0.18), transparent 35%),
+        linear-gradient(150deg, #030133 0%, #0c1d72 56%, #146fb6 100%);
 }
 
 .client-auth-aside{
@@ -781,13 +784,13 @@ p{
 .client-register-overlay{
     background:
         linear-gradient(180deg, rgba(3, 1, 51, 0.18), rgba(3, 1, 51, 0.88)),
-        linear-gradient(135deg, rgba(20, 111, 182, 0.12), rgba(253, 30, 110, 0.16));
+        linear-gradient(135deg, rgba(20, 111, 182, 0.14), rgba(253, 30, 110, 0.12));
 }
 
 .client-auth-overlay{
     background:
         linear-gradient(180deg, rgba(3, 1, 51, 0.18), rgba(3, 1, 51, 0.88)),
-        linear-gradient(135deg, rgba(20, 111, 182, 0.12), rgba(253, 30, 110, 0.16));
+        linear-gradient(135deg, rgba(20, 111, 182, 0.14), rgba(253, 30, 110, 0.12));
 }
 
 .auth-media-logo{

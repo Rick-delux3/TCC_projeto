@@ -13,23 +13,30 @@
 body.auth-layout-body{
     min-height: 100vh;
     margin: 0;
-    background: #1e1e1f;
+    background: linear-gradient(180deg, #030133 0%, #091a46 46%, #0c2b55 100%);
 }
 
 .auth-layout-main{
     min-height: 100vh;
-    background: linear-gradient(180deg, #e7e8ea 0%, #c4d0dc 18%, #7b94ab 44%, #355775 74%, #153d5b 100%);
+    background:
+        radial-gradient(circle at 14% 10%, rgba(253, 30, 110, 0.14), transparent 24%),
+        radial-gradient(circle at 84% 18%, rgba(20, 111, 182, 0.34), transparent 34%),
+        radial-gradient(circle at 50% 100%, rgba(3, 1, 51, 0.38), transparent 54%),
+        linear-gradient(180deg, #f0f5fb 0%, #dbe8f4 17%, #a5bdd4 40%, #47729b 69%, #0f3458 100%);
     padding: 34px 22px 36px;
 }
 
 .standalone-auth-page{
     min-height: 100vh;
-    background: #cfe4f7;
+    background: linear-gradient(180deg, #edf4fb 0%, #d6e5f4 100%);
 }
 
 .standalone-auth-main{
     min-height: calc(100vh - 92px);
-    background: linear-gradient(180deg, #d8ebfa 0%, #c8e0f3 100%);
+    background:
+        radial-gradient(circle at 18% 12%, rgba(253, 30, 110, 0.1), transparent 20%),
+        radial-gradient(circle at 82% 20%, rgba(20, 111, 182, 0.22), transparent 28%),
+        linear-gradient(180deg, #edf4fb 0%, #d5e4f3 100%);
     display: flex;
     align-items: flex-start;
     justify-content: center;
