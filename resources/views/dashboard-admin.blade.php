@@ -1,4 +1,4 @@
-@extends('layout-inicial.Dashboard_Admin')
+@extends('layout-inicial.dashboard_Admin')
 
 
 @section('content_a')

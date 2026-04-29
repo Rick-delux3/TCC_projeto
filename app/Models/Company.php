@@ -38,6 +38,7 @@ class Company extends Model implements CanResetPasswordContract
 
     public function leads()
     {
+        
         return $this->hasMany(Lead::class);
     }
 }

@@ -24,6 +24,10 @@ class PublicLeadController extends Controller
 
     }
 
+    public function show(){
+        return view('create-lead-form');
+    }
+
 
     public function store(Request $request){
 

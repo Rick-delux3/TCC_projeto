@@ -51,6 +51,14 @@ Route::get('/empresa/cadastro', [CompanyRegistrationController::class, 'showRegi
 Route::post('/empresa/register', [CompanyRegistrationController::class, 'store'])->name('empresa.register.post');
 Route::post('/lead/create', [PublicLeadController::class, 'store'])->name('lead.create');
 
+Route::prefix('/leads')->group( function () {
+    Route::get('/showform', [PublicLeadController::class, 'show'])->name('lead.showform');
+    Route::post('/create', [PublicLeadController::class, 'store'])->name('lead.create');
+    Route::post('/leadlovers', [PublicLeadController::class, 'enviarParaLeadLovers'])->name('lead.leadlovers');
+
+
+});
+
 
 Route::get('/empresa/login', [CompanyAuthController::class, 'showLoginForm'])->name('empresa.login');
 Route::post('/empresa/login', [CompanyAuthController::class, 'login'])->name('empresa.login.post');
