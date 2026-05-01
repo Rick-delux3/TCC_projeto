@@ -77,6 +77,8 @@ class CompanyRegistrationController extends Controller
             'city' => $data['city'],
             'state' => $data['state'],
             'password' => Hash::make($data['password']),
+            'lead_form_token' => Str::random(64),
+            'lead_form_active' => true,
         ]);
 
         $user = User::create([

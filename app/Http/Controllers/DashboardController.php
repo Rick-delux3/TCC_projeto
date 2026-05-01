@@ -4,103 +4,39 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use App\Models\Company;
-use App\Models\Lead;
-use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Str;
+use App\Jobs\SyncCompanyLeadLoversLeadsJob;
 
 class DashboardController extends Controller
 {
-    private $page;
-    private $token;
-    private $baseUrl;
-
-    public function __construct(){
-        $this->token = config('services.leadlovers.token');
-        $this->page = 1;
-        $this->baseUrl = 'https://llapi.leadlovers.com/webapi/';
-    }
-
-    private function buscarLeadsAntigosNaApi($company){
-
-            set_time_limit(0);
-
-            $token = $this->token;
-            $page = $this->page;
-
-            Log::info("INICIANDO SINCRONIZAÃƒâ€¡ÃƒÆ’O DA EMPRESA: " . $company->name);
-
-        do {
-
-            Log::info("Buscando pÃƒÂ¡gina: " . $page);
-
-            $response = Http::timeout(120)->get($this->baseUrl . 'Leads?token=' . $token . '&page=' . $page)->json();
 
 
-            $leadsDaPagina = $response['Data'] ?? [];
+    public function syncStatus(Request $request)
+    {
+        $companyId = session('company_id');
 
-            if (empty($leadsDaPagina)) {
+        if (!$companyId) {
+            return response()->json([
+                'authenticated' => false,
+                'message' => 'Usuário não autenticado.',
+            ], 401);
+        }
 
-                Log::info("PÃƒÂ¡gina vazia! Fim da busca.");
+        $company = Company::find($companyId);
 
-                break; 
-            }
+        if (!$company) {
+            return response()->json([
+                'authenticated' => false,
+                'message' => 'Empresa não encontrada.',
+            ], 404);
+        }
 
-          
-
-            foreach ($leadsDaPagina as $leadData) {
-
-                $empresa = $leadData['Company'] ?? '';
-
-                
-                if (is_array($empresa)) {
-                    $empresa = implode(', ', $empresa);
-                }
-
-                $tagLimpa = Str::slug($empresa);
-                $nomeLimpo = Str::slug($company->name);
-
-               
-                if (str_contains($tagLimpa, $nomeLimpo)) {
-
-                    $fichaCompleta = Http::timeout(60)->get($this->baseUrl . 'Lead?token=' . $token . '&email=' . $leadData['Email'])->json();
-
-                    $Tags = $fichaCompleta['Tags'] ?? [];
-                    $statusDaAnalise = '';
-                    
-                    
-                    if (is_array($Tags) && isset($Tags[0])) {
-                        $statusDaAnalise = $Tags[0]['Title'] ?? '';
-                    }
-
-                    if (is_string($Tags)) {
-                        $statusDaAnalise = $Tags;
-                    }
-                                        
-                    Lead::updateOrCreate(
-                        ['email' => $leadData['Email']], 
-                        [   
-                            'nome' => $leadData['Name'] ?? 'Sem Nome',
-                            'tel' => $leadData['Phone'] ?? null,
-                            'cidade' => $leadData['City'] ?? null,
-                            'company_id' => $company->id,
-                            'imobiliaria' => $empresa,
-                            'tags_originais' => $statusDaAnalise,
-                            'status' => !empty($statusDaAnalise) ? $statusDaAnalise : 'novo'
-                        ]
-                    );
-                }
-            }
-
-            $page++;
-
-            sleep(1);
-
-        } while (count($leadsDaPagina) > 0);
-
-        $company->update(['sincronizado_em' => now()]);
-
-        Log::info("SincronizaÃƒÂ§ÃƒÂ£o FINALIZADA com sucesso!");
+        return response()->json([
+            'authenticated' => true,
+            'sync_status' => $company->sync_status,
+            'sync_error' => $company->sync_error,
+            'sincronizado_em' => optional($company->sincronizado_em)->format('d/m/Y H:i'),
+            'total_leads' => $company->leads()->count(),
+        ]);
     }
     
     public function index(Request $request){
@@ -112,8 +48,17 @@ class DashboardController extends Controller
 
         $company = Company::find($companyId);
 
-        if (is_null($company->sincronizado_em)) {
-            $this->buscarLeadsAntigosNaApi($company);
+        if (is_null($company->sincronizado_em) &&
+            !in_array($company->sync_status, ['queued', 'running'])
+            ) 
+        {
+             $company->update([
+                'sync_status' => 'queued',
+                'sync_error' => null,
+            ]);
+
+            SyncCompanyLeadLoversLeadsJob::dispatch($company->id);
+            
         }
 
         $recentThreshold = now()->subDays(7);
@@ -149,13 +94,16 @@ class DashboardController extends Controller
         $recentLeads = $company->leads()
             ->where('created_at', '>=', $recentThreshold)
             ->count();
+
         $withPhone = $company->leads()
             ->whereNotNull('tel')
             ->where('tel', '!=', '')
             ->count();
+
         $latestLead = $company->leads()
             ->latest('created_at')
             ->first();
+
         $topTags = $tagCounts->take(4);
         $filterTags = $tagCounts;
 
@@ -169,7 +117,14 @@ class DashboardController extends Controller
             'filteredLeads' => $leads->total(),
         ];
 
-        return view('dashboard-user', compact('leads', 'dashboardStats', 'topTags', 'filterTags', 'selectedTag'))
-            ->with('success', 'Login realizado com SUCESSO!!');
+         return view('dashboard-user', [
+            'leads' => $leads,
+            'dashboardStats' => $dashboardStats,
+            'topTags' => $topTags,
+            'filterTags' => $filterTags,
+            'selectedTag' => $selectedTag,
+            'syncStatus' => $company->sync_status,
+            'syncError' => $company->sync_error,
+        ]);
     }
 }

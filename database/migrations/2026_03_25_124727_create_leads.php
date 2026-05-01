@@ -19,23 +19,36 @@ return new class extends Migration
             $table->foreignId('company_id')->constrained('companies')->onDelete('cascade');
             
             // Dados do Cliente
-            $table->string('nome')->nullable();
+            $table->string('nome');
             $table->string('email')->unique(); // Evita lead duplicado
-            $table->string('tel')->nullable();
-            $table->string('cpf')->nullable()->unique();
-            $table->string('cpf_casado')->nullable();
-            $table->string('cidade')->nullable();
-            $table->string('estado')->nullable();
-            $table->string('imobiliaria')->nullable();
-            $table->string('valor_aluguel')->nullable();
-            $table->string('outras_despesas')->nullable();
-            $table->string('nome_responsavel')->nullable();
+            $table->string('tel', 11);
+            $table->string('cpf', 11)->unique();
 
+            $table->string('estado_civil')->nullable();
+            $table->string('conjuge_cpf', 11)->nullable();
+            $table->string('conjuge_nome')->nullable();
+
+            $table->string('estado');
+            $table->string('cidade_imovel');
+            $table->string('responsavel_preenchimento');
             
-            // Controle do CRM
+            $table->decimal('valor_aluguel', 10, 2);
+            $table->decimal('outras_despesas', 10, 2)->default(0);
+            $table->decimal('valor_total_encargos', 10, 2)->default(0);
+
+            $table->string('imobiliaria')->nullable();
             $table->text('tags_originais')->nullable(); // Para salvar o que veio no webhook
-            $table->string('status')->default('novo');  // E
-            
+            $table->string('status')->default('novo');
+
+            $table->string('leadlovers_status')->default('formulario_publico');
+            $table->json('leadlovers_response')->nullable();
+            $table->timestamp('sent_to_leadlovers_at')->nullable();
+
+            $table->string('origem')->default('formulario_publico');
+            $table->ipAddress('ip')->nullable();
+            $table->string('user_agent')->nullable();
+
+
             $table->timestamps();
         });
     }

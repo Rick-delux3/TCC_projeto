@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Facades\Hash;
 
 class TwoFactorController extends Controller
 {
@@ -25,8 +26,16 @@ class TwoFactorController extends Controller
     {
         $request->validate(['code' => 'required|digits:6']);
 
-        $userId = Auth::id();
-        $verifyKey = $this->verifyThrottleKey($userId, $request->ip());
+        $user = Auth::user();
+
+        if(!$user){
+            return redirect()
+                ->route('empresa.login')
+                ->withErrors([
+                    'email' => 'Usuário não autenticado.',
+                ]);
+        }
+        $verifyKey = $this->verifyThrottleKey($user, $request->ip());
 
         if (RateLimiter::tooManyAttempts($verifyKey, self::VERIFY_MAX_ATTEMPTS)) {
             $seconds = RateLimiter::availableIn($verifyKey);
@@ -36,23 +45,27 @@ class TwoFactorController extends Controller
             ]);
         }
 
-        $code = TwoFactorCode::where('user_id', $userId)
-            ->where('code', $request->code)
-            ->where('expires_at', '>=', now())
+        $twoFactorCode = TwoFactorCode::where('user_id', $user->id)
+        ->where('expires_at', '>=', now())
             ->latest('id')
             ->first();
 
-        if (!$code) {
+        if (
+            !$twoFactorCode ||
+            !Hash::check($request->code, $twoFactorCode->code)
+        ) {
             RateLimiter::hit($verifyKey, self::VERIFY_DECAY_SECONDS);
 
-            return back()->withErrors(['code' => 'Codigo invalido ou expirado.']);
+            return back()->withErrors([
+                'code' => 'Código inválido ou expirado.',
+            ]);
         }
 
         session(['2fa_passed' => true]);
         RateLimiter::clear($verifyKey);
 
         // Cleanup all codes so the challenge cannot be replayed.
-        TwoFactorCode::where('user_id', $userId)->delete();
+        TwoFactorCode::where('user_id', $user->id)->delete();
 
         return redirect()->route('Dashboard')->with('success', 'Bem vindo!');
     }
@@ -86,19 +99,33 @@ class TwoFactorController extends Controller
         RateLimiter::hit($cooldownKey, self::RESEND_COOLDOWN_SECONDS);
 
         // Invalidate older codes and send a fresh one.
+        
+        $plainCode = (string) random_int(100000, 999999);
+
         TwoFactorCode::where('user_id', $user->id)->delete();
-
-        $code = rand(100000, 999999);
-
+        
         TwoFactorCode::create([
             'user_id' => $user->id,
-            'code' => $code,
+            'code' => Hash::make($plainCode),
             'expires_at' => now()->addMinutes(10),
         ]);
 
-        Mail::send('emails.2fa-code', ['code' => $code], function ($message) use ($user) {
-            $message->to($user->email)->subject('Seu novo codigo de verificacao');
-        });
+        try {
+            Mail::send('emails.2fa-code', ['code' => $plainCode], function ($message) use ($user) {
+                $message->to($user->email)->subject('Seu novo codigo de verificacao');
+            });
+            
+        } catch (\Throwable $e) {
+            TwoFactorCode::where('user_id', $user->id)->delete();
+
+            return back()->withErrors([
+                'code' => 'Não foi possível reenviar o código. Tente novamente.',
+            ]);
+        }
+
+        RateLimiter::hit($resendKey, self::RESEND_DECAY_SECONDS);
+        RateLimiter::hit($cooldownKey, self::RESEND_COOLDOWN_SECONDS);
+
 
         return back()->with('success', 'Novo codigo enviado para seu e-mail.');
     }

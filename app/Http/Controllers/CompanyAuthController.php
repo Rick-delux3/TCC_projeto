@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Str;
 
 class CompanyAuthController extends Controller
 {
@@ -27,35 +28,67 @@ class CompanyAuthController extends Controller
             'password' => 'required|string|min:6',
         ]);
 
+        $throttleKey = 'company-login:' . Str::lower($data['email']) . '|' . $request->ip();
+
+        if (RateLimiter::tooManyAttempts($throttleKey, 5)) {
+            return back()
+                ->withErrors([
+                    'email' => 'Muitas tentativas de login. Tente novamente em alguns minutos.',
+                ])
+                ->onlyInput('email');
+        }
+
         $company = Company::where('email', $data['email'])->first();
 
         if (!$company || !Hash::check($data['password'], $company->password)) {
+            RateLimiter::hit($throttleKey, 60);
+
             return back()->withErrors(['email' => 'E-mail ou senha incorretos.']);
         }
 
         $user = User::where('company_id', $company->id)->first();
 
         if (!$user) {
-            return back()->withErrors(['email' => 'Usuario admin nao encontrado.']);
+            return back()->withErrors(['email' => 'Usuario admin nao encontrado.'])->onlyInput('email');
         }
 
-        session(['company_id' => $company->id]);
-        Auth::login($user);
+        RateLimiter::clear($throttleKey);
 
+        Auth::login($user);
+        $request->session()->regenerate();
+        
+        session(['company_id' => $company->id]);
         // Keep only one active code per user.
         TwoFactorCode::where('user_id', $user->id)->delete();
 
-        $code = rand(100000, 999999);
+        $code = random_int(100000, 999999);
 
         TwoFactorCode::create([
             'user_id' => $user->id,
-            'code' => $code,
+            'code' => Hash::make((string) $code),
             'expires_at' => now()->addMinutes(10),
         ]);
 
-        Mail::send('emails.2fa-code', ['code' => $code], function ($message) use ($request) {
-            $message->to($request->email)->subject('Seu codigo de verificacao');
-        });
+        try {
+
+            Mail::send('emails.2fa-code', ['code' => $code], function ($message) use ($request) {
+                $message->to($request->email)->subject('Seu codigo de verificacao');
+            });
+
+        } catch (\Throwable $e) {
+
+             Auth::logout();
+
+            $request->session()->invalidate();
+            $request->session()->regenerateToken();
+
+            return back()
+                ->withErrors([
+                    'email' => 'Não foi possível enviar o código de verificação. Tente novamente.',
+                ])
+                ->onlyInput('email');
+        }
+
 
         session()->forget('2fa_passed');
 
@@ -67,10 +100,13 @@ class CompanyAuthController extends Controller
         return redirect()->route('2fa')->with('success', 'Codigo enviado ao seu e-mail.');
     }
 
-    public function logout()
+    public function logout(Request $request)
     {
         Auth::logout();
-        session()->forget('company_id');
+
+        $request->session()->invalidate();
+        $request->session()->regenerateToken();
+
 
         return redirect()->route('empresa.login')->with('success', 'Logout realizado com sucesso.');
     }

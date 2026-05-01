@@ -14,14 +14,24 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\PublicLeadController;
 
 
+Route::view('/', 'index')->name('index');
 
-Route::get('/Dashboard/User',[DashboardController::class, 'index'])
-->middleware(['auth', '2fa'])
-->name('Dashboard');
 
-Route::get('/Dashboard/Admin', function (){
-    return view('dashboard-admin');
-})->middleware(['auth:admin', 'admin.2fa'])->name('Dashboard-Admin');
+Route::prefix('/Dashboard')->group(function () {
+
+    Route::get('/User',[DashboardController::class, 'index'])
+    ->middleware(['auth', '2fa'])
+    ->name('Dashboard');
+    
+    Route::get('/Admin', function (){
+        return view('dashboard-admin');
+    })
+    ->middleware(['auth:admin', 'admin.2fa'])
+    ->name('Dashboard-Admin');
+
+    Route::get('/sync-status', [DashboardController::class, 'syncStatus'])
+    ->middleware(['auth', '2fa'])->name('Dashboard.syncStatus');
+});
 
 Route::middleware('auth')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
@@ -46,24 +56,20 @@ Route::middleware('auth:admin')->group(function () {
     Route::post('/admin/logout', [AdminAuthController::class, 'logout'])->name('admin.logout');
 });
 
-Route::view('/', 'index')->name('index');
-Route::get('/empresa/cadastro', [CompanyRegistrationController::class, 'showRegistrationForm'])->name('empresa.register.form');
-Route::post('/empresa/register', [CompanyRegistrationController::class, 'store'])->name('empresa.register.post');
-Route::post('/lead/create', [PublicLeadController::class, 'store'])->name('lead.create');
-
 Route::prefix('/leads')->group( function () {
     Route::get('/showform', [PublicLeadController::class, 'show'])->name('lead.showform');
     Route::post('/create', [PublicLeadController::class, 'store'])->name('lead.create');
     Route::post('/leadlovers', [PublicLeadController::class, 'enviarParaLeadLovers'])->name('lead.leadlovers');
-
-
 });
-
-
-Route::get('/empresa/login', [CompanyAuthController::class, 'showLoginForm'])->name('empresa.login');
-Route::post('/empresa/login', [CompanyAuthController::class, 'login'])->name('empresa.login.post');
-
-Route::get('/empresa/logout', [CompanyAuthController::class, 'logout'])->name('empresa.logout');
+    
+Route::prefix('/empresa')->group( function () {
+    Route::get('/form', [CompanyRegistrationController::class, 'showRegistrationForm'])->name('empresa.register.form');
+    Route::post('/register', [CompanyRegistrationController::class, 'store'])->name('empresa.register.post');
+    Route::get('/login', [CompanyAuthController::class, 'showLoginForm'])->name('empresa.login');
+    Route::post('/login/post', [CompanyAuthController::class, 'login'])->name('empresa.login.post');
+    Route::get('/logout', [CompanyAuthController::class, 'logout'])->name('empresa.logout');
+});
+    
 
 Route::middleware('guest')->group(function () {
     Route::get('/empresa/forgot-password', [CompanyPasswordResetLinkController::class, 'create'])

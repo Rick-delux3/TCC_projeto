@@ -15,10 +15,19 @@ class Company extends Model implements CanResetPasswordContract
     use HasFactory, Notifiable, CanResetPassword;
 
 
-    protected $fillable = ['name', 'email', 'phone', 'password', 'city', 'state', 'sincronizado_em'];
+    protected $fillable = ['name', 'email', 'phone', 'password', 'city', 'state', 'sincronizado_em', 'sync_status', 'sync_started_at', 'sync_finished_at', 'sync_error','lead_form_token', 'lead_form_active'];
 
     protected $hidden = [
         'password',
+        'lead_form_token',
+    ];
+
+    protected $casts = [
+        'sincronizado_em' => 'datatime',
+        'sync_started_at' => 'datatime',
+        'sync_finished_at' => 'datatime',
+        'lead_form_active' => 'boolean',
+
     ];
 
     public function users()
@@ -26,10 +35,6 @@ class Company extends Model implements CanResetPasswordContract
         return $this->hasMany(User::class);
     }
 
-    public function setSenhaAttribute($value)
-    {
-        $this->attributes['password'] = bcrypt($value);
-    }
 
     public function sendPasswordResetNotification($token): void
     {

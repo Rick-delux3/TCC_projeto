@@ -25,6 +25,26 @@
     $currentEnd = $leads->lastItem() ?? 0;
 @endphp
 
+<div id="sync-alert">
+    @if ($syncStatus === 'queued')
+        <div class="alert alert-info">
+            A sincronização dos seus leads foi iniciada.
+        </div>
+    @elseif ($syncStatus === 'running')
+        <div class="alert alert-info">
+            Estamos sincronizando seus leads da LeadLovers. Isso pode levar alguns instantes.
+        </div>
+    @elseif ($syncStatus === 'done')
+        <div class="alert alert-success">
+            Leads sincronizados com sucesso.
+        </div>
+    @elseif ($syncStatus === 'failed')
+        <div class="alert alert-danger">
+            Não foi possível sincronizar seus leads.
+            {{ $syncError ?? '' }}
+        </div>
+    @endif
+</div>
 <div class="crm-dashboard">
     <section class="crm-hero">
         <div class="crm-hero__main">
@@ -353,4 +373,86 @@
         </aside>
     </section>
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const syncAlert = document.getElementById('sync-alert');
+    const statusUrl = "{{ route('Dashboard.syncStatus') }}";
+
+    let intervalId = null;
+
+    async function checkSyncStatus() {
+        try {
+            const response = await fetch(statusUrl, {
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            });
+
+            if (!response.ok) {
+                return;
+            }
+
+            const data = await response.json();
+
+            if (!data.authenticated) {
+                return;
+            }
+
+            if (data.sync_status === 'queued') {
+                syncAlert.innerHTML = `
+                    <div class="alert alert-info">
+                        A sincronização está na fila. Aguarde alguns instantes.
+                    </div>
+                `;
+            }
+
+            if (data.sync_status === 'running') {
+                syncAlert.innerHTML = `
+                    <div class="alert alert-info">
+                        Estamos sincronizando seus leads da LeadLovers.
+                        Leads encontrados até agora: <strong>${data.total_leads}</strong>.
+                    </div>
+                `;
+            }
+
+            if (data.sync_status === 'done') {
+                clearInterval(intervalId);
+
+                syncAlert.innerHTML = `
+                    <div class="alert alert-success">
+                        Leads sincronizados com sucesso. Atualizando painel...
+                    </div>
+                `;
+
+                setTimeout(() => {
+                    window.location.reload();
+                }, 1500);
+            }
+
+            if (data.sync_status === 'failed') {
+                clearInterval(intervalId);
+
+                syncAlert.innerHTML = `
+                    <div class="alert alert-danger">
+                        Não foi possível sincronizar os leads.
+                        ${data.sync_error ?? ''}
+                    </div>
+                `;
+            }
+        } catch (error) {
+            console.error('Erro ao consultar status da sincronização:', error);
+        }
+    }
+
+    const currentStatus = "{{ $syncStatus }}";
+
+    if (currentStatus === 'queued' || currentStatus === 'running') {
+        intervalId = setInterval(checkSyncStatus, 5000);
+        checkSyncStatus();
+    }
+});
+</script>
 @endsection

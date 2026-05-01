@@ -36,11 +36,12 @@ return [
     ],
 
     'leadlovers' => [
-    'email' => env('LEADLOVERS_EMAIL'),
-    'token' => env('LEADLOVERS_TOKEN'),
-    'machine' => env('LEADLOVERS_MACHINE'),
-    'sequence' => env('LEADLOVERS_SEQUENCE'),
-    'step' => env('LEADLOVERS_STEP')
+        'base_url' => env('LEADLOVERS_BASE_URL', 'https://llapi.leadlovers.com/webapi/'),
+        'email' => env('LEADLOVERS_EMAIL'),
+        'token' => env('LEADLOVERS_TOKEN'),
+        'machine' => env('LEADLOVERS_MACHINE'),
+        'sequence' => env('LEADLOVERS_SEQUENCE'),
+        'step' => env('LEADLOVERS_STEP')
 ],
 
 ];
