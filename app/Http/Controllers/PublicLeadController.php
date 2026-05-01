@@ -82,7 +82,7 @@ class PublicLeadController extends Controller
 
        $leadLovers::dispatch($Lead->id);
 
-
+        return back()->with('success', 'Lead cadastrado com sucesso.');
     }
             
             

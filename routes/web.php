@@ -56,10 +56,10 @@ Route::middleware('auth:admin')->group(function () {
     Route::post('/admin/logout', [AdminAuthController::class, 'logout'])->name('admin.logout');
 });
 
-Route::prefix('/leads')->group( function () {
-    Route::get('/showform', [PublicLeadController::class, 'show'])->name('lead.showform');
-    Route::post('/create', [PublicLeadController::class, 'store'])->name('lead.create');
-    Route::post('/leadlovers', [PublicLeadController::class, 'enviarParaLeadLovers'])->name('lead.leadlovers');
+Route::middleware('throttle:10,1')->group(function () {
+    Route::get('/captacao/{token}', [PublicLeadController::class, 'show'])->name('public.leads.show');
+
+    Route::post('/captacao/{token}', [PublicLeadController::class, 'store'])->name('public.leads.store');
 });
     
 Route::prefix('/empresa')->group( function () {
