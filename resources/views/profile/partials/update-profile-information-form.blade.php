@@ -1,3 +1,14 @@
+{{-- 
+  Partial: Formulario de Atualizacao de Informacoes do Perfil
+  
+  Secao para atualizar nome e email da conta.
+  Se email nao verificado, exibe opcao de reenviar verificacao.
+  Campos: name, email.
+  Mostra mensagem de sucesso se salvo com sucesso.
+  Endpoint: route('profile.update') - PATCH
+  Inclui formulario oculto para reenvio de verificacao.
+--}}
+
 <section>
     <header>
         <h2 class="text-lg font-medium text-gray-900">

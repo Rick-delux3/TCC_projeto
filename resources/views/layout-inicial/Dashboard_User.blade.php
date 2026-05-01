@@ -1,3 +1,13 @@
+{{-- 
+  Layout - Dashboard de Usuario/Empresa
+  
+  Layout para o painel de usuario/imobiliaria.
+  CSS customizado: dashboard-user.css, welcome.css.
+  Inclui: Modal de sucesso, header_welcome, page-loader.
+  Bootstrap 5.3.8, Google Fonts.
+  Yield: content_w
+--}}
+
 <!DOCTYPE html>
 <html lang="pt-br">
 <head>

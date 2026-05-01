@@ -1,6 +1,22 @@
+{{-- 
+  Dashboard de Usuário/Empresa
+  
+  Painel CRM completo para imobiliárias acompanharem seus leads sincronizados.
+  Inclui: KPIs, filtros por tag, tabela de leads com paginação, sidebar com dados estatísticos.
+  
+  Dados esperados:
+  - dashboardStats: array com totalLeads, newLeads, recentLeads, withPhone, etc.
+  - leads: paginação de leads
+  - topTags, filterTags: coleções de tags para filtros
+  - selectedTag: tag atualmente filtrada (opcional)
+  
+  Layout: layout-inicial.Dashboard_User
+--}}
+
 @extends('layout-inicial.Dashboard_User')
 
 @section('content_w')
+{{-- Definição de mapa de labels para status dos leads --}}
 @php
     $statusLabels = [
         'novo' => 'Novo',
@@ -10,6 +26,7 @@
         'perdido' => 'Perdido',
     ];
 
+    // {{-- Extração segura de variáveis com valores padrão --}}
     $totalLeads = $dashboardStats['totalLeads'] ?? 0;
     $newLeads = $dashboardStats['newLeads'] ?? 0;
     $recentLeads = $dashboardStats['recentLeads'] ?? 0;
@@ -25,6 +42,7 @@
     $currentEnd = $leads->lastItem() ?? 0;
 @endphp
 
+{{-- Container principal do dashboard CRM --}}
 <div class="crm-dashboard">
     <section class="crm-hero">
         <div class="crm-hero__main">

@@ -1,3 +1,13 @@
+{{-- 
+  Pagina de Verificacao 2FA (Dois Fatores)
+  
+  Interface de autenticacao de dois fatores.
+  Entrada de 6 digitos com confirmacao e opcao de reenvio de codigo.
+  HTML puro sem layout extension - estilo bootstrap.
+  
+  Endpoint de dados: definido no form action
+--}}
+
 <!DOCTYPE html>
 <html lang="pt-br">
 <head>

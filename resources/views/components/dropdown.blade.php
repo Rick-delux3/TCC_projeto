@@ -1,3 +1,11 @@
+{{-- 
+  Componente: Dropdown / Menu Suspenso
+  
+  Menu dropdown customizavel com Alpine.js.
+  Props: align (left|top|right), width, contentClasses
+  Slots: trigger (acionador), content (conteudo)
+--}}
+
 @props(['align' => 'right', 'width' => '48', 'contentClasses' => 'py-1 bg-white'])
 
 @php
@@ -13,6 +21,7 @@ $width = match ($width) {
 };
 @endphp
 
+{{-- Container dropdown com comportamento Alpine --}}
 <div class="relative" x-data="{ open: false }" @click.outside="open = false" @close.stop="open = false">
     <div @click="open = ! open">
         {{ $trigger }}

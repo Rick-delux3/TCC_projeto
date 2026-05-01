@@ -1,3 +1,12 @@
+{{-- 
+  Layout - Pagina Inicial (Index/Landing Page)
+  
+  Layout para a homepage da aplicacao. 
+  Inclui: Bootstrap 5.3.8, Bootstrap Icons, Google Fonts (Inter, Playfair Display, Sansation).
+  CSS customizado: welcome.css. Vite para assets.
+  Inclui header_index e page-loader.
+--}}
+
 <!DOCTYPE html>
 <html lang="pt-br">
 <head>

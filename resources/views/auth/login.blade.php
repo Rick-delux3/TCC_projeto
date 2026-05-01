@@ -1,3 +1,13 @@
+{{-- 
+  Pagina de Login - Usuario/Staff
+  
+  Formulario de login para usuarios regulares do sistema.
+  Inclui campo de "lembrar acesso" e links para recuperacao de senha/registro.
+  
+  Dados enviados para: route('login')
+  Layout: layout-inicial.app
+--}}
+
 @extends('layout-inicial.app')
 
 @section('content')

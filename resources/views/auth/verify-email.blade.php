@@ -1,3 +1,14 @@
+{{-- 
+  Pagina de Verificacao de Email
+  
+  Mensagem pedindo confirmacao de email.
+  Botoes: reenviar email, logout.
+  Mensagem de sucesso se link foi reenviado.
+  
+  Layout: x-guest-layout (componente)
+  Endpoints: route('verification.send') - POST, route('logout') - POST
+--}}
+
 <x-guest-layout>
     <div class="mb-4 text-sm text-gray-600">
         {{ __('Thanks for signing up! Before getting started, could you verify your email address by clicking on the link we just emailed to you? If you didn\'t receive the email, we will gladly send you another.') }}

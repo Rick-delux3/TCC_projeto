@@ -1,3 +1,12 @@
+{{-- 
+  Componente: Navegacao Principal
+  
+  Barra de navegacao para usuarios autenticados.
+  Inclui: logo, links (Dashboard), dropdown de configuracoes (Perfil, Logout).
+  Responsivo com menu hamburguer para mobile (Alpine.js).
+  Usa componentes: x-application-logo, x-nav-link, x-dropdown, x-dropdown-link.
+--}}
+
 <nav x-data="{ open: false }" class="bg-white border-b border-gray-100">
     <!-- Primary Navigation Menu -->
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">

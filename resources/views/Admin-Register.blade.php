@@ -1,6 +1,17 @@
+{{-- 
+  Página de Registro de Administrador
+  
+  Formulário para cadastro de novos administradores da plataforma.
+  Inclui validação de email, CPF e confirmação de senha.
+  
+  Dados enviados para: route('admin.register.post')
+  Layout: layout-inicial.app
+--}}
+
 @extends('layout-inicial.app')
 
 @section('content')
+{{-- Container principal da página de registro --}}
 <div class="admin-register-page">
     <section class="admin-register-shell">
         <aside class="admin-register-aside">

@@ -1,6 +1,17 @@
+{{-- 
+  Página de Login da Empresa/Imobiliária
+  
+  Formulário de login para empresas acessarem o portal CRM.
+  Autenticação por email e senha com opção de recuperação de senha.
+  
+  Dados enviados para: route('empresa.login.post')
+  Layout: layout-inicial.app
+--}}
+
 @extends('layout-inicial.app')
 
 @section('content')
+{{-- Container principal da página de login --}}
 <div class="client-auth-page">
     <section class="client-auth-shell">
         <aside class="client-auth-aside">

@@ -1,3 +1,14 @@
+{{-- 
+  Pagina de Recuperacao de Senha - Usuario
+  
+  Formulario para solicitar reset de senha.
+  Envia link de redefinicao para email cadastrado.
+  Mostra mensagens de sucesso/erro com estilos dedicados.
+  
+  Dados enviados para: route('password.email')
+  Layout: layout-inicial.app
+--}}
+
 @extends('layout-inicial.app')
 
 @section('content')

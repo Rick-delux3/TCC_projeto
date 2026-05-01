@@ -1,3 +1,13 @@
+{{-- 
+  Partial: Formulario de Atualizacao de Senha
+  
+  Secao com formulario para alterar senha da conta.
+  Campos: senha atual, nova senha, confirmacao.
+  Mostra mensagem de sucesso se salvo com sucesso.
+  Endpoint: route('password.update') - PUT
+  Usa componentes: x-input-label, x-text-input, x-primary-button.
+--}}
+
 <section>
     <header>
         <h2 class="text-lg font-medium text-gray-900">

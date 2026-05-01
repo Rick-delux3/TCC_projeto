@@ -1,6 +1,18 @@
+{{-- 
+  Página de Registro de Empresa/Imobiliária
+  
+  Formulário para cadastro de novas empresas no sistema.
+  Coleta informações: nome (seleção de tags), telefone, email, cidade, estado e senha.
+  As tags oficiais são passadas do controller.
+  
+  Dados enviados para: route('empresa.register.post')
+  Layout: layout-inicial.app
+--}}
+
 @extends('layout-inicial.app')
 
 @section('content')
+{{-- Container principal da página de registro --}}
 <div class="client-register-page">
     <section class="client-register-shell">
         <aside class="client-register-aside">

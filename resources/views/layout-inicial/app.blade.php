@@ -1,3 +1,12 @@
+{{-- 
+  Layout Inicial - Paginas de Autenticacao
+  
+  Layout customizado para pages de login, registro, recuperacao de senha.
+  Inclui: header_app, modais de erro/sucesso, Bootstrap 5.3.8, Google Fonts.
+  Usa formularios CSS customizados (form-register.css).
+  Com suporte completo a CSRF e page-loader.
+--}}
+
 <!DOCTYPE html>
 <html lang="pt-br">
 <head>

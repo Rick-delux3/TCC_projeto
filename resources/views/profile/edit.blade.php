@@ -1,3 +1,13 @@
+{{-- 
+  Pagina de Edicao de Perfil
+  
+  Painel para usuario editar seu perfil.
+  Inclui 3 secoes: atualizar informacoes, atualizar senha, deletar conta.
+  Cada secao e um partial incluido com seu proprio formulario.
+  
+  Layout: x-app-layout (componente de layout Jetstream)
+--}}
+
 <x-app-layout>
     <x-slot name="header">
         <h2 class="font-semibold text-xl text-gray-800 leading-tight">

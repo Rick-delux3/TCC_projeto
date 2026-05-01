@@ -1,3 +1,12 @@
+{{-- 
+  Partial: Formulario de Delecao de Conta
+  
+  Secao com botao para deletar conta e modal de confirmacao.
+  Requer senha para confirmar a acao (por seguranca).
+  Usa componentes: x-danger-button, x-modal, x-secondary-button.
+  Endpoint: route('profile.destroy') - DELETE
+--}}
+
 <section class="space-y-6">
     <header>
         <h2 class="text-lg font-medium text-gray-900">

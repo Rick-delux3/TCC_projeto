@@ -1,3 +1,11 @@
+{{-- 
+  Layout para Paginas Guest (sem autenticacao)
+  
+  Layout simplificado para login, registro e recuperacao de senha.
+  Centraliza conteudo em card com logo e fontes Google.
+  Responsivo com suporte a CSRF token.
+--}}
+
 <!DOCTYPE html>
 <html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
     <head>

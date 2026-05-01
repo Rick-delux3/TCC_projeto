@@ -1,3 +1,14 @@
+{{-- 
+  Pagina de Recuperacao de Senha - Empresa/Imobiliaria
+  
+  Formulario para empresa solicitar recuperacao de senha.
+  Envia link de redefinicao para email cadastrado.
+  Display de mensagens de status/erro com estilos dedicados.
+  
+  Endpoint: route('company.password.email') - POST
+  Layout: layout-inicial.app
+--}}
+
 @extends('layout-inicial.app')
 
 @section('content')

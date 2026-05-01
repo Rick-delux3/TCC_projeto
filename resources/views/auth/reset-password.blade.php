@@ -1,3 +1,15 @@
+{{-- 
+  Pagina de Reset de Senha - Usuario
+  
+  Formulario para usuario redefinir senha apos solicitar recuperacao.
+  Recebe token de email e email atraves da URL.
+  Campos: email (pre-preenchido), nova senha, confirmacao.
+  Display de erros com estilos dedicados.
+  
+  Endpoint: route('password.store') - POST
+  Layout: layout-inicial.app
+--}}
+
 @extends('layout-inicial.app')
 
 @section('content')

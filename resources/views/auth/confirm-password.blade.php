@@ -1,3 +1,14 @@
+{{-- 
+  Pagina de Confirmacao de Senha
+  
+  Formulario para confirmar senha ao acessar area segura.
+  Campo: password (obrigatorio).
+  Botao: Confirmar (x-primary-button).
+  
+  Layout: x-guest-layout (componente)
+  Endpoint: route('password.confirm') - POST
+--}}
+
 <x-guest-layout>
     <div class="mb-4 text-sm text-gray-600">
         {{ __('This is a secure area of the application. Please confirm your password before continuing.') }}

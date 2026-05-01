@@ -1,3 +1,13 @@
+{{-- 
+  Email: Codigo de Verificacao 2FA
+  
+  Template de email com codigo de autenticacao de dois fatores.
+  Exibe: titulo, instrucoes, codigo em fonte grande (32px) com letter-spacing.
+  Aviso: codigo expira em 10 minutos.
+  
+  Variavel: $code (string - 6 digitos)
+--}}
+
 <!DOCTYPE html>
 <html>
 <body>

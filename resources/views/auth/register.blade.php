@@ -1,3 +1,14 @@
+{{-- 
+  Pagina de Registro - Usuario
+  
+  Formulario para criar nova conta de usuario.
+  Campos: nome, email, senha, confirmacao de senha.
+  Inclui validacoes client-side e display de erros.
+  
+  Dados enviados para: route('register')
+  Layout: layout-inicial.app
+--}}
+
 @extends('layout-inicial.app')
 
 @section('content')

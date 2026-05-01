@@ -1,7 +1,18 @@
+{{-- 
+  Pagina Inicial / Landing Page
+  
+  Homepage do projeto NVS Seguros CRM. 
+  Apresenta o produto com hero section, beneficios, features e call-to-action.
+  Design moderno com Tailwind CSS e gradientes.
+  
+  Layout: layout-inicial.index-app
+--}}
+
 @extends('layout-inicial.index-app')
 
 @section('content')
 
+{{-- Secao hero principal com apresentacao do produto --}}
 <section id="hero" class="relative overflow-hidden bg-[linear-gradient(180deg,#08173f_0%,#10316b_54%,#146FB6_100%)] text-zinc-100">
     <div class="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.12),transparent_28%),radial-gradient(circle_at_82%_18%,rgba(253,30,110,0.18),transparent_18%),radial-gradient(circle_at_50%_100%,rgba(210,234,255,0.18),transparent_26%),linear-gradient(180deg,rgba(3,1,51,0.14)_0%,rgba(3,1,51,0.08)_100%)]"></div>
     <div class="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/55 to-transparent"></div>

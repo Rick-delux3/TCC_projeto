@@ -1,9 +1,19 @@
+{{-- 
+  Componente: Modal / Dialog
+  
+  Modal acessivel com Alpine.js.
+  Recursos: tabulacao ciclica, escape para fechar, foco automatico.
+  Props: name (id), show (inicial), maxWidth (tamanho: sm|md|lg|xl|2xl)
+  Eventos: open-modal, close-modal (disparaveis via window)
+--}}
+
 @props([
     'name',
     'show' => false,
     'maxWidth' => '2xl'
 ])
 
+{{-- Mapa de tamanhos maximos --}}
 @php
 $maxWidth = [
     'sm' => 'sm:max-w-sm',

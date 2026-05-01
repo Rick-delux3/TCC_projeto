@@ -1,3 +1,12 @@
+{{-- 
+  Partial: Footer da Aplicacao
+  
+  Rodape com informacoes sobre Neves Corretora / Akialuga.
+  Exibe: logo da corretora, descricao, links de privacidade.
+  Placeholders: links de redes sociais (vazios no momento).
+  HTML: Bootstrap classes para grid/flex layout.
+--}}
+
  <footer>
         <div class="bio d-flex text-center">
             <h1>

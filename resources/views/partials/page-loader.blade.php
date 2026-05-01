@@ -1,3 +1,12 @@
+{{-- 
+  Componente: Page Loader / Loading Modal
+  
+  Modal de carregamento que aparece automaticamente ao submeter formularios.
+  ID: page-loader-modal
+  Animacao: spinner giratoria com transicoes CSS.
+  Controlado via JavaScript nos formularios.
+--}}
+
 <style>
     #page-loader-modal {
         position: fixed;

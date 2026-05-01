@@ -1,3 +1,13 @@
+{{-- 
+  Layout - Dashboard Administrativo
+  
+  Layout para o painel administrativo.
+  CSS customizado: form-register.css, welcome.css.
+  Inclui: Modal de sucesso, header_admin, page-loader.
+  Bootstrap 5.3.8, Google Fonts.
+  Yield: content_a
+--}}
+
 <!DOCTYPE html>
 <html lang="pt-br">
 <head>

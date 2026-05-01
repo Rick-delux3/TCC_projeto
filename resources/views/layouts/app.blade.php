@@ -1,3 +1,12 @@
+{{-- 
+  Layout Principal da Aplicacao
+  
+  Layout base com HTML5, responsivo e com suporte ao CSRF token.
+  Inclui: navegacao, header customizavel, area de conteudo principal.
+  Carrega CSS e JS via Vite.
+  Exibe page-loader no footer.
+--}}
+
 <!DOCTYPE html>
 <html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
     <head>

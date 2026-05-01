@@ -1,3 +1,14 @@
+{{-- 
+  Pagina de Reset de Senha - Empresa/Imobiliaria
+  
+  Formulario para empresa redefinir sua senha apos solicitar recuperacao.
+  Recebe token de email e email atraves da URL.
+  Campos: email (pre-preenchido), nova senha, confirmacao.
+  
+  Endpoint: route('company.password.store') - POST
+  Layout: layout-inicial.app
+--}}
+
 @extends('layout-inicial.app')
 
 @section('content')
