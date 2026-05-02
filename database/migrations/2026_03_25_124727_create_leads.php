@@ -20,27 +20,27 @@ return new class extends Migration
             
             // Dados do Cliente
             $table->string('nome');
-            $table->string('email')->unique(); // Evita lead duplicado
-            $table->string('tel', 11);
-            $table->string('cpf', 11)->unique();
+            $table->string('email'); // Evita lead duplicado
+            $table->string('tel', 20)->nullable();
+            $table->string('cpf', 11)->nullable();
 
             $table->string('estado_civil')->nullable();
             $table->string('conjuge_cpf', 11)->nullable();
             $table->string('conjuge_nome')->nullable();
 
-            $table->string('estado');
-            $table->string('cidade_imovel');
-            $table->string('responsavel_preenchimento');
+            $table->string('estado')->nullable();
+            $table->string('cidade_imovel')->nullable();
+            $table->string('responsavel_preenchimento')->nullable();
             
-            $table->decimal('valor_aluguel', 10, 2);
-            $table->decimal('outras_despesas', 10, 2)->default(0);
-            $table->decimal('valor_total_encargos', 10, 2)->default(0);
+            $table->decimal('valor_aluguel', 10, 2)->nullable();
+            $table->decimal('outras_despesas', 10, 2)->nullable();
+            $table->decimal('valor_total_encargos', 10, 2)->nullable();
 
             $table->string('imobiliaria')->nullable();
             $table->text('tags_originais')->nullable(); // Para salvar o que veio no webhook
             $table->string('status')->default('novo');
 
-            $table->string('leadlovers_status')->default('formulario_publico');
+            $table->string('leadlovers_status')->default('pending');
             $table->json('leadlovers_response')->nullable();
             $table->timestamp('sent_to_leadlovers_at')->nullable();
 

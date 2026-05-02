@@ -25,7 +25,7 @@ class Lead extends Model
         'valor_aluguel',
         'outras_despesas',
         'valor_total_encargos',
-        'nome_responsavel',
+        'responsavel_preenchimento',
         'tags_originais', 
         'status',
         'origem',
@@ -42,7 +42,7 @@ class Lead extends Model
         'outras_despesas' => 'decimal:2',
         'valor_total_encargos' => 'decimal:2',
         'leadlovers_response' => 'array',
-        'send_to_leadlovers_at' => 'datatime',
+        'send_to_leadlovers_at' => 'datetime',
     ]; 
 
     /**

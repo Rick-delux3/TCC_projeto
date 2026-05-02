@@ -22,6 +22,10 @@ Route::prefix('/Dashboard')->group(function () {
     Route::get('/User',[DashboardController::class, 'index'])
     ->middleware(['auth', '2fa'])
     ->name('Dashboard');
+
+    Route::post('/sync-again', [DashboardController::class, 'syncAgain'])
+    ->middleware(['auth', '2fa'])
+    ->name('Dashboard.syncAgain');
     
     Route::get('/Admin', function (){
         return view('dashboard-admin');

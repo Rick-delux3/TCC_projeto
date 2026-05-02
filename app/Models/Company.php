@@ -23,9 +23,9 @@ class Company extends Model implements CanResetPasswordContract
     ];
 
     protected $casts = [
-        'sincronizado_em' => 'datatime',
-        'sync_started_at' => 'datatime',
-        'sync_finished_at' => 'datatime',
+        'sincronizado_em' => 'datetime',
+        'sync_started_at' => 'datetime',
+        'sync_finished_at' => 'datetime',
         'lead_form_active' => 'boolean',
 
     ];

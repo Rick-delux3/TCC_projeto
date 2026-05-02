@@ -8,7 +8,21 @@ use App\Jobs\SyncCompanyLeadLoversLeadsJob;
 
 class DashboardController extends Controller
 {
+    private function queueCompanySync(Company $company): bool
+    {
+        if (in_array($company->sync_status, ['queued', 'running'], true)) {
+            return false;
+        }
 
+        $company->update([
+            'sync_status' => 'queued',
+            'sync_error' => null,
+        ]);
+
+        SyncCompanyLeadLoversLeadsJob::dispatch($company->id);
+
+        return true;
+    }
 
     public function syncStatus(Request $request)
     {
@@ -48,17 +62,12 @@ class DashboardController extends Controller
 
         $company = Company::find($companyId);
 
-        if (is_null($company->sincronizado_em) &&
-            !in_array($company->sync_status, ['queued', 'running'])
-            ) 
-        {
-             $company->update([
-                'sync_status' => 'queued',
-                'sync_error' => null,
-            ]);
+        if (!$company) {
+            return redirect()->route('empresa.login');
+        }
 
-            SyncCompanyLeadLoversLeadsJob::dispatch($company->id);
-            
+        if (is_null($company->sincronizado_em)) {
+            $this->queueCompanySync($company);
         }
 
         $recentThreshold = now()->subDays(7);
@@ -125,6 +134,39 @@ class DashboardController extends Controller
             'selectedTag' => $selectedTag,
             'syncStatus' => $company->sync_status,
             'syncError' => $company->sync_error,
+            'leadFormUrl' => $company->lead_form_active && filled($company->lead_form_token)
+                ? route('public.leads.show', $company->lead_form_token)
+                : null,
+            'leadFormActive' => (bool) $company->lead_form_active,
         ]);
+    }
+
+    public function syncAgain()
+    {
+        $companyId = session('company_id');
+
+        if (!$companyId) {
+            return redirect()
+                ->route('empresa.login')
+                ->with('success', 'Sua sessao expirou. Entre novamente para sincronizar os leads.');
+        }
+
+        $company = Company::find($companyId);
+
+        if (!$company) {
+            return redirect()
+                ->route('empresa.login')
+                ->with('success', 'Empresa nao encontrada para a sincronizacao.');
+        }
+
+        if (!$this->queueCompanySync($company)) {
+            return redirect()
+                ->route('Dashboard')
+                ->with('success', 'A sincronizacao ja esta em andamento.');
+        }
+
+        return redirect()
+            ->route('Dashboard')
+            ->with('success', 'Nova sincronizacao iniciada com sucesso.');
     }
 }

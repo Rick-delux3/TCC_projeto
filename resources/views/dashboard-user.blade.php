@@ -23,27 +23,137 @@
     $isTagFiltered = filled($selectedTag);
     $currentStart = $leads->firstItem() ?? 0;
     $currentEnd = $leads->lastItem() ?? 0;
+    $sessionSuccessMessage = session('success');
+    $leadFormUrl = $leadFormUrl ?? null;
+    $leadFormActive = $leadFormActive ?? false;
+    $hasSyncFailed = $syncStatus === 'failed';
+    $isSyncBusy = in_array($syncStatus, ['queued', 'running'], true);
+    $showInitialSyncModal = in_array($syncStatus, ['queued', 'running'], true);
+    $showFailedSyncModal = $hasSyncFailed;
+    $showLeadFormModal = filled($leadFormUrl);
 @endphp
 
-<div id="sync-alert">
-    @if ($syncStatus === 'queued')
-        <div class="alert alert-info">
-            A sincronização dos seus leads foi iniciada.
+<div
+    id="sync-status-modal"
+    class="sync-modal {{ $showInitialSyncModal || $showFailedSyncModal || $sessionSuccessMessage || $showLeadFormModal ? 'is-visible' : 'is-hidden' }}"
+    data-state="{{ $syncStatus }}"
+    data-variant="info"
+    aria-hidden="{{ $showInitialSyncModal || $showFailedSyncModal || $sessionSuccessMessage || $showLeadFormModal ? 'false' : 'true' }}"
+>
+    <div class="sync-modal__backdrop" data-sync-dismiss></div>
+
+    <div class="sync-modal__dialog" role="dialog" aria-modal="true" aria-labelledby="sync-modal-title">
+        <div class="sync-modal__card">
+            <button type="button" class="sync-modal__close" aria-label="Fechar" data-sync-dismiss>
+                <span aria-hidden="true">&times;</span>
+            </button>
+
+            <div class="sync-modal__brand">
+                <img src="{{ asset('imgs/Logo_NVS.png') }}" alt="NVS Seguros">
+                <span>SEGUROS</span>
+            </div>
+
+            <span id="sync-modal-badge" class="sync-modal__badge">Sincronizacao ativa</span>
+            <h2 id="sync-modal-title" class="sync-modal__title">Sincronizando leads...</h2>
+            <p id="sync-modal-description" class="sync-modal__description">
+                Processando e sincronizando novos leads entre a API e a base de dados local.
+            </p>
+
+            <div class="sync-modal__progress">
+                <div class="sync-modal__track">
+                    <div id="sync-modal-progress-bar" class="sync-modal__fill" style="width: 0%;"></div>
+                    <span id="sync-modal-progress-thumb" class="sync-modal__thumb" style="left: 0%;"></span>
+                </div>
+
+                <div class="sync-modal__progress-copy">
+                    <strong id="sync-modal-percent">0%</strong>
+                    <span id="sync-modal-summary">Aguardando inicio do processamento.</span>
+                </div>
+            </div>
+
+            <section class="sync-modal__lead-card" aria-labelledby="lead-form-card-title">
+                <div class="sync-modal__lead-copy">
+                    <span class="sync-modal__lead-tag">CaptaÃƒÂ§ÃƒÂ£o externa</span>
+                    <h3 id="lead-form-card-title" class="sync-modal__lead-title">Link rÃƒÂ¡pido do formulÃƒÂ¡rio de lead</h3>
+                    <p id="lead-form-card-description" class="sync-modal__lead-description">
+                        Compartilhe este acesso com clientes ou pÃƒÂ¡ginas de captura para receber novos leads sem entrar no painel.
+                    </p>
+                </div>
+
+                <div class="sync-modal__lead-field">
+                    <input
+                        type="text"
+                        class="sync-modal__lead-input"
+                        value="{{ $leadFormUrl ?? '' }}"
+                        readonly
+                        id="leadFormLink"
+                        @disabled(blank($leadFormUrl))
+                    >
+
+                    <button
+                        class="sync-modal__lead-copy-btn"
+                        type="button"
+                        id="leadFormCopyButton"
+                        @disabled(blank($leadFormUrl))
+                    >
+                        Copiar link
+                    </button>
+                </div>
+
+                <div class="sync-modal__lead-actions">
+                    <a
+                        href="{{ $leadFormUrl ?? '#' }}"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        class="sync-modal__lead-open {{ blank($leadFormUrl) ? 'is-disabled' : '' }}"
+                        id="leadFormOpenButton"
+                        @if (blank($leadFormUrl)) aria-disabled="true" tabindex="-1" @endif
+                    >
+                        Abrir formulÃƒÂ¡rio
+                    </a>
+
+                    <span
+                        id="leadFormCopyStatus"
+                        class="sync-modal__lead-status {{ blank($leadFormUrl) ? 'is-muted' : '' }}"
+                    >
+                        {{ blank($leadFormUrl) ? 'FormulÃƒÂ¡rio indisponÃƒÂ­vel no momento.' : 'DisponÃƒÂ­vel para compartilhamento imediato.' }}
+                    </span>
+                </div>
+            </section>
+
+            <div class="sync-modal__pipeline" aria-hidden="true">
+                <div class="sync-modal__endpoint">
+                    <span class="sync-modal__endpoint-icon">DB</span>
+                    <small>Local DB</small>
+                </div>
+
+                <div class="sync-modal__pipeline-line"></div>
+
+                <div class="sync-modal__endpoint">
+                    <span class="sync-modal__endpoint-icon">API</span>
+                    <small>LeadLovers API</small>
+                </div>
+            </div>
+
+            <p id="sync-modal-footnote" class="sync-modal__footnote">
+                Este processo pode levar alguns segundos.
+            </p>
+
+            <div class="sync-modal__actions">
+                <button type="button" class="sync-modal__secondary" data-sync-dismiss>
+                    Continuar no painel
+                </button>
+
+                <button type="button" class="sync-modal__primary is-hidden" id="sync-modal-primary-action">
+                    Atualizar painel
+                </button>
+            </div>
+
+            <form method="POST" action="{{ route('Dashboard.syncAgain') }}" id="sync-modal-retry-form" class="sync-modal__retry-form">
+                @csrf
+            </form>
         </div>
-    @elseif ($syncStatus === 'running')
-        <div class="alert alert-info">
-            Estamos sincronizando seus leads da LeadLovers. Isso pode levar alguns instantes.
-        </div>
-    @elseif ($syncStatus === 'done')
-        <div class="alert alert-success">
-            Leads sincronizados com sucesso.
-        </div>
-    @elseif ($syncStatus === 'failed')
-        <div class="alert alert-danger">
-            Não foi possível sincronizar seus leads.
-            {{ $syncError ?? '' }}
-        </div>
-    @endif
+    </div>
 </div>
 <div class="crm-dashboard">
     <section class="crm-hero">
@@ -54,6 +164,27 @@
                 Acompanhe a entrada de contatos, priorize atendimentos e organize o fluxo comercial
                 em uma interface mais clara, moderna e preparada para crescimento.
             </p>
+
+            <div class="crm-hero__actions">
+                <form method="POST" action="{{ route('Dashboard.syncAgain') }}" class="crm-sync-form">
+                    @csrf
+                    <button
+                        type="submit"
+                        class="crm-sync-button {{ $isSyncBusy ? 'is-busy' : '' }} {{ $hasSyncFailed ? 'is-error' : '' }}"
+                        @disabled($isSyncBusy)
+                    >
+                        {{ $isSyncBusy ? 'Sincronizacao em andamento' : ($hasSyncFailed ? 'Tentar sincronizacao novamente' : 'Sincronizar novamente') }}
+                    </button>
+                </form>
+
+                <span class="crm-sync-hint {{ $hasSyncFailed ? 'is-error' : '' }}">
+                    {{ $hasSyncFailed
+                        ? 'A ultima sincronizacao falhou. Use o botao ao lado para tentar novamente a importacao dos leads.'
+                        : ($isSyncBusy
+                        ? 'Sua fila ja esta ativa. O modal acompanha o progresso em tempo real.'
+                        : 'Use esta acao quando quiser puxar uma nova rodada de leads da integracao.') }}
+                </span>
+            </div>
 
             <div class="crm-hero__highlights">
                 <div class="crm-hero__highlight">
@@ -376,10 +507,267 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function () {
-    const syncAlert = document.getElementById('sync-alert');
+    const modal = document.getElementById('sync-status-modal');
     const statusUrl = "{{ route('Dashboard.syncStatus') }}";
+    const currentStatus = @json($syncStatus);
+    const initialSyncError = @json($syncError);
+    const initialTotalLeads = @json($totalLeads);
+    const sessionSuccessMessage = @json($sessionSuccessMessage);
+    const leadFormUrl = @json($leadFormUrl);
+    const leadFormActive = @json($leadFormActive);
+    const showLeadFormModal = @json($showLeadFormModal);
+
+    if (!modal) {
+        return;
+    }
+
+    const badgeEl = document.getElementById('sync-modal-badge');
+    const titleEl = document.getElementById('sync-modal-title');
+    const descriptionEl = document.getElementById('sync-modal-description');
+    const progressBarEl = document.getElementById('sync-modal-progress-bar');
+    const progressThumbEl = document.getElementById('sync-modal-progress-thumb');
+    const percentEl = document.getElementById('sync-modal-percent');
+    const summaryEl = document.getElementById('sync-modal-summary');
+    const footnoteEl = document.getElementById('sync-modal-footnote');
+    const primaryActionEl = document.getElementById('sync-modal-primary-action');
+    const secondaryActionEl = modal.querySelector('.sync-modal__secondary');
+    const dismissEls = modal.querySelectorAll('[data-sync-dismiss]');
+    const retryFormEl = document.getElementById('sync-modal-retry-form');
+    const leadFormCopyButton = document.getElementById('leadFormCopyButton');
+    const leadFormInput = document.getElementById('leadFormLink');
+    const leadFormCopyStatus = document.getElementById('leadFormCopyStatus');
+    const leadFormOpenButton = document.getElementById('leadFormOpenButton');
 
     let intervalId = null;
+    let suppressLiveModal = false;
+    let doneReloadTimeout = null;
+    let copyFeedbackTimeout = null;
+
+    function openModal(force) {
+        if (force) {
+            suppressLiveModal = false;
+        }
+
+        modal.classList.remove('is-hidden');
+        modal.classList.add('is-visible');
+        modal.setAttribute('aria-hidden', 'false');
+    }
+
+    function closeModal() {
+        modal.classList.remove('is-visible');
+        modal.classList.add('is-hidden');
+        modal.setAttribute('aria-hidden', 'true');
+
+        if (modal.dataset.state === 'queued' || modal.dataset.state === 'running') {
+            suppressLiveModal = true;
+        }
+    }
+
+    function progressForStatus(status, totalLeads) {
+        if (status === 'queued') {
+            return 18;
+        }
+
+        if (status === 'running') {
+            return Math.min(84, 46 + Math.min(Number(totalLeads || 0), 38));
+        }
+
+        if (status === 'lead-hub') {
+            return leadFormActive ? 100 : 0;
+        }
+
+        return 100;
+    }
+
+    function getModalCopy(status, payload) {
+        const leadsCount = Number(payload.totalLeads || 0);
+        const progress = progressForStatus(status, leadsCount);
+
+        if (status === 'queued') {
+            return {
+                state: 'queued',
+                variant: 'info',
+                badge: 'Fila inteligente',
+                title: 'Preparando sincronizacao de leads',
+                description: 'Organizando a fila de importacao entre a LeadLovers e a base local, enquanto o formulario abaixo ja pode ser compartilhado.',
+                progress: progress,
+                summary: 'Aguardando inicio do processamento',
+                footnote: 'Voce pode continuar no painel enquanto a fila e preparada.',
+                primaryLabel: ''
+            };
+        }
+
+        if (status === 'running') {
+            return {
+                state: 'running',
+                variant: 'info',
+                badge: 'Sincronizacao em andamento',
+                title: 'Sincronizando leads...',
+                description: 'Processando e sincronizando novos leads entre a API e a base de dados local. O link de captacao segue disponivel logo abaixo.',
+                progress: progress,
+                summary: leadsCount > 0 ? `${leadsCount} leads processados ate agora` : 'Lendo os primeiros registros da integracao',
+                footnote: 'Este processo pode levar alguns segundos.',
+                primaryLabel: ''
+            };
+        }
+
+        if (status === 'done') {
+            return {
+                state: 'done',
+                variant: 'success',
+                badge: 'Base atualizada',
+                title: 'Leads sincronizados com sucesso',
+                description: 'Sua base local foi atualizada e o painel esta pronto para refletir os dados mais recentes. O formulario de captacao continua liberado para novos envios.',
+                progress: 100,
+                summary: `${leadsCount} leads disponiveis no painel`,
+                footnote: 'Atualizando a interface automaticamente.',
+                primaryLabel: 'Atualizar agora'
+            };
+        }
+
+        if (status === 'failed') {
+            return {
+                state: 'failed',
+                variant: 'error',
+                badge: 'Sincronizacao interrompida',
+                title: 'Nao foi possivel concluir a sincronizacao',
+                description: payload.syncError || 'A sincronizacao encontrou uma falha entre a API e a base local. O link de captacao pode continuar sendo usado se estiver ativo.',
+                progress: 100,
+                summary: 'Revise a integracao e tente novamente mais tarde.',
+                footnote: 'Voce pode continuar no painel enquanto investigamos a falha.',
+                primaryLabel: 'Sincronizar novamente'
+            };
+        }
+
+        if (status === 'lead-hub') {
+            return {
+                state: 'lead-hub',
+                variant: leadFormActive ? 'info' : 'error',
+                badge: leadFormActive ? 'Captacao pronta' : 'Captacao indisponivel',
+                title: leadFormActive ? 'Seu formulario de leads esta pronto' : 'O formulario de leads esta indisponivel',
+                description: leadFormActive
+                    ? 'Use este espaco para compartilhar o formulario de captacao com clientes, portais ou paginas externas.'
+                    : 'Ative novamente o formulario publico para voltar a receber leads externos por este acesso.',
+                progress: progress,
+                summary: leadFormActive ? 'Link seguro gerado para a sua imobiliaria' : 'Nenhum link ativo para compartilhamento',
+                footnote: leadFormActive
+                    ? 'Voce pode copiar o link, abrir o formulario e continuar no painel sem interromper a operacao.'
+                    : 'Assim que o formulario for reativado, o link voltara a aparecer aqui.',
+                primaryLabel: leadFormActive ? 'Abrir formulario' : ''
+            };
+        }
+
+        return {
+            state: 'flash-success',
+            variant: 'success',
+            badge: 'Tudo certo',
+            title: 'Painel pronto para uso',
+            description: payload.message || 'Operacao concluida com sucesso.',
+            progress: 100,
+            summary: 'Ambiente liberado para atendimento',
+            footnote: 'Voce ja pode seguir com sua operacao.',
+            primaryLabel: 'Fechar'
+        };
+    }
+
+    function renderModal(copy) {
+        modal.dataset.state = copy.state;
+        modal.dataset.variant = copy.variant;
+
+        badgeEl.textContent = copy.badge;
+        titleEl.textContent = copy.title;
+        descriptionEl.textContent = copy.description;
+        percentEl.textContent = `${copy.progress}%`;
+        summaryEl.textContent = copy.summary;
+        footnoteEl.textContent = copy.footnote;
+        progressBarEl.style.width = `${copy.progress}%`;
+        progressThumbEl.style.left = `${copy.progress}%`;
+
+        if (copy.primaryLabel) {
+            primaryActionEl.textContent = copy.primaryLabel;
+            primaryActionEl.classList.remove('is-hidden');
+        } else {
+            primaryActionEl.classList.add('is-hidden');
+        }
+
+        secondaryActionEl.textContent = copy.state === 'done' ? 'Fechar' : 'Continuar no painel';
+    }
+
+    function setLeadCopyStatus(message, variant) {
+        if (!leadFormCopyStatus) {
+            return;
+        }
+
+        leadFormCopyStatus.textContent = message;
+        leadFormCopyStatus.classList.remove('is-success', 'is-error', 'is-muted');
+
+        if (variant) {
+            leadFormCopyStatus.classList.add(variant);
+        }
+    }
+
+    dismissEls.forEach(function (button) {
+        button.addEventListener('click', closeModal);
+    });
+
+    primaryActionEl.addEventListener('click', function () {
+        if (modal.dataset.state === 'lead-hub' && leadFormUrl) {
+            window.open(leadFormUrl, '_blank', 'noopener');
+            return;
+        }
+
+        if (modal.dataset.state === 'failed' && retryFormEl) {
+            retryFormEl.submit();
+            return;
+        }
+
+        if (modal.dataset.state === 'done') {
+            window.location.reload();
+            return;
+        }
+
+        closeModal();
+    });
+
+    if (leadFormOpenButton) {
+        leadFormOpenButton.addEventListener('click', function (event) {
+            if (!leadFormUrl) {
+                event.preventDefault();
+            }
+        });
+    }
+
+    if (leadFormCopyButton) {
+        leadFormCopyButton.addEventListener('click', async function () {
+            if (!leadFormUrl || !leadFormInput) {
+                setLeadCopyStatus('Formulario indisponivel para copia.', 'is-error');
+                return;
+            }
+
+            try {
+                await navigator.clipboard.writeText(leadFormUrl);
+                setLeadCopyStatus('Link copiado com sucesso.', 'is-success');
+
+                if (copyFeedbackTimeout) {
+                    clearTimeout(copyFeedbackTimeout);
+                }
+
+                copyFeedbackTimeout = setTimeout(function () {
+                    setLeadCopyStatus('Disponivel para compartilhamento imediato.', '');
+                }, 2600);
+            } catch (error) {
+                leadFormInput.focus();
+                leadFormInput.select();
+                setLeadCopyStatus('Nao foi possivel copiar automaticamente. Use Ctrl+C.', 'is-error');
+            }
+        });
+    }
+
+    document.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape' && modal.classList.contains('is-visible')) {
+            closeModal();
+        }
+    });
 
     async function checkSyncStatus() {
         try {
@@ -401,58 +789,83 @@ document.addEventListener('DOMContentLoaded', function () {
                 return;
             }
 
-            if (data.sync_status === 'queued') {
-                syncAlert.innerHTML = `
-                    <div class="alert alert-info">
-                        A sincronização está na fila. Aguarde alguns instantes.
-                    </div>
-                `;
-            }
+            if (data.sync_status === 'queued' || data.sync_status === 'running') {
+                renderModal(getModalCopy(data.sync_status, {
+                    totalLeads: data.total_leads,
+                    syncError: data.sync_error,
+                    message: ''
+                }));
 
-            if (data.sync_status === 'running') {
-                syncAlert.innerHTML = `
-                    <div class="alert alert-info">
-                        Estamos sincronizando seus leads da LeadLovers.
-                        Leads encontrados até agora: <strong>${data.total_leads}</strong>.
-                    </div>
-                `;
+                if (!suppressLiveModal) {
+                    openModal(false);
+                }
             }
 
             if (data.sync_status === 'done') {
                 clearInterval(intervalId);
+                renderModal(getModalCopy('done', {
+                    totalLeads: data.total_leads,
+                    syncError: data.sync_error
+                }));
+                openModal(true);
 
-                syncAlert.innerHTML = `
-                    <div class="alert alert-success">
-                        Leads sincronizados com sucesso. Atualizando painel...
-                    </div>
-                `;
+                if (doneReloadTimeout) {
+                    clearTimeout(doneReloadTimeout);
+                }
 
-                setTimeout(() => {
+                doneReloadTimeout = setTimeout(function () {
                     window.location.reload();
-                }, 1500);
+                }, 1800);
             }
 
             if (data.sync_status === 'failed') {
                 clearInterval(intervalId);
-
-                syncAlert.innerHTML = `
-                    <div class="alert alert-danger">
-                        Não foi possível sincronizar os leads.
-                        ${data.sync_error ?? ''}
-                    </div>
-                `;
+                renderModal(getModalCopy('failed', {
+                    totalLeads: data.total_leads,
+                    syncError: data.sync_error
+                }));
+                openModal(true);
             }
         } catch (error) {
-            console.error('Erro ao consultar status da sincronização:', error);
+            console.error('Erro ao consultar status da sincronizacao:', error);
         }
     }
 
-    const currentStatus = "{{ $syncStatus }}";
-
     if (currentStatus === 'queued' || currentStatus === 'running') {
+        renderModal(getModalCopy(currentStatus, {
+            totalLeads: initialTotalLeads,
+            syncError: initialSyncError,
+            message: ''
+        }));
+        openModal(true);
         intervalId = setInterval(checkSyncStatus, 5000);
         checkSyncStatus();
+    } else if (currentStatus === 'failed') {
+        renderModal(getModalCopy('failed', {
+            totalLeads: initialTotalLeads,
+            syncError: initialSyncError,
+            message: ''
+        }));
+        openModal(true);
+    } else if (sessionSuccessMessage) {
+        renderModal(getModalCopy('flash-success', {
+            totalLeads: initialTotalLeads,
+            syncError: initialSyncError,
+            message: sessionSuccessMessage
+        }));
+        openModal(true);
+    } else if (showLeadFormModal) {
+        renderModal(getModalCopy('lead-hub', {
+            totalLeads: initialTotalLeads,
+            syncError: initialSyncError,
+            message: ''
+        }));
+        openModal(true);
+    } else {
+        closeModal();
     }
 });
 </script>
 @endsection
+
+
