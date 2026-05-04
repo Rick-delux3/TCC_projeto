@@ -25,6 +25,7 @@ class StorePublicLeadRequest extends FormRequest
             'valor_aluguel' => $this->normalizarDinheiro($this->valor_aluguel),
             'outras_despesas' => $this->normalizarDinheiro($this->outras_despesas),
             'cidade_imovel' => $this->limparTexto($this->cidade_imovel),
+            'estado' => mb_strtoupper(trim((string) $this->estado)),
             'responsavel_preenchimento' => $this->limparTexto($this->responsavel_preenchimento),
         ]);
     }
@@ -42,7 +43,7 @@ class StorePublicLeadRequest extends FormRequest
             'email' => [
                 'required',
                 'string',
-                'email:rfc,dns',
+                'email:rfc',
                 'max:255',
             ],
 
@@ -102,6 +103,12 @@ class StorePublicLeadRequest extends FormRequest
                 'string',
                 'min:2',
                 'max:100',
+            ],
+
+            'estado' => [
+                'nullable',
+                'string',
+                'size:2',
             ],
 
             'responsavel_preenchimento' => [
@@ -220,9 +227,14 @@ class StorePublicLeadRequest extends FormRequest
             return null;
         }
 
-        $valor = str_replace(['R$', ' '], '', (string) $valor);
-        $valor = str_replace('.', '', $valor);
-        $valor = str_replace(',', '.', $valor);
+       $valor = (string) $valor;
+
+       $valor = preg_replace('/[^\d,\.]/u', '', $valor);
+
+       if(str_contains($valor, ',')){
+            $valor = str_replace('.', '', $valor);
+            $valor = str_replace(',', '.', $valor);
+       }
 
         return is_numeric($valor) ? $valor : null;
     }

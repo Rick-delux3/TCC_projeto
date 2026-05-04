@@ -7,10 +7,8 @@
 <div class="container py-5">
     <div class="row justify-content-center">
         <div class="col-lg-8 col-xl-7">
-
             <div class="card shadow-sm border-0 rounded-4">
                 <div class="card-body p-4 p-md-5">
-
                     <div class="mb-4 text-center">
                         <h1 class="h3 fw-bold mb-2">Cadastro de Lead</h1>
                         <p class="text-muted mb-0">
@@ -235,19 +233,19 @@
                             </div>
 
                             <div class="col-md-12">
-                                <label for="nome_responsavel" class="form-label">
+                                <label for="responsavel_preenchimento" class="form-label">
                                     Nome do responsável pelo preenchimento
                                 </label>
                                 <input 
                                     type="text" 
-                                    name="nome_responsavel" 
-                                    id="nome_responsavel"
-                                    class="form-control @error('nome_responsavel') is-invalid @enderror"
-                                    value="{{ old('nome_responsavel') }}"
+                                    name="responsavel_preenchimento" 
+                                    id="responsavel_preenchimento"
+                                    class="form-control @error('responsavel_preenchimento') is-invalid @enderror"
+                                    value="{{ old('responsavel_preenchimento') }}"
                                     placeholder="Ex: Maria Oliveira"
                                     required
                                 >
-                                @error('nome_responsavel')
+                                @error('responsavel_preenchimento')
                                     <div class="invalid-feedback">{{ $message }}</div>
                                 @enderror
                             </div>

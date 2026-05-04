@@ -39,7 +39,7 @@ class PublicLeadController extends Controller
     }
 
     
-    public function store(StorePublicLeadRequest $request, string $token, SendLeadToLeadLoversJob $leadLovers){
+    public function store(StorePublicLeadRequest $request, string $token){
         
         $company = Company::where('lead_form_token', $token)
         ->where('lead_form_active', true)
@@ -80,7 +80,7 @@ class PublicLeadController extends Controller
         
         );
 
-       $leadLovers::dispatch($Lead->id);
+       SendLeadToLeadLoversJob::dispatch($Lead->id);
 
         return back()->with('success', 'Lead cadastrado com sucesso.');
     }

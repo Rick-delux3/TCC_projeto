@@ -2,6 +2,7 @@
 
 @section('content_w')
 @php
+    //Status dos Leads
     $statusLabels = [
         'novo' => 'Novo',
         'em-andamento' => 'Em andamento',
@@ -9,7 +10,7 @@
         'convertido' => 'Convertido',
         'perdido' => 'Perdido',
     ];
-
+    
     $totalLeads = $dashboardStats['totalLeads'] ?? 0;
     $newLeads = $dashboardStats['newLeads'] ?? 0;
     $recentLeads = $dashboardStats['recentLeads'] ?? 0;
@@ -23,22 +24,19 @@
     $isTagFiltered = filled($selectedTag);
     $currentStart = $leads->firstItem() ?? 0;
     $currentEnd = $leads->lastItem() ?? 0;
-    $sessionSuccessMessage = session('success');
     $leadFormUrl = $leadFormUrl ?? null;
-    $leadFormActive = $leadFormActive ?? false;
+    $leadFormAvailable = filled($leadFormUrl);
     $hasSyncFailed = $syncStatus === 'failed';
     $isSyncBusy = in_array($syncStatus, ['queued', 'running'], true);
-    $showInitialSyncModal = in_array($syncStatus, ['queued', 'running'], true);
-    $showFailedSyncModal = $hasSyncFailed;
-    $showLeadFormModal = filled($leadFormUrl);
+    $shouldAutoShowSyncModal = in_array($syncStatus, ['queued', 'running', 'failed'], true);
 @endphp
 
 <div
     id="sync-status-modal"
-    class="sync-modal {{ $showInitialSyncModal || $showFailedSyncModal || $sessionSuccessMessage || $showLeadFormModal ? 'is-visible' : 'is-hidden' }}"
+    class="sync-modal {{ $shouldAutoShowSyncModal ? 'is-visible' : 'is-hidden' }}"
     data-state="{{ $syncStatus }}"
     data-variant="info"
-    aria-hidden="{{ $showInitialSyncModal || $showFailedSyncModal || $sessionSuccessMessage || $showLeadFormModal ? 'false' : 'true' }}"
+    aria-hidden="{{ $shouldAutoShowSyncModal ? 'false' : 'true' }}"
 >
     <div class="sync-modal__backdrop" data-sync-dismiss></div>
 
@@ -444,6 +442,58 @@
         </div>
 
         <aside class="crm-sidebar">
+            <div class="crm-card crm-card--lead-hub">
+                <div class="crm-card__header crm-card__header--stack">
+                    <div>
+                        <span class="crm-section-tag">Captação externa</span>
+                        <h2>Formulário público de leads</h2>
+                        <p>Compartilhe este acesso com clientes, landing pages ou portais e receba novos leads direto na base da imobiliária.</p>
+                    </div>
+                </div>
+
+                <div class="crm-lead-hub {{ $leadFormAvailable ? '' : 'is-disabled' }}">
+                    <div class="crm-lead-hub__field">
+                        <input
+                            type="text"
+                            class="crm-lead-hub__input"
+                            value="{{ $leadFormUrl ?? '' }}"
+                            readonly
+                            id="dashboardLeadFormLink"
+                            @disabled(!$leadFormAvailable)
+                        >
+
+                        <button
+                            type="button"
+                            class="crm-lead-hub__copy"
+                            id="dashboardLeadFormCopyButton"
+                            @disabled(!$leadFormAvailable)
+                        >
+                            Copiar link
+                        </button>
+                    </div>
+
+                    <div class="crm-lead-hub__actions">
+                        <a
+                            href="{{ $leadFormUrl ?? '#' }}"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            class="crm-lead-hub__open {{ $leadFormAvailable ? '' : 'is-disabled' }}"
+                            id="dashboardLeadFormOpenButton"
+                            @if (!$leadFormAvailable) aria-disabled="true" tabindex="-1" @endif
+                        >
+                            Abrir formulário
+                        </a>
+
+                        <span
+                            id="dashboardLeadFormCopyStatus"
+                            class="crm-lead-hub__status {{ $leadFormAvailable ? '' : 'is-muted' }}"
+                        >
+                            {{ $leadFormAvailable ? 'Disponível para compartilhamento imediato.' : 'Formulário indisponível no momento.' }}
+                        </span>
+                    </div>
+                </div>
+            </div>
+
             <div class="crm-card">
                 <div class="crm-card__header crm-card__header--stack">
                     <div>
@@ -512,10 +562,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const currentStatus = @json($syncStatus);
     const initialSyncError = @json($syncError);
     const initialTotalLeads = @json($totalLeads);
-    const sessionSuccessMessage = @json($sessionSuccessMessage);
     const leadFormUrl = @json($leadFormUrl);
-    const leadFormActive = @json($leadFormActive);
-    const showLeadFormModal = @json($showLeadFormModal);
 
     if (!modal) {
         return;
@@ -537,11 +584,21 @@ document.addEventListener('DOMContentLoaded', function () {
     const leadFormInput = document.getElementById('leadFormLink');
     const leadFormCopyStatus = document.getElementById('leadFormCopyStatus');
     const leadFormOpenButton = document.getElementById('leadFormOpenButton');
+    const dashboardLeadFormCopyButton = document.getElementById('dashboardLeadFormCopyButton');
+    const dashboardLeadFormInput = document.getElementById('dashboardLeadFormLink');
+    const dashboardLeadFormCopyStatus = document.getElementById('dashboardLeadFormCopyStatus');
+    const dashboardLeadFormOpenButton = document.getElementById('dashboardLeadFormOpenButton');
 
     let intervalId = null;
     let suppressLiveModal = false;
     let doneReloadTimeout = null;
-    let copyFeedbackTimeout = null;
+
+    function stopPolling() {
+        if (intervalId) {
+            clearInterval(intervalId);
+            intervalId = null;
+        }
+    }
 
     function openModal(force) {
         if (force) {
@@ -570,10 +627,6 @@ document.addEventListener('DOMContentLoaded', function () {
 
         if (status === 'running') {
             return Math.min(84, 46 + Math.min(Number(totalLeads || 0), 38));
-        }
-
-        if (status === 'lead-hub') {
-            return leadFormActive ? 100 : 0;
         }
 
         return 100;
@@ -611,20 +664,6 @@ document.addEventListener('DOMContentLoaded', function () {
             };
         }
 
-        if (status === 'done') {
-            return {
-                state: 'done',
-                variant: 'success',
-                badge: 'Base atualizada',
-                title: 'Leads sincronizados com sucesso',
-                description: 'Sua base local foi atualizada e o painel esta pronto para refletir os dados mais recentes. O formulario de captacao continua liberado para novos envios.',
-                progress: 100,
-                summary: `${leadsCount} leads disponiveis no painel`,
-                footnote: 'Atualizando a interface automaticamente.',
-                primaryLabel: 'Atualizar agora'
-            };
-        }
-
         if (status === 'failed') {
             return {
                 state: 'failed',
@@ -639,34 +678,16 @@ document.addEventListener('DOMContentLoaded', function () {
             };
         }
 
-        if (status === 'lead-hub') {
-            return {
-                state: 'lead-hub',
-                variant: leadFormActive ? 'info' : 'error',
-                badge: leadFormActive ? 'Captacao pronta' : 'Captacao indisponivel',
-                title: leadFormActive ? 'Seu formulario de leads esta pronto' : 'O formulario de leads esta indisponivel',
-                description: leadFormActive
-                    ? 'Use este espaco para compartilhar o formulario de captacao com clientes, portais ou paginas externas.'
-                    : 'Ative novamente o formulario publico para voltar a receber leads externos por este acesso.',
-                progress: progress,
-                summary: leadFormActive ? 'Link seguro gerado para a sua imobiliaria' : 'Nenhum link ativo para compartilhamento',
-                footnote: leadFormActive
-                    ? 'Voce pode copiar o link, abrir o formulario e continuar no painel sem interromper a operacao.'
-                    : 'Assim que o formulario for reativado, o link voltara a aparecer aqui.',
-                primaryLabel: leadFormActive ? 'Abrir formulario' : ''
-            };
-        }
-
         return {
-            state: 'flash-success',
-            variant: 'success',
-            badge: 'Tudo certo',
-            title: 'Painel pronto para uso',
-            description: payload.message || 'Operacao concluida com sucesso.',
+            state: 'idle',
+            variant: 'info',
+            badge: 'Painel pronto',
+            title: 'Sincronizacao concluida',
+            description: 'A base local ja esta atualizada e pronta para consulta.',
             progress: 100,
-            summary: 'Ambiente liberado para atendimento',
-            footnote: 'Voce ja pode seguir com sua operacao.',
-            primaryLabel: 'Fechar'
+            summary: `${leadsCount} leads disponiveis no painel`,
+            footnote: 'Voce pode seguir com a operacao normalmente.',
+            primaryLabel: ''
         };
     }
 
@@ -690,20 +711,60 @@ document.addEventListener('DOMContentLoaded', function () {
             primaryActionEl.classList.add('is-hidden');
         }
 
-        secondaryActionEl.textContent = copy.state === 'done' ? 'Fechar' : 'Continuar no painel';
+        secondaryActionEl.textContent = 'Continuar no painel';
     }
 
-    function setLeadCopyStatus(message, variant) {
-        if (!leadFormCopyStatus) {
+    function setLeadCopyStatus(target, message, variant) {
+        if (!target) {
             return;
         }
 
-        leadFormCopyStatus.textContent = message;
-        leadFormCopyStatus.classList.remove('is-success', 'is-error', 'is-muted');
+        target.textContent = message;
+        target.classList.remove('is-success', 'is-error', 'is-muted');
 
         if (variant) {
-            leadFormCopyStatus.classList.add(variant);
+            target.classList.add(variant);
         }
+    }
+
+    function bindLeadFormActions(copyButton, input, statusEl, openButton, defaultMessage) {
+        let feedbackTimeout = null;
+
+        if (openButton) {
+            openButton.addEventListener('click', function (event) {
+                if (!leadFormUrl) {
+                    event.preventDefault();
+                }
+            });
+        }
+
+        if (!copyButton || !input || !statusEl) {
+            return;
+        }
+
+        copyButton.addEventListener('click', async function () {
+            if (!leadFormUrl) {
+                setLeadCopyStatus(statusEl, 'Formulario indisponivel para copia.', 'is-error');
+                return;
+            }
+
+            try {
+                await navigator.clipboard.writeText(leadFormUrl);
+                setLeadCopyStatus(statusEl, 'Link copiado com sucesso.', 'is-success');
+
+                if (feedbackTimeout) {
+                    clearTimeout(feedbackTimeout);
+                }
+
+                feedbackTimeout = setTimeout(function () {
+                    setLeadCopyStatus(statusEl, defaultMessage, '');
+                }, 2600);
+            } catch (error) {
+                input.focus();
+                input.select();
+                setLeadCopyStatus(statusEl, 'Nao foi possivel copiar automaticamente. Use Ctrl+C.', 'is-error');
+            }
+        });
     }
 
     dismissEls.forEach(function (button) {
@@ -711,62 +772,43 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 
     primaryActionEl.addEventListener('click', function () {
-        if (modal.dataset.state === 'lead-hub' && leadFormUrl) {
-            window.open(leadFormUrl, '_blank', 'noopener');
-            return;
-        }
-
         if (modal.dataset.state === 'failed' && retryFormEl) {
             retryFormEl.submit();
-            return;
-        }
-
-        if (modal.dataset.state === 'done') {
-            window.location.reload();
             return;
         }
 
         closeModal();
     });
 
-    if (leadFormOpenButton) {
-        leadFormOpenButton.addEventListener('click', function (event) {
-            if (!leadFormUrl) {
-                event.preventDefault();
-            }
-        });
-    }
+    bindLeadFormActions(
+        leadFormCopyButton,
+        leadFormInput,
+        leadFormCopyStatus,
+        leadFormOpenButton,
+        'Disponivel para compartilhamento imediato.'
+    );
 
-    if (leadFormCopyButton) {
-        leadFormCopyButton.addEventListener('click', async function () {
-            if (!leadFormUrl || !leadFormInput) {
-                setLeadCopyStatus('Formulario indisponivel para copia.', 'is-error');
-                return;
-            }
-
-            try {
-                await navigator.clipboard.writeText(leadFormUrl);
-                setLeadCopyStatus('Link copiado com sucesso.', 'is-success');
-
-                if (copyFeedbackTimeout) {
-                    clearTimeout(copyFeedbackTimeout);
-                }
-
-                copyFeedbackTimeout = setTimeout(function () {
-                    setLeadCopyStatus('Disponivel para compartilhamento imediato.', '');
-                }, 2600);
-            } catch (error) {
-                leadFormInput.focus();
-                leadFormInput.select();
-                setLeadCopyStatus('Nao foi possivel copiar automaticamente. Use Ctrl+C.', 'is-error');
-            }
-        });
-    }
+    bindLeadFormActions(
+        dashboardLeadFormCopyButton,
+        dashboardLeadFormInput,
+        dashboardLeadFormCopyStatus,
+        dashboardLeadFormOpenButton,
+        'Disponivel para compartilhamento imediato.'
+    );
 
     document.addEventListener('keydown', function (event) {
         if (event.key === 'Escape' && modal.classList.contains('is-visible')) {
             closeModal();
         }
+    });
+
+    window.addEventListener('beforeunload', function () {
+        stopPolling();
+
+        if (doneReloadTimeout) {
+            clearTimeout(doneReloadTimeout);
+        }
+
     });
 
     async function checkSyncStatus() {
@@ -780,12 +822,14 @@ document.addEventListener('DOMContentLoaded', function () {
             });
 
             if (!response.ok) {
+                stopPolling();
                 return;
             }
 
             const data = await response.json();
 
             if (!data.authenticated) {
+                stopPolling();
                 return;
             }
 
@@ -802,12 +846,8 @@ document.addEventListener('DOMContentLoaded', function () {
             }
 
             if (data.sync_status === 'done') {
-                clearInterval(intervalId);
-                renderModal(getModalCopy('done', {
-                    totalLeads: data.total_leads,
-                    syncError: data.sync_error
-                }));
-                openModal(true);
+                stopPolling();
+                closeModal();
 
                 if (doneReloadTimeout) {
                     clearTimeout(doneReloadTimeout);
@@ -815,11 +855,11 @@ document.addEventListener('DOMContentLoaded', function () {
 
                 doneReloadTimeout = setTimeout(function () {
                     window.location.reload();
-                }, 1800);
+                }, 400);
             }
 
             if (data.sync_status === 'failed') {
-                clearInterval(intervalId);
+                stopPolling();
                 renderModal(getModalCopy('failed', {
                     totalLeads: data.total_leads,
                     syncError: data.sync_error
@@ -835,7 +875,6 @@ document.addEventListener('DOMContentLoaded', function () {
         renderModal(getModalCopy(currentStatus, {
             totalLeads: initialTotalLeads,
             syncError: initialSyncError,
-            message: ''
         }));
         openModal(true);
         intervalId = setInterval(checkSyncStatus, 5000);
@@ -844,21 +883,6 @@ document.addEventListener('DOMContentLoaded', function () {
         renderModal(getModalCopy('failed', {
             totalLeads: initialTotalLeads,
             syncError: initialSyncError,
-            message: ''
-        }));
-        openModal(true);
-    } else if (sessionSuccessMessage) {
-        renderModal(getModalCopy('flash-success', {
-            totalLeads: initialTotalLeads,
-            syncError: initialSyncError,
-            message: sessionSuccessMessage
-        }));
-        openModal(true);
-    } else if (showLeadFormModal) {
-        renderModal(getModalCopy('lead-hub', {
-            totalLeads: initialTotalLeads,
-            syncError: initialSyncError,
-            message: ''
         }));
         openModal(true);
     } else {
@@ -867,5 +891,4 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 </script>
 @endsection
-
 
