@@ -16,7 +16,12 @@ return new class extends Migration
 
             // Relacionamento com a tabela de imobiliárias (companies)
             // Se a corretora excluir a imobiliária, os clientes dela também serão excluídos
-            $table->foreignId('company_id')->constrained('companies')->onDelete('cascade');
+            $table->foreignId('company_id')
+            ->nullable()
+            ->constrained('companies')
+            ->nullOnDelete();
+
+            $table->string('tipo_solicitante')->nullable();
             
             // Dados do Cliente
             $table->string('nome');
@@ -28,13 +33,22 @@ return new class extends Migration
             $table->string('conjuge_cpf', 11)->nullable();
             $table->string('conjuge_nome')->nullable();
 
-            $table->string('estado')->nullable();
+            $table->string('estado', 2)->nullable();
             $table->string('cidade_imovel')->nullable();
             $table->string('responsavel_preenchimento')->nullable();
             
             $table->decimal('valor_aluguel', 10, 2)->nullable();
             $table->decimal('outras_despesas', 10, 2)->nullable();
             $table->decimal('valor_total_encargos', 10, 2)->nullable();
+
+            // Dados específicos de imobiliária não cadastrada.
+            $table->string('nome_imobiliaria_informada')->nullable();
+            $table->string('cnpj_imobiliaria_informada')->nullable();
+
+            // Dados específicos de locador/proprietário.
+            $table->string('nome_locador')->nullable();
+            $table->string('telefone_locador', 20)->nullable();
+            $table->string('email_locador')->nullable();
 
             $table->string('imobiliaria')->nullable();
             $table->text('tags_originais')->nullable(); // Para salvar o que veio no webhook
@@ -44,10 +58,16 @@ return new class extends Migration
             $table->json('leadlovers_response')->nullable();
             $table->timestamp('sent_to_leadlovers_at')->nullable();
 
-            $table->string('origem')->default('formulario_publico');
+            $table->string('origem')->default('simulacao_publica');
             $table->ipAddress('ip')->nullable();
             $table->string('user_agent')->nullable();
+            $table->text('observacoes')->nullable();
 
+                    /**
+             * Evita duplicação do mesmo e-mail dentro da mesma imobiliária.
+             * Para leads sem imobiliária, o controle pode ser feito pelo e-mail + origem.
+             */
+            $table->unique(['company_id', 'email']);
 
             $table->timestamps();
         });

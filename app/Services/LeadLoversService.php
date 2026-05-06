@@ -20,151 +20,111 @@ class LeadLoversService
         $this->sequence = config('services.leadlovers.sequence');
     }
 
-    public function createLead(array $data): array
-    {
-        return $this->post('Lead', [
-            'Name' => $data['Name'] ?? null,
-            'Email' => $data['Email'] ?? null,
-            'Phone' => $data['Phone'] ?? '',
-            'City' => $data['City'] ?? '',
-            'State' => $data['State'] ?? '',
-            'MachineCode' => $this->machineId,
-            'EmailSequenceCode' => $this->sequence,
-            'SequenceLevelCode' => 1,
-        ]);
-    }
-
+    /**
+     * Busca todas as tags da conta LeadLovers.
+     */
     public function getAllTags(): array
     {
-        return $this->get('Tags');
-    }
-
-    public function createTag(string $title): array
-    {
-        return $this->post('Tags', [
-            'Title' => $title,
-        ]);
-    }
-
-    public function addTagToLead(string $email, string $tag): array
-    {
-        return $this->post('Tag', [
-            'Email' => $email,
-            'Tag' => $tag,
-        ]);
-    }
-
-    public function getLeadByEmail(string $email): array
-    {
-        return $this->get('Lead', [
-            'email' => $email,
-        ]);
-    }
-
-    public function getLeadsPage(int $page = 1): array
-    {
-        return $this->get('Leads', [
-            'page' => $page,
-        ]);
-    }
-
-    public function getOfficialCompanyTags(): array
-    {
-        $response = $this->getAllTags();
-
-        $tags = $response['Tags'] ?? [];
-
-        if (!is_array($tags)) {
-            return [];
-        }
-
-        return collect($tags)
-            ->pluck('Title')
-            ->filter(fn ($title) => is_string($title))
-            ->filter(fn ($title) => str_starts_with($title, 'Imobiliária'))
-            ->sort()
-            ->values()
-            ->all();
-    }
-
-    private function get(string $endpoint, array $query = []): array
-    {
         try {
-            $response = Http::timeout(20)
+            $response = Http::timeout(30)
                 ->retry(2, 1000)
-                ->get($this->baseUrl . $endpoint, array_merge([
+                ->get($this->baseUrl . 'Tags', [
                     'token' => $this->token,
-                ], $query));
+                ]);
 
             if (!$response->successful()) {
-                Log::warning('Erro GET na API LeadLovers', [
-                    'endpoint' => $endpoint,
+                Log::warning('Erro ao buscar tags na LeadLovers', [
                     'status' => $response->status(),
                     'body' => $response->body(),
                 ]);
 
-                return [
-                    'success' => false,
-                    'status' => $response->status(),
-                    'message' => 'Erro na comunicação com a LeadLovers.',
-                    'data' => $response->json(),
-                ];
+                return [];
             }
 
             return $response->json() ?? [];
         } catch (\Throwable $e) {
-            Log::error('Falha GET na API LeadLovers', [
-                'endpoint' => $endpoint,
+            Log::error('Falha ao buscar tags na LeadLovers', [
                 'message' => $e->getMessage(),
             ]);
 
-            return [
-                'success' => false,
-                'status' => null,
-                'message' => 'Falha ao conectar com a LeadLovers.',
-                'data' => null,
-            ];
+            return [];
         }
     }
 
-    private function post(string $endpoint, array $payload = []): array
+    /**
+     * Insere o lead na máquina da LeadLovers.
+     * O campo Tag precisa receber o ID da tag principal.
+     */
+    public function createLead(array $data): array
     {
         try {
             $response = Http::asJson()
-                ->timeout(20)
+                ->timeout(30)
                 ->retry(2, 1000)
                 ->withQueryParameters([
                     'token' => $this->token,
                 ])
-                ->post($this->baseUrl . $endpoint, $payload);
+                ->post($this->baseUrl . 'Lead', [
+                    'Name' => $data['Name'],
+                    'Email' => $data['Email'],
+                    'Phone' => $data['Phone'] ?? '',
+                    'City' => $data['City'] ?? '',
+                    'State' => $data['State'] ?? '',
 
-            if (!$response->successful()) {
-                Log::warning('Erro POST na API LeadLovers', [
-                    'endpoint' => $endpoint,
-                    'status' => $response->status(),
-                    'body' => $response->body(),
+                    'MachineCode' => (int) $this->machineId,
+                    'EmailSequenceCode' => (int) $this->sequence,
+                    'SequenceLevelCode' => 1,
+
+                    // Tag principal do lead.
+                    'Tag' => isset($data['Tag']) ? (int) $data['Tag'] : 0,
+
+                    // Pontuação opcional.
+                    'Score' => isset($data['Score']) ? (int) $data['Score'] : 0,
                 ]);
-
-                return [
-                    'success' => false,
-                    'status' => $response->status(),
-                    'message' => 'Erro na comunicação com a LeadLovers.',
-                    'data' => $response->json(),
-                ];
-            }
 
             return $response->json() ?? [];
         } catch (\Throwable $e) {
-            Log::error('Falha POST na API LeadLovers', [
-                'endpoint' => $endpoint,
+            Log::error('Erro ao criar lead na LeadLovers', [
+                'email' => $data['Email'] ?? null,
                 'message' => $e->getMessage(),
             ]);
 
             return [
-                'success' => false,
-                'status' => null,
-                'message' => 'Falha ao conectar com a LeadLovers.',
-                'data' => null,
+                'StatusCode' => 500,
+                'Message' => 'Falha ao conectar com a LeadLovers.',
+            ];
+        }
+    }
+
+    /**
+     * Adiciona tag extra ao lead usando ID da tag.
+     */
+    public function addTagToLeadById(string $email, int|string $tagId, int $score = 0): array
+    {
+        try {
+            $response = Http::asJson()
+                ->timeout(30)
+                ->retry(2, 1000)
+                ->withQueryParameters([
+                    'token' => $this->token,
+                ])
+                ->post($this->baseUrl . 'Tag', [
+                    'Email' => $email,
+                    'Tag' => (int) $tagId,
+                    'Score' => $score,
+                ]);
+
+            return $response->json() ?? [];
+        } catch (\Throwable $e) {
+            Log::error('Erro ao adicionar tag ao lead na LeadLovers', [
+                'email' => $email,
+                'tag_id' => $tagId,
+                'message' => $e->getMessage(),
+            ]);
+
+            return [
+                'StatusCode' => 500,
+                'Message' => 'Falha ao adicionar tag ao lead.',
             ];
         }
     }

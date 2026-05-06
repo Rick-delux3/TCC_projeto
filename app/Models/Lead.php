@@ -12,6 +12,7 @@ class Lead extends Model
     // Permite salvar dados em massa via Webhook
     protected $fillable = [
         'company_id',
+        'tipo_solicitante',
         'cpf',
         'conjuge_cpf',
         'conjuge_nome',
@@ -25,12 +26,18 @@ class Lead extends Model
         'valor_aluguel',
         'outras_despesas',
         'valor_total_encargos',
+        'nome_imobiliaria_informada',
+        'cnpj_imobiliaria_informada',
+        'nome_locador',
+        'telefone_locador',
+        'email_locador',
         'responsavel_preenchimento',
         'tags_originais', 
         'status',
         'origem',
         'ip',
         'user_agent',
+        'observacoes',
         'leadlovers_status',
         'leadlovers_response',
         'sent_to_leadlovers_at',
@@ -46,7 +53,8 @@ class Lead extends Model
     ]; 
 
     /**
-     * Relacionamento: Um Lead pertence a uma Imobiliária (Company)
+     * Um lead pode pertencer a uma imobiliária cadastrada.
+     * Mas pode ser null para locatário, locador ou imobiliária não cadastrada.
      */
     public function company()
     {

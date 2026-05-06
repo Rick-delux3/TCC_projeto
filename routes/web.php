@@ -12,6 +12,8 @@ use App\Http\Controllers\AdminsRegistrationController;
 use App\Http\Controllers\AdminAuthController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\PublicLeadController;
+use App\Http\Controllers\SimulationController;
+
 
 
 Route::view('/', 'index')->name('index');
@@ -65,6 +67,53 @@ Route::middleware('throttle:10,1')->group(function () {
 
     Route::post('/captacao/{token}', [PublicLeadController::class, 'store'])->name('public.leads.store');
 });
+
+Route::prefix('simulacao')
+    ->name('simulation.')
+    ->middleware('throttle:20,1')
+    ->group(function () {
+        // Página inicial do questionário.
+        Route::get('/', [SimulationController::class, 'start'])
+            ->name('start');
+
+        // Recebe o perfil escolhido e redireciona.
+        Route::post('/perfil', [SimulationController::class, 'chooseProfile'])
+            ->name('profile');
+
+        // Imobiliária cadastrada: tela para digitar chave.
+        Route::get('/imobiliaria-cadastrada', [SimulationController::class, 'registeredCompanyAccess'])
+            ->name('registered-company.access');
+
+        Route::post('/imobiliaria-cadastrada/verificar', [SimulationController::class, 'verifyCompanyCode'])
+            ->middleware('throttle:5,1')
+            ->name('registered-company.verify');
+
+        // Formulário da imobiliária cadastrada após chave validada.
+        Route::get('/imobiliaria-cadastrada/{code}', [SimulationController::class, 'registeredCompanyForm'])
+            ->name('registered-company.form');
+
+        Route::post('/imobiliaria-cadastrada/{code}', [SimulationController::class, 'storeRegisteredCompanyLead'])
+            ->name('registered-company.store');
+
+        // Outros perfis.
+        Route::get('/imobiliaria-nao-cadastrada', [SimulationController::class, 'unregisteredCompanyForm'])
+            ->name('unregistered-company.form');
+
+        Route::post('/imobiliaria-nao-cadastrada', [SimulationController::class, 'storeUnregisteredCompanyLead'])
+            ->name('unregistered-company.store');
+
+        Route::get('/locatario', [SimulationController::class, 'tenantForm'])
+            ->name('tenant.form');
+
+        Route::post('/locatario', [SimulationController::class, 'storeTenantLead'])
+            ->name('tenant.store');
+
+        Route::get('/locador', [SimulationController::class, 'landlordForm'])
+            ->name('landlord.form');
+
+        Route::post('/locador', [SimulationController::class, 'storeLandlordLead'])
+            ->name('landlord.store');
+    });
     
 Route::prefix('/empresa')->group( function () {
     Route::get('/form', [CompanyRegistrationController::class, 'showRegistrationForm'])->name('empresa.register.form');
