@@ -1,4 +1,4 @@
-@extends('layout-inicial.Dashboard_User')
+@extends('layout-inicial.dashboard_User')
 
 @section('content_w')
 @php

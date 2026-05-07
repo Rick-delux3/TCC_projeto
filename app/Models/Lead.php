@@ -32,11 +32,13 @@ class Lead extends Model
         'telefone_locador',
         'email_locador',
         'responsavel_preenchimento',
+        'telefone_responsavel',
         'tags_originais', 
         'status',
         'origem',
         'ip',
         'user_agent',
+        'aceite_termos',
         'observacoes',
         'leadlovers_status',
         'leadlovers_response',
@@ -50,6 +52,7 @@ class Lead extends Model
         'valor_total_encargos' => 'decimal:2',
         'leadlovers_response' => 'array',
         'send_to_leadlovers_at' => 'datetime',
+        'aceite_termos' => 'boolean',
     ]; 
 
     /**

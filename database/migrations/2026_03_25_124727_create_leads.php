@@ -36,6 +36,8 @@ return new class extends Migration
             $table->string('estado', 2)->nullable();
             $table->string('cidade_imovel')->nullable();
             $table->string('responsavel_preenchimento')->nullable();
+            $table->string('telefone_responsavel', 20)->nullable();
+
             
             $table->decimal('valor_aluguel', 10, 2)->nullable();
             $table->decimal('outras_despesas', 10, 2)->nullable();
@@ -61,6 +63,8 @@ return new class extends Migration
             $table->string('origem')->default('simulacao_publica');
             $table->ipAddress('ip')->nullable();
             $table->string('user_agent')->nullable();
+
+            $table->boolean('aceite_termos')->default(false);
             $table->text('observacoes')->nullable();
 
                     /**

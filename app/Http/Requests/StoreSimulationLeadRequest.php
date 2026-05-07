@@ -34,6 +34,8 @@ class StoreSimulationLeadRequest extends FormRequest
             'estado' => mb_strtoupper(trim((string) $this->estado)),
 
             'responsavel_preenchimento' => $this->limparTexto($this->responsavel_preenchimento),
+            'telefone_responsavel' => $this->somenteNumeros($this->telefone_responsavel),
+
 
             'nome_imobiliaria_informada' => $this->limparTexto($this->nome_imobiliaria_informada),
             'cnpj_imobiliaria_informada' => $this->somenteNumeros($this->cnpj_imobiliaria_informada),
@@ -49,6 +51,8 @@ class StoreSimulationLeadRequest extends FormRequest
         return [
             // Campo invisível contra bots.
             'website' => ['nullable', 'size:0'],
+
+            'aceite_termos' => ['accepted'],
 
             'nome' => ['required', 'string', 'min:3', 'max:255'],
             'email' => ['required', 'string', 'email:rfc', 'max:255'],
@@ -82,6 +86,7 @@ class StoreSimulationLeadRequest extends FormRequest
             'estado' => ['nullable', 'string', 'size:2'],
 
             'responsavel_preenchimento' => ['nullable', 'string', 'min:3', 'max:255'],
+            'telefone_responsavel' => ['nullable', 'string', 'min:10', 'max:11'],
 
             'nome_imobiliaria_informada' => ['nullable', 'string', 'max:255'],
             'cnpj_imobiliaria_informada' => ['nullable', 'string', 'size:14'],

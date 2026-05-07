@@ -1,0 +1,28 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root{
+    --primary-color: #030133;
+    --secundary-color: #146FB6;
+    --terciary-color: #FD1E6E;
+    --quartenary-color: #FDFDFD;
+    --descr-color: #55658C; 
+    --font-principal: 'Sansation';
+}
+
+body.auth-layout-body{
+    min-height: 100vh;
+    margin: 0;
+    background: linear-gradient(180deg, #030133 0%, #091a46 46%, #0c2b55 100%);
+}
+
+.auth-layout-main{
+    min-height: 100vh;
+    background:
+        radial-gradient(circle at 14% 10%, rgba(253, 30, 110, 0.14), transparent 24%),
+        radial-gradient(circle at 84% 18%, rgba(20, 111, 182, 0.34), transparent 34%),
+        radial-gradient(circle at 50% 100%, rgba(3, 1, 51, 0.38), transparent 54%),
+        linear-gradient(180deg, #f0f5fb 0%, #dbe8f4 17%, #a5bdd4 40%, #47729b 69%, #0f3458 100%);
+    padding: 34px 22px 36px;
+}

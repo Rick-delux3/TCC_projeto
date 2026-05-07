@@ -18,6 +18,11 @@ class SimulationController extends Controller
         return view('simulation.start');
     }
 
+    public function success()
+    {
+        return view('simulation.success');
+    }
+
     /**
      * Redireciona o usuário conforme o perfil escolhido.
      */
@@ -246,36 +251,24 @@ class SimulationController extends Controller
     private function tagsAsString(string $tipoSolicitante, ?Company $company): string
     {
         $tags = match ($tipoSolicitante) {
-            'imobiliaria_cadastrada' => [
-                $company?->name,
-                'Imobiliária cadastrada',
-                'Análise residencial',
-                'Origem: Plataforma',
-            ],
-            'imobiliaria_nao_cadastrada' => [
-                'Imobiliária morna',
-                'Imobiliária não cadastrada',
-                'Lead parceria',
-                'Análise residencial',
-                'Origem: Plataforma',
-            ],
-            'locatario' => [
-                'Locatário',
-                'Análise residencial',
-                'Seguro fiança',
-                'Origem: Simulação pública',
-            ],
-            'locador' => [
-                'Locador',
-                'Proprietário',
-                'Análise residencial',
-                'Origem: Simulação pública',
-            ],
-            default => [
-                'Análise residencial',
-                'Origem: Plataforma',
-            ],
-        };
+        'imobiliaria_cadastrada' => [
+            $company?->name,
+        ],
+
+        'imobiliaria_nao_cadastrada' => [
+            'imobiliaria morna',
+        ],
+
+        'locatario' => [
+            'locatario',
+        ],
+
+        'locador' => [
+            'proprietario',
+        ],
+
+        default => [],
+    };
 
         return collect($tags)->filter()->implode(', ');
     }

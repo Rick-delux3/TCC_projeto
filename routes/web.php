@@ -62,11 +62,11 @@ Route::middleware('auth:admin')->group(function () {
     Route::post('/admin/logout', [AdminAuthController::class, 'logout'])->name('admin.logout');
 });
 
-Route::middleware('throttle:10,1')->group(function () {
-    Route::get('/captacao/{token}', [PublicLeadController::class, 'show'])->name('public.leads.show');
+//Route::middleware('throttle:10,1')->group(function () {
+    //Route::get('/captacao/{token}', [PublicLeadController::class, 'show'])->name('public.leads.show');
 
-    Route::post('/captacao/{token}', [PublicLeadController::class, 'store'])->name('public.leads.store');
-});
+    //Route::post('/captacao/{token}', [PublicLeadController::class, 'store'])->name('public.leads.store');
+//});
 
 Route::prefix('simulacao')
     ->name('simulation.')
@@ -79,6 +79,9 @@ Route::prefix('simulacao')
         // Recebe o perfil escolhido e redireciona.
         Route::post('/perfil', [SimulationController::class, 'chooseProfile'])
             ->name('profile');
+
+        Route::get('/sucesso', [SimulationController::class, 'success'])
+            ->name('success');
 
         // Imobiliária cadastrada: tela para digitar chave.
         Route::get('/imobiliaria-cadastrada', [SimulationController::class, 'registeredCompanyAccess'])

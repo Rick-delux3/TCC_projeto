@@ -28,6 +28,9 @@
                     <a href="{{ route('empresa.login') }}" class="showcase-cta inline-flex items-center justify-center rounded-full border border-white/18 bg-white/10 px-7 py-3.5 text-base font-semibold text-white transition hover:border-white/26 hover:bg-white/16">
                         Acessar Painel
                     </a>
+                    <a href="{{ route('simulation.start') }}" class="showcase-cta inline-flex items-center justify-center rounded-full border border-white/18 bg-white/10 px-7 py-3.5 text-base font-semibold text-white transition hover:border-white/26 hover:bg-white/16">
+                        Simulação de Seguro
+                    </a>
                 </div>
 
                 <div id="beneficios" class="mt-12 grid gap-4 sm:grid-cols-3">
