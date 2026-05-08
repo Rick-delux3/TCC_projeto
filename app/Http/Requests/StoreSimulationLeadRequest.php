@@ -88,7 +88,7 @@ class StoreSimulationLeadRequest extends FormRequest
             'responsavel_preenchimento' => ['nullable', 'string', 'min:3', 'max:255'],
             'telefone_responsavel' => ['nullable', 'string', 'min:10', 'max:11'],
 
-            'nome_imobiliaria_informada' => ['nullable', 'string', 'max:255'],
+            'nome_imobiliaria_informada' => ['nullable', 'string', 'min:3', 'max:255'],
             'cnpj_imobiliaria_informada' => ['nullable', 'string', 'size:14'],
 
             'nome_locador' => ['nullable', 'string', 'max:255'],

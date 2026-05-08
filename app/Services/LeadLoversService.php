@@ -70,6 +70,8 @@ class LeadLoversService
                     'Phone' => $data['Phone'] ?? '',
                     'City' => $data['City'] ?? '',
                     'State' => $data['State'] ?? '',
+                    'Company' => $data['Company'] ?? '',
+
 
                     'MachineCode' => (int) $this->machineId,
                     'EmailSequenceCode' => (int) $this->sequence,

@@ -1,29 +1,7 @@
-<footer>
-        <div class="clientes d-flex row">
-            <div class="logo-footer col-2">
-                <div><img src="{{ asset('imgs/logo-akialuga.jpg') }}" class="img-fluid" alt="logo"></div>
-            </div>
-            <div class="descr col-4">
-                <i><p>Veja que nossos Clientes Falam dos nossos Serviços</p></i>
-            </div> 
-        </div>
-        
-        <div class="redes d-flex row">
-            <div class="col-3 d-flex flex-column logo-footer">
-                <div>
-                    <img src="{{ asset('imgs/logo corretora (1)_resized_resized.png') }}" class="img-fluid" alt="Logo">
-                </div>
-                <p class="neves">Neves Corretora</p>
-
-            </div>
-            <div class="col-3">
-                <p>Termos de Uso e Politica de Privaciadade</p>
-            </div>
-            <div class="col-3 d-flex ">
-                <div><img src="" alt="face"></div>
-                <div><img src="" alt="X"></div>
-                <div><img src="" alt="insta"></div>
-                <div><img src="" alt="in"></div>
-            </div>
-        </div>
+<footer class="border-t border-[#146FB6]/14 bg-[linear-gradient(180deg,#030133_0%,#0c2f59_100%)] text-blue-50/88">
+    <div class="mx-auto flex max-w-7xl flex-col gap-4 px-5 py-8 text-sm sm:flex-row sm:items-center sm:justify-between lg:px-8">
+        <p>NVS Seguros & Corretagens. O padrão ouro em gestão imobiliária e inteligência comercial.</p>
+        <p class="text-blue-100/70">&copy; {{ now()->year }} Todos os direitos reservados.</p>
+    </div>
 </footer>
+

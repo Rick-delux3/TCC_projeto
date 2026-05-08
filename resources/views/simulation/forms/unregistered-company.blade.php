@@ -90,7 +90,7 @@
 
                     <div class="col-12">
                         <label class="form-label">Caso preenchido por Imobiliária/Proprietário</label>
-                        <input type="text" name="observacoes" class="form-control" value="{{ old('observacoes') }}" placeholder="INFORMAR NOME E TELEFONE">
+                        <input type="text" name="nome_imobiliaria_informada" class="form-control" value="{{ old('nome_imobiliaria_informada') }}" placeholder="INFORMAR NOME E TELEFONE">
                     </div>
                 </div>
 

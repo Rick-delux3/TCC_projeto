@@ -57,6 +57,7 @@ class SendLeadToLeadLoversJob implements ShouldQueue
             'Phone' => $lead->tel ?? '',
             'City' => $lead->cidade_imovel ?? '',
             'State' => $lead->estado ?? '',
+            'Company' => $lead->imobiliaria ?? $lead->nome_imobiliaria_informada ?? '',
             'Tag' => $mainTagId,
             'Score' => 0,
         ]);

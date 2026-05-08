@@ -8,6 +8,10 @@ use App\Jobs\SyncCompanyLeadLoversLeadsJob;
 
 class DashboardController extends Controller
 {
+    /**
+     * Dispara a sincronização dos leads da imobiliária com a LeadLovers.
+     * Retorna false se já houver uma sincronização na fila ou em execução.
+     */
     private function queueCompanySync(Company $company): bool
     {
         if (in_array($company->sync_status, ['queued', 'running'], true)) {
@@ -24,6 +28,54 @@ class DashboardController extends Controller
         return true;
     }
 
+    /**
+     * Garante que a imobiliária tenha uma chave de acesso.
+     * Isso protege empresas antigas criadas antes da nova lógica.
+     */
+    private function ensureLeadAccessCode(Company $company): void
+    {
+        if (filled($company->lead_access_code)) {
+            return;
+        }
+
+        do {
+            $code = $this->randomAlphaNumericCode(6);
+        } while (Company::where('lead_access_code', $code)->exists());
+
+        $company->lead_access_code = $code;
+
+        /**
+         * Se lead_form_active estiver null por causa de registros antigos,
+         * deixamos ativo para permitir o uso do formulário público.
+         */
+        if (is_null($company->lead_form_active)) {
+            $company->lead_form_active = true;
+        }
+
+        $company->save();
+    }
+
+    /**
+     * Gera uma chave curta e legível.
+     * Remove caracteres confusos como O, 0, I e 1.
+     */
+    private function randomAlphaNumericCode(int $length = 6): string
+    {
+        $characters = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+
+        $code = '';
+
+        for ($i = 0; $i < $length; $i++) {
+            $code .= $characters[random_int(0, strlen($characters) - 1)];
+        }
+
+        return $code;
+    }
+
+    /**
+     * Endpoint usado pelo JavaScript do dashboard para acompanhar
+     * o status da sincronização.
+     */
     public function syncStatus(Request $request)
     {
         $companyId = session('company_id');
@@ -52,10 +104,14 @@ class DashboardController extends Controller
             'total_leads' => $company->leads()->count(),
         ]);
     }
-    
-    public function index(Request $request){
+
+    /**
+     * Dashboard da imobiliária.
+     */
+    public function index(Request $request)
+    {
         $companyId = session('company_id');
-        
+
         if (!$companyId) {
             return redirect()->route('empresa.login');
         }
@@ -63,43 +119,81 @@ class DashboardController extends Controller
         $company = Company::find($companyId);
 
         if (!$company) {
-            return redirect()->route('empresa.login');
+            return redirect()
+                ->route('empresa.login')
+                ->withErrors([
+                    'email' => 'Empresa não encontrada. Faça login novamente.',
+                ]);
         }
 
+        /**
+         * Nova lógica:
+         * a imobiliária usa chave de acesso, não mais token público direto.
+         */
+        $this->ensureLeadAccessCode($company);
+
+        /**
+         * Primeira sincronização automática.
+         */
         if (is_null($company->sincronizado_em)) {
             $this->queueCompanySync($company);
         }
 
         $recentThreshold = now()->subDays(7);
+        $companyTagName = mb_strtolower(trim((string) $company->name));
         $selectedTag = trim((string) $request->query('tag', ''));
 
+        if (mb_strtolower(trim($selectedTag)) === $companyTagName) {
+            $selectedTag = '';
+        }
+
+        /**
+         * Conta as tags salvas nos leads da imobiliária.
+         */
         $tagCounts = $company->leads()
             ->pluck('tags_originais')
             ->filter()
-            ->flatMap(function ($tags) {
+            ->flatMap(function ($tags) use ($companyTagName) {
                 return collect(preg_split('/\s*,\s*/', $tags))
                     ->filter(fn ($tag) => filled($tag))
-                    ->map(fn ($tag) => trim($tag));
+                    ->map(fn ($tag) => trim($tag))
+                    ->reject(function ($tag) use ($companyTagName) {
+                        return mb_strtolower(trim($tag)) === $companyTagName;
+                    });
             })
             ->countBy()
             ->sortDesc();
 
-        $leadsQuery = $company->leads()->orderBy('created_at', 'desc');
+        /**
+         * Query principal dos leads exibidos na tabela.
+         */
+        $leadsQuery = $company->leads()
+            ->orderBy('created_at', 'desc');
 
         if (filled($selectedTag)) {
-            $leadsQuery->where('tags_originais', 'like', '%' . addcslashes($selectedTag, '%_\\') . '%');
+            $leadsQuery->where(
+                'tags_originais',
+                'like',
+                '%' . addcslashes($selectedTag, '%_\\') . '%'
+            );
         }
 
         $leads = $leadsQuery
             ->paginate(6)
             ->withQueryString();
 
+        /**
+         * Estatísticas do dashboard.
+         */
         $totalLeads = $company->leads()->count();
+
         $newLeads = $company->leads()
             ->where(function ($query) {
-                $query->whereNull('status')->orWhere('status', 'novo');
+                $query->whereNull('status')
+                    ->orWhere('status', 'novo');
             })
             ->count();
+
         $recentLeads = $company->leads()
             ->where('created_at', '>=', $recentThreshold)
             ->count();
@@ -126,21 +220,46 @@ class DashboardController extends Controller
             'filteredLeads' => $leads->total(),
         ];
 
-         return view('dashboard-user', [
+        /**
+         * Nova lógica de acesso:
+         * - leadFormUrl leva para a página pública onde a chave será digitada.
+         * - leadAccessCode é a chave que a imobiliária deve usar.
+         */
+        $leadFormUrl = route('simulation.registered-company.access');
+
+        return view('dashboard-user', [
+            'company' => $company,
+
             'leads' => $leads,
             'dashboardStats' => $dashboardStats,
+
             'topTags' => $topTags,
             'filterTags' => $filterTags,
             'selectedTag' => $selectedTag,
+
             'syncStatus' => $company->sync_status,
             'syncError' => $company->sync_error,
-            'leadFormUrl' => $company->lead_form_active && filled($company->lead_form_token)
-                ? route('public.leads.show', $company->lead_form_token)
+
+            /**
+             * Mantive leadFormUrl para não quebrar a view atual.
+             * Agora ele aponta para a tela de chave, não para /captacao/{token}.
+             */
+            'leadFormUrl' => $company->lead_form_active
+                ? $leadFormUrl
                 : null,
+
+            /**
+             * Nova variável principal para o dashboard.
+             */
+            'leadAccessCode' => $company->lead_access_code,
+
             'leadFormActive' => (bool) $company->lead_form_active,
         ]);
     }
 
+    /**
+     * Botão "Sincronizar novamente".
+     */
     public function syncAgain()
     {
         $companyId = session('company_id');
@@ -148,7 +267,7 @@ class DashboardController extends Controller
         if (!$companyId) {
             return redirect()
                 ->route('empresa.login')
-                ->with('success', 'Sua sessao expirou. Entre novamente para sincronizar os leads.');
+                ->with('success', 'Sua sessão expirou. Entre novamente para sincronizar os leads.');
         }
 
         $company = Company::find($companyId);
@@ -156,17 +275,17 @@ class DashboardController extends Controller
         if (!$company) {
             return redirect()
                 ->route('empresa.login')
-                ->with('success', 'Empresa nao encontrada para a sincronizacao.');
+                ->with('success', 'Empresa não encontrada para a sincronização.');
         }
 
         if (!$this->queueCompanySync($company)) {
             return redirect()
                 ->route('Dashboard')
-                ->with('success', 'A sincronizacao ja esta em andamento.');
+                ->with('success', 'A sincronização já está em andamento.');
         }
 
         return redirect()
             ->route('Dashboard')
-            ->with('success', 'Nova sincronizacao iniciada com sucesso.');
+            ->with('success', 'Nova sincronização iniciada com sucesso.');
     }
 }

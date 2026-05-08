@@ -26,3 +26,79 @@ body.auth-layout-body{
         linear-gradient(180deg, #f0f5fb 0%, #dbe8f4 17%, #a5bdd4 40%, #47729b 69%, #0f3458 100%);
     padding: 34px 22px 36px;
 }
+
+.auth-topbar{
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    width: 100%;
+    min-height: 0;
+    background: transparent;
+    box-shadow: none;
+    border: 0;
+    z-index: 20;
+    pointer-events: none;
+}
+
+.auth-topbar__inner{
+    width: 100%;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 14px 22px 0;
+    display: flex;
+    align-items: center;
+    pointer-events: none;
+}
+
+.auth-topbar__back{
+    display: inline-flex;
+    align-items: center;
+    text-decoration: none;
+    justify-content: center;
+    gap: 7px;
+    min-height: 38px;
+    padding: 5px 12px 5px 6px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.92);
+    color: var(--primary-color);
+    border: 1px solid rgba(3, 1, 51, 0.12);
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0.2px;
+    box-shadow: 0 10px 22px rgba(6, 24, 46, 0.16);
+    backdrop-filter: blur(12px);
+    transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+    pointer-events: auto;
+}
+
+.auth-topbar__back:hover{
+    transform: translateY(-1px);
+    color: var(--primary-color);
+    border-color: rgba(20, 111, 182, 0.35);
+    box-shadow: 0 14px 28px rgba(6, 24, 46, 0.22);
+}
+
+.auth-topbar__icon-frame{
+    width: 26px;
+    height: 26px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    background: linear-gradient(135deg, var(--primary-color), var(--secundary-color));
+    flex: 0 0 26px;
+}
+
+.auth-topbar__back-icon{
+    width: 11px;
+    height: 11px;
+    display: block;
+    object-fit: contain;
+    filter: brightness(0) invert(1);
+}
+
+.auth-topbar__back-text{
+    line-height: 1;
+    white-space: nowrap;
+}
