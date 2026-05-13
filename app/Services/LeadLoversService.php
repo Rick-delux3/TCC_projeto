@@ -11,13 +11,17 @@ class LeadLoversService
     private ?string $token;
     private ?string $machineId;
     private ?string $sequence;
+    private ?string $locatariosequence;
+    private ?string $step;
 
     public function __construct()
     {
         $this->baseUrl = rtrim(config('services.leadlovers.base_url', 'https://llapi.leadlovers.com/webapi/'), '/') . '/';
         $this->token = config('services.leadlovers.token');
         $this->machineId = config('services.leadlovers.machine');
-        $this->sequence = config('services.leadlovers.sequence');
+        $this->sequence = config('services.leadlovers.sequence_1');
+        $this->locatariosequence = config('services.leadlovers.sequence_2');
+        $this->step = config('services.leadlovers.step');
     }
 
     /**
@@ -58,33 +62,89 @@ class LeadLoversService
     public function createLead(array $data): array
     {
         try {
+            $tagId = (int) ($data['Tag'] ?? 0);
+
+            if ($tagId <= 0) {
+                Log::warning('Tentativa de criar lead na LeadLovers sem tag principal valida', [
+                    'email' => $data['Email'] ?? null,
+                ]);
+
+                return [
+                    'StatusCode' => 422,
+                    'Message' => 'Tag principal nao encontrada.',
+                ];
+
+            }
+             /*
+                |--------------------------------------------------------------------------
+                | Sequência dinâmica
+                |--------------------------------------------------------------------------
+                | Se o Job enviar EmailSequenceCode, usamos a sequência enviada.
+                | Caso contrário, usamos a sequência padrão do .env.
+                */
+            $sequenceCode = (int) ($data['EmailSequenceCode'] ?? $this->sequence);
+            $sequenceLevelCode = (int) ($data['SequenceLevelCode'] ?? $this->step ?: 1);
+
+            
+            if ($sequenceCode <= 0) {
+                Log::warning('Tentativa de criar lead na LeadLovers sem sequência válida', [
+                    'email' => $data['Email'] ?? null,
+                    'tipo' => $data['tipo_solicitante'] ?? null,
+                ]);
+
+                return [
+                    'StatusCode' => 422,
+                    'Message' => 'Sequência da LeadLovers não encontrada.',
+                ];
+            }
+
+
+            $payload = [
+                'Name' => $data['Name'],
+                'Email' => $data['Email'],
+                'Phone' => $data['Phone'] ?? '',
+                'City' => $data['City'] ?? '',
+                'State' => $data['State'] ?? '',
+                'Company' => $data['Company'] ?? '',
+
+                'MachineCode' => (int) $this->machineId,
+                'EmailSequenceCode' => $sequenceCode,
+                'SequenceLevelCode' => $sequenceLevelCode,
+
+                'Tag' => $tagId,
+                'Score' => isset($data['Score']) ? (int) $data['Score'] : 0,
+            ];
+
+            Log::info('Payload enviado para LeadLovers', [
+                'email' => $payload['Email'],
+                'machine' => $payload['MachineCode'],
+                'sequence' => $payload['EmailSequenceCode'],
+                'step' => $payload['SequenceLevelCode'],
+                'tag' => $payload['Tag'],
+                'company' => $payload['Company'],
+            ]);
+
             $response = Http::asJson()
                 ->timeout(30)
                 ->retry(2, 1000)
                 ->withQueryParameters([
                     'token' => $this->token,
                 ])
-                ->post($this->baseUrl . 'Lead', [
-                    'Name' => $data['Name'],
-                    'Email' => $data['Email'],
-                    'Phone' => $data['Phone'] ?? '',
-                    'City' => $data['City'] ?? '',
-                    'State' => $data['State'] ?? '',
-                    'Company' => $data['Company'] ?? '',
+                ->post($this->baseUrl . 'Lead', $payload);
 
-
-                    'MachineCode' => (int) $this->machineId,
-                    'EmailSequenceCode' => (int) $this->sequence,
-                    'SequenceLevelCode' => 1,
-
-                    // Tag principal do lead.
-                    'Tag' => isset($data['Tag']) ? (int) $data['Tag'] : 0,
-
-                    // Pontuação opcional.
-                    'Score' => isset($data['Score']) ? (int) $data['Score'] : 0,
+            if (!$response->successful()) {
+                Log::warning('LeadLovers respondeu erro ao criar lead', [
+                    'status' => $response->status(),
+                    'email' => $data['Email'] ?? null,
+                    'body' => $response->body(),
                 ]);
+            }
 
-            return $response->json() ?? [];
+            return $response->json() ?? [
+                'StatusCode' => $response->status(),
+                'Message' => $response->body(),
+            ];
+            
         } catch (\Throwable $e) {
             Log::error('Erro ao criar lead na LeadLovers', [
                 'email' => $data['Email'] ?? null,

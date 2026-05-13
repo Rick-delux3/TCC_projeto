@@ -18,6 +18,14 @@ use App\Http\Controllers\SimulationController;
 
 Route::view('/', 'index')->name('index');
 
+Route::get('/dashboard', fn () => redirect()->route('Dashboard'))
+    ->middleware(['auth', '2fa'])
+    ->name('dashboard');
+
+Route::get('/analise', fn () => redirect()->route('Dashboard'))
+    ->middleware(['auth', '2fa'])
+    ->name('analise');
+
 
 Route::prefix('/Dashboard')->group(function () {
 

@@ -40,8 +40,17 @@ return [
         'email' => env('LEADLOVERS_EMAIL'),
         'token' => env('LEADLOVERS_TOKEN'),
         'machine' => env('LEADLOVERS_MACHINE'),
-        'sequence' => env('LEADLOVERS_SEQUENCE'),
-        'step' => env('LEADLOVERS_STEP')
+        'sequence_1' => env('LEADLOVERS_SEQUENCE'),
+        'sequence_2' => env('LEADLOVERS_SEQUENCE_LOCATARIO'),
+        'step' => env('LEADLOVERS_STEP'),
+        
 ],
+
+    'pottencial' => [
+        'base_url' => env('POTTENCIAL_API_URL', 'https://api.pottencial.com.br'),
+        'client_id' => env('POTTENCIAL_CLIENT_ID'),
+        'client_secret' => env('POTTENCIAL_CLIENT_SECRET'),
+
+    ]
 
 ];

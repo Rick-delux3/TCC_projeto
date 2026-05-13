@@ -6,6 +6,7 @@ use App\Models\Company;
 use App\Models\Lead;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use RuntimeException;
 
 class LeadLoversSyncService
 {
@@ -39,7 +40,7 @@ class LeadLoversSyncService
                     'max_pages' => $maxPages,
                 ]);
 
-                break;
+                throw new RuntimeException('Limite maximo de paginas atingido antes do fim da sincronizacao.');
             }
 
             Log::info('Buscando página de leads na LeadLovers', [
@@ -157,7 +158,7 @@ class LeadLoversSyncService
                     [
                         'nome' => $leadData['Name'] ?? 'Sem Nome',
                         'tel' => $leadData['Phone'] ?? null,
-                        'cidade' => $leadData['City'] ?? null,
+                        'cidade_imovel' => $leadData['City'] ?? null,
                         'imobiliaria' => $company->name,
                         'tags_originais' => $tags->implode(', '),
                         'status' => $this->definirStatus($tags, $companyTag),

@@ -18,7 +18,7 @@ class StorePublicLeadRequest extends FormRequest
             'nome' => $this->limparTexto($this->nome),
             'email' => mb_strtolower(trim((string) $this->email)),
             'cpf' => $this->somenteNumeros($this->cpf),
-            'telefone' => $this->somenteNumeros($this->telefone),
+            'tel' => $this->somenteNumeros($this->tel),
             'estado_civil' => mb_strtolower(trim((string) $this->estado_civil)),
             'conjuge_nome' => $this->limparTexto($this->conjuge_nome),
             'conjuge_cpf' => $this->somenteNumeros($this->conjuge_cpf),
@@ -54,7 +54,7 @@ class StorePublicLeadRequest extends FormRequest
                 'regex:/^\d{11}$/',
             ],
 
-            'telefone' => [
+            'tel' => [
                 'required',
                 'string',
                 'min:10',
@@ -161,9 +161,9 @@ class StorePublicLeadRequest extends FormRequest
             'cpf.required' => 'Informe o CPF.',
             'cpf.size' => 'O CPF deve conter 11 números.',
 
-            'telefone.required' => 'Informe o telefone.',
-            'telefone.min' => 'O telefone deve conter DDD e número.',
-            'telefone.max' => 'O telefone deve conter no máximo 11 números.',
+            'tel.required' => 'Informe o telefone.',
+            'tel.min' => 'O telefone deve conter DDD e número.',
+            'tel.max' => 'O telefone deve conter no máximo 11 números.',
 
             'estado_civil.required' => 'Informe o estado civil.',
             'estado_civil.in' => 'Informe um estado civil válido.',
@@ -192,7 +192,7 @@ class StorePublicLeadRequest extends FormRequest
             'nome' => 'nome',
             'email' => 'e-mail',
             'cpf' => 'CPF',
-            'telefone' => 'telefone',
+            'tel' => 'telefone',
             'estado_civil' => 'estado civil',
             'conjuge_nome' => 'nome do cônjuge',
             'conjuge_cpf' => 'CPF do cônjuge',

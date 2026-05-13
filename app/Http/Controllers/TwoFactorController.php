@@ -35,7 +35,7 @@ class TwoFactorController extends Controller
                     'email' => 'Usuário não autenticado.',
                 ]);
         }
-        $verifyKey = $this->verifyThrottleKey($user, $request->ip());
+        $verifyKey = $this->verifyThrottleKey($user->id, $request->ip());
 
         if (RateLimiter::tooManyAttempts($verifyKey, self::VERIFY_MAX_ATTEMPTS)) {
             $seconds = RateLimiter::availableIn($verifyKey);
@@ -94,9 +94,6 @@ class TwoFactorController extends Controller
 
             return back()->with('info', "Aguarde {$seconds} segundos para reenviar o codigo.");
         }
-
-        RateLimiter::hit($resendKey, self::RESEND_DECAY_SECONDS);
-        RateLimiter::hit($cooldownKey, self::RESEND_COOLDOWN_SECONDS);
 
         // Invalidate older codes and send a fresh one.
         

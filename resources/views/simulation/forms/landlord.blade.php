@@ -35,7 +35,7 @@
 
                     <div class="col-md-6">
                         <label class="form-label">Telefone só números</label>
-                        <input type="text" name="telefone" class="form-control" value="{{ old('telefone') }}" placeholder="ex: 11997285152">
+                        <input type="text" name="tel" class="form-control" value="{{ old('tel') }}" placeholder="ex: 11997285152">
                     </div>
 
                     <div class="col-md-6">
@@ -60,7 +60,7 @@
 
                     <div class="col-md-6">
                         <label class="form-label">Nome do responsável pelo preenchimento</label>
-                        <input type="text" name="responsavel_preenchimento" class="form-control" value="{{ old('nome_responsavel') }}" placeholder="Nome">
+                        <input type="text" name="responsavel_preenchimento" class="form-control" value="{{ old('responsavel_preenchimento') }}" placeholder="Nome">
                     </div>
 
                     <div class="col-md-6">

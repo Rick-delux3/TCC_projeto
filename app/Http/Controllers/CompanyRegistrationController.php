@@ -3,12 +3,14 @@
 namespace App\Http\Controllers;
 
 use App\Models\Company;
+use App\Models\LeadLoversTag;
 use App\Models\User;
 use App\Services\LeadLoversService;
 use Illuminate\Auth\Events\Registered;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
 class CompanyRegistrationController extends Controller
@@ -70,6 +72,10 @@ class CompanyRegistrationController extends Controller
             'password' => 'required|string|min:6|confirmed',
         ]);
 
+        $companyTag = LeadLoversTag::where('title', $data['name'])
+            ->where('active', true)
+            ->first();
+
         $company = Company::create([
             'name' => $data['name'],
             'email' => $data['email'],
@@ -79,6 +85,8 @@ class CompanyRegistrationController extends Controller
             'password' => Hash::make($data['password']),
             'lead_form_token' => Str::random(64),
             'lead_form_active' => true,
+            'leadlovers_tag_id' => $companyTag?->leadlovers_tag_id,
+            'leadlovers_tag_name' => $companyTag?->title,
         ]);
 
         $user = User::create([
@@ -91,17 +99,28 @@ class CompanyRegistrationController extends Controller
         // Sends the standard Laravel email verification link.
         event(new Registered($user));
 
-        $res = $leadLovers->createLead([
-            'Name' => $company->name,
-            'Email' => $company->email,
-            'Phone' => $company->phone ?? '',
-            'City' => $company->city,
-            'State' => $company->state,
-        ]);
+        if ($companyTag) {
+            $res = $leadLovers->createLead([
+                'Name' => $company->name,
+                'Email' => $company->email,
+                'Phone' => $company->phone ?? '',
+                'City' => $company->city,
+                'State' => $company->state,
+                'Company' => $company->name,
+                'Tag' => $companyTag->leadlovers_tag_id,
+            ]);
 
-        if (!is_array($res) || !isset($res['StatusCode']) || $res['StatusCode'] !== 200) {
-            return back()->withErrors([
-                'leadlovers' => 'Erro ao criar o lead no LeadLovers. Detalhes: ' . json_encode($res),
+            if (!is_array($res) || !$this->leadLoversResponseWasSuccessful($res)) {
+                Log::warning('Empresa cadastrada, mas a LeadLovers retornou falha ao criar lead.', [
+                    'company_id' => $company->id,
+                    'status_code' => is_array($res) ? ($res['StatusCode'] ?? null) : null,
+                    'message' => is_array($res) ? ($res['Message'] ?? $res['message'] ?? null) : null,
+                ]);
+            }
+        } else {
+            Log::warning('Empresa cadastrada sem tag local correspondente da LeadLovers.', [
+                'company_id' => $company->id,
+                'company_name' => $company->name,
             ]);
         }
 
@@ -109,5 +128,18 @@ class CompanyRegistrationController extends Controller
             'success',
             'Cadastro realizado com sucesso. Verifique seu e-mail antes de concluir o acesso.'
         );
+    }
+
+    private function leadLoversResponseWasSuccessful(array $response): bool
+    {
+        if (($response['StatusCode'] ?? null) === 200) {
+            return true;
+        }
+
+        $message = (string) ($response['Message'] ?? $response['message'] ?? '');
+        $exception = $response['Exception'] ?? $response['exception'] ?? null;
+
+        return $exception === null
+            && mb_stripos($message, 'Novo lead inserido na fila para processamento') !== false;
     }
 }

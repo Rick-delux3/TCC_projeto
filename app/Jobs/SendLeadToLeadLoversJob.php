@@ -48,6 +48,25 @@ class SendLeadToLeadLoversJob implements ShouldQueue
             return;
         }
 
+        $sequenceCode = $this->sequenceCodeForLead($lead);
+
+        if (!$sequenceCode) {
+            Log::warning('Sequência LeadLovers não encontrada para o lead', [
+                'lead_id' => $lead->id,
+                'tipo_solicitante' => $lead->tipo_solicitante,
+            ]);
+
+            $lead->update([
+                'leadlovers_status' => 'sequence_failed',
+                'leadlovers_response' => [
+                    'message' => 'Sequência da LeadLovers não encontrada.',
+                    'tipo_solicitante' => $lead->tipo_solicitante,
+                ],
+            ]);
+
+            return;
+        }
+
         /**
          * Cria o lead na máquina da LeadLovers já com a tag principal.
          */
@@ -58,15 +77,22 @@ class SendLeadToLeadLoversJob implements ShouldQueue
             'City' => $lead->cidade_imovel ?? '',
             'State' => $lead->estado ?? '',
             'Company' => $lead->imobiliaria ?? $lead->nome_imobiliaria_informada ?? '',
+
             'Tag' => $mainTagId,
             'Score' => 0,
+
+            'EmailSequenceCode' => $sequenceCode,
+            'SequenceLevelCode' => (int) config('services.leadlovers.step', 1),
+
+            'tipo_solicitante' => $lead->tipo_solicitante,
         ]);
 
-        if (!is_array($response) || ($response['StatusCode'] ?? null) !== 200) {
+        if (!is_array($response) || !$this->leadLoversResponseWasSuccessful($response)) {
             Log::warning('Lead não enviado para LeadLovers', [
                 'lead_id' => $lead->id,
                 'email' => $lead->email,
-                'response' => $response,
+                'status_code' => $response['StatusCode'] ?? null,
+                'message' => $response['Message'] ?? $response['message'] ?? null,
             ]);
 
             $lead->update([
@@ -111,7 +137,7 @@ class SendLeadToLeadLoversJob implements ShouldQueue
         $tagKey = match ($lead->tipo_solicitante) {
             'locatario' => 'locatario',
             'imobiliaria_nao_cadastrada' => 'imobiliaria_morna',
-            'locador' => 'proprietario',
+            'locador' => 'diretoprop',
             default => null,
         };
 
@@ -150,8 +176,34 @@ class SendLeadToLeadLoversJob implements ShouldQueue
             ->value('leadlovers_tag_id');
     }
 
-    /**
-     * Aplica tags extras, se você quiser usar além da tag principal.
-     */
+    private function leadLoversResponseWasSuccessful(array $response): bool
+    {
+        if (($response['StatusCode'] ?? null) === 200) {
+            return true;
+        }
+
+        $message = (string) ($response['Message'] ?? $response['message'] ?? '');
+        $exception = $response['Exception'] ?? $response['exception'] ?? null;
+
+        return $exception === null
+            && mb_stripos($message, 'Novo lead inserido na fila para processamento') !== false;
+    }
+    
+    private function sequenceCodeForLead(Lead $lead): ?int {
+         /*
+        |--------------------------------------------------------------------------
+        | Regra de negócio das sequências
+        |--------------------------------------------------------------------------
+        | Locatário vai para uma sequência própria.
+        | Todos os outros perfis vão para a sequência padrão.
+        */
+
+        if($lead->tipo_solicitante === 'locatario'){
+            return (int) config('services.leadlovers.sequence_2');
+
+        }
+        
+        return (int) config('services.leadlovers.sequence_1');
+    }
     
 }

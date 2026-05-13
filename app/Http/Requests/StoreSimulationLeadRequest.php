@@ -21,7 +21,7 @@ class StoreSimulationLeadRequest extends FormRequest
             'nome' => $this->limparTexto($this->nome),
             'email' => mb_strtolower(trim((string) $this->email)),
             'cpf' => $this->somenteNumeros($this->cpf),
-            'telefone' => $this->somenteNumeros($this->telefone),
+            'tel' => $this->somenteNumeros($this->tel),
 
             'estado_civil' => mb_strtolower(trim((string) $this->estado_civil)),
             'conjuge_nome' => $this->limparTexto($this->conjuge_nome),
@@ -56,7 +56,7 @@ class StoreSimulationLeadRequest extends FormRequest
 
             'nome' => ['required', 'string', 'min:3', 'max:255'],
             'email' => ['required', 'string', 'email:rfc', 'max:255'],
-            'telefone' => ['required', 'string', 'min:10', 'max:11'],
+            'tel' => ['required', 'string', 'min:10', 'max:11'],
 
             // CPF pode ser obrigatório dependendo do perfil, mas aqui deixamos flexível.
             'cpf' => ['nullable', 'string', 'size:11', 'regex:/^\d{11}$/'],

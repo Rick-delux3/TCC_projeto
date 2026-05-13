@@ -210,7 +210,7 @@ class SimulationController extends Controller
                 'nome' => $data['nome'],
                 'email' => $data['email'],
                 'cpf' => $data['cpf'] ?? null,
-                'tel' => $data['telefone'] ?? null,
+                'tel' => $data['tel'] ?? null,
 
                 'estado_civil' => $data['estado_civil'] ?? null,
                 'conjuge_nome' => $data['conjuge_nome'] ?? null,
@@ -229,7 +229,8 @@ class SimulationController extends Controller
                 'telefone_locador' => $data['telefone_locador'] ?? null,
                 'email_locador' => $data['email_locador'] ?? null,
 
-                'nome_responsavel' => $data['nome_responsavel'] ?? null,
+                'responsavel_preenchimento' => $data['responsavel_preenchimento'] ?? null,
+                'telefone_responsavel' => $data['telefone_responsavel'] ?? null,
 
                 'imobiliaria' => $company?->name ?? ($data['nome_imobiliaria_informada'] ?? null),
                 'tags_originais' => $this->tagsAsString($context['tipo_solicitante'], $company),
@@ -240,6 +241,7 @@ class SimulationController extends Controller
 
                 'ip' => $request->ip(),
                 'user_agent' => $request->userAgent(),
+                'aceite_termos' => $request->boolean('aceite_termos'),
                 'observacoes' => $data['observacoes'] ?? null,
             ]
         );
@@ -264,7 +266,7 @@ class SimulationController extends Controller
         ],
 
         'locador' => [
-            'proprietario',
+            'diretoprop',
         ],
 
         default => [],

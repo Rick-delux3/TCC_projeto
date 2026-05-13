@@ -51,7 +51,7 @@ class Lead extends Model
         'outras_despesas' => 'decimal:2',
         'valor_total_encargos' => 'decimal:2',
         'leadlovers_response' => 'array',
-        'send_to_leadlovers_at' => 'datetime',
+        'sent_to_leadlovers_at' => 'datetime',
         'aceite_termos' => 'boolean',
     ]; 
 
