@@ -44,13 +44,34 @@ return [
         'sequence_2' => env('LEADLOVERS_SEQUENCE_LOCATARIO'),
         'step' => env('LEADLOVERS_STEP'),
         
-],
+    ],
 
     'pottencial' => [
         'base_url' => env('POTTENCIAL_API_URL', 'https://api.pottencial.com.br'),
         'client_id' => env('POTTENCIAL_CLIENT_ID'),
         'client_secret' => env('POTTENCIAL_CLIENT_SECRET'),
+        'real_estate_product_id' => env('POTTENCIAL_REAL_ESTATE_PRODUCT_ID'),
+        'broker_document' => env('POTTENCIAL_BROKER_DOCUMENT'),
+        'default_beneficiary_document' => env('POTTENCIAL_DEFAULT_BENEFICIARY_DOCUMENT'),
+        'default_commission' => (float) env('POTTENCIAL_DEFAULT_COMMISSION', 0.10),
+        'commercial_loading_fee' => (float) env('POTTENCIAL_COMMERCIAL_LOADING_FEE', 0.10),
+        'default_payment_type' => env('POTTENCIAL_DEFAULT_PAYMENT_TYPE', 'Boleto'),
+        'default_installments' => (int) env('POTTENCIAL_DEFAULT_INSTALLMENTS', 1),
+        'default_plan_key' => env('POTTENCIAL_DEFAULT_PLAN_KEY', 'traditional'),
+        'default_assistance' => env('POTTENCIAL_DEFAULT_ASSISTANCE', 'Complete'),
+        'policy_owner_document' => env('POTTENCIAL_POLICY_OWNER_DOCUMENT'),
+        'default_multiple' => env('POTTENCIAL_DEFAULT_MULTIPLE', 30),
+        'default_lease_months' => env('POTTENCIAL_DEFAULT_LEASE_MONTHS', 30),
 
+
+    ],
+
+    'porto' => [
+        'base_url' => env('PORTO_BASE_URL'),
+        'client_id' => env('PORTO_CLIENT_ID'),
+        'client_secret' => env('PORTO_CLIENT_SECRET'),
+        'env' => env('PORTO_ENV', 'sandbox')
     ]
+
 
 ];

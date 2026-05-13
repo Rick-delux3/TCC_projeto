@@ -16,6 +16,9 @@ use App\Http\Controllers\SimulationController;
 
 
 
+
+
+
 Route::view('/', 'index')->name('index');
 
 Route::get('/dashboard', fn () => redirect()->route('Dashboard'))

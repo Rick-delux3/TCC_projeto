@@ -4,6 +4,10 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use App\Models\Company;
+use App\Models\InsuranceAnalysis;
+use App\Models\InsuranceAnalysisEvent;
+
 
 class Lead extends Model
 {
@@ -18,12 +22,22 @@ class Lead extends Model
         'conjuge_nome',
         'estado_civil',
         'cidade_imovel',
+        'bairro',
+        'logradouro',
+        'numero',
+        'complemento',
+        'cep',
         'estado',
         'imobiliaria',
         'nome', 
         'email', 
         'tel',
         'valor_aluguel',
+        'valor_agua',
+        'valor_luz',
+        'valor_gas',
+        'valor_condominio',
+        'valor_iptu',
         'outras_despesas',
         'valor_total_encargos',
         'nome_imobiliaria_informada',
@@ -49,6 +63,11 @@ class Lead extends Model
     protected $casts = [
         'valor_aluguel' => 'decimal:2',
         'outras_despesas' => 'decimal:2',
+        'valor_agua' => 'decimal:2',
+        'valor_luz' => 'decimal:2,',
+        'valor_gas' => 'decimal:2',
+        'valor_condominio' => 'decimal:2',
+        'valor_iptu' => 'decimal:2',
         'valor_total_encargos' => 'decimal:2',
         'leadlovers_response' => 'array',
         'sent_to_leadlovers_at' => 'datetime',
@@ -62,5 +81,14 @@ class Lead extends Model
     public function company()
     {
         return $this->belongsTo(Company::class);
+    }
+
+    public function insuranceAnalyses(){
+        return $this->hasMany(InsuranceAnalysis::class);
+    }
+
+    public function latestInsuranceAnalysis()
+    {
+        return $this->hasOne(InsuranceAnalysis::class);
     }
 }

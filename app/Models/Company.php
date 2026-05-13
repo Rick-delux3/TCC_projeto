@@ -18,7 +18,8 @@ class Company extends Model implements CanResetPasswordContract
 
 
     protected $fillable = [
-        'name', 'email', 'phone', 'password',
+        'name', 'email', 'phone', 'cnpj',
+        'password',
         'city', 'state', 'sincronizado_em',
         'sync_status', 'sync_started_at', 'sync_finished_at',
         'sync_error','lead_form_token', 'lead_form_active',

@@ -35,11 +35,21 @@ return new class extends Migration
 
             $table->string('estado', 2)->nullable();
             $table->string('cidade_imovel')->nullable();
+            $table->string('bairro')->nullable();
+            $table->string('logradouro')->nullable();
+            $table->string('numero')->nullable();
+            $table->string('complemento')->nullable();
+            $table->string('cep', 8)->nullable();
             $table->string('responsavel_preenchimento')->nullable();
             $table->string('telefone_responsavel', 20)->nullable();
 
             
             $table->decimal('valor_aluguel', 10, 2)->nullable();
+            $table->decimal('valor_agua', 10, 2)->nullable();
+            $table->decimal('valor_luz', 10, 2)->nullable();
+            $table->decimal('valor_gas', 10, 2)->nullable();
+            $table->decimal('valor_condominio', 10, 2)->nullable();
+            $table->decimal('valor_iptu', 10, 2)->nullable();
             $table->decimal('outras_despesas', 10, 2)->nullable();
             $table->decimal('valor_total_encargos', 10, 2)->nullable();
 
