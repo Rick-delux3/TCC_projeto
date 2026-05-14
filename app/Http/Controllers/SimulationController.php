@@ -7,6 +7,8 @@ use App\Jobs\SendLeadToLeadLoversJob;
 use App\Models\Company;
 use App\Models\Lead;
 use Illuminate\Http\Request;
+use App\Jobs\StartInsuranceAnalysesBatchJob;
+use Illuminate\Support\Facades\Bus;
 
 class SimulationController extends Controller
 {
@@ -104,7 +106,7 @@ class SimulationController extends Controller
             'origem' => 'imobiliaria_cadastrada',
         ]);
 
-        SendLeadToLeadLoversJob::dispatch($lead->id);
+        $this->dispatchLeadFlow($lead);
 
         return back()->with('success', 'Solicitação enviada com sucesso.');
     }
@@ -125,7 +127,7 @@ class SimulationController extends Controller
             'origem' => 'imobiliaria_nao_cadastrada',
         ]);
 
-        SendLeadToLeadLoversJob::dispatch($lead->id);
+        $this->dispatchLeadFlow($lead);
 
         return back()->with('success', 'Solicitação enviada com sucesso.');
     }
@@ -146,7 +148,7 @@ class SimulationController extends Controller
             'origem' => 'locatario',
         ]);
 
-        SendLeadToLeadLoversJob::dispatch($lead->id);
+        $this->dispatchLeadFlow($lead);
 
         return back()->with('success', 'Solicitação enviada com sucesso.');
     }
@@ -167,7 +169,7 @@ class SimulationController extends Controller
             'origem' => 'locador',
         ]);
 
-        SendLeadToLeadLoversJob::dispatch($lead->id);
+        $this->dispatchLeadFlow($lead);
 
         return back()->with('success', 'Solicitação enviada com sucesso.');
     }
@@ -273,5 +275,12 @@ class SimulationController extends Controller
     };
 
         return collect($tags)->filter()->implode(', ');
+    }
+
+    private function dispatchLeadFlow(Lead $lead): void {
+        Bus::chain([
+            new SendLeadToLeadLoversJob($lead->id),
+            new StartInsuranceAnalysesBatchJob($lead->id),
+        ])->dispatch();
     }
 }

@@ -19,6 +19,7 @@ class InsuranceAnalysis extends Model
         'provider',
         'product',
         'status',
+        'pottencial_status',
         'result',
         'quote_id',
         'proposal_id',
@@ -49,22 +50,21 @@ class InsuranceAnalysis extends Model
     ];
 
     protected $casts = [
-        'rent_amount' => 'decimal:2',
-        'charges_amount' => 'decimal:2',
-        'total_monthly_amount' => 'decimal:2',
-        'premium_amount' => 'decimal:2',
-        'insured_amount' => 'decimal:2',
-        'requested_at' => 'datetime',
-        'finished_at' => 'datetime',
-        'pdf_generated_at' => 'datetime',
-        'email_sent_at' => 'datetime',
         'available_plans' => 'array',
         'available_assistances' => 'array',
         'request_payload' => 'array',
         'response_payload' => 'array',
+
         'lease_start_date' => 'date',
         'lease_end_date' => 'date',
+
         'inhabited' => 'boolean',
+
+        'requested_at' => 'datetime',
+        'finished_at' => 'datetime',
+        'pdf_generated_at' => 'datetime',
+        'email_sent_at' => 'datetime',
+
     ];
 
 

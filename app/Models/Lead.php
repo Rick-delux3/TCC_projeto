@@ -7,6 +7,8 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use App\Models\Company;
 use App\Models\InsuranceAnalysis;
 use App\Models\InsuranceAnalysisEvent;
+use App\Models\InsuranceAnalysisBatch;
+
 
 
 class Lead extends Model
@@ -90,5 +92,9 @@ class Lead extends Model
     public function latestInsuranceAnalysis()
     {
         return $this->hasOne(InsuranceAnalysis::class);
+    }
+
+    public function insuranceAnalysesBatches(){
+        return $this->hasMany(InsuranceAnalysisBatch::class);
     }
 }

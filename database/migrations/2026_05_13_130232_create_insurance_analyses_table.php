@@ -14,6 +14,11 @@ return new class extends Migration
         Schema::create('insurance_analyses', function (Blueprint $table) {
             $table->id();
 
+            $table->foreignId('insurance_analysis_batch_id')
+            ->nullable()
+            ->constrained('insurance_analysis_batches')
+            ->nullOnDelete();
+
             $table->foreignId('lead_id')
             ->constrained('leads')
             ->cascadeOnDelete();
@@ -29,7 +34,7 @@ return new class extends Migration
 
             // Status interno da análise
             $table->string('status')->default('pending');
-            $table->string('pottencial_status')->nullable();
+            $table->string('provider_status')->nullable();
             // pending, processing, approved, rejected, manual_review, failed
 
             // Resultado final apresentado no dashboard

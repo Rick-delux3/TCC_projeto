@@ -12,7 +12,6 @@ class RentalGuaranteeQuotePayloadBuilder
 
         $startDate = $analysis->lease_start_date ?? now();
         $endDate = $analysis->lease_end_date ?? now()->addMonthsNoOverflow(30);
-
         $policyHolderDocument = only_numbers(
             $lead->cpf_cnpj
             ?? $lead->cpf

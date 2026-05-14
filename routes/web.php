@@ -13,11 +13,12 @@ use App\Http\Controllers\AdminAuthController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\PublicLeadController;
 use App\Http\Controllers\SimulationController;
+use App\Services\PottencialService;
 
 
 
 
-
+Route::get('/teste/token_acesso', [PottencialService::class, 'testAuthentication']);
 
 Route::view('/', 'index')->name('index');
 
