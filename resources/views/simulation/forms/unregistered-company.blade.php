@@ -18,80 +18,76 @@
                 @include('simulation.partials.honeypot')
 
                 <div class="row g-3">
-                    <div class="col-md-6">
-                        <label class="form-label">Nome</label>
-                        <input type="text" name="nome" class="form-control" value="{{ old('nome') }}" placeholder="completo">
-                    </div>
-
-                    <div class="col-md-6">
-                        <label class="form-label">E-mail</label>
-                        <input type="email" name="email" class="form-control" value="{{ old('email') }}" placeholder="EMAIL">
-                    </div>
-
-                    <div class="col-md-6">
-                        <label class="form-label">CPF</label>
-                        <input type="text" name="cpf" class="form-control" value="{{ old('cpf') }}" placeholder="CPF">
-                    </div>
-
-                    <div class="col-md-6">
-                        <label class="form-label">Telefone</label>
-                        <input type="text" name="tel" class="form-control" value="{{ old('tel') }}" placeholder="Celular">
-                    </div>
-
                     <div class="col-12">
-                        <label class="form-label d-block">Estado civil</label>
-
-                        <div class="form-check">
-                            <input class="form-check-input" type="radio" name="estado_civil" value="casado" id="estado_civil_casado">
-                            <label class="form-check-label" for="estado_civil_casado">
-                                CASADO ou residente com companheiro(a)
-                            </label>
-                        </div>
-
-                        <div class="form-check">
-                            <input class="form-check-input" type="radio" name="estado_civil" value="solteiro" id="estado_civil_solteiro">
-                            <label class="form-check-label" for="estado_civil_solteiro">
-                                Solteiro
-                            </label>
-                        </div>
-
-                        <div class="form-check">
-                            <input class="form-check-input" type="radio" name="estado_civil" value="divorciado" id="estado_civil_divorciado">
-                            <label class="form-check-label" for="estado_civil_divorciado">
-                                Separado/divorciado/viúvo
-                            </label>
-                        </div>
+                        <h5 class="fw-bold border-bottom pb-2">
+                            Dados do pretendente à locação
+                        </h5>
                     </div>
 
                     <div class="col-md-6">
-                        <label class="form-label">Apenas para casado</label>
-                        <input type="text" name="conjuge_cpf" class="form-control" value="{{ old('conjuge_cpf') }}" placeholder="CPF do cônjuge">
+                        <label class="form-label">Nome completo <span class="text-danger">*</span></label>
+                        <input type="text" name="nome" class="form-control" value="{{ old('nome') }}" placeholder="Nome completo">
                     </div>
 
                     <div class="col-md-6">
-                        <label class="form-label">Valor do aluguel</label>
-                        <input type="text" name="valor_aluguel" class="form-control" value="{{ old('valor_aluguel') }}" placeholder="R$">
+                        <label class="form-label">E-mail <span class="text-danger">*</span></label>
+                        <input type="email" name="email" class="form-control" value="{{ old('email') }}" placeholder="email@exemplo.com">
                     </div>
 
                     <div class="col-md-6">
-                        <label class="form-label">Outras despesas</label>
-                        <input type="text" name="outras_despesas" class="form-control" value="{{ old('outras_despesas') }}" placeholder="Ex IPTU OU CONDOMÍNIO SE SOUBER">
+                        <label class="form-label">CPF <span class="text-danger">*</span></label>
+                        <input type="text" name="cpf" class="form-control" value="{{ old('cpf') }}" placeholder="Somente números">
                     </div>
 
                     <div class="col-md-6">
-                        <label class="form-label">Cidade do imóvel pretendido</label>
-                        <input type="text" name="cidade_imovel" class="form-control" value="{{ old('cidade_imovel') }}" placeholder="CEP ou CIDADE">
+                        <label class="form-label">Telefone <span class="text-danger">*</span></label>
+                        <input type="text" name="tel" class="form-control" value="{{ old('tel') }}" placeholder="Ex: 11997285152">
                     </div>
 
-                    <div class="col-12">
+                    <div class="col-md-4">
+                        <label class="form-label">Estado civil</label>
+                        <select name="estado_civil" class="form-select">
+                            <option value="">Selecione</option>
+                            <option value="solteiro" @selected(old('estado_civil') === 'solteiro')>Solteiro(a)</option>
+                            <option value="casado" @selected(old('estado_civil') === 'casado')>Casado(a)</option>
+                            <option value="uniao_estavel" @selected(old('estado_civil') === 'uniao_estavel')>União estável</option>
+                            <option value="divorciado" @selected(old('estado_civil') === 'divorciado')>Divorciado(a)</option>
+                            <option value="viuvo" @selected(old('estado_civil') === 'viuvo')>Viúvo(a)</option>
+                        </select>
+                    </div>
+
+                    <div class="col-md-4">
+                        <label class="form-label">Nome do cônjuge</label>
+                        <input type="text" name="conjuge_nome" class="form-control" value="{{ old('conjuge_nome') }}" placeholder="Se casado ou união estável">
+                    </div>
+
+                    <div class="col-md-4">
+                        <label class="form-label">CPF do cônjuge</label>
+                        <input type="text" name="conjuge_cpf" class="form-control" value="{{ old('conjuge_cpf') }}" placeholder="Se casado ou união estável">
+                    </div>
+
+                    <div class="col-12 mt-3">
+                        <h5 class="fw-bold border-bottom pb-2">
+                            Dados da imobiliária ou responsável
+                        </h5>
+                    </div>
+
+                    <div class="col-md-12">
+                        <label class="form-label">Nome da imobiliária informada</label>
+                        <input type="text" name="nome_imobiliaria_informada" class="form-control" value="{{ old('nome_imobiliaria_informada') }}" placeholder="Nome da imobiliária">
+                    </div>
+
+                    <div class="col-md-6">
                         <label class="form-label">Nome do responsável pelo preenchimento</label>
-                        <input type="text" name="responsavel_preenchimento" class="form-control" value="{{ old('responsavel_preenchimento') }}" placeholder="Nome da imobiliária">
+                        <input type="text" name="responsavel_preenchimento" class="form-control" value="{{ old('responsavel_preenchimento') }}" placeholder="Nome">
                     </div>
 
-                    <div class="col-12">
-                        <label class="form-label">Caso preenchido por Imobiliária/Proprietário</label>
-                        <input type="text" name="nome_imobiliaria_informada" class="form-control" value="{{ old('nome_imobiliaria_informada') }}" placeholder="INFORMAR NOME E TELEFONE">
+                    <div class="col-md-6">
+                        <label class="form-label">Telefone do responsável</label>
+                        <input type="text" name="telefone_responsavel" class="form-control" value="{{ old('telefone_responsavel') }}" placeholder="Telefone">
                     </div>
+
+                    @include('simulation.partials.property-expenses-address')
                 </div>
 
                 @include('simulation.partials.consent-checkbox')

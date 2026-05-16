@@ -14,11 +14,14 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\PublicLeadController;
 use App\Http\Controllers\SimulationController;
 use App\Services\PottencialService;
+use App\Http\Controllers\InsuranceAnalysisController;
+use App\Http\Controllers\CepController;
 
 
 
 
-Route::get('/teste/token_acesso', [PottencialService::class, 'testAuthentication']);
+
+//Route::get('/teste/token_acesso', [PottencialService::class, 'testAuthentication']);
 
 Route::view('/', 'index')->name('index');
 
@@ -40,6 +43,18 @@ Route::prefix('/Dashboard')->group(function () {
     Route::post('/sync-again', [DashboardController::class, 'syncAgain'])
     ->middleware(['auth', '2fa'])
     ->name('Dashboard.syncAgain');
+
+    Route::get('/analises', [InsuranceAnalysisController::class, 'index'])
+    ->name('insurance-analyses.index');
+
+    Route::get('/analises/{batch}', [InsuranceAnalysisController::class, 'show'])
+    ->name('insurance-analyses.show');
+
+    Route::post('/analises/provider/{analysis}/retry', [InsuranceAnalysisController::class, 'retry'])
+    ->name('insurance-analyses.retry');
+
+    Route::post('/analises/provider/{analysis}/sync-status', [InsuranceAnalysisController::class, 'syncStatus'])
+    ->name('insurance-analyses.sync-status');
     
     Route::get('/Admin', function (){
         return view('dashboard-admin');
@@ -74,11 +89,7 @@ Route::middleware('auth:admin')->group(function () {
     Route::post('/admin/logout', [AdminAuthController::class, 'logout'])->name('admin.logout');
 });
 
-//Route::middleware('throttle:10,1')->group(function () {
-    //Route::get('/captacao/{token}', [PublicLeadController::class, 'show'])->name('public.leads.show');
 
-    //Route::post('/captacao/{token}', [PublicLeadController::class, 'store'])->name('public.leads.store');
-//});
 
 Route::prefix('simulacao')
     ->name('simulation.')
@@ -129,6 +140,11 @@ Route::prefix('simulacao')
         Route::post('/locador', [SimulationController::class, 'storeLandlordLead'])
             ->name('landlord.store');
     });
+
+Route::get('/cep/{cep}', [CepController::class, 'show'])
+    ->where('cep', '[0-9\.\-]+')
+    ->middleware('throttle:30,1')
+    ->name('cep.show');
     
 Route::prefix('/empresa')->group( function () {
     Route::get('/form', [CompanyRegistrationController::class, 'showRegistrationForm'])->name('empresa.register.form');

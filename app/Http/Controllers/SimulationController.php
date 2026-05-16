@@ -9,6 +9,8 @@ use App\Models\Lead;
 use Illuminate\Http\Request;
 use App\Jobs\StartInsuranceAnalysesBatchJob;
 use Illuminate\Support\Facades\Bus;
+use Illuminate\Support\Facades\DB;
+
 
 class SimulationController extends Controller
 {
@@ -100,15 +102,18 @@ class SimulationController extends Controller
     {
         $company = $this->findCompanyByCode($code);
 
-        $lead = $this->saveLead($request, [
-            'tipo_solicitante' => 'imobiliaria_cadastrada',
-            'company' => $company,
-            'origem' => 'imobiliaria_cadastrada',
-        ]);
+        $lead = DB::transaction(function () use ($request, $company){
+            return $this->saveLead($request, [
+                    'tipo_solicitante' => 'imobiliaria_cadastrada',
+                    'company' => $company,
+                    'origem' => 'imobiliaria_cadastrada',
+                ]);
+        });
+        
 
         $this->dispatchLeadFlow($lead);
 
-        return back()->with('success', 'Solicitação enviada com sucesso.');
+        return redirect()->route('simulation.success')->with('success', 'Solicitação enviada com sucesso.');
     }
 
     /**
@@ -121,15 +126,19 @@ class SimulationController extends Controller
 
     public function storeUnregisteredCompanyLead(StoreSimulationLeadRequest $request)
     {
-        $lead = $this->saveLead($request, [
-            'tipo_solicitante' => 'imobiliaria_nao_cadastrada',
-            'company' => null,
-            'origem' => 'imobiliaria_nao_cadastrada',
-        ]);
+        $lead = DB::transaction(function () use ($request) {
+            return $this->saveLead($request, [
+                'tipo_solicitante' => 'imobiliaria_nao_cadastrada',
+                'company' => null,
+                'origem' => 'imobiliaria_nao_cadastrada',
+            ]);
+        });
 
         $this->dispatchLeadFlow($lead);
 
-        return back()->with('success', 'Solicitação enviada com sucesso.');
+        return redirect()
+            ->route('simulation.success')
+            ->with('success', 'Solicitação enviada com sucesso. O resultado será enviado por e-mail.');
     }
 
     /**
@@ -142,15 +151,19 @@ class SimulationController extends Controller
 
     public function storeTenantLead(StoreSimulationLeadRequest $request)
     {
-        $lead = $this->saveLead($request, [
-            'tipo_solicitante' => 'locatario',
-            'company' => null,
-            'origem' => 'locatario',
-        ]);
+       $lead = DB::transaction(function () use ($request) {
+            return $this->saveLead($request, [
+                'tipo_solicitante' => 'locatario',
+                'company' => null,
+                'origem' => 'locatario',
+            ]);
+        });
 
         $this->dispatchLeadFlow($lead);
 
-        return back()->with('success', 'Solicitação enviada com sucesso.');
+        return redirect()
+            ->route('simulation.success')
+            ->with('success', 'Solicitação enviada com sucesso. O resultado será enviado por e-mail.');
     }
 
     /**
@@ -163,15 +176,19 @@ class SimulationController extends Controller
 
     public function storeLandlordLead(StoreSimulationLeadRequest $request)
     {
-        $lead = $this->saveLead($request, [
-            'tipo_solicitante' => 'locador',
-            'company' => null,
-            'origem' => 'locador',
-        ]);
+        $lead = DB::transaction(function () use ($request) {
+            return $this->saveLead($request, [
+                'tipo_solicitante' => 'locador',
+                'company' => null,
+                'origem' => 'locador',
+            ]);
+        });
 
         $this->dispatchLeadFlow($lead);
 
-        return back()->with('success', 'Solicitação enviada com sucesso.');
+        return redirect()
+            ->route('simulation.success')
+            ->with('success', 'Solicitação enviada com sucesso. O resultado será enviado por e-mail.');
     }
 
     /**
@@ -201,6 +218,35 @@ class SimulationController extends Controller
         $valorAluguel = (float) ($data['valor_aluguel'] ?? 0);
         $outrasDespesas = (float) ($data['outras_despesas'] ?? 0);
 
+        $valorAluguel = (float) ($data['valor_aluguel'] ?? 0);
+
+        $valorCondominio = (float) ($data['valor_condominio'] ?? 0);
+        $valorIptu = (float) ($data['valor_iptu'] ?? 0);
+        $valorGas = (float) ($data['valor_gas'] ?? 0);
+        $outrasDespesas = (float) ($data['outras_despesas'] ?? 0);
+
+        $valorAgua = isset($data['valor_agua']) && $data['valor_agua'] !== null && $data['valor_agua'] !== ''
+            ? (float) $data['valor_agua']
+            : $valorAluguel * 0.10;
+
+        $valorLuz = isset($data['valor_luz']) && $data['valor_luz'] !== null && $data['valor_luz'] !== ''
+            ? (float) $data['valor_luz']
+            : $valorAluguel * 0.10;
+
+        $valorTotalEncargos = $valorAluguel
+            + $valorCondominio
+            + $valorIptu
+            + $valorGas
+            + $valorAgua
+            + $valorLuz
+            + $outrasDespesas;
+
+
+            $cpfCnpj = $data['cpf_cnpj']
+            ?? $data['cpf']
+            ?? $data['cnpj']
+            ?? null;
+
         return Lead::updateOrCreate(
             [
                 'company_id' => $company?->id,
@@ -218,12 +264,23 @@ class SimulationController extends Controller
                 'conjuge_nome' => $data['conjuge_nome'] ?? null,
                 'conjuge_cpf' => $data['conjuge_cpf'] ?? null,
 
-                'estado' => $data['estado'] ?? null,
+                'cep' => $data['cep'] ?? null,
+                'logradouro' => $data['logradouro'] ?? null,
+                'numero' => $data['numero'] ?? null,
+                'complemento' => $data['complemento'] ?? null,
+                'bairro' => $data['bairro'] ?? null,
                 'cidade_imovel' => $data['cidade_imovel'] ?? null,
-                'valor_aluguel' => $valorAluguel ?: null,
-                'outras_despesas' => $outrasDespesas,
-                'valor_total_encargos' => $valorAluguel + $outrasDespesas,
+                'estado' => $data['estado'] ?? null,
 
+                'valor_aluguel' => $valorAluguel ?: null,
+                'valor_condominio' => $valorCondominio,
+                'valor_iptu' => $valorIptu,
+                'valor_gas' => $valorGas,
+                'valor_agua' => $valorAgua,
+                'valor_luz' => $valorLuz,
+                'outras_despesas' => $outrasDespesas,
+                'valor_total_encargos' => $valorTotalEncargos,
+                
                 'nome_imobiliaria_informada' => $data['nome_imobiliaria_informada'] ?? null,
                 'cnpj_imobiliaria_informada' => $data['cnpj_imobiliaria_informada'] ?? null,
 

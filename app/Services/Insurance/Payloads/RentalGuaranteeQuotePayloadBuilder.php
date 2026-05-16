@@ -23,7 +23,7 @@ class RentalGuaranteeQuotePayloadBuilder
             'policyPeriodEnd' => $endDate->format('Y-m-d'),
             'policyType' => config('services.pottencial.default_policy_type', 'Unique'),
 
-            'commissionedAgents' => $this->commissionedAgents(),
+            'commissionedAgents' => $this->commissionedAgents($analysis),
 
             'participants' => [
                 $this->policyHolder($lead, $policyHolderDocument),
@@ -67,8 +67,10 @@ class RentalGuaranteeQuotePayloadBuilder
         ];
     }
 
-    private function commissionedAgents(): array
+    private function commissionedAgents(InsuranceAnalysis $analysis): array
     {
+        $lead = $analysis->lead;
+
         $agents = [
             [
                 'documentNumber' => only_numbers(config('services.pottencial.broker_document')),
@@ -78,15 +80,20 @@ class RentalGuaranteeQuotePayloadBuilder
             ],
         ];
 
-        $policyOwnerDocument = only_numbers(config('services.pottencial.policy_owner_document'));
+        
+        if($lead->tipo_solicitante === 'imobiliaria_cadastrada'){
+            $companyCNPJ = only_numbers($lead->company->cnpj);
+            
+            if (empty($companyCNPJ)) {
+                throw new \RuntimeException('CNPJ da imobiliária não encontrado para envio da cotação.');
+            }
 
-        if (!empty($policyOwnerDocument)) {
-            $agents[] = [
-                'documentNumber' => $policyOwnerDocument,
-                'role' => 'PolicyOwner',
-                'lead' => false,
-                'isPayer' => true,
-            ];
+                $agents[] = [
+                    'documentNumber' => $companyCNPJ,
+                    'role' => 'PolicyOwner',
+                    'lead' => false,
+                    'isPayer' => true,
+                ];
         }
 
         return $agents;
@@ -115,8 +122,8 @@ class RentalGuaranteeQuotePayloadBuilder
             'number' => $lead->numero,
             'district' => $lead->bairro,
             'city' => $lead->cidade_imovel,
-            'state' => strtoupper($lead->estado),
-            'zipCode' => only_numbers($lead->cep),
+            'state' => $lead->estado,
+            'zipCode' => $lead->cep,
             'complement' => $lead->complemento ?? '',
             'country' => 'BRA',
             'type' => 'Residential',

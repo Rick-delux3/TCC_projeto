@@ -8,6 +8,9 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use App\Jobs\SendAnalysisResultsEmailJob;
+use App\Jobs\ApplyFinalAnalysisTagToLeadLoversJob;
+
 
 class CompleteInsuranceAnalysesBatchJob implements ShouldQueue
 {
@@ -47,6 +50,7 @@ class CompleteInsuranceAnalysesBatchJob implements ShouldQueue
         ]);
 
         if ($status !== 'processing') {
+            ApplyFinalAnalysisTagToLeadLoversJob::dispatch($batch->id);
             SendAnalysisResultsEmailJob::dispatch($batch->id);
         }
     }

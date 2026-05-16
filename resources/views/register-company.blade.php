@@ -49,6 +49,24 @@
                     @enderror
                 </div>
 
+                <div class="client-field">
+                    <label for="cnpj" class="client-label">CNPJ da imobiliária</label>
+                    <input
+                        type="text"
+                        id="cnpj"
+                        name="cnpj"
+                        class="client-input"
+                        value="{{ old('cnpj') }}"
+                        inputmode="numeric"
+                        maxlength="18"
+                        placeholder="00.000.000/0000-00"
+                        required
+                    >
+                    @error('cnpj')
+                        <span class="client-field-error">{{ $message }}</span>
+                    @enderror
+                </div>
+
                 <div class="client-grid">
                     <div class="client-field">
                         <label for="phone" class="client-label">Telefone</label>

@@ -7,11 +7,12 @@ use App\Models\LeadLoversTag;
 use App\Models\User;
 use App\Services\LeadLoversService;
 use Illuminate\Auth\Events\Registered;
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
+use App\Http\Requests\StoreCompanyRequest;
+
 
 class CompanyRegistrationController extends Controller
 {
@@ -61,16 +62,9 @@ class CompanyRegistrationController extends Controller
 
     
 
-    public function store(Request $request, LeadLoversService $leadLovers)
+    public function store(StoreCompanyRequest $request, LeadLoversService $leadLovers)
     {
-        $data = $request->validate([
-            'name' => 'required|string|max:255|unique:companies,name',
-            'email' => 'required|string|lowercase|email:rfc,dns|max:255|unique:companies,email|unique:users,email',
-            'phone' => ['required', 'string', 'max:15', 'regex:/^\(\d{2}\)\s\d{4,5}-\d{4}$/', 'unique:companies,phone'],
-            'city' => 'required|string|max:55',
-            'state' => 'required|string|max:2',
-            'password' => 'required|string|min:6|confirmed',
-        ]);
+        $data = $request->validated();
 
         $companyTag = LeadLoversTag::where('title', $data['name'])
             ->where('active', true)

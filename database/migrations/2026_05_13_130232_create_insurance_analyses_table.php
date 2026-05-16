@@ -14,19 +14,9 @@ return new class extends Migration
         Schema::create('insurance_analyses', function (Blueprint $table) {
             $table->id();
 
-            $table->foreignId('insurance_analysis_batch_id')
-            ->nullable()
-            ->constrained('insurance_analysis_batches')
-            ->nullOnDelete();
-
-            $table->foreignId('lead_id')
-            ->constrained('leads')
-            ->cascadeOnDelete();
-
-            $table->foreignId('company_id')
-                ->nullable()
-                ->constrained('companies')
-                ->nullOnDelete();
+            $table->unsignedBigInteger('insurance_analysis_batch_id')->nullable();
+            $table->unsignedBigInteger('lead_id');
+            $table->unsignedBigInteger('company_id')->nullable();
 
             // Para o TCC, manter fixo como pottencial/residencial_fianca
             $table->string('provider')->default('pottencial');
@@ -86,6 +76,23 @@ return new class extends Migration
             $table->timestamp('finished_at')->nullable();
             $table->timestamp('pdf_generated_at')->nullable();
             $table->timestamp('email_sent_at')->nullable();
+
+
+            $table->foreign('lead_id')
+                ->references('id')
+                ->on('leads')
+                ->onDelete('cascade');
+
+            $table->foreign('company_id')
+                ->references('id')
+                ->on('companies')
+                ->nullOnDelete();
+                
+            $table->foreign('insurance_analysis_batch_id')
+                ->references('id')
+                ->on('insurance_analysis_batches')
+                ->nullOnDelete();
+
             $table->timestamps();
         });
     }

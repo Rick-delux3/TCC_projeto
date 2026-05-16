@@ -24,7 +24,7 @@ class RunProviderAnalysisJob implements ShouldQueue
 
     public function handle(InsuranceProviderResolver $resolver): void
     {
-        $analysis = InsuranceAnalysis::with('lead', 'batch')->findOrFail($this->analysisId);
+        $analysis = InsuranceAnalysis::with('lead.company', 'batch')->findOrFail($this->analysisId);
 
         $analysis->update([
             'status' => 'processing',

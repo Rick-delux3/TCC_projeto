@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use App\Models\Lead;
 use App\Models\Company;
 use App\Models\InsuranceAnalysisEvent;
+use App\Models\InsuranceAnalysisBatch;
 
 
 class InsuranceAnalysis extends Model
@@ -68,12 +69,15 @@ class InsuranceAnalysis extends Model
     ];
 
 
-
-    public function Lead(){
+    public function batch(){
+        return $this->belongsTo(InsuranceAnalysisBatch::class, 'insurance_analysis_batch_id');
+    }
+    
+    public function lead(){
         return $this->belongsTo(Lead::class);
     }
 
-    public function Company(){
+    public function company(){
         return $this->belongsTo(Company::class);
     }
 

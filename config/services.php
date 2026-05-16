@@ -62,6 +62,8 @@ return [
         'policy_owner_document' => env('POTTENCIAL_POLICY_OWNER_DOCUMENT'),
         'default_multiple' => env('POTTENCIAL_DEFAULT_MULTIPLE', 30),
         'default_lease_months' => env('POTTENCIAL_DEFAULT_LEASE_MONTHS', 30),
+        'default_policy_type' => env('POTTENCIAL_DEFAULT_POLICY_TYPE', 'Unique'),
+
 
 
     ],

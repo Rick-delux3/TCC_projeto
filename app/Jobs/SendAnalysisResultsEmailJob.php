@@ -14,6 +14,9 @@ class SendAnalysisResultsEmailJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
+    public int $tries = 3;
+    public int $timeout = 120;
+
     public function __construct(
         public int $batchId
     ) {}
@@ -22,9 +25,11 @@ class SendAnalysisResultsEmailJob implements ShouldQueue
     {
         $batch = InsuranceAnalysisBatch::with('lead', 'analyses')->findOrFail($this->batchId);
 
-        if ($batch->email_sent_at) {
-            return;
-        }
+        if ($batch->email_sent_at) return;
+
+        $lead = $batch->lead;
+
+        if(!$lead || !$lead->email) return;
 
         // Depois você troca por um Mailable bonito.
         Mail::raw($this->buildMessage($batch), function ($message) use ($batch) {
@@ -39,26 +44,50 @@ class SendAnalysisResultsEmailJob implements ShouldQueue
 
     private function buildMessage(InsuranceAnalysisBatch $batch): string
     {
+        $lead = $batch->lead;
+
         $lines = [];
 
-        $lines[] = "Olá, {$batch->lead->nome}.";
+        $lines[] = "Olá, {$lead->nome}.";
         $lines[] = "";
-        $lines[] = "Recebemos os resultados da sua análise de Seguro Fiança:";
+        $lines[] = "Recebemos o resultado da sua análise de Seguro Fiança Locatícia Residencial.";
+        $lines[] = "";
+        $lines[] = "Resultados por companhia:";
         $lines[] = "";
 
         foreach ($batch->analyses as $analysis) {
-            $lines[] = strtoupper($analysis->provider);
-            $lines[] = "Status: {$analysis->status}";
+            $lines[] ='Companhias: ' . strtoupper($analysis->provider);
+            $lines[] = "Status: " . $this->formatStatus($analysis->status);
 
             if ($analysis->premium_amount) {
                 $lines[] = "Orçamento estimado: R$ " . number_format($analysis->premium_amount, 2, ',', '.');
             }
 
+            if($analysis->error_message){
+                $lines[] = "Observações: {$analysis->error_message}"; 
+            }
+
             $lines[] = "";
         }
 
-        $lines[] = "A imobiliária/corretora também recebeu esses resultados no dashboard.";
+        $lines[] = "Em breve, a imobiliária ou corretora poderá entrar em contato com mais informações.";
+        $lines[] = "";
+        $lines[] = "Este é um e-mail automático.";
 
         return implode("\n", $lines);
+    }
+
+    private function formatStatus(?string $status): string
+    {
+        return match ($status) {
+            'approved' => 'Aprovado',
+            'rejected' => 'Recusado',
+            'manual_review' => 'Em negociação',
+            'quoted' => 'Cotado',
+            'failed' => 'Falha técnica',
+            'processing' => 'Em processamento',
+            'pending' => 'Pendente',
+            default => 'Não informado',
+        };
     }
 }

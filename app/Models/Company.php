@@ -9,6 +9,9 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Notifications\Notifiable;
 use App\Models\Lead;
+use App\Models\InsuranceAnalysisBatch;
+use App\Models\InsuranceAnalysis;
+use App\Models\User;
 use Illuminate\Support\Str;
 use Override;
 
@@ -56,6 +59,16 @@ class Company extends Model implements CanResetPasswordContract
         return $this->hasMany(Lead::class);
     }
 
+    public function insuranceAnalysisBatches()
+    {
+        return $this->hasMany(InsuranceAnalysisBatch::class);
+    }
+
+    public function insuranceAnalyses()
+    {
+        return $this->hasMany(InsuranceAnalysis::class);
+    }
+
     #[Override]
     protected static function booted(): void
     {
@@ -95,4 +108,8 @@ class Company extends Model implements CanResetPasswordContract
 
         return $code;
     }
+
+    
+
+
 }
