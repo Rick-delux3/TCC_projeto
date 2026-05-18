@@ -46,6 +46,10 @@ class StartInsuranceAnalysesBatchJob implements ShouldQueue
 
         $jobs = [];
 
+        $rentAmount = (float) ($lead->valor_aluguel ?? 0);
+        $chargesAmount = $this->chargesAmount($lead);
+        $totalMonthlyAmount = $rentAmount + $chargesAmount;
+
         foreach ($providers as $provider) {
             $analysis = InsuranceAnalysis::create([
                 'insurance_analysis_batch_id' => $batchModel->id,
@@ -65,9 +69,9 @@ class StartInsuranceAnalysesBatchJob implements ShouldQueue
 
                 'inhabited' => false,
 
-                'rent_amount' => (float) ($lead->valor_aluguel ?? 0),
-                'charges_amount' => $this->chargesAmount($lead),
-                'total_monthly_amount' => (float) ($lead->valor_aluguel ?? 0) + $this->chargesAmount($lead),
+                'rent_amount' => $rentAmount,
+                'charges_amount' => $chargesAmount,
+                'total_monthly_amount' => $totalMonthlyAmount,
 
                 'payment_type' => config('services.pottencial.default_payment_type', 'Boleto'),
                 'installments' => (int) config('services.pottencial.default_installments', 12),
@@ -83,19 +87,19 @@ class StartInsuranceAnalysesBatchJob implements ShouldQueue
         }
 
         Bus::batch($jobs)
-            ->name("Análises do lead {$lead->id}")
-            ->then(function (Batch $batch) use ($batchModel) {
-                CompleteInsuranceAnalysesBatchJob::dispatch($batchModel->id);
-            })
-            ->catch(function (Batch $batch, Throwable $e) use ($batchModel) {
-                Log::warning('Erro em lote de análises', [
-                    'batch_id' => $batchModel->id,
-                    'message' => $e->getMessage(),
-                ]);
-
-                CompleteInsuranceAnalysesBatchJob::dispatch($batchModel->id);
-            })
-            ->dispatch();
+        ->name("Análises do lead {$lead->id}")
+        ->allowFailures()
+        ->catch(function (Batch $batch, Throwable $e) use ($batchModel) {
+            Log::warning('Erro em algum job do lote de análises', [
+                'batch_model_id' => $batchModel->id,
+                'laravel_batch_id' => $batch->id,
+                'message' => $e->getMessage(),
+            ]);
+        })
+        ->finally(function (Batch $batch) use ($batchModel) {
+            CompleteInsuranceAnalysesBatchJob::dispatch($batchModel->id);
+        })
+        ->dispatch();
     }
 
     private function chargesAmount(Lead $lead): float

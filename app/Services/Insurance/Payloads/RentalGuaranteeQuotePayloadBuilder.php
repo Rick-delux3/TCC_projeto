@@ -12,7 +12,7 @@ class RentalGuaranteeQuotePayloadBuilder
 
         $startDate = $analysis->lease_start_date ?? now();
         $endDate = $analysis->lease_end_date ?? now()->addMonthsNoOverflow(30);
-        $policyHolderDocument = only_numbers(
+        $policyHolderDocument = \only_numbers(
             $lead->cpf_cnpj
             ?? $lead->cpf
             ?? ''
@@ -73,7 +73,7 @@ class RentalGuaranteeQuotePayloadBuilder
 
         $agents = [
             [
-                'documentNumber' => only_numbers(config('services.pottencial.broker_document')),
+                'documentNumber' => \only_numbers(config('services.pottencial.broker_document')),
                 'role' => 'Broker',
                 'commissionPercentage' => (float) config('services.pottencial.default_commission', 0.20),
                 'lead' => true,
@@ -82,7 +82,7 @@ class RentalGuaranteeQuotePayloadBuilder
 
         
         if($lead->tipo_solicitante === 'imobiliaria_cadastrada'){
-            $companyCNPJ = only_numbers($lead->company->cnpj);
+            $companyCNPJ = \only_numbers($lead->company->cnpj);
             
             if (empty($companyCNPJ)) {
                 throw new \RuntimeException('CNPJ da imobiliária não encontrado para envio da cotação.');
@@ -110,7 +110,7 @@ class RentalGuaranteeQuotePayloadBuilder
                 'name' => $lead->nome,
                 'email' => $lead->email,
                 'phoneNumber' => '',
-                'cellPhoneNumber' => only_numbers($lead->tel ?? ''),
+                'cellPhoneNumber' => \only_numbers($lead->tel ?? ''),
             ],
         ];
     }
@@ -230,4 +230,6 @@ class RentalGuaranteeQuotePayloadBuilder
 
         return $aluguel * 0.10;
     }
+
+   
 }

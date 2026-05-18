@@ -52,19 +52,36 @@ class SendAnalysisResultsEmailJob implements ShouldQueue
         $lines[] = "";
         $lines[] = "Recebemos o resultado da sua análise de Seguro Fiança Locatícia Residencial.";
         $lines[] = "";
+
+        if ($batch->analyses->isEmpty()) {
+            $lines[] = "Nenhuma análise foi encontrada para este lote.";
+            $lines[] = "Nossa equipe irá verificar o processamento.";
+            $lines[] = "";
+
+            return implode("\n", $lines);
+        }
+
         $lines[] = "Resultados por companhia:";
         $lines[] = "";
 
         foreach ($batch->analyses as $analysis) {
-            $lines[] ='Companhias: ' . strtoupper($analysis->provider);
+            $lines[] = "Companhia: " . strtoupper($analysis->provider);
             $lines[] = "Status: " . $this->formatStatus($analysis->status);
+
+            if ($analysis->provider_status) {
+                $lines[] = "Status da companhia: {$analysis->provider_status}";
+            }
+
+            if ($analysis->quote_id) {
+                $lines[] = "Código da cotação: {$analysis->quote_id}";
+            }
 
             if ($analysis->premium_amount) {
                 $lines[] = "Orçamento estimado: R$ " . number_format($analysis->premium_amount, 2, ',', '.');
             }
 
-            if($analysis->error_message){
-                $lines[] = "Observações: {$analysis->error_message}"; 
+            if ($analysis->error_message) {
+                $lines[] = "Observação: {$analysis->error_message}";
             }
 
             $lines[] = "";

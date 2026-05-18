@@ -66,7 +66,7 @@ class Lead extends Model
         'valor_aluguel' => 'decimal:2',
         'outras_despesas' => 'decimal:2',
         'valor_agua' => 'decimal:2',
-        'valor_luz' => 'decimal:2,',
+        'valor_luz' => 'decimal:2',
         'valor_gas' => 'decimal:2',
         'valor_condominio' => 'decimal:2',
         'valor_iptu' => 'decimal:2',

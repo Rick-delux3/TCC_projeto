@@ -15,6 +15,7 @@ class InsuranceAnalysis extends Model
     use HasFactory;
 
     protected $fillable = [
+        'insurance_analysis_batch_id',
         'lead_id',
         'company_id',
         'provider',

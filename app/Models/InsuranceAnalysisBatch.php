@@ -36,6 +36,6 @@ class InsuranceAnalysisBatch extends Model
 
     public function analyses()
     {
-        return $this->hasMany(InsuranceAnalysis::class);
+        return $this->hasMany(InsuranceAnalysis::class, 'insurance_analysis_batch_id');
     }
 }
