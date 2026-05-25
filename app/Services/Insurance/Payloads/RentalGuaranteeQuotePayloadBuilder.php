@@ -31,37 +31,38 @@ class RentalGuaranteeQuotePayloadBuilder
 
             'riskObjects' => [
                 [
-                    'type' => 'FiancaLocaticia',
-                    'planKey' => $analysis->plan_key ?? 'traditional',
-                    'multiple' => $analysis->multiple ?? 30,
-                    'occupation' => 'Residencial',
-                    'inhabited' => (bool) $analysis->inhabited,
-
+                    'type' => 'rentalProperty',
+                    
                     'tenantDocumentNumber' => $policyHolderDocument,
-
+                    
                     'startLeaseContract' => $startDate->format('Y-m-d'),
                     'endLeaseContract' => $endDate->format('Y-m-d'),
-
+                    
+                    'coverages' => $this->coverages($lead, $analysis->multiple ?? 30),
+                    
                     'riskLocation' => [
                         'address' => $this->addressFromLead($lead),
-                    ],
-
-                    'coverages' => $this->coverages($lead, $analysis->multiple ?? 30),
+                        ],
+                        
                     'expenses' => $this->expenses($lead),
+                    'planKey' => $analysis->plan_key ?? 'traditional',
+                    'occupation' => 'residencial',
+                    'inhabited' => (bool) $analysis->inhabited,
+                    'multiple' => $analysis->multiple ?? 30,
+                    'paymentConditions' => [
+                        'paymentType' => $analysis->payment_type
+                            ?? config('services.pottencial.default_payment_type', 'Boleto'),
+        
+                        'installments' => $analysis->installments
+                            ?? (int) config('services.pottencial.default_installments', 12),
+                    ],
+                    
                 ],
-            ],
 
-            'paymentConditions' => [
-                'paymentType' => $analysis->payment_type
-                    ?? config('services.pottencial.default_payment_type', 'Boleto'),
-
-                'installments' => $analysis->installments
-                    ?? (int) config('services.pottencial.default_installments', 12),
-            ],
-
-            'assistanceServices' => [
-                [
-                    'key' => config('services.pottencial.default_assistance', 'Complete'),
+                'assistanceServices' => [
+                    [
+                        'key' => config('services.pottencial.default_assistance', 'Complete'),
+                    ],
                 ],
             ],
         ];
@@ -101,18 +102,49 @@ class RentalGuaranteeQuotePayloadBuilder
 
     private function policyHolder($lead, string $document): array
     {
-        return [
-            'documentNumber' => $document,
-            'role' => 'PolicyHolder',
-            'main' => true,
-            'address' => $this->addressFromLead($lead),
-            'contact' => [
-                'name' => $lead->nome,
-                'email' => $lead->email,
-                'phoneNumber' => '',
-                'cellPhoneNumber' => \only_numbers($lead->tel ?? ''),
-            ],
-        ];
+        $participants = [
+                [
+                    'documentNumber' => $document,
+                    'role' => 'PolicyHolder',
+                    'main' => true,
+                    'address' => $this->addressFromLead($lead),
+                    'contact' => [
+                        'name' => $lead->nome,
+                        'email' => $lead->email,
+                        'phoneNumber' => '',
+                        'cellPhoneNumber' => \only_numbers($lead->tel ?? ''),
+                    ],
+                ],
+
+                [
+                    'documentNumber' => "33286641065",
+                    'participationPercentage' => 1,
+                    'role' => "Beneficiary",
+                    'address' => $this->addressFromLead($lead),
+                    'contact' => [
+                        'name' => $lead->nome,
+                        'email' => $lead->email,
+                        'phoneNumber' => '',
+                        'cellPhoneNumber' => \only_numbers($lead->tel ?? ''),
+                    ]
+
+                ],
+
+                [
+                    'documentNumber' => '68426024084',
+                    'role' => 'Insured',
+                    'address' => $this->addressFromLead($lead),
+                    'contact' => [
+                        'name' => $lead->nome,
+                        'email' => $lead->email,
+                        'phoneNumber' => '',
+                        'cellPhoneNumber' => \only_numbers($lead->tel ?? ''),
+                    ]
+                ]
+            
+            ];
+
+            return $participants;
     }
 
     private function addressFromLead($lead): array

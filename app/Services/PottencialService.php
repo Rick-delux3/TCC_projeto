@@ -25,26 +25,39 @@ class PottencialService
     public function getAccessToken(): ?string
     {
         return Cache::remember('pottencial_access_token', now()->addMinutes(55), function () {
+            if (!$this->baseUrl) {
+                Log::error('Base URL da Pottencial não configurada.');
+
+                return null;
+            }
+
+
             if (!$this->clientId || !$this->clientSecret) {
                 Log::error('Credenciais da Pottencial não configuradas.');
 
                 return null;
             }
 
+            $url = $this->baseUrl . '/oauth/v3/access-token';
+
+
             $response = Http::withBasicAuth($this->clientId, $this->clientSecret)
+                ->acceptJson()
                 ->timeout(30)
-                ->post($this->baseUrl . '/oauth/v3/access-token');
+                ->post($url);
 
             if (!$response->successful()) {
                 Log::warning('Erro ao gerar access_token da Pottencial', [
                     'status' => $response->status(),
+                    'http_status' => $response->status(),
+                    'raw_body' => $response->body(),
                     'body' => $response->body(),
                 ]);
 
                 return null;
             }
 
-            $data = $response->json();
+            $data = $this->safeJson($response);
 
             Log::info('Access token da Pottencial gerado com sucesso', [
                 'expires_in' => $data['expires_in'] ?? null,
@@ -93,89 +106,155 @@ class PottencialService
      */
     public function createRentalGuaranteeQuote(array $payload): array
     {
-        return $this->postJson('/insurance/v1/fianca-locaticia/quotes', $payload);
+        return $this->postJson('/insurance/v1/fianca-locaticia-mensalizado-pf/quotes', $payload);
     }
 
     public function getRentalGuaranteeQuote(string $quoteId): array
     {
-        return $this->getJson("/insurance/v1/fianca-locaticia/quotes/{$quoteId}");
+        return $this->getJson("/insurance/v1/fianca-locaticia-mensalizado-pf/quotes/{$quoteId}");
     }
 
     
 
     private function postJson(string $endpoint, array $payload): array
     {
+        $url = $this->baseUrl . $endpoint;
+
+        if(!$this->baseUrl){
+            return [
+                'success' => false,
+                'http_status' => null,
+                'endpoint' => $endpoint,
+                'url' => null,
+                'payload' => $payload,
+                'response' => [],
+                'raw_body' => null,
+                'error' => 'Configuração services.pottencial.base_url não encontrada.',
+            ];
+        }
+
+
         try {
             $response = Http::asJson()
+                ->acceptJson()
                 ->timeout(60)
                 ->withHeaders($this->authHeaders())
-                ->post($this->baseUrl . $endpoint, $payload);
+                ->post($url, $payload);
 
-            if (!$response->successful()) {
-                Log::warning('Erro ao solicitar cotação/análise na Pottencial', [
-                    'endpoint' => $endpoint,
-                    'status' => $response->status(),
-                    'body' => $response->body(),
-                ]);
-
-                return [
-                    'success' => false,
-                    'endpoint' => $endpoint,
-                    'status' => $response->status(),
-                    'response' => $response->json() ?? $response->body(),
-                ];
-            }
-
-            return [
-                'success' => true,
-                'endpoint' => $endpoint,
-                'status' => $response->status(),
-                'response' => $response->json(),
-            ];
+             return $this->normalizeResponse(
+                response: $response,
+                endpoint: $endpoint,
+                url: $url,
+                payload: $payload
+            );
+        
+            
         } catch (\Throwable $e) {
             Log::error('Falha inesperada ao chamar API da Pottencial', [
                 'endpoint' => $endpoint,
+                'url' => $url,
                 'message' => $e->getMessage(),
             ]);
 
             return [
                 'success' => false,
+                'http_status' => null,
                 'endpoint' => $endpoint,
-                'status' => null,
+                'url' => $url,
+                'payload' => $payload,
                 'response' => [
                     'message' => $e->getMessage(),
                 ],
+                'raw_body' => null,
+                'error' => $e->getMessage(),
             ];
         }
     }
 
     private function getJson(string $endpoint): array
     {
-        try {
-            $response = Http::timeout(60)
-                ->withHeaders($this->authHeaders())
-                ->get($this->baseUrl . $endpoint);
+        $url = $this->baseUrl . $endpoint;
 
+        if(!$this->baseUrl){
             return [
-                'success' => $response->successful(),
+                'success' => false,
+                'http_status' => null,
                 'endpoint' => $endpoint,
-                'status' => $response->status(),
-                'response' => $response->json() ?? $response->body(),
+                'url' => null,
+                'response' => [],
+                'raw_body' => null,
+                'error' => 'Configuração services.pottencial.base_url não encontrada.',
             ];
+        }
+
+        try {
+            $response = Http::acceptJson()
+                ->timeout(60)
+                ->withHeaders($this->authHeaders())
+                ->get($url);
+
+            return $this->normalizeResponse(
+                response: $response,
+                endpoint: $endpoint,
+                url: $url
+            );
         } catch (\Throwable $e) {
             Log::error('Falha inesperada ao consultar API da Pottencial', [
                 'endpoint' => $endpoint,
+                'url' => $url,
                 'message' => $e->getMessage(),
             ]);
 
             return [
                 'success' => false,
+                'http_status' => null,
                 'endpoint' => $endpoint,
-                'status' => null,
+                'url' => $url,
                 'response' => [
                     'message' => $e->getMessage(),
                 ],
+                'raw_body' => null,
+                'error' => $e->getMessage(),
             ];
+        }
+    }
+    private function normalizeResponse($response, string $endpoint, string $url, ?array $payload = null): array
+    {
+        $json = $this->safeJson($response);
+        $rawBody = $response->body();
+
+        $normalized = [
+            'success' => $response->successful(),
+            'http_status' => $response->status(),
+            'endpoint' => $endpoint,
+            'url' => $url,
+            'response' => is_array($json) ? $json : [],
+            'raw_body' => $rawBody,
+            'headers' => $response->headers(),
+        ];
+
+        if ($payload !== null) {
+            $normalized['payload'] = $payload;
+        }
+
+        Log::info('Resposta HTTP da Pottencial', [
+            'endpoint' => $endpoint,
+            'url' => $url,
+            'http_status' => $normalized['http_status'],
+            'success' => $normalized['success'],
+            'response' => $normalized['response'],
+            'raw_body' => $normalized['raw_body'],
+        ]);
+
+        return $normalized;
+    }
+
+    private function safeJson($response): mixed
+    {
+        try {
+            return $response->json();
+        } catch (\Throwable $e) {
+            return null;
         }
     }
 }

@@ -47,7 +47,8 @@ return [
     ],
 
     'pottencial' => [
-        'base_url' => env('POTTENCIAL_API_URL', 'https://api.pottencial.com.br'),
+        'base_url' => env('POTTENCIAL_API_URL', 'https://api-sandbox.pottencial.com.br'),
+        'rental_endpoint' => env('POTTENCIAL_RENTAL_GUARANTEE_ENDPOINT', '/insurance/v1/fianca-locaticia-mensalizado-pf/quotes'),
         'client_id' => env('POTTENCIAL_CLIENT_ID'),
         'client_secret' => env('POTTENCIAL_CLIENT_SECRET'),
         'real_estate_product_id' => env('POTTENCIAL_REAL_ESTATE_PRODUCT_ID'),

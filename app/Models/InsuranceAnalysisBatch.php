@@ -16,9 +16,13 @@ class InsuranceAnalysisBatch extends Model
         'started_at',
         'finished_at',
         'email_sent_at',
+        'email_status',
+        'email_failed_at',
+        'email_error',
     ];
 
     protected $casts = [
+        'email_failed_at' => 'datetime',
         'started_at' => 'datetime',
         'finished_at' => 'datetime',
         'email_sent_at' => 'datetime',

@@ -4,13 +4,13 @@ namespace App\Jobs;
 
 use App\Models\InsuranceAnalysis;
 use App\Services\Insurance\Providers\InsuranceProviderResolver;
+use Illuminate\Bus\Batchable;
 use Illuminate\Bus\Queueable;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
-use Illuminate\Bus\Batchable;
 
 class RunProviderAnalysisJob implements ShouldQueue
 {
@@ -25,7 +25,13 @@ class RunProviderAnalysisJob implements ShouldQueue
 
     public function handle(InsuranceProviderResolver $resolver): void
     {
-        $analysis = InsuranceAnalysis::with('lead.company', 'batch')->findOrFail($this->analysisId);
+        /*
+         * Carrega lead.company porque o builder da Pottencial precisa:
+         * - lead: dados do solicitante/PolicyHolder;
+         * - company: CNPJ da imobiliária cadastrada, se houver PolicyOwner.
+         */
+        $analysis = InsuranceAnalysis::with('lead.company', 'batch')
+            ->findOrFail($this->analysisId);
 
         $analysis->update([
             'status' => 'processing',
@@ -42,7 +48,18 @@ class RunProviderAnalysisJob implements ShouldQueue
         try {
             $provider = $resolver->resolve($analysis->provider);
 
+            /*
+             * Aqui o provider chama o service da companhia.
+             * Para Pottencial, retorna:
+             * success, http_status, endpoint, url, response, raw_body.
+             */
             $result = $provider->requestAnalysis($analysis);
+
+            Log::info('Resultado bruto recebido do provider', [
+                'analysis_id' => $analysis->id,
+                'provider' => $analysis->provider,
+                'result' => $result,
+            ]);
 
             $this->applyResult($analysis, $result);
         } catch (\Throwable $e) {
@@ -63,6 +80,11 @@ class RunProviderAnalysisJob implements ShouldQueue
                 'provider' => $analysis->provider,
                 'message' => $e->getMessage(),
             ]);
+
+            /*
+             * Mesmo falhando por exception, o lote precisa ser reavaliado.
+             */
+            $this->dispatchBatchCompletionCheck($analysis);
         }
     }
 
@@ -71,8 +93,11 @@ class RunProviderAnalysisJob implements ShouldQueue
         $response = $result['response'] ?? [];
         $httpStatus = $result['http_status'] ?? null;
         $rawBody = $result['raw_body'] ?? null;
+        $headers = $result['headers'] ?? [];
 
-
+        /*
+         * Payload salvo no banco para debug.
+         */
         $debugPayload = [
             'http_status' => $httpStatus,
             'success' => $result['success'] ?? false,
@@ -80,48 +105,95 @@ class RunProviderAnalysisJob implements ShouldQueue
             'url' => $result['url'] ?? null,
             'response' => $response,
             'raw_body' => $rawBody,
+            'headers' => $headers,
+            'error' => $result['error'] ?? null,
         ];
 
+         /**
+     * Caso 1:
+     * A requisição falhou de verdade.
+     *
+     * Exemplo:
+     * - HTTP 400
+     * - HTTP 401
+     * - HTTP 422
+     * - HTTP 500
+     */
         if (!($result['success'] ?? false)) {
             $analysis->update([
                 'status' => 'failed',
                 'response_payload' => $debugPayload,
-                'error_message' => is_array($response)
-                    ? json_encode($response, JSON_UNESCAPED_UNICODE)
-                    : (string) $rawBody,
+                'error_message' => $result['error']
+                    ?? (is_array($response)
+                        ? json_encode($response, JSON_UNESCAPED_UNICODE)
+                        : (string) $rawBody),
                 'finished_at' => now(),
             ]);
 
             $analysis->events()->create([
                 'event_type' => 'failed',
                 'status' => 'failed',
-                'message' => 'Falha HTTP ao chamar {$analysis->provider}. Status: {$httpStatus}',
+                'message' => "Falha HTTP ao chamar {$analysis->provider}. Status: {$httpStatus}",
                 'response' => $debugPayload,
             ]);
+
+            $this->dispatchBatchCompletionCheck($analysis);
 
             return;
         }
 
+         /**
+     * Tenta encontrar quoteId no JSON.
+     */
+
+        $providerStatus = $response['status'] ?? null;
+        $quoteId = $response['quoteId'] ?? null;
+
+
+        if (!$quoteId) {
+            $quoteId = $this->extractQuoteIdFromHeaders($headers);
+        }
+
+         /**
+     * Caso 2:
+     * A API retornou sucesso HTTP, mas sem JSON útil.
+     *
+     * Exemplo atual:
+     * HTTP 201
+     * raw_body = "undefined"
+     * response = []
+     *
+     * Isso NÃO deve virar "failed/ruim", porque a API aceitou a solicitação.
+     * Vamos marcar como manual_review/em negociação.
+     */
         if (empty($response)) {
             $analysis->update([
-                'status' => 'failed',
+                'status' => 'manual_review',
+                'result' => 'manual_review',
+                'provider_status' => 'CreatedWithoutBody',
+                'quote_id' => $quoteId,
+
                 'response_payload' => $debugPayload,
-                'error_message' => "A API retornou HTTP {$httpStatus}, mas a resposta JSON veio vazia.",
+                'error_message' => 'A API retornou sucesso HTTP, mas sem corpo JSON útil. Verifique headers e consulta de status.',
                 'finished_at' => now(),
             ]);
 
             $analysis->events()->create([
-                'event_type' => 'empty_response',
-                'status' => 'failed',
-                'message' => "A API retornou HTTP {$httpStatus}, mas sem resposta JSON útil.",
+                'event_type' => 'created_without_body',
+                'status' => 'manual_review',
+                'message' => "A API retornou HTTP {$httpStatus}, mas sem JSON útil. A análise foi marcada como em negociação.",
                 'response' => $debugPayload,
             ]);
+
+            $this->dispatchBatchCompletionCheck($analysis);
 
             return;
         }
 
-        $providerStatus = $response['status'] ?? null;
-        $quoteId = $response['quoteId'] ?? null;
+        /*
+         * Caso 3: veio JSON, mas sem os campos mínimos esperados.
+         */
+        
 
         if (!$providerStatus && !$quoteId) {
             $analysis->update([
@@ -138,20 +210,30 @@ class RunProviderAnalysisJob implements ShouldQueue
                 'response' => $debugPayload,
             ]);
 
+            $this->dispatchBatchCompletionCheck($analysis);
+
             return;
         }
 
-
+        /*
+         * Mapeia status da Pottencial para status interno do sistema.
+         */
         $internalStatus = match ($providerStatus) {
             'Approved' => 'approved',
             'Denied' => 'rejected',
             'UnderAnalysis', 'Pending' => 'manual_review',
+
+            /*
+             * Se vier quoteId mas não vier status conhecido,
+             * consideramos como cotado.
+             */
             default => 'quoted',
         };
 
         $analysis->update([
             'status' => $internalStatus,
-            'result' => in_array($internalStatus, ['approved', 'rejected', 'manual_review'])
+
+            'result' => in_array($internalStatus, ['approved', 'rejected', 'manual_review'], true)
                 ? $internalStatus
                 : null,
 
@@ -165,6 +247,7 @@ class RunProviderAnalysisJob implements ShouldQueue
             'insured_amount' => $this->extractInsuredAmount($response) ?? $analysis->insured_amount,
 
             'response_payload' => $debugPayload,
+            'error_message' => null,
             'finished_at' => now(),
         ]);
 
@@ -175,24 +258,78 @@ class RunProviderAnalysisJob implements ShouldQueue
             'response' => $debugPayload,
         ]);
 
-        if ($analysis->insurance_analysis_batch_id) {
-            CompleteInsuranceAnalysesBatchJob::dispatch($analysis->insurance_analysis_batch_id);
-        }
+        $this->dispatchBatchCompletionCheck($analysis);
     }
 
     private function extractPremiumAmount(array $response): ?float
     {
-        return $response['premiumAmount']
+        $value = $response['premiumAmount']
             ?? $response['premium']['total']
             ?? $response['availablePlans'][0]['premiumAmount']
             ?? $response['availablePlans'][0]['premium']['total']
             ?? null;
+
+        return $value !== null ? (float) $value : null;
     }
 
     private function extractInsuredAmount(array $response): ?float
     {
-        return $response['insuredAmount']
+        $value = $response['insuredAmount']
             ?? $response['availablePlans'][0]['insuredAmount']
             ?? null;
+
+        return $value !== null ? (float) $value : null;
+    }
+
+    /**
+     * Reavalia o lote depois que uma análise termina.
+     *
+     * Isso permite:
+     * - fechar o batch;
+     * - aplicar tag final no LeadLovers;
+     * - enviar e-mail.
+     */
+    private function dispatchBatchCompletionCheck(InsuranceAnalysis $analysis): void
+    {
+        if (!$analysis->insurance_analysis_batch_id) {
+            return;
+        }
+
+        CompleteInsuranceAnalysesBatchJob::dispatch(
+            $analysis->insurance_analysis_batch_id
+        );
+    }
+
+    private function extractQuoteIdFromHeaders(array $headers): ?string
+    {
+        /**
+         * Normalmente headers vêm assim:
+         *
+         * [
+         *   "Location" => [
+         *      "https://api.../quotes/123"
+         *   ]
+         * ]
+         *
+         * ou com letras minúsculas dependendo do client.
+         */
+        $location = $headers['Location'][0]
+            ?? $headers['location'][0]
+            ?? null;
+
+        if (!$location) {
+            return null;
+        }
+
+        /**
+         * Tenta pegar o último trecho da URL.
+         *
+         * Exemplo:
+         * /quotes/abc-123
+         * retorna abc-123
+         */
+        $parts = explode('/', trim($location, '/'));
+
+        return end($parts) ?: null;
     }
 }

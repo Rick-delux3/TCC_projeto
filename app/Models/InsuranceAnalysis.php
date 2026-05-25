@@ -21,7 +21,7 @@ class InsuranceAnalysis extends Model
         'provider',
         'product',
         'status',
-        'pottencial_status',
+        'provider_status',
         'result',
         'quote_id',
         'proposal_id',

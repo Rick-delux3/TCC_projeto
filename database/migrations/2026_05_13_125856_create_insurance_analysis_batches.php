@@ -38,6 +38,12 @@ return new class extends Migration
             $table->timestamp('finished_at')->nullable();
             $table->timestamp('email_sent_at')->nullable();
 
+            $table->string('email_status')->default('pending');
+            $table->timestamp('email_failed_at')->nullable();
+            $table->text('email_error')->nullable();
+
+            
+
 
             $table->timestamps();
         });

@@ -21,7 +21,7 @@ use App\Http\Controllers\CepController;
 
 
 
-//Route::get('/teste/token_acesso', [PottencialService::class, 'testAuthentication']);
+Route::get('/teste/token_acesso', [PottencialService::class, 'testAuthentication']);
 
 Route::view('/', 'index')->name('index');
 

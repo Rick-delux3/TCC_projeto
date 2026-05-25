@@ -4,11 +4,13 @@ namespace App\Jobs;
 
 use App\Models\InsuranceAnalysisBatch;
 use Illuminate\Bus\Queueable;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use Throwable;
 
 class SendAnalysisResultsEmailJob implements ShouldQueue
 {
@@ -23,23 +25,68 @@ class SendAnalysisResultsEmailJob implements ShouldQueue
 
     public function handle(): void
     {
-        $batch = InsuranceAnalysisBatch::with('lead', 'analyses')->findOrFail($this->batchId);
+        $batch = InsuranceAnalysisBatch::with([
+            'lead',
+            'analyses',
+        ])->findOrFail($this->batchId);
 
-        if ($batch->email_sent_at) return;
+        /*
+         * Evita envio duplicado.
+         */
+        if ($batch->email_sent_at) {
+            return;
+        }
 
         $lead = $batch->lead;
 
-        if(!$lead || !$lead->email) return;
+        if (!$lead || !$lead->email) {
+            $batch->update([
+                'email_status' => 'failed',
+                'email_failed_at' => now(),
+                'email_error' => 'Lead sem e-mail válido.',
+            ]);
 
-        // Depois você troca por um Mailable bonito.
-        Mail::raw($this->buildMessage($batch), function ($message) use ($batch) {
-            $message->to($batch->lead->email)
-                ->subject('Resultado da sua análise de Seguro Fiança');
-        });
+            return;
+        }
 
-        $batch->update([
-            'email_sent_at' => now(),
-        ]);
+        try {
+            $body = $this->buildMessage($batch);
+
+            Mail::raw($body, function ($message) use ($lead) {
+                $message->to($lead->email)
+                    ->subject('Resultado da sua análise de Seguro Fiança');
+            });
+
+            $batch->update([
+                'email_sent_at' => now(),
+                'email_status' => 'sent',
+                'email_failed_at' => null,
+                'email_error' => null,
+            ]);
+        } catch (Throwable $e) {
+            /*
+             * Salva o erro no banco para você ver no dashboard/admin depois.
+             */
+            $batch->update([
+                'email_status' => 'failed',
+                'email_failed_at' => now(),
+                'email_error' => $e->getMessage(),
+            ]);
+
+            Log::error('Erro ao enviar e-mail de resultado da análise', [
+                'batch_id' => $batch->id,
+                'lead_id' => $lead->id ?? null,
+                'lead_email' => $lead->email ?? null,
+                'message' => $e->getMessage(),
+            ]);
+
+            /*
+             * Como SMTP pode voltar depois, re-lançamos a exception para o Laravel
+             * controlar retry/failure. Se estiver usando Gmail com limite estourado,
+             * não adianta retry imediato; nesse caso use MAIL_MAILER=log ou Mailtrap.
+             */
+            throw $e;
+        }
     }
 
     private function buildMessage(InsuranceAnalysisBatch $batch): string
@@ -65,6 +112,8 @@ class SendAnalysisResultsEmailJob implements ShouldQueue
         $lines[] = "";
 
         foreach ($batch->analyses as $analysis) {
+            $response = $analysis->response_payload['response'] ?? [];
+
             $lines[] = "Companhia: " . strtoupper($analysis->provider);
             $lines[] = "Status: " . $this->formatStatus($analysis->status);
 
@@ -76,12 +125,32 @@ class SendAnalysisResultsEmailJob implements ShouldQueue
                 $lines[] = "Código da cotação: {$analysis->quote_id}";
             }
 
-            if ($analysis->premium_amount) {
-                $lines[] = "Orçamento estimado: R$ " . number_format($analysis->premium_amount, 2, ',', '.');
+            if (!empty($response['productKey'])) {
+                $lines[] = "Produto: {$response['productKey']}";
             }
 
-            if ($analysis->error_message) {
-                $lines[] = "Observação: {$analysis->error_message}";
+            if ($analysis->premium_amount) {
+                $lines[] = "Orçamento estimado: R$ " . number_format((float) $analysis->premium_amount, 2, ',', '.');
+            }
+
+            if (!empty($response['commercialPremium'])) {
+                $lines[] = "Prêmio comercial: R$ " . number_format((float) $response['commercialPremium'], 2, ',', '.');
+            }
+
+            if (!empty($response['grossPremium'])) {
+                $lines[] = "Prêmio bruto: R$ " . number_format((float) $response['grossPremium'], 2, ',', '.');
+            }
+
+            if (!empty($response['iof'])) {
+                $lines[] = "IOF: R$ " . number_format((float) $response['iof'], 2, ',', '.');
+            }
+
+            if ($analysis->status === 'manual_review') {
+                $lines[] = "Observação: sua análise foi recebida e está em negociação/validação pela companhia.";
+            }
+
+            if ($analysis->status === 'failed' && $analysis->error_message) {
+                $lines[] = "Erro técnico: {$analysis->error_message}";
             }
 
             $lines[] = "";
