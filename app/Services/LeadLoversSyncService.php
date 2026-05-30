@@ -2,7 +2,7 @@
 
 namespace App\Services;
 
-use App\Models\Company;
+use App\Models\Imobiliaria;
 use App\Models\Lead;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -15,11 +15,11 @@ class LeadLoversSyncService
 
     public function __construct()
     {
-        $this->baseUrl = rtrim(config('services.leadlovers.base_url', 'https://llapi.leadlovers.com/webapi/'), '/') . '/';
+        $this->baseUrl = config('services.leadlovers.base_url', 'https://llapi.leadlovers.com/webapi/');
         $this->token = config('services.leadlovers.token');
     }
 
-    public function syncCompanyLeads(Company $company): void
+    public function syncCompanyLeads(Imobiliaria $company): void
     {
         $page = 1;
         $maxPages = 25;
@@ -150,20 +150,35 @@ class LeadLoversSyncService
                     continue;
                 }
 
-                Lead::updateOrCreate(
-                    [
-                        'email' => $email,
-                        'company_id' => $company->id,
-                    ],
-                    [
-                        'nome' => $leadData['Name'] ?? 'Sem Nome',
-                        'tel' => $leadData['Phone'] ?? null,
-                        'cidade_imovel' => $leadData['City'] ?? null,
-                        'imobiliaria' => $company->name,
-                        'tags_originais' => $tags->implode(', '),
-                        'status' => $this->definirStatus($tags, $companyTag),
-                    ]
-                );
+                $lead = Lead::firstOrNew([
+                    'email' => $email,
+                    'company_id' => $company->id,
+                ]);
+
+                $lead->fill([
+                    'nome' => $leadData['Name'] ?? 'Sem Nome',
+                    'tel' => $leadData['Phone'] ?? null,
+                    'imobiliaria' => $company->name,
+                    'tags_originais' => $tags->implode(', '),
+                    'status' => $this->definirStatus($tags, $companyTag),
+                ]);
+
+                if (!$lead->exists) {
+                    $lead->tipo_solicitante = 'imobiliaria_cadastrada';
+                    $lead->origem = 'leadlovers_sync';
+                }
+
+                $lead->save();
+
+                if (filled($leadData['City'] ?? null) || filled($leadData['State'] ?? null)) {
+                    $lead->endereco()->updateOrCreate(
+                        ['lead_id' => $lead->id],
+                        [
+                            'cidade_imovel' => $leadData['City'] ?? null,
+                            'estado' => $leadData['State'] ?? null,
+                        ]
+                    );
+                }
             }
 
             if (count($leadsDaPagina) < $numRegisters) {

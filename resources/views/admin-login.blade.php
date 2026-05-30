@@ -20,7 +20,7 @@
             <header class="admin-auth-header">
                 <span class="admin-auth-badge">Acesso Restrito</span>
                 <h1>Login Administrativo</h1>
-                <p>Informe CPF e senha para entrar no painel de administradores.</p>
+                <p>Informe CPF e senha para entrar no painel de corretores.</p>
             </header>
 
             <form action="{{ route('admin.login.post') }}" method="POST" autocomplete="off" class="admin-auth-form">
@@ -56,7 +56,7 @@
 
                 <div class="admin-auth-actions">
                     <button type="submit" class="admin-submit">Entrar</button>
-                    <a href="{{ route('admin.register.form') }}" class="admin-outline-link">Criar Admin</a>
+                    <a href="{{ route('admin.register.form') }}" class="admin-outline-link">Criar corretor</a>
                 </div>
             </form>
         </div>

@@ -2,7 +2,7 @@
 
 namespace App\Jobs;
 
-use App\Models\Company;
+use App\Models\Imobiliaria;
 use App\Services\LeadLoversSyncService;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -23,7 +23,7 @@ class SyncCompanyLeadLoversLeadsJob implements ShouldQueue
 
     public function handle(LeadLoversSyncService $syncService): void
     {
-        $company = Company::findOrFail($this->companyId);
+        $company = Imobiliaria::findOrFail($this->companyId);
 
         Log::info('JOB: sincronização iniciada', [
             'company_id' => $company->id,
@@ -70,7 +70,7 @@ class SyncCompanyLeadLoversLeadsJob implements ShouldQueue
 
     public function failed(Throwable $exception): void
     {
-        $company = Company::find($this->companyId);
+        $company = Imobiliaria::find($this->companyId);
 
         if ($company) {
             $company->update([

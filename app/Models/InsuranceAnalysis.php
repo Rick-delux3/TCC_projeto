@@ -5,7 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use App\Models\Lead;
-use App\Models\Company;
+use App\Models\Imobiliaria;
 use App\Models\InsuranceAnalysisEvent;
 use App\Models\InsuranceAnalysisBatch;
 
@@ -13,6 +13,8 @@ use App\Models\InsuranceAnalysisBatch;
 class InsuranceAnalysis extends Model
 {
     use HasFactory;
+
+    protected $table = 'analises_seguro';
 
     protected $fillable = [
         'insurance_analysis_batch_id',
@@ -24,12 +26,17 @@ class InsuranceAnalysis extends Model
         'provider_status',
         'result',
         'quote_id',
+        'quote_number',
         'proposal_id',
         'policy_id',
+        'product_key',
         'rent_amount',
         'charges_amount',
         'total_monthly_amount',
         'premium_amount',
+        'commercial_premium',
+        'gross_premium',
+        'iof',
         'insured_amount',
         'plan_key',
         'multiple',
@@ -57,6 +64,15 @@ class InsuranceAnalysis extends Model
         'request_payload' => 'array',
         'response_payload' => 'array',
 
+        'rent_amount' => 'decimal:2',
+        'charges_amount' => 'decimal:2',
+        'total_monthly_amount' => 'decimal:2',
+        'premium_amount' => 'decimal:2',
+        'commercial_premium' => 'decimal:2',
+        'gross_premium' => 'decimal:2',
+        'iof' => 'decimal:2',
+        'insured_amount' => 'decimal:2',
+
         'lease_start_date' => 'date',
         'lease_end_date' => 'date',
 
@@ -71,6 +87,11 @@ class InsuranceAnalysis extends Model
 
 
     public function batch(){
+        return $this->lote();
+    }
+
+    public function lote()
+    {
         return $this->belongsTo(InsuranceAnalysisBatch::class, 'insurance_analysis_batch_id');
     }
     
@@ -79,10 +100,20 @@ class InsuranceAnalysis extends Model
     }
 
     public function company(){
-        return $this->belongsTo(Company::class);
+        return $this->imobiliaria();
+    }
+
+    public function imobiliaria()
+    {
+        return $this->belongsTo(Imobiliaria::class, 'company_id');
     }
 
     public function events(){
-        return $this->hasMany(InsuranceAnalysisEvent::class);
+        return $this->eventos();
+    }
+
+    public function eventos()
+    {
+        return $this->hasMany(InsuranceAnalysisEvent::class, 'insurance_analysis_id');
     }
 }

@@ -3,7 +3,7 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
-use App\Models\Company;
+use App\Models\Imobiliaria;
 use App\Jobs\SyncCompanyLeadLoversLeadsJob;
 
 class DashboardController extends Controller
@@ -12,7 +12,7 @@ class DashboardController extends Controller
      * Dispara a sincronização dos leads da imobiliária com a LeadLovers.
      * Retorna false se já houver uma sincronização na fila ou em execução.
      */
-    private function queueCompanySync(Company $company): bool
+    private function queueCompanySync(Imobiliaria $company): bool
     {
         if (in_array($company->sync_status, ['queued', 'running'], true)) {
             return false;
@@ -32,7 +32,7 @@ class DashboardController extends Controller
      * Garante que a imobiliária tenha uma chave de acesso.
      * Isso protege empresas antigas criadas antes da nova lógica.
      */
-    private function ensureLeadAccessCode(Company $company): void
+    private function ensureLeadAccessCode(Imobiliaria $company): void
     {
         if (filled($company->lead_access_code)) {
             return;
@@ -40,7 +40,7 @@ class DashboardController extends Controller
 
         do {
             $code = $this->randomAlphaNumericCode(6);
-        } while (Company::where('lead_access_code', $code)->exists());
+        } while (Imobiliaria::where('lead_access_code', $code)->exists());
 
         $company->lead_access_code = $code;
 
@@ -85,9 +85,9 @@ class DashboardController extends Controller
                 'authenticated' => false,
                 'message' => 'Usuário não autenticado.',
             ], 401);
-        }
+        };
 
-        $company = Company::find($companyId);
+        $company = Imobiliaria::find($companyId);
 
         if (!$company) {
             return response()->json([
@@ -116,7 +116,7 @@ class DashboardController extends Controller
             return redirect()->route('empresa.login');
         }
 
-        $company = Company::find($companyId);
+        $company = Imobiliaria::find($companyId);
 
         if (!$company) {
             return redirect()
@@ -168,6 +168,7 @@ class DashboardController extends Controller
          * Query principal dos leads exibidos na tabela.
          */
         $leadsQuery = $company->leads()
+            ->with('endereco')
             ->orderBy('created_at', 'desc');
 
         if (filled($selectedTag)) {
@@ -270,7 +271,7 @@ class DashboardController extends Controller
                 ->with('success', 'Sua sessão expirou. Entre novamente para sincronizar os leads.');
         }
 
-        $company = Company::find($companyId);
+        $company = Imobiliaria::find($companyId);
 
         if (!$company) {
             return redirect()

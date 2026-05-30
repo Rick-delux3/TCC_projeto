@@ -125,24 +125,36 @@ class SendAnalysisResultsEmailJob implements ShouldQueue
                 $lines[] = "Código da cotação: {$analysis->quote_id}";
             }
 
-            if (!empty($response['productKey'])) {
-                $lines[] = "Produto: {$response['productKey']}";
+            if ($analysis->quote_number) {
+                $lines[] = "Número da cotação: {$analysis->quote_number}";
+            }
+
+            $productKey = $analysis->product_key ?? $response['productKey'] ?? null;
+
+            if ($productKey) {
+                $lines[] = "Produto: {$productKey}";
             }
 
             if ($analysis->premium_amount) {
                 $lines[] = "Orçamento estimado: R$ " . number_format((float) $analysis->premium_amount, 2, ',', '.');
             }
 
-            if (!empty($response['commercialPremium'])) {
-                $lines[] = "Prêmio comercial: R$ " . number_format((float) $response['commercialPremium'], 2, ',', '.');
+            $commercialPremium = $analysis->commercial_premium ?? $response['commercialPremium'] ?? null;
+
+            if ($commercialPremium) {
+                $lines[] = "Prêmio comercial: R$ " . number_format((float) $commercialPremium, 2, ',', '.');
             }
 
-            if (!empty($response['grossPremium'])) {
-                $lines[] = "Prêmio bruto: R$ " . number_format((float) $response['grossPremium'], 2, ',', '.');
+            $grossPremium = $analysis->gross_premium ?? $response['grossPremium'] ?? null;
+
+            if ($grossPremium) {
+                $lines[] = "Prêmio bruto: R$ " . number_format((float) $grossPremium, 2, ',', '.');
             }
 
-            if (!empty($response['iof'])) {
-                $lines[] = "IOF: R$ " . number_format((float) $response['iof'], 2, ',', '.');
+            $iof = $analysis->iof ?? $response['iof'] ?? null;
+
+            if ($iof) {
+                $lines[] = "IOF: R$ " . number_format((float) $iof, 2, ',', '.');
             }
 
             if ($analysis->status === 'manual_review') {

@@ -11,7 +11,7 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('insurance_analysis_batches', function (Blueprint $table) {
+        Schema::create('lotes_analises_seguro', function (Blueprint $table) {
             $table->id();
 
             $table->unsignedBigInteger('lead_id');
@@ -25,7 +25,7 @@ return new class extends Migration
 
             $table->foreign('company_id')
                 ->references('id')
-                ->on('companies')
+                ->on('imobiliarias')
                 ->nullOnDelete();
 
             $table->string('status')->default('pending');
@@ -54,6 +54,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('insurance_analysis_batches');
+        Schema::dropIfExists('lotes_analises_seguro');
     }
 };

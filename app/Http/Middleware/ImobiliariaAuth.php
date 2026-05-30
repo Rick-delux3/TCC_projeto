@@ -6,7 +6,7 @@ use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 
-class CompanyAuth
+class ImobiliariaAuth
 {
     public function handle($request, Closure $next)
     {

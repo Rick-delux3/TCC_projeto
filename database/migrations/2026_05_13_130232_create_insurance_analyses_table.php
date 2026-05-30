@@ -11,7 +11,7 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('insurance_analyses', function (Blueprint $table) {
+        Schema::create('analises_seguro', function (Blueprint $table) {
             $table->id();
 
             $table->unsignedBigInteger('insurance_analysis_batch_id')->nullable();
@@ -33,8 +33,10 @@ return new class extends Migration
 
             // IDs retornados pela API
             $table->string('quote_id')->nullable();
+            $table->string('quote_number')->nullable();
             $table->string('proposal_id')->nullable();
             $table->string('policy_id')->nullable();
+            $table->string('product_key')->nullable();
 
             $table->string('plan_key')->nullable();
             $table->integer('multiple')->nullable();
@@ -51,6 +53,9 @@ return new class extends Migration
 
             // Valor de prêmio/orçamento, se a API retornar
             $table->decimal('premium_amount', 10, 2)->nullable();
+            $table->decimal('commercial_premium', 10, 2)->nullable();
+            $table->decimal('gross_premium', 10, 2)->nullable();
+            $table->decimal('iof', 10, 2)->nullable();
             $table->decimal('insured_amount', 12, 2)->nullable();
 
             // Pagamento
@@ -85,12 +90,12 @@ return new class extends Migration
 
             $table->foreign('company_id')
                 ->references('id')
-                ->on('companies')
+                ->on('imobiliarias')
                 ->nullOnDelete();
                 
             $table->foreign('insurance_analysis_batch_id')
                 ->references('id')
-                ->on('insurance_analysis_batches')
+                ->on('lotes_analises_seguro')
                 ->nullOnDelete();
 
             $table->timestamps();
@@ -102,6 +107,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('insurance_analyses');
+        Schema::dropIfExists('analises_seguro');
     }
 };

@@ -4,9 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use App\Models\Company;
 use App\Models\InsuranceAnalysis;
-use App\Models\InsuranceAnalysisEvent;
 use App\Models\InsuranceAnalysisBatch;
 
 
@@ -15,40 +13,18 @@ class Lead extends Model
 {
     use HasFactory;
 
+    protected $table = 'leads';
+
     // Permite salvar dados em massa via Webhook
     protected $fillable = [
         'company_id',
         'tipo_solicitante',
         'cpf',
-        'conjuge_cpf',
-        'conjuge_nome',
         'estado_civil',
-        'cidade_imovel',
-        'bairro',
-        'logradouro',
-        'numero',
-        'complemento',
-        'cep',
-        'estado',
         'imobiliaria',
         'nome', 
         'email', 
         'tel',
-        'valor_aluguel',
-        'valor_agua',
-        'valor_luz',
-        'valor_gas',
-        'valor_condominio',
-        'valor_iptu',
-        'outras_despesas',
-        'valor_total_encargos',
-        'nome_imobiliaria_informada',
-        'cnpj_imobiliaria_informada',
-        'nome_locador',
-        'telefone_locador',
-        'email_locador',
-        'responsavel_preenchimento',
-        'telefone_responsavel',
         'tags_originais', 
         'status',
         'origem',
@@ -59,18 +35,11 @@ class Lead extends Model
         'leadlovers_status',
         'leadlovers_response',
         'sent_to_leadlovers_at',
-
+        'created_by_admin_id',
+        'updated_by_admin_id',
     ];
 
     protected $casts = [
-        'valor_aluguel' => 'decimal:2',
-        'outras_despesas' => 'decimal:2',
-        'valor_agua' => 'decimal:2',
-        'valor_luz' => 'decimal:2',
-        'valor_gas' => 'decimal:2',
-        'valor_condominio' => 'decimal:2',
-        'valor_iptu' => 'decimal:2',
-        'valor_total_encargos' => 'decimal:2',
         'leadlovers_response' => 'array',
         'sent_to_leadlovers_at' => 'datetime',
         'aceite_termos' => 'boolean',
@@ -82,19 +51,100 @@ class Lead extends Model
      */
     public function company()
     {
-        return $this->belongsTo(Company::class);
+        return $this->imobiliaria();
     }
 
-    public function insuranceAnalyses(){
+    public function imobiliaria()
+    {
+        return $this->belongsTo(Imobiliaria::class, 'company_id');
+    }
+
+    public function endereco()
+    {
+        return $this->hasOne(LeadEnderecos::class);
+    }
+
+    public function despesas()
+    {
+        return $this->hasOne(LeadDespesas::class);
+    }
+
+    public function locadores()
+    {
+        return $this->locador();
+    }
+
+    public function locador()
+    {
+        return $this->hasOne(LeadLocadores::class);
+    }
+
+    public function conjugues()
+    {
+        return $this->conjuge();
+    }
+
+    public function conjuge()
+    {
+        return $this->hasOne(LeadConjugues::class);
+    }
+
+    public function leadImobInformada()
+    {
+        return $this->imobiliariaInformada();
+    }
+
+    public function imobiliariaInformada()
+    {
+        return $this->hasOne(LeadImobiliariaInformada::class);
+    }
+
+    public function insuranceAnalyses()
+    {
+        return $this->analisesSeguro();
+    }
+
+    public function analisesSeguro()
+    {
         return $this->hasMany(InsuranceAnalysis::class);
     }
 
     public function latestInsuranceAnalysis()
     {
+        return $this->ultimaAnaliseSeguro();
+    }
+
+    public function ultimaAnaliseSeguro()
+    {
         return $this->hasOne(InsuranceAnalysis::class);
     }
 
-    public function insuranceAnalysesBatches(){
+    public function insuranceAnalysesBatches()
+    {
+        return $this->lotesAnalisesSeguro();
+    }
+
+    public function lotesAnalisesSeguro()
+    {
         return $this->hasMany(InsuranceAnalysisBatch::class);
+    }
+    public function createdByAdmin()
+    {
+        return $this->belongsTo(Corretor::class, 'created_by_admin_id');
+    }
+
+    public function createdByCorretor()
+    {
+        return $this->belongsTo(Corretor::class, 'created_by_admin_id');
+    }
+
+    public function updatedByAdmin()
+    {
+        return $this->belongsTo(Corretor::class, 'updated_by_admin_id');
+    }
+
+    public function updatedByCorretor()
+    {
+        return $this->belongsTo(Corretor::class, 'updated_by_admin_id');
     }
 }

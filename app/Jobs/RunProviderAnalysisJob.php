@@ -30,7 +30,15 @@ class RunProviderAnalysisJob implements ShouldQueue
          * - lead: dados do solicitante/PolicyHolder;
          * - company: CNPJ da imobiliária cadastrada, se houver PolicyOwner.
          */
-        $analysis = InsuranceAnalysis::with('lead.company', 'batch')
+        $analysis = InsuranceAnalysis::with([
+            'lead.company',
+            'lead.endereco',
+            'lead.despesas',
+            'lead.conjuge',
+            'lead.locador',
+            'lead.imobiliariaInformada',
+            'batch',
+        ])
             ->findOrFail($this->analysisId);
 
         $analysis->update([
@@ -146,8 +154,8 @@ class RunProviderAnalysisJob implements ShouldQueue
      * Tenta encontrar quoteId no JSON.
      */
 
-        $providerStatus = $response['status'] ?? null;
-        $quoteId = $response['quoteId'] ?? null;
+        $providerStatus = $this->extractProviderStatus($response);
+        $quoteId = $this->extractQuoteIdFromResponse($response);
 
 
         if (!$quoteId) {
@@ -239,11 +247,16 @@ class RunProviderAnalysisJob implements ShouldQueue
 
             'provider_status' => $providerStatus,
             'quote_id' => $quoteId ?? $analysis->quote_id,
+            'quote_number' => $this->extractQuoteNumber($response) ?? $analysis->quote_number,
+            'product_key' => $this->extractProductKey($response) ?? $analysis->product_key,
 
             'available_plans' => $response['availablePlans'] ?? $analysis->available_plans,
             'available_assistances' => $response['availableAssistances'] ?? $analysis->available_assistances,
 
             'premium_amount' => $this->extractPremiumAmount($response) ?? $analysis->premium_amount,
+            'commercial_premium' => $this->extractCommercialPremium($response) ?? $analysis->commercial_premium,
+            'gross_premium' => $this->extractGrossPremium($response) ?? $analysis->gross_premium,
+            'iof' => $this->extractIof($response) ?? $analysis->iof,
             'insured_amount' => $this->extractInsuredAmount($response) ?? $analysis->insured_amount,
 
             'response_payload' => $debugPayload,
@@ -263,22 +276,136 @@ class RunProviderAnalysisJob implements ShouldQueue
 
     private function extractPremiumAmount(array $response): ?float
     {
-        $value = $response['premiumAmount']
-            ?? $response['premium']['total']
-            ?? $response['availablePlans'][0]['premiumAmount']
-            ?? $response['availablePlans'][0]['premium']['total']
-            ?? null;
+        $value = $this->firstValue($response, [
+            'premiumAmount',
+            'premium.total',
+            'quote.premiumAmount',
+            'quote.premium.total',
+            'data.premiumAmount',
+            'data.premium.total',
+            'availablePlans.0.premiumAmount',
+            'availablePlans.0.premium.total',
+        ]);
 
         return $value !== null ? (float) $value : null;
     }
 
+    private function extractProviderStatus(array $response): ?string
+    {
+        $value = $this->firstValue($response, [
+            'status',
+            'quote.status',
+            'data.status',
+        ]);
+
+        return $value !== null ? (string) $value : null;
+    }
+
+    private function extractQuoteIdFromResponse(array $response): ?string
+    {
+        $value = $this->firstValue($response, [
+            'quoteId',
+            'quote_id',
+            'id',
+            'quote.quoteId',
+            'quote.id',
+            'data.quoteId',
+            'data.id',
+        ]);
+
+        return $value !== null ? (string) $value : null;
+    }
+
+    private function extractQuoteNumber(array $response): ?string
+    {
+        $value = $this->firstValue($response, [
+            'quoteNumber',
+            'quote_number',
+            'number',
+            'quote.quoteNumber',
+            'quote.number',
+            'data.quoteNumber',
+            'data.number',
+        ]);
+
+        return $value !== null && $value !== '' ? (string) $value : null;
+    }
+
+    private function extractProductKey(array $response): ?string
+    {
+        $value = $this->firstValue($response, [
+            'productKey',
+            'product_key',
+            'quote.productKey',
+            'data.productKey',
+            'availablePlans.0.productKey',
+        ]);
+
+        return $value !== null && $value !== '' ? (string) $value : null;
+    }
+
+    private function extractCommercialPremium(array $response): ?float
+    {
+        $value = $this->firstValue($response, [
+            'commercialPremium',
+            'commercial_premium',
+            'quote.commercialPremium',
+            'data.commercialPremium',
+            'availablePlans.0.commercialPremium',
+        ]);
+
+        return $value !== null && $value !== '' ? (float) $value : null;
+    }
+
+    private function extractGrossPremium(array $response): ?float
+    {
+        $value = $this->firstValue($response, [
+            'grossPremium',
+            'gross_premium',
+            'quote.grossPremium',
+            'data.grossPremium',
+            'availablePlans.0.grossPremium',
+        ]);
+
+        return $value !== null && $value !== '' ? (float) $value : null;
+    }
+
+    private function extractIof(array $response): ?float
+    {
+        $value = $this->firstValue($response, [
+            'iof',
+            'IOF',
+            'quote.iof',
+            'data.iof',
+            'availablePlans.0.iof',
+        ]);
+
+        return $value !== null && $value !== '' ? (float) $value : null;
+    }
+
     private function extractInsuredAmount(array $response): ?float
     {
-        $value = $response['insuredAmount']
-            ?? $response['availablePlans'][0]['insuredAmount']
-            ?? null;
+        $value = $this->firstValue($response, [
+            'insuredAmount',
+            'quote.insuredAmount',
+            'data.insuredAmount',
+            'availablePlans.0.insuredAmount',
+        ]);
 
         return $value !== null ? (float) $value : null;
+    }
+
+    private function firstValue(array $response, array $paths): mixed
+    {
+        foreach ($paths as $path) {
+            $value = data_get($response, $path);
+
+            if ($value !== null && $value !== '') {
+                return $value;
+            }
+        }
+
+        return null;
     }
 
     /**

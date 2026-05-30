@@ -60,12 +60,12 @@ return [
         ],
 
         'companies' => [
-        'driver' => 'eloquent',
-        'model' => App\Models\Company::class,
+            'driver' => 'eloquent',
+            'model' => App\Models\Imobiliaria::class,
         ],
         'admins' => [
             'driver' => 'eloquent',
-            'model' => App\Models\Admins::class,
+            'model' => App\Models\Corretor::class,
         ],
 
         

@@ -12,7 +12,7 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('companies', function (Blueprint $table) {
+        Schema::table('imobiliarias', function (Blueprint $table) {
             $table->timestamp('sincronizado_em')->nullable()->after('state');
         });
     }
@@ -22,7 +22,7 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::table('companies', function (Blueprint $table) {
+        Schema::table('imobiliarias', function (Blueprint $table) {
             $table->dropColumn('sincronizado_em');
         });
     }

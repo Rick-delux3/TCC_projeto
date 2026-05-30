@@ -19,11 +19,12 @@ class StoreSimulationLeadRequest extends FormRequest
     {
         $this->merge([
             'nome' => $this->limparTexto($this->nome),
-            'email' => mb_strtolower(trim((string) $this->email)),
+            'email' => $this->normalizarEmail($this->email),
             'cpf' => $this->somenteNumeros($this->cpf),
+            'cnpj' => $this->somenteNumeros($this->cnpj),
             'tel' => $this->somenteNumeros($this->tel),
 
-            'estado_civil' => mb_strtolower(trim((string) $this->estado_civil)),
+            'estado_civil' => $this->normalizarMinusculo($this->estado_civil),
             'conjuge_nome' => $this->limparTexto($this->conjuge_nome),
             'conjuge_cpf' => $this->somenteNumeros($this->conjuge_cpf),
 
@@ -41,7 +42,7 @@ class StoreSimulationLeadRequest extends FormRequest
             'complemento' => $this->limparTexto($this->complemento),
             'bairro' => $this->limparTexto($this->bairro),
             'cidade_imovel' => $this->limparTexto($this->cidade_imovel),
-            'estado' => mb_strtoupper(trim((string) $this->estado)),
+            'estado' => $this->normalizarMaiusculo($this->estado),
 
             'responsavel_preenchimento' => $this->limparTexto($this->responsavel_preenchimento),
             'telefone_responsavel' => $this->somenteNumeros($this->telefone_responsavel),
@@ -52,7 +53,7 @@ class StoreSimulationLeadRequest extends FormRequest
 
             'nome_locador' => $this->limparTexto($this->nome_locador),
             'telefone_locador' => $this->somenteNumeros($this->telefone_locador),
-            'email_locador' => mb_strtolower(trim((string) $this->email_locador)),
+            'email_locador' => $this->normalizarEmail($this->email_locador),
         ]);
     }
 
@@ -343,7 +344,9 @@ class StoreSimulationLeadRequest extends FormRequest
             return null;
         }
 
-        return preg_replace('/\D/', '', (string) $valor);
+        $valor = preg_replace('/\D/', '', (string) $valor);
+
+        return $valor === '' ? null : $valor;
     }
 
     private function limparTexto($valor): ?string
@@ -352,7 +355,30 @@ class StoreSimulationLeadRequest extends FormRequest
             return null;
         }
 
-        return trim(preg_replace('/\s+/', ' ', (string) $valor));
+        $valor = trim(preg_replace('/\s+/', ' ', (string) $valor));
+
+        return $valor === '' ? null : $valor;
+    }
+
+    private function normalizarEmail($valor): ?string
+    {
+        $valor = $this->limparTexto($valor);
+
+        return $valor === null ? null : mb_strtolower($valor);
+    }
+
+    private function normalizarMinusculo($valor): ?string
+    {
+        $valor = $this->limparTexto($valor);
+
+        return $valor === null ? null : mb_strtolower($valor);
+    }
+
+    private function normalizarMaiusculo($valor): ?string
+    {
+        $valor = $this->limparTexto($valor);
+
+        return $valor === null ? null : mb_strtoupper($valor);
     }
 
     private function normalizarDinheiro($valor): ?string

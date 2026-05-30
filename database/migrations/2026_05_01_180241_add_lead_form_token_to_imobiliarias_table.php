@@ -11,7 +11,7 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('companies', function (Blueprint $table) {
+        Schema::table('imobiliarias', function (Blueprint $table) {
             $table->string('lead_form_token', 80)->nullable()->unique()->after('sync_error');
             $table->boolean('lead_form_active')->default(true)->after('lead_form_token');
         });
@@ -22,7 +22,7 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::table('companies', function (Blueprint $table) {
+        Schema::table('imobiliarias', function (Blueprint $table) {
             $table->dropColumn(['lead_form_token', 'lead_form_active']);
         });
     }

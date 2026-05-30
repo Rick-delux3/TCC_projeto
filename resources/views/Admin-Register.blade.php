@@ -11,7 +11,7 @@
                 <span class="admin-badge">Area administrativa</span>
                 <h2>Painel de cadastro de corretores administradores</h2>
                 <p>
-                    Este acesso e exclusivo para cadastro interno de administradores
+                    Este acesso e exclusivo para cadastro interno de corretores
                     responsaveis por acompanhar imobiliarias, clientes e analises.
                 </p>
 
@@ -26,7 +26,7 @@
         <div class="admin-register-card">
             <header class="admin-register-header">
                 <span class="admin-register-kicker">Acesso restrito</span>
-                <h1>Cadastrar administrador</h1>
+                <h1>Cadastrar corretor</h1>
                 <p>Preencha os dados abaixo para criar um novo acesso administrativo.</p>
             </header>
 
@@ -58,7 +58,7 @@
                             name="email"
                             class="admin-input"
                             value="{{ old('email') }}"
-                            placeholder="admin@corretora.com.br"
+                            placeholder="corretor@corretora.com.br"
                             autocomplete="username"
                             required
                         >
@@ -125,7 +125,7 @@
                 </div>
 
                 <div class="admin-actions">
-                    <button type="submit" class="admin-submit">Cadastrar administrador</button>
+                    <button type="submit" class="admin-submit">Cadastrar corretor</button>
                     <a href="{{ route('admin.login') }}" class="admin-outline-link">Entrar</a>
                 </div>
             </form>

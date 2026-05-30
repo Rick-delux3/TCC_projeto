@@ -18,6 +18,8 @@ class InsuranceAnalysisService
 
     public function createPendingAnalysis(Lead $lead, ?string $startDate = null): InsuranceAnalysis
     {
+        $lead->loadMissing('despesas');
+
         $leaseMonths = (int) config('services.pottencial.default_lease_months', 30);
 
         $start = $startDate
@@ -26,17 +28,17 @@ class InsuranceAnalysisService
 
         $end = $start->copy()->addMonthsNoOverflow($leaseMonths);
 
-        $rent = (float) ($lead->valor_aluguel ?? 0);
+        $rent = $this->expenseValue($lead, 'valor_aluguel') ?? 0.0;
 
         $agua = $this->valorAgua($lead);
         $luz = $this->valorLuz($lead);
 
-        $charges = (float) ($lead->valor_condominio ?? 0)
-            + (float) ($lead->valor_iptu ?? 0)
-            + (float) ($lead->valor_gas ?? 0)
+        $charges = ($this->expenseValue($lead, 'valor_condominio') ?? 0.0)
+            + ($this->expenseValue($lead, 'valor_iptu') ?? 0.0)
+            + ($this->expenseValue($lead, 'valor_gas') ?? 0.0)
             + $agua
             + $luz
-            + (float) ($lead->outras_despesas ?? 0);
+            + ($this->expenseValue($lead, 'outras_despesas') ?? 0.0);
 
         $analysis = InsuranceAnalysis::create([
             'lead_id' => $lead->id,
@@ -75,7 +77,14 @@ class InsuranceAnalysisService
 
     public function sendToPottencial(InsuranceAnalysis $analysis): InsuranceAnalysis
     {
-        $analysis->loadMissing('lead');
+        $analysis->loadMissing([
+            'lead.company',
+            'lead.endereco',
+            'lead.despesas',
+            'lead.conjuge',
+            'lead.locador',
+            'lead.imobiliariaInformada',
+        ]);
 
         $payload = $this->payloadBuilder->build($analysis);
 
@@ -152,7 +161,7 @@ class InsuranceAnalysisService
             return;
         }
 
-        $pottencialStatus = $response['status'] ?? null;
+        $pottencialStatus = $this->extractProviderStatus($response);
 
         $internalStatus = $this->mapInternalStatus($pottencialStatus);
         $resultStatus = $this->mapResultStatus($pottencialStatus);
@@ -161,14 +170,19 @@ class InsuranceAnalysisService
             'status' => $internalStatus,
             'result' => $resultStatus,
 
-            'pottencial_status' => $pottencialStatus,
+            'provider_status' => $pottencialStatus,
 
-            'quote_id' => $response['quoteId'] ?? $analysis->quote_id,
+            'quote_id' => $this->extractQuoteIdFromResponse($response) ?? $analysis->quote_id,
+            'quote_number' => $this->extractQuoteNumber($response) ?? $analysis->quote_number,
+            'product_key' => $this->extractProductKey($response) ?? $analysis->product_key,
 
             'available_plans' => $response['availablePlans'] ?? $analysis->available_plans,
             'available_assistances' => $response['availableAssistances'] ?? $analysis->available_assistances,
 
             'premium_amount' => $this->extractPremiumAmount($response) ?? $analysis->premium_amount,
+            'commercial_premium' => $this->extractCommercialPremium($response) ?? $analysis->commercial_premium,
+            'gross_premium' => $this->extractGrossPremium($response) ?? $analysis->gross_premium,
+            'iof' => $this->extractIof($response) ?? $analysis->iof,
             'insured_amount' => $this->extractInsuredAmount($response) ?? $analysis->insured_amount,
 
             'response_payload' => $response,
@@ -208,12 +222,41 @@ class InsuranceAnalysisService
         };
     }
 
+    private function extractQuoteNumber(array $response): ?string
+    {
+        $value = $this->firstValue($response, [
+            'quoteNumber',
+            'quote_number',
+            'number',
+            'quote.quoteNumber',
+            'quote.number',
+            'data.quoteNumber',
+            'data.number',
+        ]);
+
+        return $value !== null && $value !== '' ? (string) $value : null;
+    }
+
+    private function extractProductKey(array $response): ?string
+    {
+        $value = $this->firstValue($response, [
+            'productKey',
+            'product_key',
+            'quote.productKey',
+            'data.productKey',
+            'availablePlans.0.productKey',
+        ]);
+
+        return $value !== null && $value !== '' ? (string) $value : null;
+    }
+
     private function valorAgua(Lead $lead): float
     {
-        $rent = (float) ($lead->valor_aluguel ?? 0);
+        $rent = $this->expenseValue($lead, 'valor_aluguel') ?? 0.0;
+        $valorAgua = $this->expenseValue($lead, 'valor_agua');
 
-        if ($lead->valor_agua !== null && $lead->valor_agua !== '') {
-            return (float) $lead->valor_agua;
+        if ($valorAgua !== null) {
+            return $valorAgua;
         }
 
         return $rent * 0.10;
@@ -221,44 +264,125 @@ class InsuranceAnalysisService
 
     private function valorLuz(Lead $lead): float
     {
-        $rent = (float) ($lead->valor_aluguel ?? 0);
+        $rent = $this->expenseValue($lead, 'valor_aluguel') ?? 0.0;
+        $valorLuz = $this->expenseValue($lead, 'valor_luz');
 
-        if ($lead->valor_luz !== null && $lead->valor_luz !== '') {
-            return (float) $lead->valor_luz;
+        if ($valorLuz !== null) {
+            return $valorLuz;
         }
 
         return $rent * 0.10;
     }
 
+    private function expenseValue(Lead $lead, string $field): ?float
+    {
+        $despesas = $lead->despesas;
+        $value = $despesas->{$field} ?? $lead->{$field} ?? null;
+
+        return $value !== null && $value !== '' ? (float) $value : null;
+    }
+
     private function extractPremiumAmount(array $response): ?float
     {
-        if (isset($response['premiumAmount'])) {
-            return (float) $response['premiumAmount'];
-        }
+        $value = $this->firstValue($response, [
+            'premiumAmount',
+            'premium.total',
+            'quote.premiumAmount',
+            'quote.premium.total',
+            'data.premiumAmount',
+            'data.premium.total',
+            'availablePlans.0.premiumAmount',
+            'availablePlans.0.premium.total',
+        ]);
 
-        if (isset($response['premium']['total'])) {
-            return (float) $response['premium']['total'];
-        }
+        return $value !== null ? (float) $value : null;
+    }
 
-        if (isset($response['availablePlans'][0]['premiumAmount'])) {
-            return (float) $response['availablePlans'][0]['premiumAmount'];
-        }
+    private function extractCommercialPremium(array $response): ?float
+    {
+        $value = $this->firstValue($response, [
+            'commercialPremium',
+            'commercial_premium',
+            'quote.commercialPremium',
+            'data.commercialPremium',
+            'availablePlans.0.commercialPremium',
+        ]);
 
-        if (isset($response['availablePlans'][0]['premium']['total'])) {
-            return (float) $response['availablePlans'][0]['premium']['total'];
-        }
+        return $value !== null && $value !== '' ? (float) $value : null;
+    }
 
-        return null;
+    private function extractGrossPremium(array $response): ?float
+    {
+        $value = $this->firstValue($response, [
+            'grossPremium',
+            'gross_premium',
+            'quote.grossPremium',
+            'data.grossPremium',
+            'availablePlans.0.grossPremium',
+        ]);
+
+        return $value !== null && $value !== '' ? (float) $value : null;
+    }
+
+    private function extractIof(array $response): ?float
+    {
+        $value = $this->firstValue($response, [
+            'iof',
+            'IOF',
+            'quote.iof',
+            'data.iof',
+            'availablePlans.0.iof',
+        ]);
+
+        return $value !== null && $value !== '' ? (float) $value : null;
     }
 
     private function extractInsuredAmount(array $response): ?float
     {
-        if (isset($response['insuredAmount'])) {
-            return (float) $response['insuredAmount'];
-        }
+        $value = $this->firstValue($response, [
+            'insuredAmount',
+            'quote.insuredAmount',
+            'data.insuredAmount',
+            'availablePlans.0.insuredAmount',
+        ]);
 
-        if (isset($response['availablePlans'][0]['insuredAmount'])) {
-            return (float) $response['availablePlans'][0]['insuredAmount'];
+        return $value !== null ? (float) $value : null;
+    }
+
+    private function extractProviderStatus(array $response): ?string
+    {
+        $value = $this->firstValue($response, [
+            'status',
+            'quote.status',
+            'data.status',
+        ]);
+
+        return $value !== null ? (string) $value : null;
+    }
+
+    private function extractQuoteIdFromResponse(array $response): ?string
+    {
+        $value = $this->firstValue($response, [
+            'quoteId',
+            'quote_id',
+            'id',
+            'quote.quoteId',
+            'quote.id',
+            'data.quoteId',
+            'data.id',
+        ]);
+
+        return $value !== null ? (string) $value : null;
+    }
+
+    private function firstValue(array $response, array $paths): mixed
+    {
+        foreach ($paths as $path) {
+            $value = data_get($response, $path);
+
+            if ($value !== null && $value !== '') {
+                return $value;
+            }
         }
 
         return null;

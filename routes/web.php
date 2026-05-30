@@ -5,21 +5,17 @@ use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\Auth\CompanyNewPasswordController;
 use App\Http\Controllers\Auth\CompanyPasswordResetLinkController;
 use Illuminate\Support\Facades\Route;
-use App\Http\Controllers\CompanyRegistrationController;
-use App\Http\Controllers\CompanyAuthController;
+use App\Http\Controllers\ImobiliariaRegistrationController;
+use App\Http\Controllers\ImobiliariaAuthController;
 use App\Http\Controllers\TwoFactorController;
-use App\Http\Controllers\AdminsRegistrationController;
-use App\Http\Controllers\AdminAuthController;
+use App\Http\Controllers\CorretorRegistrationController;
+use App\Http\Controllers\CorretorAuthController;
 use App\Http\Controllers\DashboardController;
-use App\Http\Controllers\PublicLeadController;
 use App\Http\Controllers\SimulationController;
 use App\Services\PottencialService;
 use App\Http\Controllers\InsuranceAnalysisController;
 use App\Http\Controllers\CepController;
-
-
-
-
+use App\Models\Imobiliaria;
 
 Route::get('/teste/token_acesso', [PottencialService::class, 'testAuthentication']);
 
@@ -74,19 +70,19 @@ Route::middleware('auth')->group(function () {
 
 
 Route::middleware('guest:admin')->group(function () {
-    Route::get('/admin/login/form', [AdminAuthController::class, 'showLoginForm'])->name('admin.login');
-    Route::post('/admin/login', [AdminAuthController::class, 'login'])->name('admin.login.post');
+    Route::get('/admin/login/form', [CorretorAuthController::class, 'showLoginForm'])->name('admin.login');
+    Route::post('/admin/login', [CorretorAuthController::class, 'login'])->name('admin.login.post');
 
-    Route::get('/admins/cadastro', [AdminsRegistrationController::class, 'showRegistrationForm'])->name('admin.register.form');
-    Route::post('/admins/cadastro', [AdminsRegistrationController::class, 'store'])->name('admin.register.post');
+    Route::get('/admins/cadastro', [CorretorRegistrationController::class, 'showRegistrationForm'])->name('admin.register.form');
+    Route::post('/admins/cadastro', [CorretorRegistrationController::class, 'store'])->name('admin.register.post');
 });
 
 Route::middleware('auth:admin')->group(function () {
-    Route::get('/admin/2fa', [AdminAuthController::class, 'showTwoFactorForm'])->name('admin.2fa.form');
-    Route::post('/admin/2fa', [AdminAuthController::class, 'verifyTwoFactor'])->name('admin.2fa.verify');
-    Route::post('/admin/2fa/resend', [AdminAuthController::class, 'resendTwoFactor'])->name('admin.2fa.resend');
+    Route::get('/admin/2fa', [CorretorAuthController::class, 'showTwoFactorForm'])->name('admin.2fa.form');
+    Route::post('/admin/2fa', [CorretorAuthController::class, 'verifyTwoFactor'])->name('admin.2fa.verify');
+    Route::post('/admin/2fa/resend', [CorretorAuthController::class, 'resendTwoFactor'])->name('admin.2fa.resend');
 
-    Route::post('/admin/logout', [AdminAuthController::class, 'logout'])->name('admin.logout');
+    Route::post('/admin/logout', [CorretorAuthController::class, 'logout'])->name('admin.logout');
 });
 
 
@@ -147,11 +143,11 @@ Route::get('/cep/{cep}', [CepController::class, 'show'])
     ->name('cep.show');
     
 Route::prefix('/empresa')->group( function () {
-    Route::get('/form', [CompanyRegistrationController::class, 'showRegistrationForm'])->name('empresa.register.form');
-    Route::post('/register', [CompanyRegistrationController::class, 'store'])->name('empresa.register.post');
-    Route::get('/login', [CompanyAuthController::class, 'showLoginForm'])->name('empresa.login');
-    Route::post('/login/post', [CompanyAuthController::class, 'login'])->name('empresa.login.post');
-    Route::get('/logout', [CompanyAuthController::class, 'logout'])->name('empresa.logout');
+    Route::get('/form', [ImobiliariaRegistrationController::class, 'showRegistrationForm'])->name('empresa.register.form');
+    Route::post('/register', [ImobiliariaRegistrationController::class, 'store'])->name('empresa.register.post');
+    Route::get('/login', [ImobiliariaAuthController::class, 'showLoginForm'])->name('empresa.login');
+    Route::post('/login/post', [ImobiliariaAuthController::class, 'login'])->name('empresa.login.post');
+    Route::get('/logout', [ImobiliariaAuthController::class, 'logout'])->name('empresa.logout');
 });
     
 

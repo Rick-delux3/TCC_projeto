@@ -6,6 +6,8 @@ use Illuminate\Database\Eloquent\Model;
 
 class InsuranceAnalysisBatch extends Model
 {
+    protected $table = 'lotes_analises_seguro';
+
     protected $fillable = [
         'lead_id',
         'company_id',
@@ -35,10 +37,20 @@ class InsuranceAnalysisBatch extends Model
 
     public function company()
     {
-        return $this->belongsTo(Company::class);
+        return $this->imobiliaria();
+    }
+
+    public function imobiliaria()
+    {
+        return $this->belongsTo(Imobiliaria::class, 'company_id');
     }
 
     public function analyses()
+    {
+        return $this->analises();
+    }
+
+    public function analises()
     {
         return $this->hasMany(InsuranceAnalysis::class, 'insurance_analysis_batch_id');
     }

@@ -20,6 +20,15 @@ class PottencialInsuranceProvider implements InsuranceProviderInterface
 
     public function requestAnalysis(InsuranceAnalysis $analysis): array
     {
+        $analysis->loadMissing([
+            'lead.company',
+            'lead.endereco',
+            'lead.despesas',
+            'lead.conjuge',
+            'lead.locador',
+            'lead.imobiliariaInformada',
+        ]);
+
         $payload = $this->payloadBuilder->build($analysis);
 
         $analysis->update([

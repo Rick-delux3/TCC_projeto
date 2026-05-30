@@ -3,65 +3,75 @@
 namespace App\Services\Insurance\Payloads;
 
 use App\Models\InsuranceAnalysis;
+use App\Models\Lead;
+use Illuminate\Support\Carbon;
 
 class RentalGuaranteeQuotePayloadBuilder
 {
     public function build(InsuranceAnalysis $analysis): array
     {
+        $analysis->loadMissing([
+            'lead.company',
+            'lead.endereco',
+            'lead.despesas',
+            'lead.conjuge',
+            'lead.locador',
+            'lead.imobiliariaInformada',
+        ]);
+
         $lead = $analysis->lead;
 
-        $startDate = $analysis->lease_start_date ?? now();
-        $endDate = $analysis->lease_end_date ?? now()->addMonthsNoOverflow(30);
-        $policyHolderDocument = \only_numbers(
-            $lead->cpf_cnpj
-            ?? $lead->cpf
-            ?? ''
-        );
+        if (!$lead) {
+            throw new \RuntimeException('Lead nao encontrado para montar o payload da Pottencial.');
+        }
+
+        $leaseMonths = (int) ($analysis->multiple ?: config('services.pottencial.default_lease_months', 30));
+        $startDate = $this->dateValue($analysis->lease_start_date ?? now());
+        $endDate = $analysis->lease_end_date
+            ? $this->dateValue($analysis->lease_end_date)
+            : $startDate->copy()->addMonthsNoOverflow($leaseMonths);
+
+        $policyHolderDocument = \only_numbers($lead->cpf ?? '');
+
+        if (!$policyHolderDocument) {
+            throw new \RuntimeException('CPF do solicitante nao encontrado para envio da cotacao.');
+        }
 
         return [
             'policyPeriodStart' => $startDate->format('Y-m-d'),
             'policyPeriodEnd' => $endDate->format('Y-m-d'),
-            'policyType' => config('services.pottencial.default_policy_type', 'Unique'),
+            'policyType' => $this->policyType(),
 
             'commissionedAgents' => $this->commissionedAgents($analysis),
+            'participants' => $this->participants($lead, $policyHolderDocument),
 
-            'participants' => [
-                $this->policyHolder($lead, $policyHolderDocument),
+            'paymentConditions' => [
+                'paymentType' => $analysis->payment_type
+                    ?? config('services.pottencial.default_payment_type', 'Boleto'),
+                'installments' => $analysis->installments
+                    ?? (int) config('services.pottencial.default_installments', 12),
             ],
 
             'riskObjects' => [
                 [
-                    'type' => 'rentalProperty',
-                    
+                    'type' => 'FiancaLocaticia',
                     'tenantDocumentNumber' => $policyHolderDocument,
-                    
                     'startLeaseContract' => $startDate->format('Y-m-d'),
                     'endLeaseContract' => $endDate->format('Y-m-d'),
-                    
-                    'coverages' => $this->coverages($lead, $analysis->multiple ?? 30),
-                    
+                    'coverages' => $this->coverages($lead, $leaseMonths),
                     'riskLocation' => [
                         'address' => $this->addressFromLead($lead),
-                        ],
-                        
-                    'expenses' => $this->expenses($lead),
-                    'planKey' => $analysis->plan_key ?? 'traditional',
-                    'occupation' => 'residencial',
-                    'inhabited' => (bool) $analysis->inhabited,
-                    'multiple' => $analysis->multiple ?? 30,
-                    'paymentConditions' => [
-                        'paymentType' => $analysis->payment_type
-                            ?? config('services.pottencial.default_payment_type', 'Boleto'),
-        
-                        'installments' => $analysis->installments
-                            ?? (int) config('services.pottencial.default_installments', 12),
                     ],
-                    
-                ],
-
-                'assistanceServices' => [
-                    [
-                        'key' => config('services.pottencial.default_assistance', 'Complete'),
+                    'expenses' => $this->expenses($lead),
+                    'planKey' => $analysis->plan_key
+                        ?? config('services.pottencial.default_plan_key', 'traditional'),
+                    'occupation' => 'Residencial',
+                    'inhabited' => (bool) $analysis->inhabited,
+                    'multiple' => $leaseMonths,
+                    'assistanceServices' => [
+                        [
+                            'key' => config('services.pottencial.default_assistance', 'Complete'),
+                        ],
                     ],
                 ],
             ],
@@ -71,103 +81,142 @@ class RentalGuaranteeQuotePayloadBuilder
     private function commissionedAgents(InsuranceAnalysis $analysis): array
     {
         $lead = $analysis->lead;
+        $brokerDocument = \only_numbers(config('services.pottencial.broker_document'));
+
+        if (!$brokerDocument) {
+            throw new \RuntimeException('Documento do broker nao configurado para envio da cotacao.');
+        }
 
         $agents = [
             [
-                'documentNumber' => \only_numbers(config('services.pottencial.broker_document')),
+                'documentNumber' => $brokerDocument,
                 'role' => 'Broker',
-                'commissionPercentage' => (float) config('services.pottencial.default_commission', 0.20),
+                'commissionPercentage' => (float) config('services.pottencial.default_commission', 0.10),
                 'lead' => true,
             ],
         ];
 
-        
-        if($lead->tipo_solicitante === 'imobiliaria_cadastrada'){
-            $companyCNPJ = \only_numbers($lead->company->cnpj);
-            
-            if (empty($companyCNPJ)) {
-                throw new \RuntimeException('CNPJ da imobiliária não encontrado para envio da cotação.');
-            }
+        $companyDocument = \only_numbers($lead?->company?->cnpj ?? '');
 
-                $agents[] = [
-                    'documentNumber' => $companyCNPJ,
-                    'role' => 'PolicyOwner',
-                    'lead' => false,
-                    'isPayer' => true,
-                ];
+        if ($lead?->tipo_solicitante === 'imobiliaria_cadastrada' && $companyDocument) {
+            $agents[] = [
+                'documentNumber' => $companyDocument,
+                'role' => 'PolicyOwner',
+                'lead' => false,
+                'isPayer' => true,
+            ];
         }
 
         return $agents;
     }
 
-    private function policyHolder($lead, string $document): array
+    private function policyType(): string
     {
-        $participants = [
-                [
-                    'documentNumber' => $document,
-                    'role' => 'PolicyHolder',
-                    'main' => true,
-                    'address' => $this->addressFromLead($lead),
-                    'contact' => [
-                        'name' => $lead->nome,
-                        'email' => $lead->email,
-                        'phoneNumber' => '',
-                        'cellPhoneNumber' => \only_numbers($lead->tel ?? ''),
-                    ],
-                ],
+        $policyType = (string) config('services.pottencial.default_policy_type', 'Unico');
 
-                [
-                    'documentNumber' => "33286641065",
-                    'participationPercentage' => 1,
-                    'role' => "Beneficiary",
-                    'address' => $this->addressFromLead($lead),
-                    'contact' => [
-                        'name' => $lead->nome,
-                        'email' => $lead->email,
-                        'phoneNumber' => '',
-                        'cellPhoneNumber' => \only_numbers($lead->tel ?? ''),
-                    ]
-
-                ],
-
-                [
-                    'documentNumber' => '68426024084',
-                    'role' => 'Insured',
-                    'address' => $this->addressFromLead($lead),
-                    'contact' => [
-                        'name' => $lead->nome,
-                        'email' => $lead->email,
-                        'phoneNumber' => '',
-                        'cellPhoneNumber' => \only_numbers($lead->tel ?? ''),
-                    ]
-                ]
-            
-            ];
-
-            return $participants;
+        return in_array(mb_strtolower($policyType), ['unique', 'unico'], true)
+            ? 'Unico'
+            : $policyType;
     }
 
-    private function addressFromLead($lead): array
+    private function participants(Lead $lead, string $policyHolderDocument): array
+    {
+        $participants = [
+            $this->participant(
+                role: 'PolicyHolder',
+                document: $policyHolderDocument,
+                contact: $this->leadContact($lead),
+                main: true
+            ),
+        ];
+
+        $beneficiaryDocument = \only_numbers(config('services.pottencial.default_beneficiary_document'));
+
+        if ($beneficiaryDocument) {
+            $participants[] = $this->participant(
+                role: 'Beneficiary',
+                document: $beneficiaryDocument,
+                contact: $this->beneficiaryContact($lead),
+                extra: [
+                    'participationPercentage' => 1,
+                ]
+            );
+        }
+
+        return $participants;
+    }
+
+    private function participant(
+        string $role,
+        string $document,
+        array $contact,
+        bool $main = false,
+        array $extra = []
+    ): array {
+        $participant = [
+            'documentNumber' => $document,
+            'role' => $role,
+            'address' => $this->addressFromLead($contact['lead']),
+            'contact' => [
+                'name' => $contact['name'],
+                'email' => $contact['email'],
+                'phoneNumber' => '',
+                'cellPhoneNumber' => $contact['phone'],
+            ],
+        ];
+
+        if ($main) {
+            $participant['main'] = true;
+        }
+
+        return array_merge($participant, $extra);
+    }
+
+    private function leadContact(Lead $lead): array
     {
         return [
-            'street' => $lead->logradouro,
-            'number' => $lead->numero,
-            'district' => $lead->bairro,
-            'city' => $lead->cidade_imovel,
-            'state' => $lead->estado,
-            'zipCode' => $lead->cep,
-            'complement' => $lead->complemento ?? '',
+            'lead' => $lead,
+            'name' => $lead->nome,
+            'email' => $lead->email,
+            'phone' => \only_numbers($lead->tel ?? ''),
+        ];
+    }
+
+    private function beneficiaryContact(Lead $lead): array
+    {
+        $locador = $lead->locador;
+
+        return [
+            'lead' => $lead,
+            'name' => $locador?->nome ?: $lead->nome,
+            'email' => $locador?->email ?: $lead->email,
+            'phone' => \only_numbers($locador?->telefone ?: $lead->tel ?: ''),
+        ];
+    }
+
+    private function addressFromLead(Lead $lead): array
+    {
+        $endereco = $lead->endereco;
+
+        return [
+            'street' => $endereco?->logradouro ?? '',
+            'number' => $endereco?->numero ?? '',
+            'district' => $endereco?->bairro ?? '',
+            'city' => $endereco?->cidade_imovel ?? '',
+            'state' => $endereco?->estado ?? '',
+            'zipCode' => $endereco?->cep ?? '',
+            'complement' => $endereco?->complemento ?? '',
             'country' => 'BRA',
             'type' => 'Residential',
         ];
     }
 
-    private function coverages($lead, int $months): array
+    private function coverages(Lead $lead, int $months): array
     {
-        $aluguel = (float) ($lead->valor_aluguel ?? 0);
-        $condominio = (float) ($lead->valor_condominio ?? 0);
-        $iptu = (float) ($lead->valor_iptu ?? 0);
-        $gas = (float) ($lead->valor_gas ?? 0);
+        $aluguel = $this->expenseValue($lead, 'valor_aluguel') ?? 0.0;
+        $condominio = $this->expenseValue($lead, 'valor_condominio') ?? 0.0;
+        $iptu = $this->expenseValue($lead, 'valor_iptu') ?? 0.0;
+        $gas = $this->expenseValue($lead, 'valor_gas') ?? 0.0;
         $agua = $this->valorAgua($lead);
         $luz = $this->valorLuz($lead);
 
@@ -211,24 +260,24 @@ class RentalGuaranteeQuotePayloadBuilder
         ], fn (array $coverage) => $coverage['insuredAmount'] > 0));
     }
 
-    private function expenses($lead): array
+    private function expenses(Lead $lead): array
     {
         return array_values(array_filter([
             [
                 'description' => 'VALOR_ALUGUEL',
-                'value' => (float) ($lead->valor_aluguel ?? 0),
+                'value' => $this->expenseValue($lead, 'valor_aluguel') ?? 0.0,
             ],
             [
                 'description' => 'VALOR_CONDOMINIO',
-                'value' => (float) ($lead->valor_condominio ?? 0),
+                'value' => $this->expenseValue($lead, 'valor_condominio') ?? 0.0,
             ],
             [
                 'description' => 'VALOR_IPTU',
-                'value' => (float) ($lead->valor_iptu ?? 0),
+                'value' => $this->expenseValue($lead, 'valor_iptu') ?? 0.0,
             ],
             [
                 'description' => 'VALOR_GAS',
-                'value' => (float) ($lead->valor_gas ?? 0),
+                'value' => $this->expenseValue($lead, 'valor_gas') ?? 0.0,
             ],
             [
                 'description' => 'VALOR_AGUA',
@@ -238,30 +287,40 @@ class RentalGuaranteeQuotePayloadBuilder
                 'description' => 'VALOR_LUZ',
                 'value' => $this->valorLuz($lead),
             ],
+            [
+                'description' => 'OUTRAS_DESPESAS',
+                'value' => $this->expenseValue($lead, 'outras_despesas') ?? 0.0,
+            ],
         ], fn (array $expense) => $expense['value'] > 0));
     }
 
-    private function valorAgua($lead): float
+    private function valorAgua(Lead $lead): float
     {
-        $aluguel = (float) ($lead->valor_aluguel ?? 0);
+        $aluguel = $this->expenseValue($lead, 'valor_aluguel') ?? 0.0;
+        $valorAgua = $this->expenseValue($lead, 'valor_agua');
 
-        if ($lead->valor_agua !== null && $lead->valor_agua !== '') {
-            return (float) $lead->valor_agua;
-        }
-
-        return $aluguel * 0.10;
+        return $valorAgua ?? ($aluguel * 0.10);
     }
 
-    private function valorLuz($lead): float
+    private function valorLuz(Lead $lead): float
     {
-        $aluguel = (float) ($lead->valor_aluguel ?? 0);
+        $aluguel = $this->expenseValue($lead, 'valor_aluguel') ?? 0.0;
+        $valorLuz = $this->expenseValue($lead, 'valor_luz');
 
-        if ($lead->valor_luz !== null && $lead->valor_luz !== '') {
-            return (float) $lead->valor_luz;
-        }
-
-        return $aluguel * 0.10;
+        return $valorLuz ?? ($aluguel * 0.10);
     }
 
-   
+    private function expenseValue(Lead $lead, string $field): ?float
+    {
+        $value = $lead->despesas?->{$field} ?? null;
+
+        return $value !== null && $value !== '' ? (float) $value : null;
+    }
+
+    private function dateValue(mixed $value): Carbon
+    {
+        return $value instanceof Carbon
+            ? $value
+            : Carbon::parse($value);
+    }
 }

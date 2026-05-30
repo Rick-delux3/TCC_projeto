@@ -10,6 +10,8 @@ class InsuranceAnalysisEvent extends Model
 {
     use HasFactory;
 
+    protected $table = 'eventos_analises_seguro';
+
     protected $fillable = [
         'insurance_analysis_id',
         'event_type',
@@ -25,6 +27,11 @@ class InsuranceAnalysisEvent extends Model
     ];
 
     public function analysis(){
+        return $this->analise();
+    }
+
+    public function analise()
+    {
         return $this->belongsTo(InsuranceAnalysis::class, 'insurance_analysis_id');
     }
 }

@@ -11,7 +11,7 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('companies', function (Blueprint $table) {
+        Schema::table('imobiliarias', function (Blueprint $table) {
             $table->string('lead_access_code', 20)
             ->nullable()
             ->unique()
@@ -24,7 +24,7 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::table('companies', function (Blueprint $table) {
+        Schema::table('imobiliarias', function (Blueprint $table) {
             $table->dropColumn('lead_access_code');
         });
     }

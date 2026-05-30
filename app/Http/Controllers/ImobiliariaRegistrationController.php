@@ -2,7 +2,7 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Company;
+use App\Models\Imobiliaria;
 use App\Models\LeadLoversTag;
 use App\Models\User;
 use App\Services\LeadLoversService;
@@ -14,7 +14,7 @@ use Illuminate\Support\Str;
 use App\Http\Requests\StoreCompanyRequest;
 
 
-class CompanyRegistrationController extends Controller
+class ImobiliariaRegistrationController extends Controller
 {
     private $token;
     private $baseURL;
@@ -70,10 +70,11 @@ class CompanyRegistrationController extends Controller
             ->where('active', true)
             ->first();
 
-        $company = Company::create([
+        $company = Imobiliaria::create([
             'name' => $data['name'],
             'email' => $data['email'],
             'phone' => $data['phone'],
+            'cnpj' => $data['cnpj'],
             'city' => $data['city'],
             'state' => $data['state'],
             'password' => Hash::make($data['password']),

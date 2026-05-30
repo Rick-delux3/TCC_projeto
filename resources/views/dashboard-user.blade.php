@@ -819,7 +819,7 @@
                                 $leadName = $lead->nome ?: 'Lead sem nome';
                                 $leadEmail = $lead->email ?: 'E-mail não informado';
                                 $leadPhone = $lead->tel ?: 'Telefone não informado';
-                                $leadCity = $lead->cidade_imovel ?? $lead->cidade ?? 'Cidade não informada';
+                                $leadCity = $lead->endereco?->cidade_imovel ?? $lead->cidade_imovel ?? $lead->cidade ?? 'Cidade não informada';
 
                                 $leadDate = $lead->created_at ? $lead->created_at->format('d/m/Y') : 'Sem data';
                                 $leadTime = $lead->created_at ? $lead->created_at->format('H:i') : '--:--';

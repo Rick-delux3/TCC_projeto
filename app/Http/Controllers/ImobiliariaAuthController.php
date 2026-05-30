@@ -2,7 +2,7 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Company;
+use App\Models\Imobiliaria;
 use App\Models\TwoFactorCode;
 use App\Models\User;
 use Illuminate\Http\Request;
@@ -12,7 +12,7 @@ use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
 
-class CompanyAuthController extends Controller
+class ImobiliariaAuthController extends Controller
 {
     public function showLoginForm()
     {
@@ -23,6 +23,10 @@ class CompanyAuthController extends Controller
 
     public function login(Request $request)
     {
+        $request->merge([
+            'email' => mb_strtolower(trim((string) $request->email)),
+        ]);
+
         $data = $request->validate([
             'email' => 'required|email',
             'password' => 'required|string|min:6',
@@ -38,7 +42,7 @@ class CompanyAuthController extends Controller
                 ->onlyInput('email');
         }
 
-        $company = Company::where('email', $data['email'])->first();
+        $company = Imobiliaria::where('email', $data['email'])->first();
 
         if (!$company || !Hash::check($data['password'], $company->password)) {
             RateLimiter::hit($throttleKey, 60);

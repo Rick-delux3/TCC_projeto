@@ -1,5 +1,7 @@
 <?php
 
+use App\Models\Corretor;
+use App\Models\Imobiliaria;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
@@ -14,12 +16,23 @@ return new class extends Migration
         Schema::create('leads', function (Blueprint $table) {
             $table->id();
 
-            // Relacionamento com a tabela de imobiliárias (companies)
+            // Relacionamento com a tabela de imobiliarias.
             // Se a corretora excluir a imobiliária, os clientes dela também serão excluídos
             $table->foreignId('company_id')
             ->nullable()
-            ->constrained('companies')
+            ->constrained('imobiliarias')
             ->nullOnDelete();
+
+            $table->foreignIdFor(Corretor::class, 'created_by_admin_id')
+            ->nullable()
+            ->constrained('corretores')
+            ->nullOnDelete();
+
+            $table->foreignIdFor(Corretor::class, 'updated_by_admin_id')
+            ->nullable()
+            ->constrained('corretores')
+            ->nullOnDelete();
+
 
             $table->string('tipo_solicitante')->nullable();
             
@@ -30,37 +43,10 @@ return new class extends Migration
             $table->string('cpf', 11)->nullable();
 
             $table->string('estado_civil')->nullable();
-            $table->string('conjuge_cpf', 11)->nullable();
-            $table->string('conjuge_nome')->nullable();
 
-            $table->string('estado', 2)->nullable();
-            $table->string('cidade_imovel')->nullable();
-            $table->string('bairro')->nullable();
-            $table->string('logradouro')->nullable();
-            $table->string('numero')->nullable();
-            $table->string('complemento')->nullable();
-            $table->string('cep', 8)->nullable();
-            $table->string('responsavel_preenchimento')->nullable();
-            $table->string('telefone_responsavel', 20)->nullable();
 
-            
-            $table->decimal('valor_aluguel', 10, 2)->nullable();
-            $table->decimal('valor_agua', 10, 2)->nullable();
-            $table->decimal('valor_luz', 10, 2)->nullable();
-            $table->decimal('valor_gas', 10, 2)->nullable();
-            $table->decimal('valor_condominio', 10, 2)->nullable();
-            $table->decimal('valor_iptu', 10, 2)->nullable();
-            $table->decimal('outras_despesas', 10, 2)->nullable();
-            $table->decimal('valor_total_encargos', 10, 2)->nullable();
-
-            // Dados específicos de imobiliária não cadastrada.
-            $table->string('nome_imobiliaria_informada')->nullable();
-            $table->string('cnpj_imobiliaria_informada')->nullable();
 
             // Dados específicos de locador/proprietário.
-            $table->string('nome_locador')->nullable();
-            $table->string('telefone_locador', 20)->nullable();
-            $table->string('email_locador')->nullable();
 
             $table->string('imobiliaria')->nullable();
             $table->text('tags_originais')->nullable(); // Para salvar o que veio no webhook

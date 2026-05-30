@@ -30,7 +30,7 @@ class StartInsuranceAnalysesBatchJob implements ShouldQueue
 
     public function handle(InsuranceProviderResolver $resolver): void
     {
-        $lead = Lead::findOrFail($this->leadId);
+        $lead = Lead::with('despesas')->findOrFail($this->leadId);
 
         $providers = $resolver->availableProviders();
 
@@ -46,7 +46,7 @@ class StartInsuranceAnalysesBatchJob implements ShouldQueue
 
         $jobs = [];
 
-        $rentAmount = (float) ($lead->valor_aluguel ?? 0);
+        $rentAmount = $this->expenseValue($lead, 'valor_aluguel') ?? 0.0;
         $chargesAmount = $this->chargesAmount($lead);
         $totalMonthlyAmount = $rentAmount + $chargesAmount;
 
@@ -104,21 +104,32 @@ class StartInsuranceAnalysesBatchJob implements ShouldQueue
 
     private function chargesAmount(Lead $lead): float
     {
-        $rent = (float) ($lead->valor_aluguel ?? 0);
+        $rent = $this->expenseValue($lead, 'valor_aluguel') ?? 0.0;
 
-        $agua = $lead->valor_agua !== null
-            ? (float) $lead->valor_agua
+        $valorAgua = $this->expenseValue($lead, 'valor_agua');
+        $valorLuz = $this->expenseValue($lead, 'valor_luz');
+
+        $agua = $valorAgua !== null
+            ? $valorAgua
             : $rent * 0.10;
 
-        $luz = $lead->valor_luz !== null
-            ? (float) $lead->valor_luz
+        $luz = $valorLuz !== null
+            ? $valorLuz
             : $rent * 0.10;
 
-        return (float) ($lead->valor_condominio ?? 0)
-            + (float) ($lead->valor_iptu ?? 0)
-            + (float) ($lead->valor_gas ?? 0)
+        return ($this->expenseValue($lead, 'valor_condominio') ?? 0.0)
+            + ($this->expenseValue($lead, 'valor_iptu') ?? 0.0)
+            + ($this->expenseValue($lead, 'valor_gas') ?? 0.0)
             + $agua
             + $luz
-            + (float) ($lead->outras_despesas ?? 0);
+            + ($this->expenseValue($lead, 'outras_despesas') ?? 0.0);
+    }
+
+    private function expenseValue(Lead $lead, string $field): ?float
+    {
+        $despesas = $lead->despesas;
+        $value = $despesas->{$field} ?? $lead->{$field} ?? null;
+
+        return $value !== null && $value !== '' ? (float) $value : null;
     }
 }

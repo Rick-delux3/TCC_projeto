@@ -30,7 +30,7 @@ class SyncProviderAnalysisStatusJob implements ShouldQueue
      * Recebe o ID da análise específica.
      *
      * Exemplo:
-     * insurance_analyses.id = 15
+     * analises_seguro.id = 15
      */
     public function __construct(
         public int $analysisId
@@ -52,7 +52,15 @@ class SyncProviderAnalysisStatusJob implements ShouldQueue
          * - lead.company: necessário para montar ou consultar dados vinculados à imobiliária;
          * - batch: necessário para recalcular o lote após atualizar essa análise.
          */
-        $analysis = InsuranceAnalysis::with('lead.company', 'batch')
+        $analysis = InsuranceAnalysis::with([
+            'lead.company',
+            'lead.endereco',
+            'lead.despesas',
+            'lead.conjuge',
+            'lead.locador',
+            'lead.imobiliariaInformada',
+            'batch',
+        ])
             ->findOrFail($this->analysisId);
 
         /*
@@ -191,7 +199,7 @@ class SyncProviderAnalysisStatusJob implements ShouldQueue
          * - UnderAnalysis
          * - Pending
          */
-        $providerStatus = $response['status'] ?? null;
+        $providerStatus = $this->extractProviderStatus($response);
 
         /*
          * Converte o status da companhia para status interno do seu sistema.
@@ -223,7 +231,9 @@ class SyncProviderAnalysisStatusJob implements ShouldQueue
             /*
              * Mantém quote_id antigo se a resposta não trouxer outro.
              */
-            'quote_id' => $response['quoteId'] ?? $analysis->quote_id,
+            'quote_id' => $this->extractQuoteIdFromResponse($response) ?? $analysis->quote_id,
+            'quote_number' => $this->extractQuoteNumber($response) ?? $analysis->quote_number,
+            'product_key' => $this->extractProductKey($response) ?? $analysis->product_key,
 
             /*
              * Planos e assistências retornados pela companhia.
@@ -235,6 +245,9 @@ class SyncProviderAnalysisStatusJob implements ShouldQueue
              * Valores principais do orçamento, se vierem na resposta.
              */
             'premium_amount' => $this->extractPremiumAmount($response) ?? $analysis->premium_amount,
+            'commercial_premium' => $this->extractCommercialPremium($response) ?? $analysis->commercial_premium,
+            'gross_premium' => $this->extractGrossPremium($response) ?? $analysis->gross_premium,
+            'iof' => $this->extractIof($response) ?? $analysis->iof,
             'insured_amount' => $this->extractInsuredAmount($response) ?? $analysis->insured_amount,
 
             /*
@@ -328,13 +341,111 @@ class SyncProviderAnalysisStatusJob implements ShouldQueue
      */
     private function extractPremiumAmount(array $response): ?float
     {
-        $value = $response['premiumAmount']
-            ?? $response['premium']['total']
-            ?? $response['availablePlans'][0]['premiumAmount']
-            ?? $response['availablePlans'][0]['premium']['total']
-            ?? null;
+        $value = $this->firstValue($response, [
+            'premiumAmount',
+            'premium.total',
+            'quote.premiumAmount',
+            'quote.premium.total',
+            'data.premiumAmount',
+            'data.premium.total',
+            'availablePlans.0.premiumAmount',
+            'availablePlans.0.premium.total',
+        ]);
 
         return $value !== null ? (float) $value : null;
+    }
+
+    private function extractProviderStatus(array $response): ?string
+    {
+        $value = $this->firstValue($response, [
+            'status',
+            'quote.status',
+            'data.status',
+        ]);
+
+        return $value !== null ? (string) $value : null;
+    }
+
+    private function extractQuoteIdFromResponse(array $response): ?string
+    {
+        $value = $this->firstValue($response, [
+            'quoteId',
+            'quote_id',
+            'id',
+            'quote.quoteId',
+            'quote.id',
+            'data.quoteId',
+            'data.id',
+        ]);
+
+        return $value !== null ? (string) $value : null;
+    }
+
+    private function extractQuoteNumber(array $response): ?string
+    {
+        $value = $this->firstValue($response, [
+            'quoteNumber',
+            'quote_number',
+            'number',
+            'quote.quoteNumber',
+            'quote.number',
+            'data.quoteNumber',
+            'data.number',
+        ]);
+
+        return $value !== null && $value !== '' ? (string) $value : null;
+    }
+
+    private function extractProductKey(array $response): ?string
+    {
+        $value = $this->firstValue($response, [
+            'productKey',
+            'product_key',
+            'quote.productKey',
+            'data.productKey',
+            'availablePlans.0.productKey',
+        ]);
+
+        return $value !== null && $value !== '' ? (string) $value : null;
+    }
+
+    private function extractCommercialPremium(array $response): ?float
+    {
+        $value = $this->firstValue($response, [
+            'commercialPremium',
+            'commercial_premium',
+            'quote.commercialPremium',
+            'data.commercialPremium',
+            'availablePlans.0.commercialPremium',
+        ]);
+
+        return $value !== null && $value !== '' ? (float) $value : null;
+    }
+
+    private function extractGrossPremium(array $response): ?float
+    {
+        $value = $this->firstValue($response, [
+            'grossPremium',
+            'gross_premium',
+            'quote.grossPremium',
+            'data.grossPremium',
+            'availablePlans.0.grossPremium',
+        ]);
+
+        return $value !== null && $value !== '' ? (float) $value : null;
+    }
+
+    private function extractIof(array $response): ?float
+    {
+        $value = $this->firstValue($response, [
+            'iof',
+            'IOF',
+            'quote.iof',
+            'data.iof',
+            'availablePlans.0.iof',
+        ]);
+
+        return $value !== null && $value !== '' ? (float) $value : null;
     }
 
     /**
@@ -342,11 +453,27 @@ class SyncProviderAnalysisStatusJob implements ShouldQueue
      */
     private function extractInsuredAmount(array $response): ?float
     {
-        $value = $response['insuredAmount']
-            ?? $response['availablePlans'][0]['insuredAmount']
-            ?? null;
+        $value = $this->firstValue($response, [
+            'insuredAmount',
+            'quote.insuredAmount',
+            'data.insuredAmount',
+            'availablePlans.0.insuredAmount',
+        ]);
 
         return $value !== null ? (float) $value : null;
+    }
+
+    private function firstValue(array $response, array $paths): mixed
+    {
+        foreach ($paths as $path) {
+            $value = data_get($response, $path);
+
+            if ($value !== null && $value !== '') {
+                return $value;
+            }
+        }
+
+        return null;
     }
 
     /**

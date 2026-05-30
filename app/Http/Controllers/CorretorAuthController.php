@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\RateLimiter;
 
 
-class AdminAuthController extends Controller
+class CorretorAuthController extends Controller
 {
     private const VERIFY_MAX_ATTEMPTS = 5;
     private const VERIFY_DECAY_SECONDS = 600;
@@ -24,6 +24,10 @@ class AdminAuthController extends Controller
 
     public function login(Request $request)
     {
+        $request->merge([
+            'cpf' => preg_replace('/\D/', '', (string) $request->cpf),
+        ]);
+
         $data = $request->validate([
             'cpf' => 'required|string|regex:/^\d{11}$/',
             'password' => 'required|string|min:6',

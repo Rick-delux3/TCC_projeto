@@ -22,7 +22,11 @@ class SendLeadToLeadLoversJob implements ShouldQueue
 
     public function handle(LeadLoversService $leadLovers): void
     {
-        $lead = Lead::with('company')->findOrFail($this->leadId);
+        $lead = Lead::with([
+            'company',
+            'endereco',
+            'imobiliariaInformada',
+        ])->findOrFail($this->leadId);
 
         /**
          * Antes de criar o lead, o sistema precisa descobrir
@@ -74,9 +78,12 @@ class SendLeadToLeadLoversJob implements ShouldQueue
             'Name' => $lead->nome,
             'Email' => $lead->email,
             'Phone' => $lead->tel ?? '',
-            'City' => $lead->cidade_imovel ?? '',
-            'State' => $lead->estado ?? '',
-            'Company' => $lead->imobiliaria ?? $lead->nome_imobiliaria_informada ?? '',
+            'City' => $lead->endereco?->cidade_imovel ?? '',
+            'State' => $lead->endereco?->estado ?? '',
+            'Company' => $lead->company?->name
+                ?? $lead->imobiliariaInformada?->nome_imobiliaria_informada
+                ?? $lead->imobiliaria
+                ?? '',
 
             'Tag' => $mainTagId,
             'Score' => 0,
@@ -161,7 +168,7 @@ class SendLeadToLeadLoversJob implements ShouldQueue
 
         /**
          * Melhor opção:
-         * usar o ID salvo diretamente na tabela companies.
+         * usar o ID salvo diretamente na tabela imobiliarias.
          */
         if ($lead->company->leadlovers_tag_id) {
             return (int) $lead->company->leadlovers_tag_id;

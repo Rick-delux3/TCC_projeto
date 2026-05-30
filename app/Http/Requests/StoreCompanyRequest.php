@@ -41,7 +41,7 @@ class StoreCompanyRequest extends FormRequest
                 'string',
                 'min:3',
                 'max:255',
-                Rule::unique('companies', 'name'),
+                Rule::unique('imobiliarias', 'name'),
             ],
 
             'email' => [
@@ -49,7 +49,7 @@ class StoreCompanyRequest extends FormRequest
                 'string',
                 'email:rfc',
                 'max:255',
-                Rule::unique('companies', 'email'),
+                Rule::unique('imobiliarias', 'email'),
             ],
 
             'phone' => [
@@ -58,7 +58,7 @@ class StoreCompanyRequest extends FormRequest
                 'min:10',
                 'max:11',
                 'regex:/^\d{10,11}$/',
-                Rule::unique('companies', 'phone'),
+                Rule::unique('imobiliarias', 'phone'),
             ],
 
             'cnpj' => [
@@ -66,7 +66,7 @@ class StoreCompanyRequest extends FormRequest
                 'string',
                 'size:14',
                 'regex:/^\d{14}$/',
-                Rule::unique('companies', 'cnpj'),
+                Rule::unique('imobiliarias', 'cnpj'),
             ],
 
             'password' => [

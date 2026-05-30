@@ -48,8 +48,11 @@ class User extends Authenticatable
 
     public function company()
     {
+        return $this->imobiliaria();
+    }
 
-    return $this->belongsTo(Company::class);
-    
+    public function imobiliaria()
+    {
+        return $this->belongsTo(Imobiliaria::class, 'company_id');
     }
 }

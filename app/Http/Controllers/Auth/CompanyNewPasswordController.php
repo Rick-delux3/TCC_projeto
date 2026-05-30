@@ -3,7 +3,7 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
-use App\Models\Company;
+use App\Models\Imobiliaria;
 use Illuminate\Auth\Events\PasswordReset;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -29,7 +29,7 @@ class CompanyNewPasswordController extends Controller
 
         $status = Password::broker('companies')->reset(
             $request->only('email', 'password', 'password_confirmation', 'token'),
-            function (Company $company) use ($request) {
+            function (Imobiliaria $company) use ($request) {
                 $company->forceFill([
                     'password' => Hash::make($request->password),
                 ])->save();

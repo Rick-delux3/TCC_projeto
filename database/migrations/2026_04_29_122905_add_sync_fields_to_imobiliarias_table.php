@@ -11,7 +11,7 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('companies', function (Blueprint $table) {
+        Schema::table('imobiliarias', function (Blueprint $table) {
             $table->string('sync_status')->default('pending')->after('password');
             $table->timestamp('sync_started_at')->nullable();
             $table->timestamp('sync_finished_at')->nullable();
@@ -24,7 +24,7 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::table('companies', function (Blueprint $table) {
+        Schema::table('imobiliarias', function (Blueprint $table) {
             $table->dropColumn([
                 'sync_status',
                 'sync_started_at',

@@ -15,10 +15,11 @@ use App\Models\User;
 use Illuminate\Support\Str;
 use Override;
 
-class Company extends Model implements CanResetPasswordContract
+class Imobiliaria extends Model implements CanResetPasswordContract
 {
     use HasFactory, Notifiable, CanResetPassword;
 
+    protected $table = 'imobiliarias';
 
     protected $fillable = [
         'name', 'email', 'phone', 'cnpj',
@@ -44,7 +45,12 @@ class Company extends Model implements CanResetPasswordContract
 
     public function users()
     {
-        return $this->hasMany(User::class);
+        return $this->usuarios();
+    }
+
+    public function usuarios()
+    {
+        return $this->hasMany(User::class, 'company_id');
     }
 
 
@@ -56,23 +62,33 @@ class Company extends Model implements CanResetPasswordContract
     public function leads()
     {
         
-        return $this->hasMany(Lead::class);
+        return $this->hasMany(Lead::class, 'company_id');
     }
 
     public function insuranceAnalysisBatches()
     {
-        return $this->hasMany(InsuranceAnalysisBatch::class);
+        return $this->lotesAnalisesSeguro();
+    }
+
+    public function lotesAnalisesSeguro()
+    {
+        return $this->hasMany(InsuranceAnalysisBatch::class, 'company_id');
     }
 
     public function insuranceAnalyses()
     {
-        return $this->hasMany(InsuranceAnalysis::class);
+        return $this->analisesSeguro();
+    }
+
+    public function analisesSeguro()
+    {
+        return $this->hasMany(InsuranceAnalysis::class, 'company_id');
     }
 
     #[Override]
     protected static function booted(): void
     {
-        static::creating(function (Company $company){
+        static::creating(function (Imobiliaria $company){
             // Token longo usado internamente ou para links técnicos.
             if (empty($company->lead_form_token)) {
                 $company->lead_form_token = Str::random(64);

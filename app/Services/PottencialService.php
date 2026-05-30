@@ -14,7 +14,7 @@ class PottencialService
 
     public function __construct()
     {
-        $this->baseUrl = rtrim(config('services.pottencial.base_url'), '/');
+        $this->baseUrl = rtrim((string) config('services.pottencial.base_url'), '/');
         $this->clientId = config('services.pottencial.client_id');
         $this->clientSecret = config('services.pottencial.client_secret');
     }
@@ -106,12 +106,12 @@ class PottencialService
      */
     public function createRentalGuaranteeQuote(array $payload): array
     {
-        return $this->postJson('/insurance/v1/fianca-locaticia-mensalizado-pf/quotes', $payload);
+        return $this->postJson($this->rentalEndpoint(), $payload);
     }
 
     public function getRentalGuaranteeQuote(string $quoteId): array
     {
-        return $this->getJson("/insurance/v1/fianca-locaticia-mensalizado-pf/quotes/{$quoteId}");
+        return $this->getJson($this->rentalEndpoint() . "/{$quoteId}");
     }
 
     
@@ -256,5 +256,16 @@ class PottencialService
         } catch (\Throwable $e) {
             return null;
         }
+    }
+
+    private function rentalEndpoint(): string
+    {
+        return '/' . ltrim(
+            (string) config(
+                'services.pottencial.rental_endpoint',
+                '/insurance/v1/fianca-locaticia-mensalizado-pf/quotes'
+            ),
+            '/'
+        );
     }
 }

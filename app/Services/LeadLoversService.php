@@ -16,7 +16,7 @@ class LeadLoversService
 
     public function __construct()
     {
-        $this->baseUrl = rtrim(config('services.leadlovers.base_url', 'https://llapi.leadlovers.com/webapi/'), '/') . '/';
+        $this->baseUrl = config('services.leadlovers.base_url', 'https://llapi.leadlovers.com/webapi/');
         $this->token = config('services.leadlovers.token');
         $this->machineId = config('services.leadlovers.machine');
         $this->sequence = config('services.leadlovers.sequence_1');
@@ -132,15 +132,18 @@ class LeadLoversService
                 ])
                 ->post($this->baseUrl . 'Lead', $payload);
 
+            $json = $response->json();
+
             if (!$response->successful()) {
                 Log::warning('LeadLovers respondeu erro ao criar lead', [
                     'status' => $response->status(),
                     'email' => $data['Email'] ?? null,
                     'body' => $response->body(),
+                    'json' => $json,
                 ]);
             }
 
-            return $response->json() ?? [
+            return is_array($json) ? $json : [
                 'StatusCode' => $response->status(),
                 'Message' => $response->body(),
             ];

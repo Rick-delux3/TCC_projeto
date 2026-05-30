@@ -133,7 +133,7 @@ class InsuranceAnalysisController extends Controller
         /*
          * Limpa os dados da tentativa anterior.
          *
-         * Os eventos antigos continuam salvos em insurance_analysis_events,
+         * Os eventos antigos continuam salvos em eventos_analises_seguro,
          * então o histórico não é perdido.
          */
         $analysis->update([
@@ -141,6 +141,11 @@ class InsuranceAnalysisController extends Controller
             'result' => null,
             'provider_status' => null,
             'quote_id' => null,
+            'quote_number' => null,
+            'product_key' => null,
+            'commercial_premium' => null,
+            'gross_premium' => null,
+            'iof' => null,
             'request_payload' => null,
             'response_payload' => null,
             'available_plans' => null,
@@ -258,6 +263,11 @@ class InsuranceAnalysisController extends Controller
             'result' => null,
             'provider_status' => null,
             'quote_id' => null,
+            'quote_number' => null,
+            'product_key' => null,
+            'commercial_premium' => null,
+            'gross_premium' => null,
+            'iof' => null,
             'request_payload' => null,
             'response_payload' => null,
             'available_plans' => null,

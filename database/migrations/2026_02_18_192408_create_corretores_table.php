@@ -11,14 +11,18 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('admins', function (Blueprint $table) {
+        Schema::create('corretores', function (Blueprint $table) {
             $table->id();
             $table->string('name');
             $table->string('email')->unique();
             $table->string('cpf')->unique();
             $table->string('password');
+            $table->string('role')->default('admin');
+            $table->boolean('active')->default(true);
+            $table->timestamp('last_login_at')->nullable();
             $table->timestamps();
         });
+        
     }
 
     /**
@@ -26,6 +30,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('admins');
+        Schema::dropIfExists('corretores');
     }
 };
