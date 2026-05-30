@@ -23,12 +23,12 @@ return new class extends Migration
             ->constrained('imobiliarias')
             ->nullOnDelete();
 
-            $table->foreignIdFor(Corretor::class, 'created_by_admin_id')
+            $table->foreignIdFor(Corretor::class, 'created_by_corretor_id')
             ->nullable()
             ->constrained('corretores')
             ->nullOnDelete();
 
-            $table->foreignIdFor(Corretor::class, 'updated_by_admin_id')
+            $table->foreignIdFor(Corretor::class, 'updated_by_corretor_id')
             ->nullable()
             ->constrained('corretores')
             ->nullOnDelete();

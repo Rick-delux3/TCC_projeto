@@ -2,10 +2,6 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
-
-
-class Analise extends Model
+class Analise extends InsuranceAnalysis
 {
-    //
 }

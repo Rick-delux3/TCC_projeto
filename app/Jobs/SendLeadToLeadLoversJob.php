@@ -28,6 +28,10 @@ class SendLeadToLeadLoversJob implements ShouldQueue
             'imobiliariaInformada',
         ])->findOrFail($this->leadId);
 
+        if ($lead->leadlovers_status === 'sent' && $lead->sent_to_leadlovers_at) {
+            return;
+        }
+
         /**
          * Antes de criar o lead, o sistema precisa descobrir
          * qual é a tag principal dele.

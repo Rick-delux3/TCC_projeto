@@ -35,8 +35,8 @@ class Lead extends Model
         'leadlovers_status',
         'leadlovers_response',
         'sent_to_leadlovers_at',
-        'created_by_admin_id',
-        'updated_by_admin_id',
+        'created_by_corretor_id',
+        'updated_by_corretor_id',
     ];
 
     protected $casts = [
@@ -130,21 +130,21 @@ class Lead extends Model
     }
     public function createdByAdmin()
     {
-        return $this->belongsTo(Corretor::class, 'created_by_admin_id');
+        return $this->createdByCorretor();
     }
 
     public function createdByCorretor()
     {
-        return $this->belongsTo(Corretor::class, 'created_by_admin_id');
+        return $this->belongsTo(Corretor::class, 'created_by_corretor_id');
     }
 
     public function updatedByAdmin()
     {
-        return $this->belongsTo(Corretor::class, 'updated_by_admin_id');
+        return $this->updatedByCorretor();
     }
 
     public function updatedByCorretor()
     {
-        return $this->belongsTo(Corretor::class, 'updated_by_admin_id');
+        return $this->belongsTo(Corretor::class, 'updated_by_corretor_id');
     }
 }

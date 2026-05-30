@@ -46,6 +46,15 @@ class SendAnalysisResultsEmailJob implements ShouldQueue
                 'email_error' => 'Lead sem e-mail válido.',
             ]);
 
+            $this->registerEmailEventForAllAnalyses(
+                batch: $batch,
+                eventType: 'email_failed',
+                message: 'Lead sem e-mail valido.',
+                payload: [
+                    'lead_id' => $lead->id ?? null,
+                ]
+            );
+
             return;
         }
 
@@ -63,7 +72,27 @@ class SendAnalysisResultsEmailJob implements ShouldQueue
                 'email_failed_at' => null,
                 'email_error' => null,
             ]);
+
+            $this->registerEmailEventForAllAnalyses(
+                batch: $batch,
+                eventType: 'email_sent',
+                message: 'E-mail de resultado enviado ao lead.',
+                payload: [
+                    'lead_id' => $lead->id,
+                    'email' => $lead->email,
+                ]
+            );
         } catch (Throwable $e) {
+            $this->registerEmailEventForAllAnalyses(
+                batch: $batch,
+                eventType: 'email_failed',
+                message: $e->getMessage(),
+                payload: [
+                    'lead_id' => $lead->id ?? null,
+                    'email' => $lead->email ?? null,
+                ]
+            );
+
             /*
              * Salva o erro no banco para você ver no dashboard/admin depois.
              */
@@ -86,6 +115,30 @@ class SendAnalysisResultsEmailJob implements ShouldQueue
              * não adianta retry imediato; nesse caso use MAIL_MAILER=log ou Mailtrap.
              */
             throw $e;
+        }
+    }
+
+    private function registerEmailEventForAllAnalyses(
+        InsuranceAnalysisBatch $batch,
+        string $eventType,
+        string $message,
+        array $payload = []
+    ): void {
+        try {
+            foreach ($batch->analyses as $analysis) {
+                $analysis->events()->create([
+                    'event_type' => $eventType,
+                    'status' => $analysis->status,
+                    'message' => $message,
+                    'payload' => $payload,
+                ]);
+            }
+        } catch (Throwable $e) {
+            Log::warning('Erro ao registrar evento de e-mail da analise', [
+                'batch_id' => $batch->id,
+                'event_type' => $eventType,
+                'message' => $e->getMessage(),
+            ]);
         }
     }
 

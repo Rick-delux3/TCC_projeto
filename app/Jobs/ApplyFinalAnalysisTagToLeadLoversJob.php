@@ -127,6 +127,31 @@ class ApplyFinalAnalysisTagToLeadLoversJob implements ShouldQueue
                 $tag->leadlovers_tag_id
             );
 
+            if (!$this->leadLoversResponseWasSuccessful($response)) {
+                Log::warning('LeadLovers nao confirmou aplicacao da tag final', [
+                    'batch_id' => $batch->id,
+                    'lead_id' => $lead->id,
+                    'lead_email' => $lead->email,
+                    'tag_key' => $tagKey,
+                    'response' => $response,
+                ]);
+
+                $this->registerEventForAllAnalyses(
+                    batch: $batch,
+                    eventType: 'leadlovers_final_tag_failed',
+                    status: $tagKey,
+                    message: "LeadLovers nao confirmou a aplicacao da tag final: {$tag->title}",
+                    payload: [
+                        'tag_id' => $tag->leadlovers_tag_id,
+                        'tag_title' => $tag->title,
+                        'tag_key' => $tag->key,
+                    ],
+                    response: $response
+                );
+
+                return;
+            }
+
             $this->registerEventForAllAnalyses(
                 batch: $batch,
                 eventType: 'leadlovers_final_tag_applied',
@@ -158,6 +183,29 @@ class ApplyFinalAnalysisTagToLeadLoversJob implements ShouldQueue
                 ]
             );
         }
+    }
+
+    private function leadLoversResponseWasSuccessful(array $response): bool
+    {
+        $statusCode = $response['StatusCode']
+            ?? $response['statusCode']
+            ?? $response['status']
+            ?? null;
+
+        if ($statusCode !== null) {
+            return (int) $statusCode >= 200 && (int) $statusCode < 300;
+        }
+
+        $success = $response['Success'] ?? $response['success'] ?? null;
+
+        if ($success === true) {
+            return true;
+        }
+
+        $exception = $response['Exception'] ?? $response['exception'] ?? null;
+        $error = $response['Error'] ?? $response['error'] ?? null;
+
+        return blank($exception) && blank($error);
     }
 
     /**
@@ -192,9 +240,7 @@ class ApplyFinalAnalysisTagToLeadLoversJob implements ShouldQueue
          */
         if (
             $statuses->contains('manual_review') ||
-            $statuses->contains('quoted') ||
-            $statuses->contains('processing') ||
-            $statuses->contains('pending')
+            $statuses->contains('quoted')
         ) {
             return self::TAG_KEY_NEGOTIATION;
         }

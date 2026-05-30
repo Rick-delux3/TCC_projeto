@@ -15,7 +15,7 @@ class LeadLoversSyncService
 
     public function __construct()
     {
-        $this->baseUrl = config('services.leadlovers.base_url', 'https://llapi.leadlovers.com/webapi/');
+        $this->baseUrl = rtrim((string) config('services.leadlovers.base_url', 'https://llapi.leadlovers.com/webapi/'), '/') . '/';
         $this->token = config('services.leadlovers.token');
     }
 

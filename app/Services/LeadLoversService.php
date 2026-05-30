@@ -16,7 +16,7 @@ class LeadLoversService
 
     public function __construct()
     {
-        $this->baseUrl = config('services.leadlovers.base_url', 'https://llapi.leadlovers.com/webapi/');
+        $this->baseUrl = rtrim((string) config('services.leadlovers.base_url', 'https://llapi.leadlovers.com/webapi/'), '/') . '/';
         $this->token = config('services.leadlovers.token');
         $this->machineId = config('services.leadlovers.machine');
         $this->sequence = config('services.leadlovers.sequence_1');
@@ -179,7 +179,22 @@ class LeadLoversService
                     'Score' => $score,
                 ]);
 
-            return $response->json() ?? [];
+            $json = $response->json();
+
+            if (!$response->successful()) {
+                Log::warning('LeadLovers respondeu erro ao adicionar tag ao lead', [
+                    'status' => $response->status(),
+                    'email' => $email,
+                    'tag_id' => $tagId,
+                    'body' => $response->body(),
+                    'json' => $json,
+                ]);
+            }
+
+            return is_array($json) ? $json : [
+                'StatusCode' => $response->status(),
+                'Message' => $response->body(),
+            ];
         } catch (\Throwable $e) {
             Log::error('Erro ao adicionar tag ao lead na LeadLovers', [
                 'email' => $email,
