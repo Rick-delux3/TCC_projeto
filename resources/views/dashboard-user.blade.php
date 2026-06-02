@@ -350,58 +350,59 @@
     <div class="container-fluid px-3 px-lg-4 py-4">
 
         {{-- Toast não bloqueante de sincronização --}}
-        <div class="toast-container position-fixed top-0 end-0 p-3 sync-toast">
-            <div
-                id="syncStatusToast"
-                class="toast border-0 shadow-lg rounded-4"
-                role="status"
-                aria-live="polite"
-                aria-atomic="true"
-                data-bs-autohide="false"
-            >
-                <div class="toast-header border-0">
-                    <span class="badge {{ $syncBadgeClass }} me-2" id="sync-toast-badge">
-                        {{ $syncLabel }}
-                    </span>
+        <div id="syncFloatingPanel" class="sync-floating-panel d-none">
+            <div class="sync-floating-card p-3">
+                <div class="d-flex justify-content-between align-items-start gap-3 mb-2">
+                    <div>
+                        <span class="badge {{ $syncBadgeClass }} mb-2" id="sync-toast-badge">
+                            {{ $syncLabel }}
+                        </span>
 
-                    <strong class="me-auto" id="sync-toast-title">
-                        Status da sincronização
-                    </strong>
+                        <h6 class="fw-bold mb-1" id="sync-toast-title">
+                            Status da sincronização
+                        </h6>
+                    </div>
 
-                    <small class="text-muted" id="sync-toast-percent">
-                        0%
-                    </small>
-
-                    <button type="button" class="btn-close ms-2" data-bs-dismiss="toast" aria-label="Fechar"></button>
+                    <button type="button" class="btn-close" id="sync-panel-close-button" aria-label="Fechar"></button>
                 </div>
 
-                <div class="toast-body pt-0">
-                    <p class="text-muted small mb-2" id="sync-toast-description">
-                        Acompanhando a sincronização com a LeadLovers.
-                    </p>
+                <p class="text-muted small mb-2" id="sync-toast-description">
+                    Acompanhando a sincronização com a LeadLovers.
+                </p>
 
-                    <div class="progress mb-2" style="height: 8px;">
-                        <div
-                            id="sync-toast-progress-bar"
-                            class="progress-bar progress-bar-striped progress-bar-animated"
-                            style="width: 0%;"
-                            role="progressbar"
-                            aria-valuenow="0"
-                            aria-valuemin="0"
-                            aria-valuemax="100"
-                        ></div>
-                    </div>
+                <div class="progress mb-2" style="height: 8px;">
+                    <div
+                        id="sync-toast-progress-bar"
+                        class="progress-bar progress-bar-striped progress-bar-animated"
+                        style="width: 0%;"
+                        role="progressbar"
+                        aria-valuenow="0"
+                        aria-valuemin="0"
+                        aria-valuemax="100"
+                    ></div>
+                </div>
 
-                    <div class="small text-muted mb-3" id="sync-toast-summary">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <small class="text-muted" id="sync-toast-summary">
                         Aguardando atualização.
-                    </div>
+                    </small>
 
-                    <form method="POST" action="{{ route('Dashboard.syncAgain') }}" id="sync-toast-retry-form" class="d-none">
-                        @csrf
-                    </form>
+                    <small class="fw-semibold text-muted" id="sync-toast-percent">
+                        0%
+                    </small>
+                </div>
 
+                <form method="POST" action="{{ route('Dashboard.syncAgain') }}" id="sync-toast-retry-form" class="d-none">
+                    @csrf
+                </form>
+
+                <div class="d-flex gap-2 mt-3">
                     <button type="button" class="btn btn-sm btn-danger d-none" id="sync-toast-retry-button">
-                        Tentar sincronizar novamente
+                        Tentar novamente
+                    </button>
+
+                    <button type="button" class="btn btn-sm btn-outline-primary d-none" id="sync-panel-refresh-button">
+                        Atualizar painel
                     </button>
                 </div>
             </div>
@@ -459,42 +460,7 @@
         </div>
 
         {{-- Alertas de sincronização --}}
-        @if ($isSyncBusy)
-            <div class="alert alert-info border-0 shadow-sm rounded-4 mb-4">
-                <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2">
-                    <div>
-                        <strong>Sincronização em andamento.</strong>
-                        <div class="small">
-                            Os leads estão sendo processados em segundo plano. Você pode continuar usando o painel normalmente.
-                        </div>
-                    </div>
-
-                    <span class="badge {{ $syncBadgeClass }}">
-                        {{ $syncLabel }}
-                    </span>
-                </div>
-            </div>
-        @endif
-
-        @if ($hasSyncFailed)
-            <div class="alert alert-danger border-0 shadow-sm rounded-4 mb-4">
-                <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2">
-                    <div>
-                        <strong>A sincronização falhou.</strong>
-                        <div class="small">
-                            {{ $syncError ?? 'Não foi possível concluir a sincronização. Tente novamente.' }}
-                        </div>
-                    </div>
-
-                    <form method="POST" action="{{ route('Dashboard.syncAgain') }}">
-                        @csrf
-                        <button class="btn btn-sm btn-danger">
-                            Tentar novamente
-                        </button>
-                    </form>
-                </div>
-            </div>
-        @endif
+       
 
         {{-- Bloco principal superior --}}
         <div class="row g-4 mb-4">
@@ -1134,8 +1100,9 @@ document.addEventListener('DOMContentLoaded', function () {
     const dashboardThemeToggle = document.getElementById('dashboardThemeToggle');
     const dashboardThemeStorageKey = 'dashboard-theme';
 
-    const toastElement = document.getElementById('syncStatusToast');
-    const syncToast = toastElement ? new bootstrap.Toast(toastElement, { autohide: false }) : null;
+    const syncFloatingPanel = document.getElementById('syncFloatingPanel');
+    const syncPanelCloseButton = document.getElementById('sync-panel-close-button');
+    const syncPanelRefreshButton = document.getElementById('sync-panel-refresh-button');
 
     const toastBadgeEl = document.getElementById('sync-toast-badge');
     const toastTitleEl = document.getElementById('sync-toast-title');
@@ -1230,7 +1197,8 @@ document.addEventListener('DOMContentLoaded', function () {
                 description: 'A importação foi colocada na fila e será processada em instantes.',
                 progress: progress,
                 summary: 'Aguardando início do processamento.',
-                retry: false
+                retry: false, 
+                refresh: false
             };
         }
 
@@ -1242,7 +1210,8 @@ document.addEventListener('DOMContentLoaded', function () {
                 description: 'Os leads estão sendo sincronizados em segundo plano.',
                 progress: progress,
                 summary: leadsCount > 0 ? `${leadsCount} leads disponíveis até agora.` : 'Lendo registros da integração.',
-                retry: false
+                retry: false,
+                refresh: false
             };
         }
 
@@ -1254,7 +1223,8 @@ document.addEventListener('DOMContentLoaded', function () {
                 description: 'A base local foi atualizada com sucesso.',
                 progress: 100,
                 summary: `${leadsCount} leads disponíveis no painel.`,
-                retry: false
+                retry: false,
+                refresh: false
             };
         }
         
@@ -1266,7 +1236,8 @@ document.addEventListener('DOMContentLoaded', function () {
                 description: payload.syncError || 'A sincronização foi finalizada com uma quantidade suficiente de leads para o painel.',
                 progress: 100,
                 summary: `${leadsCount} leads disponíveis no painel.`,
-                retry: false
+                retry: false,
+                refresh: false
             };
         }
         
@@ -1278,7 +1249,8 @@ document.addEventListener('DOMContentLoaded', function () {
                 description: payload.syncError || 'Não foi possível concluir a sincronização.',
                 progress: 100,
                 summary: 'Revise a integração ou tente novamente.',
-                retry: true
+                retry: true,    
+                refresh: false
             };
         }
 
@@ -1289,12 +1261,13 @@ document.addEventListener('DOMContentLoaded', function () {
             description: 'Nenhuma sincronização em andamento.',
             progress: 0,
             summary: 'Aguardando atualização.',
-            retry: false
+            retry: false,
+            refresh: false
         };
     }
 
     function renderToast(copy) {
-        if (!toastElement) {
+        if (!syncFloatingPanel) {
             return;
         }
 
@@ -1308,13 +1281,28 @@ document.addEventListener('DOMContentLoaded', function () {
 
         toastProgressEl.style.width = `${copy.progress}%`;
         toastProgressEl.setAttribute('aria-valuenow', copy.progress);
-        toastProgressEl.className = `progress-bar progress-bar-striped progress-bar-animated bg-${copy.variant}`;
+        toastProgressEl.className = `progress-bar progress-bar-striped bg-${copy.variant}`;
+
+        if (copy.progress < 100) {
+            toastProgressEl.classList.add('progress-bar-animated');
+        }
+        else {
+            toastProgressEl.classList.remove('progress-bar-animated');
+        }
 
         if (copy.retry) {
             toastRetryButtonEl.classList.remove('d-none');
         } else {
             toastRetryButtonEl.classList.add('d-none');
         }
+
+        if (copy.refresh) {
+            syncPanelRefreshButton.classList.remove('d-none');
+        } else {
+            syncPanelRefreshButton.classList.add('d-none');
+        }
+
+        showSyncPanel();
     }
 
     function setCopyStatus(target, message, type = 'muted') {
@@ -1440,10 +1428,6 @@ document.addEventListener('DOMContentLoaded', function () {
                     syncError: data.sync_error
                 }));
 
-                if (syncToast) {
-                    syncToast.show();
-                }
-
                 return;
             }
 
@@ -1454,18 +1438,6 @@ document.addEventListener('DOMContentLoaded', function () {
                     totalLeads: data.total_leads,
                     syncError: data.sync_error
                 }));
-
-                if (syncToast) {
-                    syncToast.show();
-                }
-
-                if (doneReloadTimeout) {
-                    clearTimeout(doneReloadTimeout);
-                }
-
-                doneReloadTimeout = setTimeout(function () {
-                    window.location.reload();
-                }, 1200);
 
                 return;
             }
@@ -1498,14 +1470,14 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     });
 
-    if (currentStatus === 'queued' || currentStatus === 'running') {
+   if (currentStatus === 'queued' || currentStatus === 'running') {
         renderToast(getToastCopy(currentStatus, {
             totalLeads: initialTotalLeads,
             syncError: initialSyncError
         }));
 
-        if (syncToast && shouldAutoShowSyncToast) {
-            syncToast.show();
+        if (shouldAutoShowSyncToast) {
+            showSyncPanel();
         }
 
         intervalId = setInterval(checkSyncStatus, 5000);
@@ -1518,8 +1490,8 @@ document.addEventListener('DOMContentLoaded', function () {
             syncError: initialSyncError
         }));
 
-        if (syncToast && shouldAutoShowSyncToast) {
-            syncToast.show();
+        if (shouldAutoShowSyncToast) {
+            showSyncPanel();
         }
     }
 });
