@@ -15,9 +15,9 @@ return new class extends Migration
         Schema::create('lead_enderecos', function (Blueprint $table) {
             $table->id();
 
-             $table->foreignId(Lead::class)
-            ->constrained('leads')
-            ->cascadeOnDelete();
+             $table->foreignIdFor(Lead::class)
+             ->constrained('leads')
+             ->cascadeOnDelete();
 
             $table->string('estado', 2)->nullable();
             $table->string('cidade_imovel')->nullable();

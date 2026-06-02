@@ -19,6 +19,7 @@ class LeadEnderecos extends Model
         'estado',
     ];
 
+
     public function lead(){
         return $this->belongsTo(Lead::class);
     }

@@ -43,6 +43,11 @@ return [
         'sequence_1' => env('LEADLOVERS_SEQUENCE'),
         'sequence_2' => env('LEADLOVERS_SEQUENCE_LOCATARIO'),
         'step' => env('LEADLOVERS_STEP'),
+        'sync_max_pages' => env('SYNC_MAX_PAGES'),
+        'sync_page_size' => env('SYNC_PAGE_SIZE'),
+        'sync_max_imported_leads' => env('SYNC_MAX_IMPORTED_LEADS'),
+        'sync_max_scanned_leads' => env('SYNC_MAX_SCANNED_LEADS'),
+
         
     ],
 

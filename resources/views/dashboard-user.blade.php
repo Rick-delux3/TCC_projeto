@@ -58,7 +58,8 @@
     $syncBadgeClass = match ($syncStatus) {
         'queued' => 'text-bg-warning',
         'running' => 'text-bg-primary',
-        'done' => 'text-bg-success',
+        'completed' => 'text-bg-success',
+        'completed_with_warning' => 'text-bg-warning',
         'failed' => 'text-bg-danger',
         default => 'text-bg-secondary',
     };
@@ -66,7 +67,8 @@
     $syncLabel = match ($syncStatus) {
         'queued' => 'Na fila',
         'running' => 'Sincronizando',
-        'done' => 'Atualizado',
+        'completed' => 'Atualizado',
+        'completed_with_warning' => 'Atualizado parcialmente',
         'failed' => 'Falhou',
         default => 'Aguardando',
     };
@@ -1209,7 +1211,11 @@ document.addEventListener('DOMContentLoaded', function () {
             return Math.min(84, 46 + Math.min(Number(totalLeads || 0), 38));
         }
 
-        return 100;
+        if(status === 'completed' || status === 'completed_with_warning' || status === 'failed'){
+            return 100;
+        }
+
+        return 0;
     }
 
     function getToastCopy(status, payload) {
@@ -1240,6 +1246,30 @@ document.addEventListener('DOMContentLoaded', function () {
             };
         }
 
+        if(status === 'completed'){
+            return {
+                variant: 'success',
+                badge: 'Atualizado',
+                title: 'Sincronização concluída',
+                description: 'A base local foi atualizada com sucesso.',
+                progress: 100,
+                summary: `${leadsCount} leads disponíveis no painel.`,
+                retry: false
+            };
+        }
+        
+        if(status === 'completed_with_warning'){
+            return{
+                variant: 'warning',
+                badge: 'Parcial',
+                title: 'Sincronização parcial concluída',
+                description: payload.syncError || 'A sincronização foi finalizada com uma quantidade suficiente de leads para o painel.',
+                progress: 100,
+                summary: `${leadsCount} leads disponíveis no painel.`,
+                retry: false
+            };
+        }
+        
         if (status === 'failed') {
             return {
                 variant: 'danger',
@@ -1253,12 +1283,12 @@ document.addEventListener('DOMContentLoaded', function () {
         }
 
         return {
-            variant: 'success',
-            badge: 'Atualizado',
-            title: 'Sincronização concluída',
-            description: 'A base local foi atualizada.',
-            progress: 100,
-            summary: `${leadsCount} leads disponíveis no painel.`,
+            variant: 'secondary',
+            badge: 'Aguardando',
+            title: 'Sincronização aguardando',
+            description: 'Nenhuma sincronização em andamento.',
+            progress: 0,
+            summary: 'Aguardando atualização.',
             retry: false
         };
     }
@@ -1402,8 +1432,10 @@ document.addEventListener('DOMContentLoaded', function () {
                 return;
             }
 
-            if (data.sync_status === 'queued' || data.sync_status === 'running') {
-                renderToast(getToastCopy(data.sync_status, {
+            const status = data.sync_status;
+
+            if (status === 'queued' || status === 'running') {
+                renderToast(getToastCopy(status, {
                     totalLeads: data.total_leads,
                     syncError: data.sync_error
                 }));
@@ -1411,12 +1443,14 @@ document.addEventListener('DOMContentLoaded', function () {
                 if (syncToast) {
                     syncToast.show();
                 }
+
+                return;
             }
 
-            if (data.sync_status === 'done') {
+            if (status === 'completed' || status === 'completed_with_warning') {
                 stopPolling();
 
-                renderToast(getToastCopy('done', {
+                renderToast(getToastCopy(status, {
                     totalLeads: data.total_leads,
                     syncError: data.sync_error
                 }));
@@ -1431,10 +1465,12 @@ document.addEventListener('DOMContentLoaded', function () {
 
                 doneReloadTimeout = setTimeout(function () {
                     window.location.reload();
-                }, 900);
+                }, 1200);
+
+                return;
             }
 
-            if (data.sync_status === 'failed') {
+            if (status === 'failed') {
                 stopPolling();
 
                 renderToast(getToastCopy('failed', {
@@ -1445,7 +1481,10 @@ document.addEventListener('DOMContentLoaded', function () {
                 if (syncToast) {
                     syncToast.show();
                 }
+
+                return;
             }
+            stopPolling();
         } catch (error) {
             console.error('Erro ao consultar status da sincronização:', error);
         }
@@ -1486,19 +1525,6 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 
 
-filterLinks.forEach(function (link) {
-        link.addEventListener('click', saveScrollPosition);
-    });
 
-    const savedPosition = sessionStorage.getItem(scrollKey);
-
-    if (savedPosition !== null) {
-        window.scrollTo({
-            top: parseInt(savedPosition, 10),
-            behavior: 'instant'
-        });
-
-        sessionStorage.removeItem(scrollKey);
-    }
 </script>
 @endsection

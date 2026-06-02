@@ -37,17 +37,33 @@ class SyncCompanyLeadLoversLeadsJob implements ShouldQueue
         ]);
 
         try {
-            $syncService->syncCompanyLeads($company);
+           $result = $syncService->syncCompanyLeads($company);
+
+            $partialReasons = [
+                'max_pages_reached',
+                'max_imported_leads_reached',
+                'max_scanned_leads_reached',
+            ];
 
             Log::info('JOB: service terminou, marcando como done', [
                 'company_id' => $company->id,
             ]);
 
+            $isPartial = in_array($result['stopped_reason'] ?? null, $partialReasons, true);
+
             $company->update([
-                'sync_status' => 'done',
-                'sync_finished_at' => now(),
+                'sync_status' => $isPartial
+                    ? 'completed_with_warning'
+                    : 'completed',
+
                 'sincronizado_em' => now(),
-                'sync_error' => null,
+
+                'sync_finished_at' => now(),
+
+                'sync_error' => $isPartial
+                    ? 'Sincronização parcial concluída. Foram importados leads suficientes para exibição no dashboard.'
+                    : null,
+                
             ]);
 
             Log::info('JOB: sincronização finalizada com sucesso', [

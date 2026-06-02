@@ -12,15 +12,29 @@ class DashboardController extends Controller
      * Dispara a sincronização dos leads da imobiliária com a LeadLovers.
      * Retorna false se já houver uma sincronização na fila ou em execução.
      */
-    private function queueCompanySync(Imobiliaria $company): bool
+    private function queueCompanySync(Imobiliaria $company, bool $force = false): bool
     {
         if (in_array($company->sync_status, ['queued', 'running'], true)) {
+            return false;
+        }
+
+        if (!$force && in_array($company->sync_status, [
+            'completed',
+            'completed_with_warning',
+            'failed',
+        ], true)) {
+            return false;
+        }
+
+         if (!$force && !is_null($company->sincronizado_em)) {
             return false;
         }
 
         $company->update([
             'sync_status' => 'queued',
             'sync_error' => null,
+            'sync_started_at' => null,
+            'sync_finished_at' => null,
         ]);
 
         SyncCompanyLeadLoversLeadsJob::dispatch($company->id);
@@ -135,7 +149,16 @@ class DashboardController extends Controller
         /**
          * Primeira sincronização automática.
          */
-        if (is_null($company->sincronizado_em)) {
+        if (
+            is_null($company->sincronizado_em)
+            && !in_array($company->sync_status, [
+                'queued',
+                'running',
+                'completed',
+                'completed_with_warning',
+                'failed',
+            ], true)
+        ) {
             $this->queueCompanySync($company);
         }
 
@@ -279,7 +302,7 @@ class DashboardController extends Controller
                 ->with('success', 'Empresa não encontrada para a sincronização.');
         }
 
-        if (!$this->queueCompanySync($company)) {
+        if (!$this->queueCompanySync($company, force: true)) {
             return redirect()
                 ->route('Dashboard')
                 ->with('success', 'A sincronização já está em andamento.');
