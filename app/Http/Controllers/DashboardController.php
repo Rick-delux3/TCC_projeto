@@ -149,6 +149,9 @@ class DashboardController extends Controller
         /**
          * Primeira sincronização automática.
          */
+
+        $syncJustQueued = (bool) session('sync_just_queued', false);
+
         if (
             is_null($company->sincronizado_em)
             && !in_array($company->sync_status, [
@@ -159,7 +162,15 @@ class DashboardController extends Controller
                 'failed',
             ], true)
         ) {
-            $this->queueCompanySync($company);
+          $syncJustQueued = $this->queueCompanySync($company);
+
+
+          /*
+            * Recarrega os dados atualizados da imobiliária.
+            * Isso garante que sync_status venha como queued/running/completed
+            * depois que o método queueCompanySync fizer o update.
+            */
+          $company->refresh();
         }
 
         $recentThreshold = now()->subDays(7);
@@ -263,6 +274,7 @@ class DashboardController extends Controller
 
             'syncStatus' => $company->sync_status,
             'syncError' => $company->sync_error,
+            'syncJustQueued' => $syncJustQueued,
 
             /**
              * Mantive leadFormUrl para não quebrar a view atual.
@@ -310,6 +322,7 @@ class DashboardController extends Controller
 
         return redirect()
             ->route('Dashboard')
-            ->with('success', 'Nova sincronização iniciada com sucesso.');
+            ->with('success', 'Nova sincronização iniciada com sucesso.')
+            ->with('sync_just_queued', true);
     }
 }

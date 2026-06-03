@@ -331,8 +331,32 @@
         letter-spacing: .18rem;
     }
 
-    .sync-toast {
+    
+    .sync-floating-panel {
+        position: fixed;
+        right: 1.5rem;
+        bottom: 1.5rem;
+        width: min(420px, calc(100% - 2rem));
         z-index: 1080;
+        pointer-events: none;
+    }
+
+    .sync-floating-card {
+        pointer-events: auto;
+        background: var(--dash-toast-bg);
+        color: var(--dash-text);
+        border: 1px solid var(--dash-border);
+        box-shadow: var(--dash-card-shadow);
+        border-radius: 1.5rem;
+    }
+
+    @media (max-width: 576px) {
+        .sync-floating-panel {
+            left: 1rem;
+            right: 1rem;
+            bottom: 1rem;
+            width: auto;
+        }
     }
 
     @media (max-width: 768px) {
@@ -458,9 +482,6 @@
                 </button>
             </div>
         </div>
-
-        {{-- Alertas de sincronização --}}
-       
 
         {{-- Bloco principal superior --}}
         <div class="row g-4 mb-4">
@@ -1093,6 +1114,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const currentStatus = @json($syncStatus);
     const initialSyncError = @json($syncError);
     const initialTotalLeads = @json($totalLeads);
+    const syncJustQueued = @json($syncJustQueued ?? false);
     const leadFormUrl = @json($leadFormUrl);
     const leadAccessCode = @json($leadAccessCode);
     const shouldAutoShowSyncToast = @json($shouldAutoShowSyncToast);
@@ -1162,6 +1184,28 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
+    function showSyncPanel() {
+        if (syncFloatingPanel) {
+            syncFloatingPanel.classList.remove('d-none');
+        }
+    }
+
+    function hideSyncPanel() {
+        if (syncFloatingPanel) {
+            syncFloatingPanel.classList.add('d-none');
+        }
+    }
+
+    if (syncPanelCloseButton) {
+        syncPanelCloseButton.addEventListener('click', hideSyncPanel);
+    }
+
+    if (syncPanelRefreshButton) {
+        syncPanelRefreshButton.addEventListener('click', function () {
+            window.location.reload();
+        });
+    }
+
     function stopPolling() {
         if (intervalId) {
             clearInterval(intervalId);
@@ -1224,7 +1268,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 progress: 100,
                 summary: `${leadsCount} leads disponíveis no painel.`,
                 retry: false,
-                refresh: false
+                refresh: true
             };
         }
         
@@ -1237,7 +1281,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 progress: 100,
                 summary: `${leadsCount} leads disponíveis no painel.`,
                 retry: false,
-                refresh: false
+                refresh: true
             };
         }
         
@@ -1290,16 +1334,20 @@ document.addEventListener('DOMContentLoaded', function () {
             toastProgressEl.classList.remove('progress-bar-animated');
         }
 
-        if (copy.retry) {
-            toastRetryButtonEl.classList.remove('d-none');
-        } else {
-            toastRetryButtonEl.classList.add('d-none');
+        if (toastRetryButtonEl) {
+            if (copy.retry) {
+                toastRetryButtonEl.classList.remove('d-none');
+            } else {
+                toastRetryButtonEl.classList.add('d-none');
+            }
         }
 
-        if (copy.refresh) {
-            syncPanelRefreshButton.classList.remove('d-none');
-        } else {
-            syncPanelRefreshButton.classList.add('d-none');
+       if (syncPanelRefreshButton) {
+            if (copy.refresh) {
+                syncPanelRefreshButton.classList.remove('d-none');
+            } else {
+                syncPanelRefreshButton.classList.add('d-none');
+            }
         }
 
         showSyncPanel();
@@ -1450,9 +1498,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     syncError: data.sync_error
                 }));
 
-                if (syncToast) {
-                    syncToast.show();
-                }
+                showSyncPanel();
 
                 return;
             }
@@ -1470,15 +1516,18 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     });
 
-   if (currentStatus === 'queued' || currentStatus === 'running') {
-        renderToast(getToastCopy(currentStatus, {
+   if (currentStatus === 'queued' || currentStatus === 'running' || syncJustQueued) {
+        const statusToRender = currentStatus === 'queued' || currentStatus === 'running'
+            ? currentStatus
+            : 'queued';
+        renderToast(getToastCopy(statusToRender, {
             totalLeads: initialTotalLeads,
             syncError: initialSyncError
         }));
 
-        if (shouldAutoShowSyncToast) {
-            showSyncPanel();
-        }
+        
+        showSyncPanel();
+
 
         intervalId = setInterval(checkSyncStatus, 5000);
         checkSyncStatus();

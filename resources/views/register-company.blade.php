@@ -39,7 +39,9 @@
                         <option value="" disabled selected>Selecione sua imobiliaria...</option>
 
                         @forelse($tagsOficiais as $tagNome)
-                            <option value="{{ $tagNome }}">{{ $tagNome }}</option>
+                            <option value="{{ $tagNome->leadlovers_tag_id }}"
+                                @selected(old('leadlovers_tag_id') == $tagNome->leadlovers_tag_id)
+                            >{{ $tagNome->title }}</option>
                         @empty
                             <option value="" disabled>Nenhuma tag encontrada no sistema</option>
                         @endforelse
