@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use App\Models\Imobiliaria;
 use App\Jobs\SyncCompanyLeadLoversLeadsJob;
+use App\Models\LeadLoversTag;
 
 class DashboardController extends Controller
 {
@@ -254,6 +255,9 @@ class DashboardController extends Controller
             'latestLeadAt' => optional($latestLead)->created_at,
             'filteredLeads' => $leads->total(),
         ];
+
+
+        
 
         /**
          * Nova lógica de acesso:

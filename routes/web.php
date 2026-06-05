@@ -16,6 +16,7 @@ use App\Services\PottencialService;
 use App\Http\Controllers\InsuranceAnalysisController;
 use App\Http\Controllers\CepController;
 use App\Models\Imobiliaria;
+use App\Http\Controllers\DashboardLeadController;
 
 Route::get('/teste/token_acesso', [PottencialService::class, 'testAuthentication']);
 
@@ -51,6 +52,12 @@ Route::prefix('/Dashboard')->group(function () {
 
     Route::post('/analises/provider/{analysis}/sync-status', [InsuranceAnalysisController::class, 'syncStatus'])
     ->name('insurance-analyses.sync-status');
+
+    Route::put('/leads/{lead}', [DashboardLeadController::class, 'update'])
+    ->name('dashboard.leads.update');
+
+    Route::post('/leads/{lead}/reanalisar', [DashboardLeadController::class, 'reanalyze'])
+    ->name('dashboard.leads.reanalyze');
     
     Route::get('/Admin', function (){
         return view('dashboard-admin');

@@ -94,7 +94,7 @@ class InsuranceAnalysisController extends Controller
             'analyses.events',
         ]);
 
-        return view('insurance-analyses.show', compact('batch'));
+        return view('dashboard-user', compact('batch'));
     }
 
     /**
@@ -230,7 +230,7 @@ class InsuranceAnalysisController extends Controller
             ->latest()
             ->paginate(20);
 
-        return view('admin.insurance-analyses.index', compact('batches'));
+        return view('dashboard-admin', compact('batches'));
     }
 
     /**
@@ -247,7 +247,7 @@ class InsuranceAnalysisController extends Controller
             'analyses.events',
         ]);
 
-        return view('admin.insurance-analyses.show', compact('batch'));
+        return view('dashboard-admin', compact('batch'));
     }
 
     /**

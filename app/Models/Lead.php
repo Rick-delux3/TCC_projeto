@@ -147,4 +147,22 @@ class Lead extends Model
     {
         return $this->belongsTo(Corretor::class, 'updated_by_corretor_id');
     }
+
+    public function canRequestReanalysis(): bool
+    {
+        $lastAnalysis = $this->insuranceAnalyses()
+            ->latest('created_at')
+            ->first();
+
+        if (!$lastAnalysis) {
+            return true;
+        }
+
+        $lastLeadUpdate = collect([
+            $this->updated_at,
+            optional($this->endereco)->updated_at,
+        ])->filter()->max();
+
+        return $lastLeadUpdate && $lastLeadUpdate->gt($lastAnalysis->created_at);
+    }
 }

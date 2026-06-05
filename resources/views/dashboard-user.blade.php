@@ -74,304 +74,21 @@
     };
 @endphp
 
-<style>
-    .dashboard-shell {
-        --dash-bg: #f8f9fb;
-        --dash-surface: #ffffff;
-        --dash-surface-soft: #f1f3f5;
-        --dash-text: #212529;
-        --dash-muted: #6c757d;
-        --dash-border: rgba(0, 0, 0, .08);
-        --dash-card-shadow: 0 .5rem 1.5rem rgba(0, 0, 0, .06);
-        --dash-input-bg: #ffffff;
-        --dash-toast-bg: rgba(255, 255, 255, .96);
-        --dash-progress-bg: rgba(15, 23, 42, .08);
-        background-color: var(--dash-bg);
-        background:
-            radial-gradient(circle at top left, rgba(13, 110, 253, .08), transparent 28rem),
-            linear-gradient(180deg, #f8f9fb 0%, #ffffff 100%);
-        color: var(--dash-text);
-        min-height: 100vh;
-        transition: background-color .2s ease, color .2s ease, border-color .2s ease;
-    }
 
-    .dashboard-shell[data-dashboard-theme="dark"] {
-        --dash-bg: #0f172a;
-        --dash-surface: #111827;
-        --dash-surface-soft: #1f2937;
-        --dash-text: #f8fafc;
-        --dash-muted: #cbd5e1;
-        --dash-border: rgba(255, 255, 255, .12);
-        --dash-card-shadow: 0 .5rem 1.5rem rgba(0, 0, 0, .35);
-        --dash-input-bg: #0f172a;
-        --dash-toast-bg: rgba(17, 24, 39, .96);
-        --dash-progress-bg: rgba(255, 255, 255, .08);
-        background-color: var(--dash-bg);
-        background:
-            radial-gradient(circle at top left, rgba(59, 130, 246, .16), transparent 28rem),
-            radial-gradient(circle at top right, rgba(37, 99, 235, .12), transparent 24rem),
-            linear-gradient(180deg, #0f172a 0%, #020617 100%);
-    }
-
-    .dashboard-shell .card-body,
-    .dashboard-shell .btn,
-    .dashboard-shell .form-control,
-    .dashboard-shell .form-select,
-    .dashboard-shell .toast,
-    .dashboard-shell .list-group-item,
-    .dashboard-shell .page-link,
-    .dashboard-shell .progress,
-    .dashboard-shell .alert,
-    .dashboard-shell .badge,
-    .dashboard-shell hr,
-    .dashboard-shell .border {
-        transition: background-color .2s ease, color .2s ease, border-color .2s ease, box-shadow .2s ease;
-    }
-
-    .dashboard-shell .card:not(.dashboard-hero-card) {
-        background-color: var(--dash-surface);
-        color: var(--dash-text);
-        border-color: var(--dash-border) !important;
-        box-shadow: var(--dash-card-shadow) !important;
-    }
-
-    .dashboard-shell .text-muted {
-        color: var(--dash-muted) !important;
-    }
-
-    .dashboard-shell .bg-light,
-    .dashboard-shell .bg-body-tertiary {
-        background-color: var(--dash-surface-soft) !important;
-        color: var(--dash-text) !important;
-    }
-
-    .dashboard-shell .border,
-    .dashboard-shell hr {
-        border-color: var(--dash-border) !important;
-    }
-
-    .dashboard-shell .form-control,
-    .dashboard-shell .form-select,
-    .dashboard-shell .input-group-text {
-        background-color: var(--dash-input-bg);
-        color: var(--dash-text);
-        border-color: var(--dash-border);
-    }
-
-    .dashboard-shell .form-control::placeholder {
-        color: var(--dash-muted);
-    }
-
-    .dashboard-shell .form-control:focus,
-    .dashboard-shell .form-select:focus {
-        background-color: var(--dash-surface);
-        color: var(--dash-text);
-        border-color: rgba(13, 110, 253, .45);
-        box-shadow: 0 0 0 .25rem rgba(13, 110, 253, .16);
-    }
-
-    .dashboard-shell .list-group {
-        --bs-list-group-bg: transparent;
-        --bs-list-group-color: var(--dash-text);
-        --bs-list-group-border-color: var(--dash-border);
-        --bs-list-group-action-hover-bg: var(--dash-surface-soft);
-        --bs-list-group-action-active-bg: var(--dash-surface-soft);
-    }
-
-    .dashboard-shell .list-group-item:not(.active) {
-        color: var(--dash-text);
-    }
-
-    .dashboard-shell .pagination {
-        --bs-pagination-color: var(--dash-text);
-        --bs-pagination-bg: var(--dash-surface);
-        --bs-pagination-border-color: var(--dash-border);
-        --bs-pagination-hover-color: var(--dash-text);
-        --bs-pagination-hover-bg: var(--dash-surface-soft);
-        --bs-pagination-hover-border-color: var(--dash-border);
-        --bs-pagination-focus-color: var(--dash-text);
-        --bs-pagination-focus-bg: var(--dash-surface-soft);
-        --bs-pagination-focus-box-shadow: 0 0 0 .25rem rgba(13, 110, 253, .15);
-        --bs-pagination-disabled-color: var(--dash-muted);
-        --bs-pagination-disabled-bg: var(--dash-surface-soft);
-        --bs-pagination-disabled-border-color: var(--dash-border);
-        --bs-pagination-active-bg: #0d6efd;
-        --bs-pagination-active-border-color: #0d6efd;
-    }
-
-    .dashboard-shell .toast {
-        --bs-toast-bg: var(--dash-toast-bg);
-        --bs-toast-color: var(--dash-text);
-        --bs-toast-border-color: var(--dash-border);
-        --bs-toast-header-bg: var(--dash-surface);
-        --bs-toast-header-color: var(--dash-text);
-        background-color: var(--dash-toast-bg);
-        color: var(--dash-text);
-        border-color: var(--dash-border) !important;
-        box-shadow: var(--dash-card-shadow) !important;
-    }
-
-    .dashboard-shell .toast-header {
-        background-color: var(--dash-surface);
-        color: var(--dash-text);
-        border-bottom: 1px solid var(--dash-border);
-    }
-
-    .dashboard-shell .progress {
-        background-color: var(--dash-progress-bg);
-    }
-
-    .dashboard-shell .dashboard-filter-chip:not(.text-bg-primary),
-    .dashboard-shell .dashboard-tag-chip:not(.text-bg-primary):not(.text-bg-secondary) {
-        background-color: var(--dash-surface-soft) !important;
-        color: var(--dash-text) !important;
-        border-color: var(--dash-border) !important;
-    }
-
-    .dashboard-shell[data-dashboard-theme="dark"] .text-bg-light {
-        background-color: var(--dash-surface-soft) !important;
-        color: var(--dash-text) !important;
-        border-color: var(--dash-border) !important;
-    }
-
-    .dashboard-shell[data-dashboard-theme="dark"] .text-dark {
-        color: var(--dash-text) !important;
-    }
-
-    .dashboard-shell[data-dashboard-theme="dark"] .btn-outline-secondary,
-    .dashboard-shell[data-dashboard-theme="dark"] .btn-outline-dark {
-        color: #e5edf8;
-        border-color: rgba(255, 255, 255, .22);
-    }
-
-    .dashboard-shell[data-dashboard-theme="dark"] .btn-outline-secondary:hover,
-    .dashboard-shell[data-dashboard-theme="dark"] .btn-outline-dark:hover {
-        background-color: var(--dash-surface-soft);
-        color: #ffffff;
-        border-color: rgba(255, 255, 255, .28);
-    }
-
-    .dashboard-shell[data-dashboard-theme="dark"] .btn-outline-primary {
-        color: #8ec5ff;
-        border-color: rgba(96, 165, 250, .52);
-    }
-
-    .dashboard-shell[data-dashboard-theme="dark"] .btn-outline-primary:hover {
-        color: #ffffff;
-        background-color: rgba(13, 110, 253, .18);
-        border-color: rgba(96, 165, 250, .72);
-    }
-
-    .dashboard-shell[data-dashboard-theme="dark"] .alert-info {
-        background-color: rgba(13, 202, 240, .14);
-        color: #e6faff;
-    }
-
-    .dashboard-shell[data-dashboard-theme="dark"] .alert-danger {
-        background-color: rgba(220, 53, 69, .16);
-        color: #ffe8eb;
-    }
-
-    .dashboard-shell[data-dashboard-theme="dark"] .btn-close {
-        filter: invert(1) grayscale(100%) brightness(220%);
-    }
-
-    .dashboard-hero-card {
-        background: linear-gradient(135deg, #0d6efd 0%, #123b8f 100%);
-        overflow: hidden;
-        position: relative;
-    }
-
-    .dashboard-hero-card::after {
-        content: "";
-        position: absolute;
-        width: 260px;
-        height: 260px;
-        right: -90px;
-        top: -90px;
-        border-radius: 50%;
-        background: rgba(255, 255, 255, .12);
-    }
-
-    .dashboard-hero-card::before {
-        content: "";
-        position: absolute;
-        width: 180px;
-        height: 180px;
-        right: 80px;
-        bottom: -100px;
-        border-radius: 50%;
-        background: rgba(255, 255, 255, .08);
-    }
-
-    .dashboard-stat-card {
-        transition: transform .2s ease, box-shadow .2s ease;
-    }
-
-    .dashboard-stat-card:hover {
-        transform: translateY(-3px);
-        box-shadow: 0 .75rem 2rem rgba(0, 0, 0, .08) !important;
-    }
-
-    .lead-card {
-        transition: transform .2s ease, box-shadow .2s ease;
-    }
-
-    .lead-card:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 .75rem 1.75rem rgba(0, 0, 0, .08) !important;
-    }
-
-    .lead-avatar {
-        width: 46px;
-        height: 46px;
-    }
-
-    .access-code-box {
-        letter-spacing: .18rem;
-    }
-
-    
-    .sync-floating-panel {
-        position: fixed;
-        right: 1.5rem;
-        bottom: 1.5rem;
-        width: min(420px, calc(100% - 2rem));
-        z-index: 1080;
-        pointer-events: none;
-    }
-
-    .sync-floating-card {
-        pointer-events: auto;
-        background: var(--dash-toast-bg);
-        color: var(--dash-text);
-        border: 1px solid var(--dash-border);
-        box-shadow: var(--dash-card-shadow);
-        border-radius: 1.5rem;
-    }
-
-    @media (max-width: 576px) {
-        .sync-floating-panel {
-            left: 1rem;
-            right: 1rem;
-            bottom: 1rem;
-            width: auto;
-        }
-    }
-
-    @media (max-width: 768px) {
-        .dashboard-hero-title {
-            font-size: 2rem;
-        }
-
-        .access-code-box {
-            letter-spacing: .1rem;
-        }
-    }
-</style>
 
 <div id="dashboardThemeRoot" class="dashboard-shell" data-dashboard-theme="light">
     <div class="container-fluid px-3 px-lg-4 py-4">
+        @if (session('success'))
+            <div class="alert alert-success rounded-4 border-0 shadow-sm">
+                {{ session('success') }}
+            </div>
+        @endif
+
+        @if (session('error'))
+            <div class="alert alert-warning rounded-4 border-0 shadow-sm">
+                {{ session('error') }}
+            </div>
+        @endif
 
         {{-- Toast não bloqueante de sincronização --}}
         <div id="syncFloatingPanel" class="sync-floating-panel d-none">
@@ -915,21 +632,21 @@
                                         </div>
 
                                         <div class="d-flex gap-2">
-                                            <button type="button" class="btn btn-sm btn-outline-primary flex-fill">
+                                            <button
+                                             type="button" class="btn btn-sm btn-outline-primary flex-fill"
+                                             data-bs-toggle="modal"
+                                             data-bs-target="#leadModal{{ $lead->id }}"
+                                            >
                                                 Visualizar
-                                            </button>
-
-                                            <button type="button" class="btn btn-sm btn-primary flex-fill">
-                                                Analisar
                                             </button>
                                         </div>
                                     </div>
                                 </article>
                             </div>
-                        @endforeach
-                    </div>
-
-                    <div class="card border-0 shadow-sm rounded-4 mt-4">
+                            @endforeach
+                        </div>
+                        
+                        <div class="card border-0 shadow-sm rounded-4 mt-4">
                         <div class="card-body d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
                             <p class="text-muted small mb-0">
                                 Exibindo {{ $currentStart }} a {{ $currentEnd }} de {{ $filteredLeads }} leads{{ $isTagFiltered ? ' filtrados' : '' }}.
@@ -943,14 +660,14 @@
                         </div>
                     </div>
                 @else
-                    <div class="card border-0 shadow-sm rounded-5">
+                <div class="card border-0 shadow-sm rounded-5">
                         <div class="card-body text-center p-5">
                             <span class="badge text-bg-light border mb-3">
                                 Base vazia
                             </span>
 
                             @if ($isTagFiltered)
-                                <h3 class="h5 fw-bold">
+                            <h3 class="h5 fw-bold">
                                     Nenhum lead encontrado com a tag {{ $selectedTag }}.
                                 </h3>
 
@@ -965,7 +682,7 @@
                                 <h3 class="h5 fw-bold">
                                     Nenhum lead encontrado.
                                 </h3>
-
+                                
                                 <p class="text-muted">
                                     Assim que novos contatos forem captados ou sincronizados, eles aparecerão aqui.
                                 </p>
@@ -998,7 +715,7 @@
                                 </div>
                                 <span class="badge text-bg-success rounded-pill">{{ $withPhone }}</span>
                             </div>
-
+                            
                             <div class="d-flex justify-content-between align-items-center border-bottom pb-3">
                                 <div>
                                     <div class="fw-semibold">Sem telefone</div>
@@ -1032,10 +749,10 @@
 
                         <div class="list-group list-group-flush">
                             @forelse ($topTags as $tag => $count)
-                                <a
+                            <a
                                     href="{{ request()->fullUrlWithQuery(['tag' => $tag, 'page' => 1]) }}#leads-section"
                                     class="list-group-item list-group-item-action d-flex justify-content-between align-items-center px-0 {{ $selectedTag === $tag ? 'active px-3 rounded-3' : '' }}"
-                                >
+                                    >
                                     <div>
                                         <div class="fw-semibold">{{ $tag }}</div>
                                         <div class="small {{ $selectedTag === $tag ? 'text-white-50' : 'text-muted' }}">
@@ -1101,12 +818,408 @@
                         </div>
                     </div>
                 </div>
-
+                
             </div>
         </div>
     </div>
 </div>
 
+{{-- Modais --}}
+@foreach ($leads as $lead)
+@php
+    $leadName = $lead->nome ?: 'Lead sem nome';
+
+    $statusKey = \Illuminate\Support\Str::slug($lead->status ?: 'novo');
+    $statusLabel = $statusLabels[$statusKey] ?? ucfirst(str_replace('-', ' ', $statusKey));
+
+    $statusBadge = match ($statusKey) {
+        'novo' => 'text-bg-primary',
+        'em-andamento' => 'text-bg-warning',
+        'qualificado' => 'text-bg-info',
+        'convertido' => 'text-bg-success',
+        'perdido' => 'text-bg-danger',
+            default => 'text-bg-secondary',
+    };
+
+    $allTags = collect(preg_split('/\s*,\s*/', $lead->tags_originais ?? ''))
+        ->filter(fn ($tag) => filled($tag))
+        ->map(fn ($tag) => trim($tag))
+        ->reject(function ($tag) use ($companyTagName) {
+            return mb_strtolower(trim($tag)) === $companyTagName;
+        });
+
+    $lastAnalysis = $lead->insuranceAnalyses()
+        ->latest('created_at')
+        ->first();
+
+    $lastLeadUpdate = collect([
+        $lead->updated_at,
+        optional($lead->endereco)->updated_at,
+    ])->filter()->max();
+
+    $canReanalyze = !$lastAnalysis || ($lastLeadUpdate && $lastLeadUpdate->gt($lastAnalysis->created_at));
+@endphp
+<div
+    class="modal fade lead-details-modal"
+    id="leadModal{{ $lead->id }}"
+    tabindex="-1"
+    aria-labelledby="leadModalLabel{{ $lead->id }}"
+    aria-hidden="true"
+>
+    <div class="modal-dialog modal-xl modal-dialog-scrollable modal-dialog-centered">
+        <div class="modal-content rounded-5 border-0 shadow-lg">
+
+            <div class="modal-header border-0 pb-0">
+                <div>
+                    <span class="badge {{ $statusBadge }} mb-2">
+                        {{ $statusLabel }}
+                    </span>
+
+                    <h5 class="modal-title fw-bold" id="leadModalLabel{{ $lead->id }}">
+                        {{ $leadName }}
+                    </h5>
+
+                    <p class="text-muted small mb-0">
+                        Entrada em {{ $lead->created_at ? $lead->created_at->format('d/m/Y H:i') : 'data não informada' }}
+                    </p>
+                </div>
+
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+            </div>
+
+            <div class="modal-body p-4">
+
+                <ul class="nav nav-pills mb-4" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button
+                            class="nav-link active"
+                            data-bs-toggle="pill"
+                            data-bs-target="#lead-data-pane-{{ $lead->id }}"
+                            type="button"
+                            role="tab"
+                        >
+                            Dados para reanálise
+                        </button>
+                    </li>
+
+                    <li class="nav-item" role="presentation">
+                        <button
+                            class="nav-link"
+                            data-bs-toggle="pill"
+                            data-bs-target="#lead-tags-pane-{{ $lead->id }}"
+                            type="button"
+                            role="tab"
+                        >
+                            Tags
+                        </button>
+                    </li>
+
+                    <li class="nav-item" role="presentation">
+                        <button
+                            class="nav-link"
+                            data-bs-toggle="pill"
+                            data-bs-target="#lead-reanalysis-pane-{{ $lead->id }}"
+                            type="button"
+                            role="tab"
+                        >
+                            Reanálise
+                        </button>
+                    </li>
+                </ul>
+
+                <div class="tab-content">
+
+                    {{-- Aba 1: dados editáveis --}}
+                    <div
+                        class="tab-pane fade show active"
+                        id="lead-data-pane-{{ $lead->id }}"
+                        role="tabpanel"
+                    >
+                        <form
+                            method="POST"
+                            action="{{ route('dashboard.leads.update', $lead) }}"
+                            id="leadUpdateForm{{ $lead->id }}"
+                            class="lead-update-form"
+                            data-lead-id="{{ $lead->id }}"
+                        >
+                            @csrf
+                            @method('PUT')
+
+                            <div
+                                id="leadNoChangesAlert{{ $lead->id }}"
+                                class="alert alert-warning rounded-4 d-none"
+                            >
+                                Altere pelo menos um dado do lead antes de salvar.
+                            </div>
+
+                            <div class="row g-4">
+
+                                <div class="col-12">
+                                    <div class="card border rounded-4">
+                                        <div class="card-body">
+                                            <h6 class="fw-bold mb-3">
+                                                Dados do solicitante
+                                            </h6>
+
+                                            <div class="row g-3">
+                                                <div class="col-12 col-md-6">
+                                                    <label class="form-label small text-muted">Nome</label>
+                                                    <input type="text" name="nome" class="form-control" value="{{ old('nome', $lead->nome) }}">
+                                                </div>
+
+                                                <div class="col-12 col-md-6">
+                                                    <label class="form-label small text-muted">E-mail</label>
+                                                    <input type="email" name="email" class="form-control" value="{{ old('email', $lead->email) }}">
+                                                </div>
+
+                                                <div class="col-12 col-md-4">
+                                                    <label class="form-label small text-muted">Telefone</label>
+                                                    <input type="text" name="tel" class="form-control" value="{{ old('tel', $lead->tel) }}">
+                                                </div>
+
+                                                <div class="col-12 col-md-4">
+                                                    <label class="form-label small text-muted">CPF/CNPJ</label>
+                                                    <input type="text" name="cpf" class="form-control" value="{{ old('cpf', $lead->cpf) }}">
+                                                </div>
+
+                                                <div class="col-12 col-md-4">
+                                                    <label class="form-label small text-muted">Tipo de solicitante</label>
+                                                    <input type="text" name="tipo_solicitante" class="form-control" value="{{ old('tipo_solicitante', $lead->tipo_solicitante) }}">
+                                                </div>
+
+                                                <div class="col-12 col-md-4">
+                                                    <label class="form-label small text-muted">Estado civil</label>
+                                                    <input type="text" name="estado_civil" class="form-control" value="{{ old('estado_civil', $lead->estado_civil) }}">
+                                                </div>
+
+                                                <div class="col-12 col-md-4">
+                                                    <label class="form-label small text-muted">Nome do cônjuge</label>
+                                                    <input type="text" name="conjuge_nome" class="form-control" value="{{ old('conjuge_nome', $lead->conjuge_nome) }}">
+                                                </div>
+
+                                                <div class="col-12 col-md-4">
+                                                    <label class="form-label small text-muted">CPF do cônjuge</label>
+                                                    <input type="text" name="conjuge_cpf" class="form-control" value="{{ old('conjuge_cpf', $lead->conjuge_cpf) }}">
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="col-12">
+                                    <div class="card border rounded-4">
+                                        <div class="card-body">
+                                            <h6 class="fw-bold mb-3">
+                                                Endereço do imóvel
+                                            </h6>
+
+                                            <div class="row g-3">
+                                                <div class="col-12 col-md-3">
+                                                    <label class="form-label small text-muted">CEP</label>
+                                                    <input type="text" name="cep" class="form-control" value="{{ old('cep', $lead->endereco?->cep) }}">
+                                                </div>
+
+                                                <div class="col-12 col-md-3">
+                                                    <label class="form-label small text-muted">Estado</label>
+                                                    <input type="text" name="estado" class="form-control" value="{{ old('estado', $lead->endereco?->estado) }}">
+                                                </div>
+
+                                                <div class="col-12 col-md-6">
+                                                    <label class="form-label small text-muted">Cidade</label>
+                                                    <input type="text" name="cidade_imovel" class="form-control" value="{{ old('cidade_imovel', $lead->endereco?->cidade_imovel) }}">
+                                                </div>
+
+                                                <div class="col-12 col-md-6">
+                                                    <label class="form-label small text-muted">Bairro</label>
+                                                    <input type="text" name="bairro" class="form-control" value="{{ old('bairro', $lead->endereco?->bairro) }}">
+                                                </div>
+
+                                                <div class="col-12 col-md-6">
+                                                    <label class="form-label small text-muted">Logradouro</label>
+                                                    <input type="text" name="logradouro" class="form-control" value="{{ old('logradouro', $lead->endereco?->logradouro) }}">
+                                                </div>
+
+                                                <div class="col-12 col-md-3">
+                                                    <label class="form-label small text-muted">Número</label>
+                                                    <input type="text" name="numero" class="form-control" value="{{ old('numero', $lead->endereco?->numero) }}">
+                                                </div>
+
+                                                <div class="col-12 col-md-9">
+                                                    <label class="form-label small text-muted">Complemento</label>
+                                                    <input type="text" name="complemento" class="form-control" value="{{ old('complemento', $lead->endereco?->complemento) }}">
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="col-12">
+                                    <div class="card border rounded-4">
+                                        <div class="card-body">
+                                            <h6 class="fw-bold mb-3">
+                                                Valores da locação
+                                            </h6>
+
+                                            <div class="row g-3">
+                                                <div class="col-6 col-md-3">
+                                                    <label class="form-label small text-muted">Aluguel</label>
+                                                    <input type="number" step="0.01" min="0" name="valor_aluguel" class="form-control" value="{{ old('valor_aluguel', $lead->valor_aluguel) }}">
+                                                </div>
+
+                                                <div class="col-6 col-md-3">
+                                                    <label class="form-label small text-muted">Condomínio</label>
+                                                    <input type="number" step="0.01" min="0" name="valor_condominio" class="form-control" value="{{ old('valor_condominio', $lead->valor_condominio) }}">
+                                                </div>
+
+                                                <div class="col-6 col-md-3">
+                                                    <label class="form-label small text-muted">IPTU</label>
+                                                    <input type="number" step="0.01" min="0" name="valor_iptu" class="form-control" value="{{ old('valor_iptu', $lead->valor_iptu) }}">
+                                                </div>
+
+                                                <div class="col-6 col-md-3">
+                                                    <label class="form-label small text-muted">Gás</label>
+                                                    <input type="number" step="0.01" min="0" name="valor_gas" class="form-control" value="{{ old('valor_gas', $lead->valor_gas) }}">
+                                                </div>
+
+                                                <div class="col-6 col-md-3">
+                                                    <label class="form-label small text-muted">Água</label>
+                                                    <input type="number" step="0.01" min="0" name="valor_agua" class="form-control" value="{{ old('valor_agua', $lead->valor_agua) }}">
+                                                </div>
+
+                                                <div class="col-6 col-md-3">
+                                                    <label class="form-label small text-muted">Luz</label>
+                                                    <input type="number" step="0.01" min="0" name="valor_luz" class="form-control" value="{{ old('valor_luz', $lead->valor_luz) }}">
+                                                </div>
+
+                                                <div class="col-6 col-md-3">
+                                                    <label class="form-label small text-muted">Outras despesas</label>
+                                                    <input type="number" step="0.01" min="0" name="outras_despesas" class="form-control" value="{{ old('outras_despesas', $lead->outras_despesas) }}">
+                                                </div>
+
+                                                <div class="col-6 col-md-3">
+                                                    <label class="form-label small text-muted">Total atual</label>
+                                                    <input
+                                                        type="text"
+                                                        class="form-control fw-bold"
+                                                        value="R$ {{ number_format((float) $lead->valor_total_encargos, 2, ',', '.') }}"
+                                                        readonly
+                                                    >
+                                                </div>
+                                            </div>
+
+                                            <div class="small text-muted mt-3">
+                                                Após salvar os dados, solicite a reanálise na aba “Reanálise”.
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                            </div>
+                        </form>
+                    </div>
+
+                    {{-- Aba 2: tags somente leitura --}}
+                    <div
+                        class="tab-pane fade"
+                        id="lead-tags-pane-{{ $lead->id }}"
+                        role="tabpanel"
+                    >
+                        <div class="card border rounded-4">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
+                                    <div>
+                                        <h6 class="fw-bold mb-1">
+                                            Tags do lead
+                                        </h6>
+
+                                        <p class="text-muted small mb-0">
+                                            As tags são exibidas apenas para consulta. A alteração de tags será feita pelo corretor no painel administrativo.
+                                        </p>
+                                    </div>
+
+                                    <span class="badge text-bg-secondary">
+                                        Somente leitura
+                                    </span>
+                                </div>
+
+                                <div class="d-flex flex-wrap gap-2">
+                                    @forelse ($allTags as $tag)
+                                        <span class="badge rounded-pill text-bg-light border text-dark">
+                                            {{ $tag }}
+                                        </span>
+                                    @empty
+                                        <span class="text-muted small">
+                                            Nenhuma tag operacional cadastrada para este lead.
+                                        </span>
+                                    @endforelse
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {{-- Aba 3: reanálise --}}
+                    <div
+                        class="tab-pane fade"
+                        id="lead-reanalysis-pane-{{ $lead->id }}"
+                        role="tabpanel"
+                    >
+                        @if ($canReanalyze)
+                            <div class="alert alert-success rounded-4">
+                                <strong>Reanálise liberada.</strong>
+                                Este lead possui alterações salvas depois da última análise.
+                            </div>
+
+                            <form
+                                method="POST"
+                                action="{{ route('dashboard.leads.reanalyze', $lead) }}"
+                                id="leadReanalyzeForm{{ $lead->id }}"
+                            >
+                                @csrf
+
+                                <button type="submit" class="btn btn-warning">
+                                    Solicitar reanálise
+                                </button>
+                            </form>
+                        @else
+                            <div class="alert alert-info rounded-4">
+                                <strong>Reanálise bloqueada.</strong>
+                                Para solicitar uma nova análise, altere algum dado do lead e clique em
+                                <strong>Salvar alterações</strong>.
+                            </div>
+
+                            @if ($lastAnalysis)
+                                <p class="text-muted small mb-0">
+                                    Última análise registrada em:
+                                    {{ $lastAnalysis->created_at->format('d/m/Y H:i') }}
+                                </p>
+                            @else
+                                <p class="text-muted small mb-0">
+                                    Nenhuma análise anterior foi encontrada para este lead.
+                                </p>
+                            @endif
+                        @endif
+                    </div>
+                </div>
+            </div>
+            
+
+            <div class="modal-footer border-0 pt-0">
+                <button
+                    type="submit"
+                    form="leadUpdateForm{{ $lead->id }}"
+                    class="btn btn-primary"
+                >
+                    Salvar dados
+                </button>
+
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    Fechar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+@endforeach
 
 <script>
 document.addEventListener('DOMContentLoaded', function () {
@@ -1121,11 +1234,11 @@ document.addEventListener('DOMContentLoaded', function () {
     const dashboardThemeRoot = document.getElementById('dashboardThemeRoot');
     const dashboardThemeToggle = document.getElementById('dashboardThemeToggle');
     const dashboardThemeStorageKey = 'dashboard-theme';
-
+    
     const syncFloatingPanel = document.getElementById('syncFloatingPanel');
     const syncPanelCloseButton = document.getElementById('sync-panel-close-button');
     const syncPanelRefreshButton = document.getElementById('sync-panel-refresh-button');
-
+    
     const toastBadgeEl = document.getElementById('sync-toast-badge');
     const toastTitleEl = document.getElementById('sync-toast-title');
     const toastDescriptionEl = document.getElementById('sync-toast-description');
@@ -1134,10 +1247,10 @@ document.addEventListener('DOMContentLoaded', function () {
     const toastSummaryEl = document.getElementById('sync-toast-summary');
     const toastRetryButtonEl = document.getElementById('sync-toast-retry-button');
     const toastRetryFormEl = document.getElementById('sync-toast-retry-form');
-
+    
     const dashboardLeadAccessCodeCopyButton = document.getElementById('dashboardLeadAccessCodeCopyButton');
     const dashboardLeadAccessCodeInput = document.getElementById('dashboardLeadAccessCode');
-
+    
     const dashboardLeadFormCopyButton = document.getElementById('dashboardLeadFormCopyButton');
     const dashboardLeadFormInput = document.getElementById('dashboardLeadFormLink');
     const dashboardLeadFormCopyStatus = document.getElementById('dashboardLeadFormCopyStatus');
@@ -1543,7 +1656,76 @@ document.addEventListener('DOMContentLoaded', function () {
             showSyncPanel();
         }
     }
+
+    const leadUpdateForms = document.querySelectorAll('.lead-update-form');
+    
+    leadUpdateForms.forEach(function (form) {
+        const leadId = form.dataset.leadId;
+        const alertBox = document.getElementById(`leadNoChangesAlert${leadId}`);
+    
+        const fields = Array.from(
+            form.querySelectorAll('input[name], select[name], textarea[name]')
+        ).filter(function (field) {
+            return !['_token', '_method'].includes(field.name);
+        });
+    
+        const initialValues = new Map();
+    
+        fields.forEach(function (field) {
+            initialValues.set(field.name, field.value ?? '');
+        });
+    
+        function formHasChanges() {
+            return fields.some(function (field) {
+                const initialValue = initialValues.get(field.name) ?? '';
+                const currentValue = field.value ?? '';
+    
+                return currentValue !== initialValue;
+            });
+        }
+    
+        fields.forEach(function (field) {
+            field.addEventListener('input', function () {
+                if (alertBox) {
+                    alertBox.classList.add('d-none');
+                }
+            });
+    
+            field.addEventListener('change', function () {
+                if (alertBox) {
+                    alertBox.classList.add('d-none');
+                }
+            });
+        });
+    
+        form.addEventListener('submit', function (event) {
+            if (!formHasChanges()) {
+                event.preventDefault();
+    
+                if (alertBox) {
+                    alertBox.classList.remove('d-none');
+                    alertBox.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'center'
+                    });
+                }
+            }
+        });
+    });
+
+    document.querySelectorAll('.lead-details-modal').forEach(function (modalEl) {
+    modalEl.addEventListener('hidden.bs.modal', function () {
+            document.querySelectorAll('.modal-backdrop').forEach(function (backdrop) {
+                backdrop.remove();
+            });
+
+            document.body.classList.remove('modal-open');
+            document.body.style.removeProperty('overflow');
+            document.body.style.removeProperty('padding-right');
+        });
+    });
 });
+
 
 
 

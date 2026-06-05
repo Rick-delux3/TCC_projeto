@@ -114,6 +114,7 @@ class PottencialService
         return $this->getJson($this->rentalEndpoint() . "/{$quoteId}");
     }
 
+
     
 
     private function postJson(string $endpoint, array $payload): array
