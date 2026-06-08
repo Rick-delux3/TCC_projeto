@@ -7,24 +7,11 @@ use App\Models\LeadLoversTag;
 use App\Models\User;
 use Illuminate\Auth\Events\Registered;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 use App\Http\Requests\StoreCompanyRequest;
 
-
-
 class ImobiliariaRegistrationController extends Controller
 {
-    private $token;
-    private $baseURL;
-
-    function __construct()
-    {
-        $this->token = config('services.leadlovers.token');
-        $this->baseURL = 'https://llapi.leadlovers.com/webapi/';
-
-    }
-
     public function showRegistrationForm()
     {
        $blockedTerms = [
@@ -41,6 +28,9 @@ class ImobiliariaRegistrationController extends Controller
             'ruim',
             'negociação',
             'negociacao',
+            'carro',
+            'atraso',
+
         ];
 
         $tagsQuery = LeadLoversTag::query()
@@ -71,10 +61,10 @@ class ImobiliariaRegistrationController extends Controller
 
         $companyTag = LeadLoversTag::where('leadlovers_tag_id', $data['leadlovers_tag_id'])
             ->where('active', true)
-            ->first();
+            ->firstOrFail();
 
         $company = Imobiliaria::create([
-            'name' => $data['name'],
+            'name' => $companyTag->title,
             'email' => $data['email'],
             'phone' => $data['phone'],
             'cnpj' => $data['cnpj'],
@@ -92,7 +82,7 @@ class ImobiliariaRegistrationController extends Controller
         ]);
 
         $user = User::create([
-            'name' => $data['name'],
+            'name' => $companyTag->title,
             'email' => $data['email'],
             'password' => Hash::make($data['password']),
             'company_id' => $company->id,

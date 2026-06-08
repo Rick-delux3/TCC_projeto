@@ -34,8 +34,8 @@
                 @csrf
 
                 <div class="client-field">
-                    <label for="name" class="client-label">Nome da empresa</label>
-                    <select name="name" id="name" class="client-input client-select" required>
+                    <label for="leadlovers_tag_id" class="client-label">Nome da empresa</label>
+                    <select name="leadlovers_tag_id" id="leadlovers_tag_id" class="client-input client-select" required>
                         <option value="" disabled selected>Selecione sua imobiliaria...</option>
 
                         @forelse($tagsOficiais as $tagNome)
@@ -46,7 +46,7 @@
                             <option value="" disabled>Nenhuma tag encontrada no sistema</option>
                         @endforelse
                     </select>
-                    @error('name')
+                    @error('leadlovers_tag_id')
                         <span class="client-field-error">{{ $message }}</span>
                     @enderror
                 </div>

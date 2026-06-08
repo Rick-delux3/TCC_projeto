@@ -20,7 +20,7 @@ class StoreCompanyRequest extends FormRequest
     protected function prepareForValidation(): void
     {
         $this->merge([
-            'name' => $this->limparTexto($this->name),
+            'leadlovers_tag_id' => $this->limparTexto($this->leadlovers_tag_id),
             'email' => mb_strtolower(trim((string) $this->email)),
             'phone' => $this->somenteNumeros($this->phone),
             'cnpj' => $this->somenteNumeros($this->cnpj),
@@ -36,12 +36,12 @@ class StoreCompanyRequest extends FormRequest
             // Campo invisível contra bots, se você quiser usar no form.
             'website' => ['nullable', 'size:0'],
 
-            'name' => [
+            'leadlovers_tag_id' => [
                 'required',
-                'string',
-                'min:3',
-                'max:255',
-                Rule::unique('imobiliarias', 'name'),
+                'integer',
+                Rule::exists('lead_lovers_tags', 'leadlovers_tag_id')
+                    ->where('active', true),
+                Rule::unique('imobiliarias', 'leadlovers_tag_id'),
             ],
 
             'email' => [
@@ -123,9 +123,10 @@ class StoreCompanyRequest extends FormRequest
         return [
             'website.size' => 'Requisição inválida.',
 
-            'name.required' => 'Informe o nome da imobiliária.',
-            'name.min' => 'O nome da imobiliária deve ter pelo menos 3 caracteres.',
-            'name.unique' => 'Já existe uma imobiliária cadastrada com esse nome.',
+            'leadlovers_tag_id.required' => 'Informe o nome da imobiliária.',
+            'leadlovers_tag_id.integer' => 'A imobiliária selecionada é inválida.',
+            'leadlovers_tag_id.exists' => 'A imobiliária selecionada não foi encontrada ou não está disponível.',
+            'leadlovers_tag_id.unique' => 'Esta imobiliária já possui cadastro no sistema.',
 
             'email.required' => 'Informe o e-mail da imobiliária.',
             'email.email' => 'Informe um e-mail válido.',
