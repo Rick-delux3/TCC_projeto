@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Models\InsuranceAnalysisBatch;
 use App\Models\LeadLoversTag;
+use App\Models\Lead;
 use App\Services\LeadLoversService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -12,7 +13,7 @@ use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
 
-class ApplyFinalAnalysisTagToLeadLoversJob implements ShouldQueue
+    class ApplyFinalAnalysisTagToLeadLoversJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
@@ -62,10 +63,6 @@ class ApplyFinalAnalysisTagToLeadLoversJob implements ShouldQueue
         /*
          * Evita aplicar a mesma tag final mais de uma vez.
          * Isso é importante porque jobs podem ser executados novamente.
-         */
-        if ($this->finalTagAlreadyApplied($batch)) {
-            return;
-        }
 
         /*
          * Descobre qual tag final deve ser aplicada:
@@ -111,6 +108,12 @@ class ApplyFinalAnalysisTagToLeadLoversJob implements ShouldQueue
             return;
         }
 
+        if ($this->finalTagAlreadyApplied($batch)) {
+            $this->appendLocalTag($lead, $tag->title);
+
+            return;
+        }
+
         try {
             /*
              * Aqui você aplica a tag no LeadLovers.
@@ -151,6 +154,15 @@ class ApplyFinalAnalysisTagToLeadLoversJob implements ShouldQueue
 
                 return;
             }
+
+            /*
+            * Correção principal:
+            * A tag foi aplicada na LeadLovers, mas o dashboard lê as tags
+            * do campo local leads.tags_originais.
+            *
+            * Portanto, precisamos salvar a tag final também no banco local.
+            */
+            $this->appendLocalTag($lead, $tag->title);
 
             $this->registerEventForAllAnalyses(
                 batch: $batch,
@@ -206,6 +218,7 @@ class ApplyFinalAnalysisTagToLeadLoversJob implements ShouldQueue
         $error = $response['Error'] ?? $response['error'] ?? null;
 
         return blank($exception) && blank($error);
+
     }
 
     /**
@@ -304,5 +317,43 @@ class ApplyFinalAnalysisTagToLeadLoversJob implements ShouldQueue
                 'response' => $response,
             ]);
         }
+    }
+
+    /**
+ * Adiciona a tag final no campo local tags_originais do lead.
+ *
+ * O dashboard da imobiliária não consulta a LeadLovers em tempo real.
+ * Ele exibe e filtra tags a partir de leads.tags_originais.
+ *
+ * Por isso, toda tag aplicada na LeadLovers também precisa ser
+ * espelhada neste campo local.
+ */
+    private function appendLocalTag(Lead $lead, string $tagTitle): void
+    {
+        $tagTitle = trim($tagTitle);
+
+        if ($tagTitle === '') {
+            return;
+        }
+
+        $currentTags = collect(preg_split('/\s*,\s*/', (string) $lead->tags_originais))
+            ->filter(fn ($tag) => filled($tag))
+            ->map(fn ($tag) => trim($tag))
+            ->values();
+
+        $alreadyExists = $currentTags->contains(function ($tag) use ($tagTitle) {
+            return mb_strtolower($tag) === mb_strtolower($tagTitle);
+        });
+
+        if (!$alreadyExists) {
+            $currentTags->push($tagTitle);
+        }
+
+        $lead->forceFill([
+            'tags_originais' => $currentTags
+                ->unique(fn ($tag) => mb_strtolower($tag))
+                ->values()
+                ->implode(', '),
+        ])->save();
     }
 }

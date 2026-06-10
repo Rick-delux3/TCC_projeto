@@ -161,6 +161,62 @@ class LeadLoversService
         }
     }
 
+    public function updateLead(array $payload): array
+    {
+        /*
+        * Endpoint da documentação:
+        * PATCH /webapi/Lead?token={token}
+        *
+        * O campo Email é obrigatório e normalmente identifica o lead.
+        */
+
+        $baseUrl = $this->baseUrl;
+        $token = $this->token;
+
+        if (!$baseUrl || !$token) {
+            return [
+                'success' => false,
+                'status' => null,
+                'response' => [],
+                'error' => 'Configuração da LeadLovers incompleta.',
+            ];
+        }
+
+        $url = $baseUrl . '/Lead?' . http_build_query([
+            'token' => $token,
+        ]);
+
+        try {
+            $response = \Illuminate\Support\Facades\Http::asJson()
+                ->acceptJson()
+                ->timeout(30)
+                ->retry(2, 1000)
+                ->patch($url, $payload);
+
+            return [
+                'success' => $response->successful(),
+                'status' => $response->status(),
+                'response' => $response->json() ?? [],
+                'raw_body' => $response->body(),
+                'payload' => $payload,
+            ];
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('Erro ao atualizar lead na LeadLovers', [
+                'message' => $e->getMessage(),
+                'payload' => $payload,
+            ]);
+
+            return [
+                'success' => false,
+                'status' => null,
+                'response' => [],
+                'raw_body' => null,
+                'payload' => $payload,
+                'error' => $e->getMessage(),
+            ];
+        }
+    }
+
     /**
      * Adiciona tag extra ao lead usando ID da tag.
      */

@@ -7,6 +7,7 @@ use App\Models\Imobiliaria;
 use App\Models\Lead;
 use Illuminate\Support\Facades\DB;
 use App\Http\Requests\StorePublicLeadRequest;
+use App\Jobs\UpdateLeadOnLeadLoversJob;
 use Illuminate\Http\Request;
 
 
@@ -78,6 +79,8 @@ class DashboardLeadController extends Controller
             $valorIptu = (float) ($data['valor_iptu'] ?? 0);
             $outrasDespesas = (float) ($data['outras_despesas'] ?? 0);
 
+            $originalEmail = $lead->email;
+
             $lead->fill([
                 'nome' => $data['nome'] ?? null,
                 'email' => $data['email'] ?? null,
@@ -138,6 +141,8 @@ class DashboardLeadController extends Controller
                     $lead->endereco()->save($endereco);
                 }
             });
+
+            UpdateLeadOnLeadLoversJob::dispatch($lead->id, $originalEmail);
 
         return back()->with('success', 'Dados do lead atualizados com sucesso. Agora você pode solicitar uma reanálise.');
     }
