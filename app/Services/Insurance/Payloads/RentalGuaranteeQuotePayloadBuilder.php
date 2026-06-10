@@ -144,7 +144,7 @@ class RentalGuaranteeQuotePayloadBuilder
         /*
          * PolicyOwner somente quando for imobiliária cadastrada.
          */
-        $imobiliaria = $this->imobiliariaFromLead($lead);
+        $imobiliaria = $lead?->company;
 
         $companyDocument = \only_numbers($imobiliaria?->cnpj ?? '');
 
@@ -158,7 +158,7 @@ class RentalGuaranteeQuotePayloadBuilder
              * Só envia commissionPercentage do PolicyOwner se você configurar.
              * Isso evita mandar 0 ou campos desnecessários.
              */
-            $policyOwnerCommission = (float) config('services.pottencial.policy_owner_commission', 0);
+            $policyOwnerCommission = (float) config('services.pottencial.default_commission', 0.15);
 
             if ($policyOwnerCommission > 0) {
                 $policyOwner['commissionPercentage'] = $policyOwnerCommission;
@@ -394,18 +394,7 @@ class RentalGuaranteeQuotePayloadBuilder
         }
     }
 
-    private function imobiliariaFromLead(Lead $lead): ?object
-    {
-        if (method_exists($lead, 'imobiliaria')) {
-            return $lead->imobiliaria;
-        }
 
-        if (method_exists($lead, 'company')) {
-            return $lead->company;
-        }
-
-        return null;
-    }
 
     private function dateValue(mixed $value): Carbon
     {

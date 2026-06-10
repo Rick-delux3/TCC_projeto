@@ -40,24 +40,29 @@ Route::prefix('/Dashboard')->group(function () {
     Route::post('/sync-again', [DashboardController::class, 'syncAgain'])
     ->middleware(['auth', '2fa'])
     ->name('Dashboard.syncAgain');
-
-    Route::get('/analises', [InsuranceAnalysisController::class, 'index'])
-    ->name('insurance-analyses.index');
-
-    Route::get('/analises/{batch}', [InsuranceAnalysisController::class, 'show'])
-    ->name('insurance-analyses.show');
-
-    Route::post('/analises/provider/{analysis}/retry', [InsuranceAnalysisController::class, 'retry'])
-    ->name('insurance-analyses.retry');
-
-    Route::post('/analises/provider/{analysis}/sync-status', [InsuranceAnalysisController::class, 'syncStatus'])
-    ->name('insurance-analyses.sync-status');
-
+    
     Route::put('/leads/{lead}', [DashboardLeadController::class, 'update'])
     ->name('dashboard.leads.update');
 
     Route::post('/leads/{lead}/reanalisar', [DashboardLeadController::class, 'reanalyze'])
     ->name('dashboard.leads.reanalyze');
+    
+    Route::get('/analises', [InsuranceAnalysisController::class, 'index'])
+    ->middleware(['auth', '2fa'])
+    ->name('insurance-analyses.index');
+
+    Route::get('/analises/{batch}', [InsuranceAnalysisController::class, 'show'])
+    ->middleware(['auth', '2fa'])
+    ->name('insurance-analyses.show');
+
+    Route::post('/analises/provider/{analysis}/retry', [InsuranceAnalysisController::class, 'retry'])
+    ->middleware(['auth', '2fa'])
+    ->name('insurance-analyses.retry');
+
+    Route::post('/analises/provider/{analysis}/sync-status', [InsuranceAnalysisController::class, 'syncStatus'])
+    ->middleware(['auth', '2fa'])
+    ->name('insurance-analyses.sync-status');
+
     
     Route::get('/Admin', function (){
         return view('dashboard-admin');
@@ -66,7 +71,7 @@ Route::prefix('/Dashboard')->group(function () {
     ->name('Dashboard-Admin');
 
     Route::get('/sync-status', [DashboardController::class, 'syncStatus'])
-    ->middleware(['auth', '2fa'])->name('Dashboard.syncStatus');
+    ->middleware(['auth', '2fa', 'throttle:sync-status'])->name('Dashboard.syncStatus');
 });
 
 Route::middleware('auth')->group(function () {
@@ -96,14 +101,15 @@ Route::middleware('auth:admin')->group(function () {
 
 Route::prefix('simulacao')
     ->name('simulation.')
-    ->middleware('throttle:20,1')
     ->group(function () {
         // Página inicial do questionário.
         Route::get('/', [SimulationController::class, 'start'])
+            ->middleware('throttle:simulation-page')
             ->name('start');
 
         // Recebe o perfil escolhido e redireciona.
         Route::post('/perfil', [SimulationController::class, 'chooseProfile'])
+            ->middleware('throttle:simulation-submit')
             ->name('profile');
 
         Route::get('/sucesso', [SimulationController::class, 'success'])
@@ -111,36 +117,45 @@ Route::prefix('simulacao')
 
         // Imobiliária cadastrada: tela para digitar chave.
         Route::get('/imobiliaria-cadastrada', [SimulationController::class, 'registeredCompanyAccess'])
+            ->middleware('throttle:simulation-page')
             ->name('registered-company.access');
 
         Route::post('/imobiliaria-cadastrada/verificar', [SimulationController::class, 'verifyCompanyCode'])
-            ->middleware('throttle:5,1')
+            ->middleware('throttle:simulation-submit')
             ->name('registered-company.verify');
 
         // Formulário da imobiliária cadastrada após chave validada.
         Route::get('/imobiliaria-cadastrada/{code}', [SimulationController::class, 'registeredCompanyForm'])
+            ->middleware('throttle:simulation-page')
             ->name('registered-company.form');
 
         Route::post('/imobiliaria-cadastrada/{code}', [SimulationController::class, 'storeRegisteredCompanyLead'])
+            ->middleware('throttle:simulation-submit')
             ->name('registered-company.store');
 
         // Outros perfis.
         Route::get('/imobiliaria-nao-cadastrada', [SimulationController::class, 'unregisteredCompanyForm'])
+            ->middleware('throttle:simulation-page')
             ->name('unregistered-company.form');
 
         Route::post('/imobiliaria-nao-cadastrada', [SimulationController::class, 'storeUnregisteredCompanyLead'])
+            ->middleware('throttle:simulation-submit')
             ->name('unregistered-company.store');
 
         Route::get('/locatario', [SimulationController::class, 'tenantForm'])
+            ->middleware('throttle:simulation-page')
             ->name('tenant.form');
 
         Route::post('/locatario', [SimulationController::class, 'storeTenantLead'])
+            ->middleware('throttle:simulation-submit')
             ->name('tenant.store');
 
         Route::get('/locador', [SimulationController::class, 'landlordForm'])
+            ->middleware('throttle:simulation-page')
             ->name('landlord.form');
 
         Route::post('/locador', [SimulationController::class, 'storeLandlordLead'])
+            ->middleware('throttle:simulation-submit')
             ->name('landlord.store');
     });
 

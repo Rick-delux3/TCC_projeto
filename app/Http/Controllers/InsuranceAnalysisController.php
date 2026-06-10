@@ -7,6 +7,7 @@ use App\Jobs\SyncProviderAnalysisStatusJob;
 use App\Models\InsuranceAnalysis;
 use App\Models\InsuranceAnalysisBatch;
 use Illuminate\Http\Request;
+use App\Models\Imobiliaria;
 
 class InsuranceAnalysisController extends Controller
 {
@@ -40,15 +41,110 @@ class InsuranceAnalysisController extends Controller
          * Também evita exibir leads de locatário, locador ou imobiliária não cadastrada,
          * pois normalmente esses leads terão company_id = null.
          */
-        $batches = InsuranceAnalysisBatch::with([
+
+        $company = Imobiliaria::findOrFail($companyId);
+
+
+         $selectedStatus = $request->query('status');
+         $search = trim((string) $request->query('search'));
+
+    /*
+    |--------------------------------------------------------------------------
+    | Estatísticas dos lotes e análises da imobiliária
+    |--------------------------------------------------------------------------
+    */
+
+        $totalBatches = InsuranceAnalysisBatch::where('company_id', $companyId)->count();
+
+        $runningBatches = InsuranceAnalysisBatch::where('company_id', $companyId)
+            ->whereIn('status', ['pending', 'running', 'processing'])
+            ->count();
+
+        $finishedBatches = InsuranceAnalysisBatch::where('company_id', $companyId)
+            ->whereIn('status', ['done', 'completed', 'finished'])
+            ->count();
+
+        $failedBatches = InsuranceAnalysisBatch::where('company_id', $companyId)
+            ->whereIn('status', ['failed', 'error'])
+            ->count();
+
+        $approvedAnalyses = InsuranceAnalysis::where('company_id', $companyId)
+            ->whereIn('status', ['approved', 'Approved'])
+            ->count();
+
+        $rejectedAnalyses = InsuranceAnalysis::where('company_id', $companyId)
+            ->whereIn('status', ['rejected', 'refused', 'denied', 'Denied', 'Refused'])
+            ->count();
+
+        /*
+        |--------------------------------------------------------------------------
+        | Análises em andamento
+        |--------------------------------------------------------------------------
+        */
+
+        $inProgressAnalyses = InsuranceAnalysis::with('lead')
+            ->where('company_id', $companyId)
+            ->whereIn('status', ['pending', 'processing', 'queued', 'running'])
+            ->latest('updated_at')
+            ->limit(6)
+            ->get();
+
+        /*
+        |--------------------------------------------------------------------------
+        | Query principal dos lotes
+        |--------------------------------------------------------------------------
+        */
+
+        $batchesQuery = InsuranceAnalysisBatch::with([
                 'lead',
                 'analyses',
             ])
-            ->where('company_id', $companyId)
-            ->latest()
-            ->paginate(15);
+            ->where('company_id', $companyId);
 
-        return view('', compact('batches'));
+        if (filled($selectedStatus)) {
+            $batchesQuery->where('status', $selectedStatus);
+        }
+
+        if (filled($search)) {
+            $batchesQuery->where(function ($query) use ($search) {
+                $query->whereHas('lead', function ($leadQuery) use ($search) {
+                    $leadQuery
+                        ->where('nome', 'like', "%{$search}%")
+                        ->orWhere('email', 'like', "%{$search}%")
+                        ->orWhere('cpf', 'like', "%{$search}%");
+                })
+                ->orWhereHas('analyses', function ($analysisQuery) use ($search) {
+                    $analysisQuery
+                        ->where('provider', 'like', "%{$search}%")
+                        ->orWhere('quote_id', 'like', "%{$search}%")
+                        ->orWhere('quote_number', 'like', "%{$search}%")
+                        ->orWhere('product_key', 'like', "%{$search}%");
+                });
+            });
+        }
+
+        $batches = $batchesQuery
+            ->latest()
+            ->paginate(10)
+            ->withQueryString();
+
+        $dashboardStats = [
+            'totalBatches' => $totalBatches,
+            'runningBatches' => $runningBatches,
+            'finishedBatches' => $finishedBatches,
+            'failedBatches' => $failedBatches,
+            'approvedAnalyses' => $approvedAnalyses,
+            'rejectedAnalyses' => $rejectedAnalyses,
+        ];
+
+        return view('insurance-analyses.dashboard-user.index', [
+            'company' => $company,
+            'batches' => $batches,
+            'inProgressAnalyses' => $inProgressAnalyses,
+            'dashboardStats' => $dashboardStats,
+            'selectedStatus' => $selectedStatus,
+            'search' => $search,
+        ]);
     }
 
     /**
@@ -70,31 +166,24 @@ class InsuranceAnalysisController extends Controller
 
         abort_if(!$companyId, 403, 'Empresa não identificada.');
 
-        /*
-         * Garante que a imobiliária só veja lotes dela.
-         *
-         * Se o lote for de um lead sem company_id, por exemplo locatário direto,
-         * ele não deve aparecer no dashboard de imobiliária.
-         */
         abort_if(
             (int) $batch->company_id !== (int) $companyId,
             403,
             'Você não tem permissão para acessar esta análise.'
         );
 
-        /*
-         * Carrega os dados necessários para a tela:
-         * - lead: dados do solicitante;
-         * - company: imobiliária vinculada;
-         * - analyses.events: análises por companhia + histórico.
-         */
+        $company = Imobiliaria::findOrFail($companyId);
+
         $batch->load([
             'lead',
             'company',
             'analyses.events',
         ]);
 
-        return view('dashboard-user', compact('batch'));
+        return view('insurance-analyses.dashboard-user.show', [
+            'company' => $company,
+            'batch' => $batch,
+        ]);
     }
 
     /**
