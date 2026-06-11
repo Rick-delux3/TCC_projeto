@@ -47,6 +47,9 @@ return [
         'sync_page_size' => env('SYNC_PAGE_SIZE'),
         'sync_max_imported_leads' => env('SYNC_MAX_IMPORTED_LEADS'),
         'sync_max_scanned_leads' => env('SYNC_MAX_SCANNED_LEADS'),
+        'dynamic_fields' => [
+            env('DYNAMIC_FIELD_CPF_LEAD')
+        ]
 
         
     ],

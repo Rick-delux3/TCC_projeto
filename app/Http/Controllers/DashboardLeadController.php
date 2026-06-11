@@ -12,6 +12,7 @@ use Illuminate\Http\Request;
 
 
 
+
 class DashboardLeadController extends Controller
 {
     private function getLoggedCompany(): Imobiliaria
@@ -82,14 +83,14 @@ class DashboardLeadController extends Controller
             $originalEmail = $lead->email;
 
             $lead->fill([
-                'nome' => $data['nome'] ?? null,
-                'email' => $data['email'] ?? null,
-                'tel' => $data['tel'] ?? null,
-                'cpf' => $data['cpf'] ?? null,
-                'tipo_solicitante' => $data['tipo_solicitante'] ?? null,
-                'estado_civil' => $data['estado_civil'] ?? null,
-                'conjuge_nome' => $data['conjuge_nome'] ?? null,
-                'conjuge_cpf' => $data['conjuge_cpf'] ?? null,
+                'nome' => $data['nome'] ?? $lead->nome,
+                'email' => $data['email'] ?? $lead->email,
+                'tel' => $data['tel'] ?? $lead->tel,
+                'cpf' => $data['cpf'] ?? $lead->cpf,
+                'tipo_solicitante' => $data['tipo_solicitante'] ?? $lead->tipo_solicitante,
+                'estado_civil' => $data['estado_civil'] ?? $lead->estado_civil,
+                'conjuge_nome' => $data['conjuge_nome'] ?? $lead->conjuge->nome,
+                'conjuge_cpf' => $data['conjuge_cpf'] ?? $lead->conjuge->cpf,
 
                 'valor_aluguel' => $valorAluguel,
                 'valor_agua' => $valorAgua,

@@ -30,8 +30,79 @@
     $topTags = $topTags ?? collect();
     $filterTags = $filterTags ?? collect();
     $selectedTag = $selectedTag ?? '';
+    $leadSearch = $leadSearch ?? '';
     $isTagFiltered = filled($selectedTag);
+    $isNameFiltered = filled($leadSearch);
+    $isFiltering = $isTagFiltered || $isNameFiltered;
     $companyTagName = mb_strtolower(trim((string) ($company->name ?? '')));
+
+     /*
+    |--------------------------------------------------------------------------
+    | Funções visuais para tags importantes
+    |--------------------------------------------------------------------------
+    | Essas funções ajudam a identificar visualmente leads aprovados e ruins
+    | sem alterar a regra de negócio nem o banco de dados.
+    */
+
+    $normalizeTag = function ($value) {
+        return \Illuminate\Support\Str::of((string) $value)
+            ->ascii()
+            ->lower()
+            ->squish()
+            ->toString();
+    };
+
+    /*
+    |--------------------------------------------------------------------------
+    | Define a cor de cada tag
+    |--------------------------------------------------------------------------
+    | aprovado/aprovados -> verde
+    | ruim -> vermelho
+    | demais -> neutro
+    */
+    $tagToneClass = function ($tag) use ($normalizeTag) {
+        $normalizedTag = $normalizeTag($tag);
+
+        return match (true) {
+            str_contains($normalizedTag, 'aprovados') => 'dashboard-tag-chip--approved',
+            str_contains($normalizedTag, 'ruim') => 'dashboard-tag-chip--bad',
+            default => 'dashboard-tag-chip--neutral',
+        };
+    };
+
+    /*
+    |--------------------------------------------------------------------------
+    | Define a aparência do card do lead
+    |--------------------------------------------------------------------------
+    | Se tiver tag "ruim", o vermelho tem prioridade.
+    | Isso evita exibir como aprovado um lead que também esteja marcado como ruim.
+    */
+    $getLeadTone = function ($tags) use ($normalizeTag) {
+        $normalizedTags = collect($tags)
+            ->map(fn ($tag) => $normalizeTag($tag));
+
+        if ($normalizedTags->contains(fn ($tag) => str_contains($tag, 'ruim'))) {
+            return [
+                'card' => 'lead-card--bad',
+                'badge' => 'lead-quality-badge--bad',
+                'label' => 'Lead ruim',
+            ];
+        }
+
+        if ($normalizedTags->contains(fn ($tag) => str_contains($tag, 'aprovados'))) {
+            return [
+                'card' => 'lead-card--approved',
+                'badge' => 'lead-quality-badge--approved',
+                'label' => 'Aprovado',
+            ];
+        }
+
+        return [
+            'card' => 'lead-card--neutral',
+            'badge' => null,
+            'label' => null,
+        ];
+    };
 
     $currentStart = $leads->firstItem() ?? 0;
     $currentEnd = $leads->lastItem() ?? 0;
@@ -466,15 +537,39 @@
                                 </h2>
 
                                 <p class="text-muted mb-0">
-                                    {{ $isTagFiltered ? $filteredLeads . ' leads encontrados no filtro atual.' : $totalLeads . ' leads cadastrados na base.' }}
+                                    @if ($isFiltering)
+                                        {{ $filteredLeads }} lead(s) encontrados nos filtros atuais.
+                                    @else
+                                        {{ $totalLeads }} leads cadastrados na base.
+                                    @endif
+            
                                 </p>
                             </div>
 
-                            <form method="GET" action="{{ url()->current() }}#leads-section" class="row g-2 align-items-end">
-                                <div class="col-12 col-md-auto">
-                                    <label for="crm-tag-filter" class="form-label small text-muted">
-                                        Filtrar por tag
+                           <form method="GET" action="{{ url()->current() }}#leads-section" class="row g-2 align-items-end">
+
+                                {{-- Filtro por nome do lead --}}
+                                <div class="col-12 col-lg-5">
+                                    <label for="crm-lead-name-filter" class="form-label small text-muted">
+                                        Buscar lead por nome
                                     </label>
+
+                                    <input
+                                        type="text"
+                                        id="crm-lead-name-filter"
+                                        name="lead_name"
+                                        class="form-control"
+                                        value="{{ $leadSearch }}"
+                                        placeholder="Digite o primeiro nome ou nome completo"
+                                        autocomplete="off"
+                                    >
+                                </div>
+
+                                {{-- Filtro por tag --}}
+                                <div class="col-12 col-lg-4">
+                                        <label for="crm-tag-filter" class="form-label small text-muted">
+                                            Filtrar por tag
+                                        </label>
 
                                     <select id="crm-tag-filter" name="tag" class="form-select">
                                         <option value="">Todas as tags</option>
@@ -487,12 +582,13 @@
                                     </select>
                                 </div>
 
-                                <div class="col-12 col-md-auto d-flex gap-2">
-                                    <button class="btn btn-primary" type="submit">
-                                        Aplicar
+                                {{-- Ações --}}
+                                <div class="col-12 col-lg-3 d-flex gap-2">
+                                    <button class="btn btn-primary flex-fill" type="submit">
+                                        Buscar
                                     </button>
 
-                                    @if ($isTagFiltered)
+                                    @if ($isFiltering)
                                         <a href="{{ url()->current() }}#leads-section" class="btn btn-outline-secondary">
                                             Limpar
                                         </a>
@@ -504,9 +600,14 @@
                         @if ($filterTags->isNotEmpty())
                             <div class="d-flex flex-wrap gap-2 mt-4">
                                 @foreach ($filterTags->take(10) as $tag => $count)
+                                    @php
+                                        $filterChipClass = $tagToneClass($tag);
+                                        $isSelectedFilterChip = $selectedTag === $tag;
+                                    @endphp
+
                                     <a
                                         href="{{ request()->fullUrlWithQuery(['tag' => $tag, 'page' => 1]) }}#leads-section"
-                                        class="badge rounded-pill text-decoration-none px-3 py-2 dashboard-filter-chip {{ $selectedTag === $tag ? 'text-bg-primary' : 'text-bg-light border text-dark' }}"
+                                        class="badge rounded-pill text-decoration-none px-3 py-2 dashboard-filter-chip {{ $filterChipClass }} {{ $isSelectedFilterChip ? 'dashboard-tag-chip--selected' : '' }}"
                                     >
                                         {{ $tag }} · {{ $count }}
                                     </a>
@@ -539,7 +640,8 @@
                                     ->reject(function ($tag) use ($companyTagName) {
                                         return mb_strtolower(trim($tag)) === $companyTagName;
                                     });
-
+                                
+                                $leadTone = $getLeadTone($allTags);
                                 $visibleTags = $allTags->take(3);
                                 $remainingTags = max($allTags->count() - $visibleTags->count(), 0);
 
@@ -560,7 +662,7 @@
                             @endphp
 
                             <div class="col-12 col-lg-6">
-                                <article class="card border-0 shadow-sm rounded-5 lead-card h-100">
+                                <article class="card border-0 shadow-sm rounded-5 lead-card h-100 {{ $leadTone['card'] }}">
                                     <div class="card-body p-4">
                                         <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
                                             <div class="d-flex align-items-center gap-3">
@@ -579,9 +681,17 @@
                                                 </div>
                                             </div>
 
-                                            <span class="badge {{ $statusBadge }}">
-                                                {{ $statusLabel }}
-                                            </span>
+                                            <div class="d-flex flex-column align-items-end gap-2">
+                                                <span class="badge {{ $statusBadge }}">
+                                                    {{ $statusLabel }}
+                                                </span>
+
+                                                @if ($leadTone['label'])
+                                                    <span class="badge rounded-pill lead-quality-badge {{ $leadTone['badge'] }}">
+                                                        {{ $leadTone['label'] }}
+                                                    </span>
+                                                @endif
+                                            </div>
                                         </div>
 
                                         <div class="border rounded-4 p-3 mb-3 bg-light">
@@ -612,9 +722,14 @@
 
                                         <div class="d-flex flex-wrap gap-1 mb-3">
                                             @forelse ($visibleTags as $tag)
+                                                @php
+                                                    $tagChipClass = $tagToneClass($tag);
+                                                    $isSelectedChip = $selectedTag === $tag;
+                                                @endphp
+
                                                 <a
                                                     href="{{ request()->fullUrlWithQuery(['tag' => $tag, 'page' => 1]) }}#leads-section"
-                                                    class="badge rounded-pill text-decoration-none dashboard-tag-chip {{ $selectedTag === $tag ? 'text-bg-primary' : 'text-bg-light border text-dark' }}"
+                                                    class="badge rounded-pill text-decoration-none dashboard-tag-chip {{ $tagChipClass }} {{ $isSelectedChip ? 'dashboard-tag-chip--selected' : '' }}"
                                                 >
                                                     {{ $tag }}
                                                 </a>
@@ -649,7 +764,7 @@
                         <div class="card border-0 shadow-sm rounded-4 mt-4">
                         <div class="card-body d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
                             <p class="text-muted small mb-0">
-                                Exibindo {{ $currentStart }} a {{ $currentEnd }} de {{ $filteredLeads }} leads{{ $isTagFiltered ? ' filtrados' : '' }}.
+                                Exibindo {{ $currentStart }} a {{ $currentEnd }} de {{ $filteredLeads }} leads{{ $isFiltering ? ' filtrados' : '' }}.
                             </p>
 
                             @if ($leads->hasPages())
@@ -666,27 +781,27 @@
                                 Base vazia
                             </span>
 
-                            @if ($isTagFiltered)
+                        @if ($isFiltering)
                             <h3 class="h5 fw-bold">
-                                    Nenhum lead encontrado com a tag {{ $selectedTag }}.
-                                </h3>
+                                Nenhum lead encontrado com os filtros informados.
+                            </h3>
 
-                                <p class="text-muted">
-                                    Tente escolher outra tag ou limpe o filtro para visualizar toda a base.
-                                </p>
+                            <p class="text-muted">
+                                Tente pesquisar outro nome, escolher outra tag ou limpar os filtros.
+                            </p>
 
-                                <a href="{{ url()->current() }}#leads-section" class="btn btn-outline-secondary">
-                                    Limpar filtro
-                                </a>
-                            @else
-                                <h3 class="h5 fw-bold">
-                                    Nenhum lead encontrado.
-                                </h3>
-                                
-                                <p class="text-muted">
-                                    Assim que novos contatos forem captados ou sincronizados, eles aparecerão aqui.
-                                </p>
-                            @endif
+                            <a href="{{ url()->current() }}#leads-section" class="btn btn-outline-secondary">
+                                Limpar filtros
+                            </a>
+                        @else
+                            <h3 class="h5 fw-bold">
+                                Nenhum lead encontrado.
+                            </h3>
+
+                            <p class="text-muted">
+                                Assim que novos contatos forem captados ou sincronizados, eles aparecerão aqui.
+                            </p>
+                        @endif
                         </div>
                     </div>
                 @endif
@@ -969,7 +1084,7 @@
 
                                                 <div class="col-12 col-md-6">
                                                     <label class="form-label small text-muted">E-mail</label>
-                                                    <input type="email" name="email" class="form-control" value="{{ old('email', $lead->email) }}">
+                                                    <input type="email" name="email" class="form-control" value="{{ old('email', $lead->email) }}" readonly>
                                                 </div>
 
                                                 <div class="col-12 col-md-4">
@@ -1144,7 +1259,7 @@
 
                                 <div class="d-flex flex-wrap gap-2">
                                     @forelse ($allTags as $tag)
-                                        <span class="badge rounded-pill text-bg-light border text-dark">
+                                        <span class="badge rounded-pill dashboard-tag-chip {{ $tagToneClass($tag) }}">
                                             {{ $tag }}
                                         </span>
                                     @empty

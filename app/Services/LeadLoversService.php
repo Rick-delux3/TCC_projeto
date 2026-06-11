@@ -16,6 +16,7 @@ class LeadLoversService
 
     public function __construct()
     {
+        
         $this->baseUrl = rtrim((string) config('services.leadlovers.base_url', 'https://llapi.leadlovers.com/webapi/'), '/') . '/';
         $this->token = config('services.leadlovers.token');
         $this->machineId = config('services.leadlovers.machine');

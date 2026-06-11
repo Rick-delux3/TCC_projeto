@@ -177,6 +177,7 @@ class DashboardController extends Controller
         $recentThreshold = now()->subDays(7);
         $companyTagName = mb_strtolower(trim((string) $company->name));
         $selectedTag = trim((string) $request->query('tag', ''));
+        $leadSearch = trim(preg_replace('/\s+/', ' ', (string) $request->query('lead_name', '')));
 
         if (mb_strtolower(trim($selectedTag)) === $companyTagName) {
             $selectedTag = '';
@@ -212,6 +213,32 @@ class DashboardController extends Controller
                 'like',
                 '%' . addcslashes($selectedTag, '%_\\') . '%'
             );
+        }
+
+        if (filled($leadSearch)) {
+            /*
+            |--------------------------------------------------------------------------
+            | Busca inteligente por nome
+            |--------------------------------------------------------------------------
+            | 1. Se existir um lead com nome exatamente igual ao termo digitado,
+            |    exibe apenas esse lead.
+            |
+            | 2. Se não existir nome exato, busca por nomes que começam com o termo.
+            |    Exemplo: "João" encontra "João Silva", "João Pedro", etc.
+            */
+            $exactNameExists = $company->leads()
+                ->where('nome', $leadSearch)
+                ->exists();
+
+            if ($exactNameExists) {
+                $leadsQuery->where('nome', $leadSearch);
+            } else {
+                $leadsQuery->where(
+                    'nome',
+                    'like',
+                    addcslashes($leadSearch, '%_\\') . '%'
+                );
+            }
         }
 
         $leads = $leadsQuery
@@ -275,6 +302,7 @@ class DashboardController extends Controller
             'topTags' => $topTags,
             'filterTags' => $filterTags,
             'selectedTag' => $selectedTag,
+            'leadSearch' => $leadSearch,
 
             'syncStatus' => $company->sync_status,
             'syncError' => $company->sync_error,
