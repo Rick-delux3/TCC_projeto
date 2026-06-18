@@ -10,6 +10,7 @@
         'completed' => 'Concluído',
         'finished' => 'Finalizado',
         'failed' => 'Falhou',
+        'completed_with_errors' => 'Concluído com erros',
     ];
 
     $batchStatusBadges = [
@@ -20,6 +21,7 @@
         'completed' => 'text-bg-success',
         'finished' => 'text-bg-success',
         'failed' => 'text-bg-danger',
+        'completed_with_errors' => 'text-bg-warning',
     ];
 
     $analysisStatusLabels = [
@@ -51,6 +53,74 @@
         'quoted' => 'text-bg-secondary',
         'failed' => 'text-bg-danger',
     ];
+
+    /*
+    |--------------------------------------------------------------------------
+    | Eventos que representam resultado de análise/reanálise
+    |--------------------------------------------------------------------------
+    | Esses eventos são usados para mostrar a última rodada do lote
+    | e os valores enviados/retornados por companhia.
+    */
+    $resultEventTypes = [
+        'previous_analysis_snapshot',
+
+        'analysis_completed',
+        'reanalysis_completed',
+
+        'created_without_body',
+        'reanalysis_created_without_body',
+
+        'failed',
+        'reanalysis_failed',
+
+        'invalid_response',
+        'reanalysis_invalid_response',
+    ];
+
+    /*
+    |--------------------------------------------------------------------------
+    | Formatação de dinheiro
+    |--------------------------------------------------------------------------
+    */
+    $money = function ($value) {
+        if ($value === null || $value === '') {
+            return 'Não informado';
+        }
+
+        return 'R$ ' . number_format((float) $value, 2, ',', '.');
+    };
+
+    /*
+    |--------------------------------------------------------------------------
+    | Último evento de resultado de uma companhia
+    |--------------------------------------------------------------------------
+    */
+    $latestResultEvent = function ($analysis) use ($resultEventTypes) {
+        return $analysis->events
+            ->whereIn('event_type', $resultEventTypes)
+            ->sortByDesc('created_at')
+            ->first();
+    };
+
+    /*
+    |--------------------------------------------------------------------------
+    | Identifica se um evento é reanálise
+    |--------------------------------------------------------------------------
+    | previous_analysis_snapshot não deve aparecer como reanálise,
+    | e sim como "análise anterior".
+    */
+    $isReanalysisEvent = function ($event) {
+        if (!$event) {
+            return false;
+        }
+
+        if ($event->event_type === 'previous_analysis_snapshot') {
+            return false;
+        }
+
+        return str_starts_with((string) $event->event_type, 'reanalysis')
+            || (bool) data_get($event->payload, 'is_reanalysis');
+    };
 @endphp
 
 <div id="dashboardThemeRoot" class="dashboard-shell" data-dashboard-theme="light">
@@ -237,17 +307,34 @@
                                 $batchLabel = $batchStatusLabels[$batchStatus] ?? ucfirst(str_replace('_', ' ', $batchStatus));
 
                                 $totalProviders = (int) ($batch->total_providers ?? $batch->analyses->count());
-                                $finishedProviders = (int) ($batch->finished_providers ?? $batch->analyses->whereNotIn('status', ['pending', 'processing', 'queued', 'running'])->count());
-
+                                $finishedProviders = (int) (
+                                    $batch->completed_providers
+                                    ?? $batch->analyses
+                                        ->whereNotIn('status', ['pending', 'processing', 'queued', 'running'])
+                                        ->count()
+                                );
                                 $progress = $totalProviders > 0
                                     ? min(100, round(($finishedProviders / $totalProviders) * 100))
                                     : 0;
+
+                                $batchResultEvents = $batch->analyses
+                                    ->flatMap(fn ($analysis) => $analysis->events)
+                                    ->whereIn('event_type', $resultEventTypes)
+                                    ->sortByDesc('created_at');
+
+                                $lastBatchResultEvent = $batchResultEvents->first();
+
+                                $lastBatchIsReanalysis = $isReanalysisEvent($lastBatchResultEvent);
+
+                                $lastAttemptId = $lastBatchResultEvent
+                                    ? data_get($lastBatchResultEvent->payload, 'attempt_id')
+                                    : null;
                             @endphp
 
                             <div class="border rounded-4 p-3 p-lg-4 mb-3">
                                 <div class="d-flex flex-column flex-lg-row justify-content-between gap-3">
                                     <div>
-                                        <div class="d-flex align-items-center gap-2 mb-2">
+                                        <div class="d-flex align-items-center gap-2 mb-2 flex-wrap">
                                             <span class="badge {{ $batchBadge }}">
                                                 {{ $batchLabel }}
                                             </span>
@@ -255,6 +342,13 @@
                                             <span class="small text-muted">
                                                 Lote #{{ $batch->id }}
                                             </span>
+
+                                            {{-- Mostra se a última rodada registrada foi análise ou reanálise --}}
+                                            @if ($lastBatchResultEvent)
+                                                <span class="badge {{ $lastBatchIsReanalysis ? 'text-bg-warning' : 'text-bg-info' }}">
+                                                    {{ $lastBatchIsReanalysis ? 'Última rodada: Reanálise' : 'Última rodada: Análise' }}
+                                                </span>
+                                            @endif
                                         </div>
 
                                         <h3 class="h6 fw-bold mb-1">
@@ -303,6 +397,32 @@
                                             $analysisStatus = $analysis->status ?? 'pending';
                                             $analysisBadge = $analysisStatusBadges[$analysisStatus] ?? 'text-bg-secondary';
                                             $analysisLabel = $analysisStatusLabels[$analysisStatus] ?? ucfirst(str_replace('_', ' ', $analysisStatus));
+
+                                            /*
+                                            |--------------------------------------------------------------------------
+                                            | Último resultado salvo em eventos
+                                            |--------------------------------------------------------------------------
+                                            | A análise atual guarda o estado mais recente, mas o histórico verdadeiro
+                                            | está nos eventos.
+                                            */
+                                            $lastResultEvent = $latestResultEvent($analysis);
+
+                                            $lastPayload = (array) ($lastResultEvent?->payload ?? []);
+                                            $lastResponse = (array) ($lastResultEvent?->response ?? []);
+
+                                            $analysisIsReanalysis = $isReanalysisEvent($lastResultEvent);
+
+                                            $eventPremium =
+                                                data_get($lastResponse, 'commercial_premium')
+                                                ?? data_get($lastResponse, 'premium_amount')
+                                                ?? data_get($lastResponse, 'gross_premium')
+                                                ?? $analysis->commercial_premium
+                                                ?? $analysis->premium_amount
+                                                ?? $analysis->gross_premium
+                                                ?? null;
+
+                                            $eventRentAmount = data_get($lastPayload, 'rent_amount');
+                                            $eventTotalMonthlyAmount = data_get($lastPayload, 'total_monthly_amount');
                                         @endphp
 
                                         <div class="col-12 col-md-6">
@@ -318,18 +438,36 @@
                                                         </div>
                                                     </div>
 
+                                                @if ($lastResultEvent)
+                                                    <div class="mt-2">
+                                                        <span class="badge {{ $analysisIsReanalysis ? 'text-bg-warning' : 'text-bg-info' }}">
+                                                            {{ $analysisIsReanalysis ? 'Resultado da reanálise' : 'Resultado da análise' }}
+                                                        </span>
+                                                    </div>
+                                                @endif
                                                     <span class="badge {{ $analysisBadge }}">
                                                         {{ $analysisLabel }}
                                                     </span>
                                                 </div>
 
-                                                @if ($analysis->commercial_premium || $analysis->premium_amount)
+                                                @if ($eventPremium)
                                                     <div class="small text-muted mt-2">
-                                                        Prêmio:
-                                                        <strong>
-                                                            R$
-                                                            {{ number_format((float) ($analysis->commercial_premium ?? $analysis->premium_amount), 2, ',', '.') }}
-                                                        </strong>
+                                                        Prêmio retornado:
+                                                        <strong>{{ $money($eventPremium) }}</strong>
+                                                    </div>
+                                                @endif
+
+                                                @if ($eventRentAmount !== null && $eventRentAmount !== '')
+                                                    <div class="small text-muted mt-1">
+                                                        Aluguel enviado:
+                                                        <strong>{{ $money($eventRentAmount) }}</strong>
+                                                    </div>
+                                                @endif
+
+                                                @if ($eventTotalMonthlyAmount !== null && $eventTotalMonthlyAmount !== '')
+                                                    <div class="small text-muted mt-1">
+                                                        Total mensal enviado:
+                                                        <strong>{{ $money($eventTotalMonthlyAmount) }}</strong>
                                                     </div>
                                                 @endif
                                             </div>

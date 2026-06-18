@@ -64,7 +64,7 @@
         $normalizedTag = $normalizeTag($tag);
 
         return match (true) {
-            str_contains($normalizedTag, 'aprovados') => 'dashboard-tag-chip--approved',
+            str_contains($normalizedTag, 'aprovad') => 'dashboard-tag-chip--approved',
             str_contains($normalizedTag, 'ruim') => 'dashboard-tag-chip--bad',
             default => 'dashboard-tag-chip--neutral',
         };
@@ -89,7 +89,7 @@
             ];
         }
 
-        if ($normalizedTags->contains(fn ($tag) => str_contains($tag, 'aprovados'))) {
+        if ($normalizedTags->contains(fn ($tag) => str_contains($tag, 'aprovad'))) {
             return [
                 'card' => 'lead-card--approved',
                 'badge' => 'lead-quality-badge--approved',
@@ -144,7 +144,6 @@
         default => 'Aguardando',
     };
 @endphp
-
 
 
 <div id="dashboardThemeRoot" class="dashboard-shell" data-dashboard-theme="light">
@@ -429,6 +428,7 @@
         </div>
 
 
+
         {{-- Métricas --}}
         <div class="row g-3 mb-4">
             <div class="col-6 col-xl-3">
@@ -517,11 +517,141 @@
         </div>
 
 
-        {{-- Conteúdo principal --}}
-        <div class="row g-4">
+        {{-- Cards operacionais superiores --}}
+        <div class="row g-4 mb-4">
 
-            {{-- Coluna de leads --}}
-            <div class="col-12 col-xxl-8">
+            {{-- Resumo operacional --}}
+            <div class="col-12 col-xl-4">
+                <div class="card border-0 shadow-sm rounded-5 h-100">
+                    <div class="card-body p-4">
+                        <span class="badge text-bg-dark mb-2">
+                            Operação
+                        </span>
+
+                        <h2 class="h5 fw-bold mb-3">
+                            Resumo da base
+                        </h2>
+
+                        <div class="vstack gap-3">
+                            <div class="d-flex justify-content-between align-items-center border-bottom pb-3">
+                                <div>
+                                    <div class="fw-semibold">Com telefone</div>
+                                    <div class="small text-muted">Prontos para contato direto</div>
+                                </div>
+                                <span class="badge text-bg-success rounded-pill">{{ $withPhone }}</span>
+                            </div>
+
+                            <div class="d-flex justify-content-between align-items-center border-bottom pb-3">
+                                <div>
+                                    <div class="fw-semibold">Sem telefone</div>
+                                    <div class="small text-muted">Precisam de complemento</div>
+                                </div>
+                                <span class="badge text-bg-warning rounded-pill">{{ $withoutPhone }}</span>
+                            </div>
+
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    <div class="fw-semibold">Últimos 7 dias</div>
+                                    <div class="small text-muted">Entradas recentes</div>
+                                </div>
+                                <span class="badge text-bg-primary rounded-pill">{{ $recentLeads }}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {{-- Tags principais --}}
+            <div class="col-12 col-xl-4">
+                <div class="card border-0 shadow-sm rounded-5 h-100">
+                    <div class="card-body p-4">
+                        <span class="badge text-bg-secondary mb-2">
+                            Segmentação
+                        </span>
+
+                        <h2 class="h5 fw-bold mb-3">
+                            Tags com maior volume
+                        </h2>
+
+                        <div class="list-group list-group-flush">
+                            @forelse ($topTags as $tag => $count)
+                                <a
+                                    href="{{ request()->fullUrlWithQuery(['tag' => $tag, 'page' => 1]) }}#leads-section"
+                                    class="list-group-item list-group-item-action d-flex justify-content-between align-items-center px-0 {{ $selectedTag === $tag ? 'active px-3 rounded-3' : '' }}"
+                                >
+                                    <div>
+                                        <div class="fw-semibold">{{ $tag }}</div>
+                                        <div class="small {{ $selectedTag === $tag ? 'text-white-50' : 'text-muted' }}">
+                                            Leads desta origem
+                                        </div>
+                                    </div>
+
+                                    <span class="badge {{ $selectedTag === $tag ? 'text-bg-light text-primary' : 'text-bg-primary' }} rounded-pill">
+                                        {{ $count }}
+                                    </span>
+                                </a>
+                            @empty
+                                <p class="text-muted small mb-0">
+                                    As tags aparecerão aqui assim que existirem leads segmentados.
+                                </p>
+                            @endforelse
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {{-- Ajuda rápida --}}
+            <div class="col-12 col-xl-4">
+                <div class="card border-0 shadow-sm rounded-5 h-100">
+                    <div class="card-body p-4">
+                        <span class="badge text-bg-info mb-2">
+                            Guia rápido
+                        </span>
+
+                        <h2 class="h5 fw-bold mb-3">
+                            Como usar este painel
+                        </h2>
+
+                        <div class="vstack gap-3">
+                            <div class="d-flex gap-3">
+                                <span class="badge rounded-circle text-bg-primary d-flex align-items-center justify-content-center" style="width: 28px; height: 28px;">
+                                    1
+                                </span>
+                                <div>
+                                    <div class="fw-semibold">Compartilhe a chave</div>
+                                    <div class="small text-muted">Envie a chave e o link da simulação para sua equipe.</div>
+                                </div>
+                            </div>
+
+                            <div class="d-flex gap-3">
+                                <span class="badge rounded-circle text-bg-primary d-flex align-items-center justify-content-center" style="width: 28px; height: 28px;">
+                                    2
+                                </span>
+                                <div>
+                                    <div class="fw-semibold">Acompanhe novos leads</div>
+                                    <div class="small text-muted">Os leads captados aparecerão nesta fila comercial.</div>
+                                </div>
+                            </div>
+
+                            <div class="d-flex gap-3">
+                                <span class="badge rounded-circle text-bg-primary d-flex align-items-center justify-content-center" style="width: 28px; height: 28px;">
+                                    3
+                                </span>
+                                <div>
+                                    <div class="fw-semibold">Filtre por tag ou nome</div>
+                                    <div class="small text-muted">Use os filtros para localizar leads rapidamente.</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+
+        {{-- Área principal da lista de leads --}}
+        <div class="row g-4">
+            <div class="col-12">
 
                 {{-- Filtros --}}
                 <div class="card border-0 shadow-sm rounded-5 mb-4" id="leads-section">
@@ -542,12 +672,10 @@
                                     @else
                                         {{ $totalLeads }} leads cadastrados na base.
                                     @endif
-            
                                 </p>
                             </div>
 
-                           <form method="GET" action="{{ url()->current() }}#leads-section" class="row g-2 align-items-end">
-
+                            <form method="GET" action="{{ url()->current() }}#leads-section" class="row g-2 align-items-end">
                                 {{-- Filtro por nome do lead --}}
                                 <div class="col-12 col-lg-5">
                                     <label for="crm-lead-name-filter" class="form-label small text-muted">
@@ -567,9 +695,9 @@
 
                                 {{-- Filtro por tag --}}
                                 <div class="col-12 col-lg-4">
-                                        <label for="crm-tag-filter" class="form-label small text-muted">
-                                            Filtrar por tag
-                                        </label>
+                                    <label for="crm-tag-filter" class="form-label small text-muted">
+                                        Filtrar por tag
+                                    </label>
 
                                     <select id="crm-tag-filter" name="tag" class="form-select">
                                         <option value="">Todas as tags</option>
@@ -617,10 +745,9 @@
                     </div>
                 </div>
 
-
-                {{-- Lista de leads --}}
+                {{-- Lista de leads em largura total --}}
                 @if ($leads->total() > 0)
-                    <div class="row g-3">
+                    <div class="lead-list vstack gap-3">
                         @foreach ($leads as $lead)
                             @php
                                 $leadName = $lead->nome ?: 'Lead sem nome';
@@ -640,10 +767,21 @@
                                     ->reject(function ($tag) use ($companyTagName) {
                                         return mb_strtolower(trim($tag)) === $companyTagName;
                                     });
-                                
+
                                 $leadTone = $getLeadTone($allTags);
                                 $visibleTags = $allTags->take(3);
                                 $remainingTags = max($allTags->count() - $visibleTags->count(), 0);
+                                $officialLeadTag = $allTags->first(function ($tag) use ($normalizeTag) {
+                                        return str_contains($normalizeTag($tag), 'ruim');
+                                    });
+
+                                    if (!$officialLeadTag) {
+                                        $officialLeadTag = $allTags->first(function ($tag) use ($normalizeTag) {
+                                            return str_contains($normalizeTag($tag), 'aprovad');
+                                        });
+                                    }
+
+                                $officialLeadTag = $officialLeadTag ?: $allTags->first();
 
                                 $leadInitials = collect(preg_split('/\s+/', trim($leadName)))
                                     ->filter()
@@ -661,107 +799,111 @@
                                 };
                             @endphp
 
-                            <div class="col-12 col-lg-6">
-                                <article class="card border-0 shadow-sm rounded-5 lead-card h-100 {{ $leadTone['card'] }}">
-                                    <div class="card-body p-4">
-                                        <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
+                            <article class="card border-0 shadow-sm rounded-5 lead-card lead-list-item {{ $leadTone['card'] }}">
+                                <div class="card-body p-3 p-lg-4">
+
+                                    <div class="row g-3 align-items-center">
+
+                                        {{-- Identificação --}}
+                                        <div class="col-12 col-md-6 col-xl-3">
                                             <div class="d-flex align-items-center gap-3">
                                                 <div class="lead-avatar rounded-4 bg-primary text-white d-flex align-items-center justify-content-center fw-bold">
                                                     {{ $leadInitials ?: 'L' }}
                                                 </div>
 
-                                                <div>
-                                                    <h3 class="h6 fw-bold mb-1">
+                                                <div class="min-w-0">
+                                                    <h3 class="h6 fw-bold mb-1 text-truncate">
                                                         {{ $leadName }}
                                                     </h3>
 
-                                                    <div class="small text-muted">
+                                                    <div class="small text-muted text-truncate">
                                                         {{ $leadCity }}
                                                     </div>
                                                 </div>
                                             </div>
-
-                                            <div class="d-flex flex-column align-items-end gap-2">
-                                                <span class="badge {{ $statusBadge }}">
-                                                    {{ $statusLabel }}
-                                                </span>
-
-                                                @if ($leadTone['label'])
-                                                    <span class="badge rounded-pill lead-quality-badge {{ $leadTone['badge'] }}">
-                                                        {{ $leadTone['label'] }}
-                                                    </span>
-                                                @endif
-                                            </div>
                                         </div>
 
-                                        <div class="border rounded-4 p-3 mb-3 bg-light">
-                                            <div class="row g-2">
-                                                <div class="col-12">
-                                                    <div class="small text-muted">E-mail</div>
+                                        {{-- E-mail --}}
+                                        <div class="col-12 col-md-6 col-xl-3">
+                                            <div class="small text-muted">E-mail</div>
 
-                                                    @if ($lead->email)
-                                                        <a href="mailto:{{ $lead->email }}" class="fw-semibold text-decoration-none">
-                                                            {{ $leadEmail }}
-                                                        </a>
-                                                    @else
-                                                        <span class="fw-semibold">{{ $leadEmail }}</span>
-                                                    @endif
-                                                </div>
-
-                                                <div class="col-12 col-sm-6">
-                                                    <div class="small text-muted">Telefone</div>
-                                                    <div class="fw-semibold">{{ $leadPhone }}</div>
-                                                </div>
-
-                                                <div class="col-12 col-sm-6">
-                                                    <div class="small text-muted">Entrada</div>
-                                                    <div class="fw-semibold">{{ $leadDate }} às {{ $leadTime }}</div>
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        <div class="d-flex flex-wrap gap-1 mb-3">
-                                            @forelse ($visibleTags as $tag)
-                                                @php
-                                                    $tagChipClass = $tagToneClass($tag);
-                                                    $isSelectedChip = $selectedTag === $tag;
-                                                @endphp
-
-                                                <a
-                                                    href="{{ request()->fullUrlWithQuery(['tag' => $tag, 'page' => 1]) }}#leads-section"
-                                                    class="badge rounded-pill text-decoration-none dashboard-tag-chip {{ $tagChipClass }} {{ $isSelectedChip ? 'dashboard-tag-chip--selected' : '' }}"
-                                                >
-                                                    {{ $tag }}
+                                            @if ($lead->email)
+                                                <a href="mailto:{{ $lead->email }}" class="fw-semibold text-decoration-none text-truncate d-block">
+                                                    {{ $leadEmail }}
                                                 </a>
-                                            @empty
-                                                <span class="badge rounded-pill text-bg-light border text-muted dashboard-tag-chip">
-                                                    Sem tag
-                                                </span>
-                                            @endforelse
-
-                                            @if ($remainingTags > 0)
-                                                <span class="badge rounded-pill text-bg-secondary">
-                                                    +{{ $remainingTags }}
+                                            @else
+                                                <span class="fw-semibold text-truncate d-block">
+                                                    {{ $leadEmail }}
                                                 </span>
                                             @endif
                                         </div>
 
-                                        <div class="d-flex gap-2">
+                                        {{-- Telefone --}}
+                                        <div class="col-6 col-md-3 col-xl-2">
+                                            <div class="small text-muted">Telefone</div>
+
+                                            <div class="fw-semibold text-truncate">
+                                                {{ $leadPhone }}
+                                            </div>
+                                        </div>
+
+                                        {{-- Entrada --}}
+                                        <div class="col-6 col-md-3 col-xl-1">
+                                            <div class="small text-muted">Entrada</div>
+
+                                            <div class="fw-semibold">
+                                                {{ $leadDate }}
+                                            </div>
+
+                                            <div class="small text-muted">
+                                                {{ $leadTime }}
+                                            </div>
+                                        </div>
+
+                                        {{-- Tag oficial do lead --}}
+                                        <div class="col-12 col-md-4 col-xl-2">
+                                            <div class="d-flex flex-wrap gap-2 justify-content-start justify-content-xl-end">
+
+                                                @if ($officialLeadTag)
+                                                    @php
+                                                        $officialTagChipClass = $tagToneClass($officialLeadTag);
+                                                        $isSelectedOfficialTag = $selectedTag === $officialLeadTag;
+                                                    @endphp
+
+                                                    <a
+                                                        href="{{ request()->fullUrlWithQuery(['tag' => $officialLeadTag, 'page' => 1]) }}#leads-section"
+                                                        class="badge rounded-pill text-decoration-none dashboard-tag-chip {{ $officialTagChipClass }} {{ $isSelectedOfficialTag ? 'dashboard-tag-chip--selected' : '' }}"
+                                                    >
+                                                        {{ $officialLeadTag }}
+                                                    </a>
+                                                @else
+                                                    <span class="badge rounded-pill text-bg-light border text-muted dashboard-tag-chip">
+                                                        Sem tag
+                                                    </span>
+                                                @endif
+
+                                            </div>
+                                        </div>
+
+                                        {{-- Botão --}}
+                                        <div class="col-12 col-md-2 col-xl-1">
                                             <button
-                                             type="button" class="btn btn-sm btn-outline-primary flex-fill"
-                                             data-bs-toggle="modal"
-                                             data-bs-target="#leadModal{{ $lead->id }}"
+                                                type="button"
+                                                class="btn btn-sm btn-outline-primary w-100 text-nowrap"
+                                                data-bs-toggle="modal"
+                                                data-bs-target="#leadModal{{ $lead->id }}"
                                             >
                                                 Visualizar
                                             </button>
                                         </div>
+
                                     </div>
-                                </article>
-                            </div>
-                            @endforeach
-                        </div>
-                        
-                        <div class="card border-0 shadow-sm rounded-4 mt-4">
+                                </div>
+                            </article>
+                        @endforeach
+                    </div>
+
+                    <div class="card border-0 shadow-sm rounded-4 mt-4">
                         <div class="card-body d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
                             <p class="text-muted small mb-0">
                                 Exibindo {{ $currentStart }} a {{ $currentEnd }} de {{ $filteredLeads }} leads{{ $isFiltering ? ' filtrados' : '' }}.
@@ -775,169 +917,41 @@
                         </div>
                     </div>
                 @else
-                <div class="card border-0 shadow-sm rounded-5">
+                    <div class="card border-0 shadow-sm rounded-5">
                         <div class="card-body text-center p-5">
                             <span class="badge text-bg-light border mb-3">
                                 Base vazia
                             </span>
 
-                        @if ($isFiltering)
-                            <h3 class="h5 fw-bold">
-                                Nenhum lead encontrado com os filtros informados.
-                            </h3>
+                            @if ($isFiltering)
+                                <h3 class="h5 fw-bold">
+                                    Nenhum lead encontrado com os filtros informados.
+                                </h3>
 
-                            <p class="text-muted">
-                                Tente pesquisar outro nome, escolher outra tag ou limpar os filtros.
-                            </p>
+                                <p class="text-muted">
+                                    Tente pesquisar outro nome, escolher outra tag ou limpar os filtros.
+                                </p>
 
-                            <a href="{{ url()->current() }}#leads-section" class="btn btn-outline-secondary">
-                                Limpar filtros
-                            </a>
-                        @else
-                            <h3 class="h5 fw-bold">
-                                Nenhum lead encontrado.
-                            </h3>
+                                <a href="{{ url()->current() }}#leads-section" class="btn btn-outline-secondary">
+                                    Limpar filtros
+                                </a>
+                            @else
+                                <h3 class="h5 fw-bold">
+                                    Nenhum lead encontrado.
+                                </h3>
 
-                            <p class="text-muted">
-                                Assim que novos contatos forem captados ou sincronizados, eles aparecerão aqui.
-                            </p>
-                        @endif
+                                <p class="text-muted">
+                                    Assim que novos contatos forem captados ou sincronizados, eles aparecerão aqui.
+                                </p>
+                            @endif
                         </div>
                     </div>
                 @endif
             </div>
-
-
-            {{-- Coluna lateral --}}
-            <div class="col-12 col-xxl-4">
-
-                {{-- Resumo operacional --}}
-                <div class="card border-0 shadow-sm rounded-5 mb-4">
-                    <div class="card-body p-4">
-                        <span class="badge text-bg-dark mb-2">
-                            Operação
-                        </span>
-
-                        <h2 class="h5 fw-bold mb-3">
-                            Resumo da base
-                        </h2>
-
-                        <div class="vstack gap-3">
-                            <div class="d-flex justify-content-between align-items-center border-bottom pb-3">
-                                <div>
-                                    <div class="fw-semibold">Com telefone</div>
-                                    <div class="small text-muted">Prontos para contato direto</div>
-                                </div>
-                                <span class="badge text-bg-success rounded-pill">{{ $withPhone }}</span>
-                            </div>
-                            
-                            <div class="d-flex justify-content-between align-items-center border-bottom pb-3">
-                                <div>
-                                    <div class="fw-semibold">Sem telefone</div>
-                                    <div class="small text-muted">Precisam de complemento</div>
-                                </div>
-                                <span class="badge text-bg-warning rounded-pill">{{ $withoutPhone }}</span>
-                            </div>
-
-                            <div class="d-flex justify-content-between align-items-center">
-                                <div>
-                                    <div class="fw-semibold">Últimos 7 dias</div>
-                                    <div class="small text-muted">Entradas recentes</div>
-                                </div>
-                                <span class="badge text-bg-primary rounded-pill">{{ $recentLeads }}</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-
-                {{-- Tags principais --}}
-                <div class="card border-0 shadow-sm rounded-5 mb-4">
-                    <div class="card-body p-4">
-                        <span class="badge text-bg-secondary mb-2">
-                            Segmentação
-                        </span>
-
-                        <h2 class="h5 fw-bold mb-3">
-                            Tags com maior volume
-                        </h2>
-
-                        <div class="list-group list-group-flush">
-                            @forelse ($topTags as $tag => $count)
-                            <a
-                                    href="{{ request()->fullUrlWithQuery(['tag' => $tag, 'page' => 1]) }}#leads-section"
-                                    class="list-group-item list-group-item-action d-flex justify-content-between align-items-center px-0 {{ $selectedTag === $tag ? 'active px-3 rounded-3' : '' }}"
-                                    >
-                                    <div>
-                                        <div class="fw-semibold">{{ $tag }}</div>
-                                        <div class="small {{ $selectedTag === $tag ? 'text-white-50' : 'text-muted' }}">
-                                            Leads desta origem
-                                        </div>
-                                    </div>
-
-                                    <span class="badge {{ $selectedTag === $tag ? 'text-bg-light text-primary' : 'text-bg-primary' }} rounded-pill">
-                                        {{ $count }}
-                                    </span>
-                                </a>
-                            @empty
-                                <p class="text-muted small mb-0">
-                                    As tags aparecerão aqui assim que existirem leads segmentados.
-                                </p>
-                            @endforelse
-                        </div>
-                    </div>
-                </div>
-
-
-                {{-- Ajuda rápida --}}
-                <div class="card border-0 shadow-sm rounded-5">
-                    <div class="card-body p-4">
-                        <span class="badge text-bg-info mb-2">
-                            Guia rápido
-                        </span>
-
-                        <h2 class="h5 fw-bold mb-3">
-                            Como usar este painel
-                        </h2>
-
-                        <div class="vstack gap-3">
-                            <div class="d-flex gap-3">
-                                <span class="badge rounded-circle text-bg-primary d-flex align-items-center justify-content-center" style="width: 28px; height: 28px;">
-                                    1
-                                </span>
-                                <div>
-                                    <div class="fw-semibold">Compartilhe a chave</div>
-                                    <div class="small text-muted">Envie a chave e o link da simulação para sua equipe.</div>
-                                </div>
-                            </div>
-
-                            <div class="d-flex gap-3">
-                                <span class="badge rounded-circle text-bg-primary d-flex align-items-center justify-content-center" style="width: 28px; height: 28px;">
-                                    2
-                                </span>
-                                <div>
-                                    <div class="fw-semibold">Acompanhe novos leads</div>
-                                    <div class="small text-muted">Os leads captados aparecerão nesta fila comercial.</div>
-                                </div>
-                            </div>
-
-                            <div class="d-flex gap-3">
-                                <span class="badge rounded-circle text-bg-primary d-flex align-items-center justify-content-center" style="width: 28px; height: 28px;">
-                                    3
-                                </span>
-                                <div>
-                                    <div class="fw-semibold">Filtre por tag</div>
-                                    <div class="small text-muted">Use as tags para localizar grupos de leads rapidamente.</div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                
-            </div>
         </div>
     </div>
 </div>
+
 
 {{-- Modais --}}
 @foreach ($leads as $lead)
@@ -972,7 +986,7 @@
         optional($lead->endereco)->updated_at,
     ])->filter()->max();
 
-    $canReanalyze = !$lastAnalysis || ($lastLeadUpdate && $lastLeadUpdate->gt($lastAnalysis->created_at));
+    $canReanalyze = $lead->canRequestReanalysis();
 @endphp
 <div
     class="modal fade lead-details-modal"
@@ -1178,37 +1192,37 @@
                                             <div class="row g-3">
                                                 <div class="col-6 col-md-3">
                                                     <label class="form-label small text-muted">Aluguel</label>
-                                                    <input type="number" step="0.01" min="0" name="valor_aluguel" class="form-control" value="{{ old('valor_aluguel', $lead->valor_aluguel) }}">
+                                                    <input type="number" step="0.01" min="0" name="valor_aluguel" class="form-control" value="{{ old('valor_aluguel', $lead->despesas?->valor_aluguel) }}">
                                                 </div>
 
                                                 <div class="col-6 col-md-3">
                                                     <label class="form-label small text-muted">Condomínio</label>
-                                                    <input type="number" step="0.01" min="0" name="valor_condominio" class="form-control" value="{{ old('valor_condominio', $lead->valor_condominio) }}">
+                                                    <input type="number" step="0.01" min="0" name="valor_condominio" class="form-control" value="{{ old('valor_condominio', $lead->despesas?->valor_condominio) }}">
                                                 </div>
 
                                                 <div class="col-6 col-md-3">
                                                     <label class="form-label small text-muted">IPTU</label>
-                                                    <input type="number" step="0.01" min="0" name="valor_iptu" class="form-control" value="{{ old('valor_iptu', $lead->valor_iptu) }}">
+                                                    <input type="number" step="0.01" min="0" name="valor_iptu" class="form-control" value="{{ old('valor_iptu', $lead->despesas?->valor_iptu) }}">
                                                 </div>
 
                                                 <div class="col-6 col-md-3">
                                                     <label class="form-label small text-muted">Gás</label>
-                                                    <input type="number" step="0.01" min="0" name="valor_gas" class="form-control" value="{{ old('valor_gas', $lead->valor_gas) }}">
+                                                    <input type="number" step="0.01" min="0" name="valor_gas" class="form-control" value="{{ old('valor_gas', $lead->despesas?->valor_gas) }}">
                                                 </div>
 
                                                 <div class="col-6 col-md-3">
                                                     <label class="form-label small text-muted">Água</label>
-                                                    <input type="number" step="0.01" min="0" name="valor_agua" class="form-control" value="{{ old('valor_agua', $lead->valor_agua) }}">
+                                                    <input type="number" step="0.01" min="0" name="valor_agua" class="form-control" value="{{ old('valor_agua', $lead->despesas?->valor_agua) }}">
                                                 </div>
 
                                                 <div class="col-6 col-md-3">
                                                     <label class="form-label small text-muted">Luz</label>
-                                                    <input type="number" step="0.01" min="0" name="valor_luz" class="form-control" value="{{ old('valor_luz', $lead->valor_luz) }}">
+                                                    <input type="number" step="0.01" min="0" name="valor_luz" class="form-control" value="{{ old('valor_luz', $lead->despesas?->valor_luz) }}">
                                                 </div>
 
                                                 <div class="col-6 col-md-3">
                                                     <label class="form-label small text-muted">Outras despesas</label>
-                                                    <input type="number" step="0.01" min="0" name="outras_despesas" class="form-control" value="{{ old('outras_despesas', $lead->outras_despesas) }}">
+                                                    <input type="number" step="0.01" min="0" name="outras_despesas" class="form-control" value="{{ old('outras_despesas', $lead->despesas?->outras_despesas) }}">
                                                 </div>
 
                                                 <div class="col-6 col-md-3">
@@ -1216,7 +1230,7 @@
                                                     <input
                                                         type="text"
                                                         class="form-control fw-bold"
-                                                        value="R$ {{ number_format((float) $lead->valor_total_encargos, 2, ',', '.') }}"
+                                                        value="R$ {{ number_format((float) $lead->despesas?->valor_total_encargos, 2, ',', '.') }}"
                                                         readonly
                                                     >
                                                 </div>
@@ -1336,513 +1350,38 @@
 </div>
 @endforeach
 
-<script>
-document.addEventListener('DOMContentLoaded', function () {
-    const statusUrl = "{{ route('Dashboard.syncStatus') }}";
-    const currentStatus = @json($syncStatus);
-    const initialSyncError = @json($syncError);
-    const initialTotalLeads = @json($totalLeads);
-    const syncJustQueued = @json($syncJustQueued ?? false);
-    const leadFormUrl = @json($leadFormUrl);
-    const leadAccessCode = @json($leadAccessCode);
-    const shouldAutoShowSyncToast = @json($shouldAutoShowSyncToast);
-    const dashboardThemeRoot = document.getElementById('dashboardThemeRoot');
-    const dashboardThemeToggle = document.getElementById('dashboardThemeToggle');
-    const dashboardThemeStorageKey = 'dashboard-theme';
-    
-    const syncFloatingPanel = document.getElementById('syncFloatingPanel');
-    const syncPanelCloseButton = document.getElementById('sync-panel-close-button');
-    const syncPanelRefreshButton = document.getElementById('sync-panel-refresh-button');
-    
-    const toastBadgeEl = document.getElementById('sync-toast-badge');
-    const toastTitleEl = document.getElementById('sync-toast-title');
-    const toastDescriptionEl = document.getElementById('sync-toast-description');
-    const toastProgressEl = document.getElementById('sync-toast-progress-bar');
-    const toastPercentEl = document.getElementById('sync-toast-percent');
-    const toastSummaryEl = document.getElementById('sync-toast-summary');
-    const toastRetryButtonEl = document.getElementById('sync-toast-retry-button');
-    const toastRetryFormEl = document.getElementById('sync-toast-retry-form');
-    
-    const dashboardLeadAccessCodeCopyButton = document.getElementById('dashboardLeadAccessCodeCopyButton');
-    const dashboardLeadAccessCodeInput = document.getElementById('dashboardLeadAccessCode');
-    
-    const dashboardLeadFormCopyButton = document.getElementById('dashboardLeadFormCopyButton');
-    const dashboardLeadFormInput = document.getElementById('dashboardLeadFormLink');
-    const dashboardLeadFormCopyStatus = document.getElementById('dashboardLeadFormCopyStatus');
-    const dashboardLeadFormOpenButton = document.getElementById('dashboardLeadFormOpenButton');
-
-    let intervalId = null;
-    let doneReloadTimeout = null;
-
-    function applyDashboardTheme(theme) {
-        if (!dashboardThemeRoot || !dashboardThemeToggle) {
-            return;
-        }
-
-        const normalizedTheme = theme === 'dark' ? 'dark' : 'light';
-
-        dashboardThemeRoot.setAttribute('data-dashboard-theme', normalizedTheme);
-        dashboardThemeToggle.textContent = normalizedTheme === 'dark' ? 'Modo claro' : 'Modo escuro';
-        dashboardThemeToggle.classList.toggle('btn-outline-light', normalizedTheme === 'dark');
-        dashboardThemeToggle.classList.toggle('btn-outline-secondary', normalizedTheme !== 'dark');
-    }
-
-    if (dashboardThemeRoot && dashboardThemeToggle) {
-        let savedTheme = 'light';
-
-        try {
-            savedTheme = localStorage.getItem(dashboardThemeStorageKey) || 'light';
-        } catch (error) {
-            savedTheme = 'light';
-        }
-
-        applyDashboardTheme(savedTheme);
-
-        dashboardThemeToggle.addEventListener('click', function () {
-            const currentTheme = dashboardThemeRoot.getAttribute('data-dashboard-theme') || 'light';
-            const nextTheme = currentTheme === 'dark' ? 'light' : 'dark';
-
-            try {
-                localStorage.setItem(dashboardThemeStorageKey, nextTheme);
-            } catch (error) {
-                console.warn('Nao foi possivel salvar o tema no navegador.', error);
-            }
-
-            applyDashboardTheme(nextTheme);
-        });
-    }
-
-    function showSyncPanel() {
-        if (syncFloatingPanel) {
-            syncFloatingPanel.classList.remove('d-none');
-        }
-    }
-
-    function hideSyncPanel() {
-        if (syncFloatingPanel) {
-            syncFloatingPanel.classList.add('d-none');
-        }
-    }
-
-    if (syncPanelCloseButton) {
-        syncPanelCloseButton.addEventListener('click', hideSyncPanel);
-    }
-
-    if (syncPanelRefreshButton) {
-        syncPanelRefreshButton.addEventListener('click', function () {
-            window.location.reload();
-        });
-    }
-
-    function stopPolling() {
-        if (intervalId) {
-            clearInterval(intervalId);
-            intervalId = null;
-        }
-    }
-
-    function progressForStatus(status, totalLeads) {
-        if (status === 'queued') {
-            return 18;
-        }
-
-        if (status === 'running') {
-            return Math.min(84, 46 + Math.min(Number(totalLeads || 0), 38));
-        }
-
-        if(status === 'completed' || status === 'completed_with_warning' || status === 'failed'){
-            return 100;
-        }
-
-        return 0;
-    }
-
-    function getToastCopy(status, payload) {
-        const leadsCount = Number(payload.totalLeads || 0);
-        const progress = progressForStatus(status, leadsCount);
-
-        if (status === 'queued') {
-            return {
-                variant: 'warning',
-                badge: 'Na fila',
-                title: 'Preparando sincronização',
-                description: 'A importação foi colocada na fila e será processada em instantes.',
-                progress: progress,
-                summary: 'Aguardando início do processamento.',
-                retry: false, 
-                refresh: false
-            };
-        }
-
-        if (status === 'running') {
-            return {
-                variant: 'primary',
-                badge: 'Sincronizando',
-                title: 'Sincronização em andamento',
-                description: 'Os leads estão sendo sincronizados em segundo plano.',
-                progress: progress,
-                summary: leadsCount > 0 ? `${leadsCount} leads disponíveis até agora.` : 'Lendo registros da integração.',
-                retry: false,
-                refresh: false
-            };
-        }
-
-        if(status === 'completed'){
-            return {
-                variant: 'success',
-                badge: 'Atualizado',
-                title: 'Sincronização concluída',
-                description: 'A base local foi atualizada com sucesso.',
-                progress: 100,
-                summary: `${leadsCount} leads disponíveis no painel.`,
-                retry: false,
-                refresh: true
-            };
-        }
-        
-        if(status === 'completed_with_warning'){
-            return{
-                variant: 'warning',
-                badge: 'Parcial',
-                title: 'Sincronização parcial concluída',
-                description: payload.syncError || 'A sincronização foi finalizada com uma quantidade suficiente de leads para o painel.',
-                progress: 100,
-                summary: `${leadsCount} leads disponíveis no painel.`,
-                retry: false,
-                refresh: true
-            };
-        }
-        
-        if (status === 'failed') {
-            return {
-                variant: 'danger',
-                badge: 'Falhou',
-                title: 'Falha na sincronização',
-                description: payload.syncError || 'Não foi possível concluir a sincronização.',
-                progress: 100,
-                summary: 'Revise a integração ou tente novamente.',
-                retry: true,    
-                refresh: false
-            };
-        }
-
-        return {
-            variant: 'secondary',
-            badge: 'Aguardando',
-            title: 'Sincronização aguardando',
-            description: 'Nenhuma sincronização em andamento.',
-            progress: 0,
-            summary: 'Aguardando atualização.',
-            retry: false,
-            refresh: false
-        };
-    }
-
-    function renderToast(copy) {
-        if (!syncFloatingPanel) {
-            return;
-        }
-
-        toastBadgeEl.className = `badge text-bg-${copy.variant} me-2`;
-        toastBadgeEl.textContent = copy.badge;
-
-        toastTitleEl.textContent = copy.title;
-        toastDescriptionEl.textContent = copy.description;
-        toastPercentEl.textContent = `${copy.progress}%`;
-        toastSummaryEl.textContent = copy.summary;
-
-        toastProgressEl.style.width = `${copy.progress}%`;
-        toastProgressEl.setAttribute('aria-valuenow', copy.progress);
-        toastProgressEl.className = `progress-bar progress-bar-striped bg-${copy.variant}`;
-
-        if (copy.progress < 100) {
-            toastProgressEl.classList.add('progress-bar-animated');
-        }
-        else {
-            toastProgressEl.classList.remove('progress-bar-animated');
-        }
-
-        if (toastRetryButtonEl) {
-            if (copy.retry) {
-                toastRetryButtonEl.classList.remove('d-none');
-            } else {
-                toastRetryButtonEl.classList.add('d-none');
-            }
-        }
-
-       if (syncPanelRefreshButton) {
-            if (copy.refresh) {
-                syncPanelRefreshButton.classList.remove('d-none');
-            } else {
-                syncPanelRefreshButton.classList.add('d-none');
-            }
-        }
-
-        showSyncPanel();
-    }
-
-    function setCopyStatus(target, message, type = 'muted') {
-        if (!target) {
-            return;
-        }
-
-        target.textContent = message;
-        target.className = `small text-${type}`;
-    }
-
-    function bindCopyButton(copyButton, input, statusEl, valueToCopy, successMessage, defaultMessage) {
-        if (!copyButton || !input) {
-            return;
-        }
-
-        copyButton.addEventListener('click', async function () {
-            const value = valueToCopy || input.value;
-
-            if (!value) {
-                if (statusEl) {
-                    setCopyStatus(statusEl, 'Informação indisponível para cópia.', 'danger');
-                }
-
-                return;
-            }
-
-            try {
-                await navigator.clipboard.writeText(value);
-
-                if (statusEl) {
-                    setCopyStatus(statusEl, successMessage, 'success');
-
-                    setTimeout(function () {
-                        setCopyStatus(statusEl, defaultMessage, 'muted');
-                    }, 2600);
-                } else {
-                    const originalText = copyButton.textContent;
-                    copyButton.textContent = 'Copiado';
-
-                    setTimeout(function () {
-                        copyButton.textContent = originalText;
-                    }, 2000);
-                }
-            } catch (error) {
-                input.focus();
-                input.select();
-
-                if (statusEl) {
-                    setCopyStatus(statusEl, 'Não foi possível copiar automaticamente. Use Ctrl+C.', 'danger');
-                }
-            }
-        });
-    }
-
-    function bindOpenButton(openButton, url) {
-        if (!openButton) {
-            return;
-        }
-
-        openButton.addEventListener('click', function (event) {
-            if (!url) {
-                event.preventDefault();
-            }
-        });
-    }
-
-    if (toastRetryButtonEl) {
-        toastRetryButtonEl.addEventListener('click', function () {
-            if (toastRetryFormEl) {
-                toastRetryFormEl.submit();
-            }
-        });
-    }
-
-    bindOpenButton(dashboardLeadFormOpenButton, leadFormUrl);
-
-    bindCopyButton(
-        dashboardLeadAccessCodeCopyButton,
-        dashboardLeadAccessCodeInput,
-        null,
-        leadAccessCode,
-        'Chave copiada com sucesso.',
-        ''
-    );
-
-    bindCopyButton(
-        dashboardLeadFormCopyButton,
-        dashboardLeadFormInput,
-        dashboardLeadFormCopyStatus,
-        leadFormUrl,
-        'Link copiado com sucesso.',
-        'Envie o link e a chave para quem for preencher.'
-    );
-
-    async function checkSyncStatus() {
-        try {
-            const response = await fetch(statusUrl, {
-                method: 'GET',
-                headers: {
-                    'Accept': 'application/json',
-                    'X-Requested-With': 'XMLHttpRequest'
-                }
-            });
-
-            if (!response.ok) {
-                stopPolling();
-                return;
-            }
-
-            const data = await response.json();
-
-            if (!data.authenticated) {
-                stopPolling();
-                return;
-            }
-
-            const status = data.sync_status;
-
-            if (status === 'queued' || status === 'running') {
-                renderToast(getToastCopy(status, {
-                    totalLeads: data.total_leads,
-                    syncError: data.sync_error
-                }));
-
-                return;
-            }
-
-            if (status === 'completed' || status === 'completed_with_warning') {
-                stopPolling();
-
-                renderToast(getToastCopy(status, {
-                    totalLeads: data.total_leads,
-                    syncError: data.sync_error
-                }));
-
-                return;
-            }
-
-            if (status === 'failed') {
-                stopPolling();
-
-                renderToast(getToastCopy('failed', {
-                    totalLeads: data.total_leads,
-                    syncError: data.sync_error
-                }));
-
-                showSyncPanel();
-
-                return;
-            }
-            stopPolling();
-        } catch (error) {
-            console.error('Erro ao consultar status da sincronização:', error);
-        }
-    }
-
-    window.addEventListener('beforeunload', function () {
-        stopPolling();
-
-        if (doneReloadTimeout) {
-            clearTimeout(doneReloadTimeout);
-        }
-    });
-
-   if (currentStatus === 'queued' || currentStatus === 'running' || syncJustQueued) {
-        const statusToRender = currentStatus === 'queued' || currentStatus === 'running'
-            ? currentStatus
-            : 'queued';
-        renderToast(getToastCopy(statusToRender, {
-            totalLeads: initialTotalLeads,
-            syncError: initialSyncError
-        }));
-
-        
-        showSyncPanel();
-
-
-        intervalId = setInterval(checkSyncStatus, 5000);
-        checkSyncStatus();
-    }
-
-    if (currentStatus === 'failed') {
-        renderToast(getToastCopy('failed', {
-            totalLeads: initialTotalLeads,
-            syncError: initialSyncError
-        }));
-
-        if (shouldAutoShowSyncToast) {
-            showSyncPanel();
-        }
-    }
-
-    const leadUpdateForms = document.querySelectorAll('.lead-update-form');
-    
-    leadUpdateForms.forEach(function (form) {
-        const leadId = form.dataset.leadId;
-        const alertBox = document.getElementById(`leadNoChangesAlert${leadId}`);
-    
-        const fields = Array.from(
-            form.querySelectorAll('input[name], select[name], textarea[name]')
-        ).filter(function (field) {
-            return !['_token', '_method'].includes(field.name);
-        });
-    
-        const initialValues = new Map();
-    
-        fields.forEach(function (field) {
-            initialValues.set(field.name, field.value ?? '');
-        });
-    
-        function formHasChanges() {
-            return fields.some(function (field) {
-                const initialValue = initialValues.get(field.name) ?? '';
-                const currentValue = field.value ?? '';
-    
-                return currentValue !== initialValue;
-            });
-        }
-    
-        fields.forEach(function (field) {
-            field.addEventListener('input', function () {
-                if (alertBox) {
-                    alertBox.classList.add('d-none');
-                }
-            });
-    
-            field.addEventListener('change', function () {
-                if (alertBox) {
-                    alertBox.classList.add('d-none');
-                }
-            });
-        });
-    
-        form.addEventListener('submit', function (event) {
-            if (!formHasChanges()) {
-                event.preventDefault();
-    
-                if (alertBox) {
-                    alertBox.classList.remove('d-none');
-                    alertBox.scrollIntoView({
-                        behavior: 'smooth',
-                        block: 'center'
-                    });
-                }
-            }
-        });
-    });
-
-    document.querySelectorAll('.lead-details-modal').forEach(function (modalEl) {
-    modalEl.addEventListener('hidden.bs.modal', function () {
-            document.querySelectorAll('.modal-backdrop').forEach(function (backdrop) {
-                backdrop.remove();
-            });
-
-            document.body.classList.remove('modal-open');
-            document.body.style.removeProperty('overflow');
-            document.body.style.removeProperty('padding-right');
-        });
-    });
-});
-
-
-
-
+<script id="dashboardUserConfig" type="application/json">
+    {!! json_encode([
+        'routes' => [
+            'syncStatus' => route('Dashboard.syncStatus'),
+
+            /*
+            |--------------------------------------------------------------------------
+            | Se você ainda não criou essa rota, pode deixar null.
+            | Quando criar a rota Dashboard.realtimeStatus, o JS já começa a usar.
+            |--------------------------------------------------------------------------
+            */
+            'realtimeStatus' => \Illuminate\Support\Facades\Route::has('Dashboard.realtimeStatus')
+                ? route('Dashboard.realtimeStatus')
+                : null,
+        ],
+
+        'syncStatus' => $syncStatus,
+        'syncError' => $syncError,
+        'totalLeads' => $totalLeads,
+        'syncJustQueued' => $syncJustQueued ?? false,
+        'leadFormUrl' => $leadFormUrl,
+        'leadAccessCode' => $leadAccessCode,
+        'shouldAutoShowSyncToast' => $shouldAutoShowSyncToast,
+
+        /*
+        |--------------------------------------------------------------------------
+        | Usado somente se você aplicar a atualização automática.
+        |--------------------------------------------------------------------------
+        */
+        'dashboardActivityHash' => $dashboardActivityHash ?? null,
+    ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) !!}
 </script>
+
+@vite(['resources/js/dashboard-user.js'])
 @endsection

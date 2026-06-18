@@ -10,6 +10,7 @@
     "license": "MIT",
     "require": {
         "php": "^8.2",
+        "barryvdh/laravel-dompdf": "^3.1",
         "laravel-lang/lang": "~11.0",
         "laravel/fortify": "^1.32",
         "laravel/framework": "^12.0",

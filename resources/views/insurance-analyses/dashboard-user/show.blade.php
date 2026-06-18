@@ -68,6 +68,150 @@
         'error' => 'text-bg-danger',
     ];
 
+    /*
+    |--------------------------------------------------------------------------
+    | Eventos importantes para histórico de análise/reanálise
+    |--------------------------------------------------------------------------
+    | Esses eventos são criados pelos Jobs atualizados.
+    | Eles guardam o snapshot dos valores enviados e da resposta da API.
+    */
+    $resultEventTypes = [
+
+        'previous_analysis_snapshot',
+
+        'analysis_completed',
+        'reanalysis_completed',
+
+        'created_without_body',
+        'reanalysis_created_without_body',
+
+        'failed',
+        'reanalysis_failed',
+
+        'invalid_response',
+        'reanalysis_invalid_response',
+    ];
+
+    /*
+    |--------------------------------------------------------------------------
+    | Eventos de comunicação
+    |--------------------------------------------------------------------------
+    | Usados para mostrar se PDF/e-mail foi gerado/enviado.
+    */
+    $communicationEventTypes = [
+        'pdf_generated',
+        'email_queued',
+        'email_sent',
+        'email_failed',
+    ];
+
+    /*
+    |--------------------------------------------------------------------------
+    | Labels amigáveis dos eventos
+    |--------------------------------------------------------------------------
+    */
+    $eventTypeLabels = [
+        'previous_analysis_snapshot' => 'Análise anterior',
+        'analysis_started' => 'Análise iniciada',
+        'analysis_completed' => 'Análise concluída',
+
+        'reanalysis_requested' => 'Reanálise solicitada',
+        'reanalysis_started' => 'Reanálise iniciada',
+        'reanalysis_sent_to_api' => 'Reanálise enviada para API',
+        'reanalysis_completed' => 'Reanálise concluída',
+
+        'created_without_body' => 'Análise recebida sem retorno completo',
+        'reanalysis_created_without_body' => 'Reanálise recebida sem retorno completo',
+
+        'failed' => 'Falha na análise',
+        'reanalysis_failed' => 'Falha na reanálise',
+
+        'invalid_response' => 'Resposta inválida',
+        'reanalysis_invalid_response' => 'Resposta inválida na reanálise',
+
+        'pdf_generated' => 'PDF gerado',
+        'email_queued' => 'E-mail na fila',
+        'email_sent' => 'E-mail enviado',
+        'email_failed' => 'Falha no e-mail',
+    ];
+
+    /*
+    |--------------------------------------------------------------------------
+    | Cores dos eventos
+    |--------------------------------------------------------------------------
+    */
+    $eventTypeBadges = [
+        'previous_analysis_snapshot' => 'text-bg-secondary',
+        'analysis_completed' => 'text-bg-primary',
+        'reanalysis_completed' => 'text-bg-warning',
+
+        'analysis_started' => 'text-bg-secondary',
+        'reanalysis_started' => 'text-bg-warning',
+        'reanalysis_requested' => 'text-bg-warning',
+        'reanalysis_sent_to_api' => 'text-bg-warning',
+
+        'created_without_body' => 'text-bg-info',
+        'reanalysis_created_without_body' => 'text-bg-info',
+
+        'failed' => 'text-bg-danger',
+        'reanalysis_failed' => 'text-bg-danger',
+
+        'invalid_response' => 'text-bg-danger',
+        'reanalysis_invalid_response' => 'text-bg-danger',
+
+        'pdf_generated' => 'text-bg-dark',
+        'email_queued' => 'text-bg-secondary',
+        'email_sent' => 'text-bg-success',
+        'email_failed' => 'text-bg-danger',
+    ];
+
+    /*
+    |--------------------------------------------------------------------------
+    | Formatação de dinheiro
+    |--------------------------------------------------------------------------
+    */
+    $money = function ($value) {
+        if ($value === null || $value === '') {
+            return 'Não informado';
+        }
+
+        return 'R$ ' . number_format((float) $value, 2, ',', '.');
+    };
+
+    /*
+    |--------------------------------------------------------------------------
+    | Busca o último evento de resultado de uma análise
+    |--------------------------------------------------------------------------
+    | Serve para mostrar na listagem o último resultado daquela companhia.
+    */
+    $latestResultEvent = function ($analysis) use ($resultEventTypes) {
+        return $analysis->events
+            ->whereIn('event_type', $resultEventTypes)
+            ->sortByDesc('created_at')
+            ->first();
+    };
+
+
+   /*
+    |--------------------------------------------------------------------------
+    | Identifica se o evento representa uma reanálise
+    |--------------------------------------------------------------------------
+    | previous_analysis_snapshot é um snapshot da análise antiga,
+    | então não deve ser tratado visualmente como reanálise.
+    */
+    $isReanalysisEvent = function ($event) {
+        if (!$event) {
+            return false;
+        }
+
+        if ($event->event_type === 'previous_analysis_snapshot') {
+            return false;
+        }
+
+        return str_starts_with((string) $event->event_type, 'reanalysis')
+            || (bool) data_get($event->payload, 'is_reanalysis');
+    };
+
     $batchStatus = $batch->status ?? 'pending';
     $batchLabel = $batchStatusLabels[$batchStatus] ?? ucfirst(str_replace('_', ' ', $batchStatus));
     $batchBadge = $batchStatusBadges[$batchStatus] ?? 'text-bg-secondary';
@@ -77,7 +221,7 @@
     $totalProviders = (int) ($batch->total_providers ?? $batch->analyses->count());
 
     $finishedProviders = (int) (
-        $batch->finished_providers
+        $batch->completed_providers
         ?? $batch->analyses
             ->whereNotIn('status', ['pending', 'processing', 'queued', 'running'])
             ->count()
@@ -236,7 +380,7 @@
                             <div>
                                 <div class="small text-muted">Valor total de encargos</div>
                                 <div class="fw-bold text-primary">
-                                    R$ {{ number_format((float) ($lead->despesas->valor_total_encargos ?? 0), 2, ',', '.') }}
+                                    R$ {{ number_format((float) ($lead?->despesas?->valor_total_encargos ?? 0), 2, ',', '.') }}
                                 </div>
                             </div>
                         </div>
@@ -279,6 +423,36 @@
                                     ?? $analysis->premium_amount
                                     ?? $analysis->gross_premium
                                     ?? null;
+
+                                /*
+                                |--------------------------------------------------------------------------
+                                | Eventos de resultado da companhia
+                                |--------------------------------------------------------------------------
+                                | Aqui entram:
+                                | - análise anterior;
+                                | - análise original;
+                                | - reanálise;
+                                | - falhas relevantes.
+                                */
+                                $resultEvents = $analysis->events
+                                    ->whereIn('event_type', $resultEventTypes)
+                                    ->sortByDesc('created_at')
+                                    ->values();
+
+                                /*
+                                |--------------------------------------------------------------------------
+                                | Eventos de comunicação
+                                |--------------------------------------------------------------------------
+                                | Aqui entram:
+                                | - PDF gerado;
+                                | - e-mail na fila;
+                                | - e-mail enviado;
+                                | - falha no e-mail.
+                                */
+                                $communicationEvents = $analysis->events
+                                    ->whereIn('event_type', $communicationEventTypes)
+                                    ->sortByDesc('created_at')
+                                    ->values();
                             @endphp
 
                             <div class="border rounded-4 p-3 p-lg-4 mb-3">
@@ -395,53 +569,275 @@
                                     </div>
                                 </div>
 
-                                {{-- Histórico de eventos --}}
-                                @if ($analysis->events && $analysis->events->count() > 0)
-                                    <div class="accordion mt-4" id="analysisEventsAccordion{{ $analysis->id }}">
+                                {{-- Histórico de análise e reanálise --}}
+                                @if ($resultEvents->count() > 0)
+                                    <div class="accordion mt-4" id="analysisResultsAccordion{{ $analysis->id }}">
+                                        <div class="accordion-item border rounded-4 overflow-hidden">
+                                            <h2 class="accordion-header">
+                                                <button
+                                                    class="accordion-button"
+                                                    type="button"
+                                                    data-bs-toggle="collapse"
+                                                    data-bs-target="#analysisResultsCollapse{{ $analysis->id }}"
+                                                    aria-expanded="true"
+                                                    aria-controls="analysisResultsCollapse{{ $analysis->id }}"
+                                                >
+                                                    Histórico de análises e reanálises
+                                                </button>
+                                            </h2>
+
+                                            <div
+                                                id="analysisResultsCollapse{{ $analysis->id }}"
+                                                class="accordion-collapse collapse show"
+                                                data-bs-parent="#analysisResultsAccordion{{ $analysis->id }}"
+                                            >
+                                                <div class="accordion-body">
+                                                    <div class="vstack gap-3">
+
+                                                        @foreach ($resultEvents as $event)
+                                                            @php
+                                                                /*
+                                                                |--------------------------------------------------------------------------
+                                                                | Dados do evento
+                                                                |--------------------------------------------------------------------------
+                                                                | payload = valores enviados para a API
+                                                                | response = valores retornados pela companhia
+                                                                */
+                                                                $payload = (array) ($event->payload ?? []);
+                                                                $response = (array) ($event->response ?? []);
+
+                                                                /*
+                                                                |--------------------------------------------------------------------------
+                                                                | Tipo visual do evento
+                                                                |--------------------------------------------------------------------------
+                                                                */
+                                                                if ($event->event_type === 'previous_analysis_snapshot') {
+                                                                    $eventLabel = 'Análise anterior';
+                                                                    $eventBadge = 'text-bg-secondary';
+                                                                } else {
+                                                                    $eventIsReanalysis = $isReanalysisEvent($event);
+
+                                                                    $eventLabel = $eventIsReanalysis
+                                                                        ? 'Reanálise'
+                                                                        : 'Análise original';
+
+                                                                    $eventBadge = $eventIsReanalysis
+                                                                        ? 'text-bg-warning'
+                                                                        : 'text-bg-primary';
+                                                                }
+
+                                                                $attemptId = data_get($payload, 'attempt_id');
+
+                                                                /*
+                                                                |--------------------------------------------------------------------------
+                                                                | Valores enviados
+                                                                |--------------------------------------------------------------------------
+                                                                */
+                                                                $rentAmount = data_get($payload, 'rent_amount');
+                                                                $chargesAmount = data_get($payload, 'charges_amount');
+                                                                $totalMonthlyAmount = data_get($payload, 'total_monthly_amount');
+
+                                                                /*
+                                                                |--------------------------------------------------------------------------
+                                                                | Valores retornados
+                                                                |--------------------------------------------------------------------------
+                                                                */
+                                                                $premiumAmount =
+                                                                    data_get($response, 'commercial_premium')
+                                                                    ?? data_get($response, 'premium_amount')
+                                                                    ?? data_get($response, 'gross_premium');
+
+                                                                $insuredAmount = data_get($response, 'insured_amount');
+                                                                $quoteId = data_get($response, 'quote_id');
+                                                                $quoteNumber = data_get($response, 'quote_number');
+                                                                $providerStatus = data_get($response, 'provider_status');
+
+                                                                /*
+                                                                |--------------------------------------------------------------------------
+                                                                | PDF e e-mail da mesma rodada
+                                                                |--------------------------------------------------------------------------
+                                                                */
+                                                                $pdfGenerated = $analysis->events->contains(function ($technicalEvent) use ($event, $attemptId) {
+                                                                    return $technicalEvent->event_type === 'pdf_generated'
+                                                                        && (
+                                                                            data_get($technicalEvent->payload, 'source_event_id') === $event->id
+                                                                            || data_get($technicalEvent->payload, 'attempt_id') === $attemptId
+                                                                        );
+                                                                });
+
+                                                                $emailSent = $analysis->events->contains(function ($technicalEvent) use ($attemptId) {
+                                                                    return $technicalEvent->event_type === 'email_sent'
+                                                                        && data_get($technicalEvent->payload, 'attempt_id') === $attemptId;
+                                                                });
+                                                            @endphp
+
+                                                            <div class="border rounded-4 p-3">
+                                                                <div class="d-flex flex-column flex-lg-row justify-content-between gap-3 mb-3">
+                                                                    <div>
+                                                                        <div class="d-flex flex-wrap gap-2 align-items-center mb-2">
+                                                                            <span class="badge {{ $eventBadge }}">
+                                                                                {{ $eventLabel }}
+                                                                            </span>
+
+                                                                            <span class="badge text-bg-light border text-dark">
+                                                                                {{ $analysisStatusLabels[$event->status] ?? ucfirst(str_replace('_', ' ', $event->status ?? 'status')) }}
+                                                                            </span>
+
+                                                                            @if ($pdfGenerated)
+                                                                                <span class="badge text-bg-dark">
+                                                                                    PDF gerado
+                                                                                </span>
+                                                                            @endif
+
+                                                                            @if ($emailSent)
+                                                                                <span class="badge text-bg-success">
+                                                                                    E-mail enviado
+                                                                                </span>
+                                                                            @endif
+                                                                        </div>
+
+                                                                        <div class="fw-semibold">
+                                                                            {{ $event->message ?? 'Resultado registrado.' }}
+                                                                        </div>
+
+                                                                        <div class="small text-muted">
+                                                                            {{ $event->created_at?->format('d/m/Y H:i') }}
+                                                                        </div>
+                                                                    </div>
+
+                                                                    <div class="text-lg-end">
+                                                                        <div class="small text-muted">
+                                                                            Cotação
+                                                                        </div>
+
+                                                                        <div class="fw-bold">
+                                                                            {{ $quoteId ?? $quoteNumber ?? 'Não informada' }}
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+
+                                                                <div class="row g-3">
+
+                                                                    {{-- Valores enviados para a API --}}
+                                                                    <div class="col-12 col-lg-6">
+                                                                        <div class="bg-light rounded-4 border p-3 h-100">
+                                                                            <div class="fw-bold mb-2">
+                                                                                Valores enviados
+                                                                            </div>
+
+                                                                            <div class="small text-muted">Aluguel</div>
+                                                                            <div class="fw-semibold mb-2">
+                                                                                {{ $money($rentAmount) }}
+                                                                            </div>
+
+                                                                            <div class="small text-muted">Encargos</div>
+                                                                            <div class="fw-semibold mb-2">
+                                                                                {{ $money($chargesAmount) }}
+                                                                            </div>
+
+                                                                            <div class="small text-muted">Total mensal</div>
+                                                                            <div class="fw-semibold">
+                                                                                {{ $money($totalMonthlyAmount) }}
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+
+                                                                    {{-- Valores retornados pela companhia --}}
+                                                                    <div class="col-12 col-lg-6">
+                                                                        <div class="bg-light rounded-4 border p-3 h-100">
+                                                                            <div class="fw-bold mb-2">
+                                                                                Valores retornados
+                                                                            </div>
+
+                                                                            <div class="small text-muted">Prêmio retornado</div>
+                                                                            <div class="fw-semibold mb-2">
+                                                                                {{ $money($premiumAmount) }}
+                                                                            </div>
+
+                                                                            <div class="small text-muted">Importância segurada</div>
+                                                                            <div class="fw-semibold mb-2">
+                                                                                {{ $money($insuredAmount) }}
+                                                                            </div>
+
+                                                                            <div class="small text-muted">Status da companhia</div>
+                                                                            <div class="fw-semibold">
+                                                                                {{ $providerStatus ?? 'Não informado' }}
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+
+                                                                @if ($attemptId)
+                                                                    <div class="small text-muted mt-3">
+                                                                        Rodada: {{ $attemptId }}
+                                                                    </div>
+                                                                @endif
+                                                            </div>
+                                                        @endforeach
+
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                @endif
+
+                                {{-- Eventos técnicos de PDF e e-mail --}}
+                                @if ($communicationEvents->count() > 0)
+                                    <div class="accordion mt-3" id="technicalEventsAccordion{{ $analysis->id }}">
                                         <div class="accordion-item border rounded-4 overflow-hidden">
                                             <h2 class="accordion-header">
                                                 <button
                                                     class="accordion-button collapsed"
                                                     type="button"
                                                     data-bs-toggle="collapse"
-                                                    data-bs-target="#analysisEventsCollapse{{ $analysis->id }}"
+                                                    data-bs-target="#technicalEventsCollapse{{ $analysis->id }}"
                                                     aria-expanded="false"
-                                                    aria-controls="analysisEventsCollapse{{ $analysis->id }}"
+                                                    aria-controls="technicalEventsCollapse{{ $analysis->id }}"
                                                 >
-                                                    Histórico da análise
+                                                    Eventos de PDF e e-mail
                                                 </button>
                                             </h2>
 
                                             <div
-                                                id="analysisEventsCollapse{{ $analysis->id }}"
+                                                id="technicalEventsCollapse{{ $analysis->id }}"
                                                 class="accordion-collapse collapse"
-                                                data-bs-parent="#analysisEventsAccordion{{ $analysis->id }}"
+                                                data-bs-parent="#technicalEventsAccordion{{ $analysis->id }}"
                                             >
                                                 <div class="accordion-body">
-                                                    <div class="vstack gap-3">
-                                                        @foreach ($analysis->events->sortByDesc('created_at') as $event)
+                                                    <div class="vstack gap-2">
+                                                        @foreach ($communicationEvents as $event)
+                                                            @php
+                                                                $eventLabel = $eventTypeLabels[$event->event_type]
+                                                                    ?? ucfirst(str_replace('_', ' ', $event->event_type));
+
+                                                                $eventBadge = $eventTypeBadges[$event->event_type]
+                                                                    ?? 'text-bg-secondary';
+                                                            @endphp
+
                                                             <div class="border rounded-4 p-3">
                                                                 <div class="d-flex justify-content-between gap-3">
                                                                     <div>
-                                                                        <div class="fw-semibold">
-                                                                            {{ $event->event_type ?? 'Evento' }}
+                                                                        <span class="badge {{ $eventBadge }}">
+                                                                            {{ $eventLabel }}
+                                                                        </span>
+
+                                                                        <div class="small text-muted mt-2">
+                                                                            {{ $event->message ?? 'Sem mensagem.' }}
                                                                         </div>
 
-                                                                        <div class="small text-muted">
-                                                                            {{ $event->message ?? 'Sem mensagem registrada.' }}
-                                                                        </div>
+                                                                        @if (data_get($event->payload, 'file_name'))
+                                                                            <div class="small mt-1">
+                                                                                Arquivo:
+                                                                                <strong>{{ data_get($event->payload, 'file_name') }}</strong>
+                                                                            </div>
+                                                                        @endif
                                                                     </div>
 
                                                                     <div class="small text-muted text-end">
                                                                         {{ $event->created_at?->format('d/m/Y H:i') }}
                                                                     </div>
                                                                 </div>
-
-                                                                @if ($event->status)
-                                                                    <span class="badge text-bg-light border text-dark mt-2">
-                                                                        {{ $event->status }}
-                                                                    </span>
-                                                                @endif
                                                             </div>
                                                         @endforeach
                                                     </div>

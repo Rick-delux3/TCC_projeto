@@ -43,6 +43,7 @@ class Lead extends Model
         'leadlovers_response' => 'array',
         'sent_to_leadlovers_at' => 'datetime',
         'aceite_termos' => 'boolean',
+        'reanalysis_unlocked_at' => 'datetime',
     ]; 
 
     /**
@@ -150,6 +151,10 @@ class Lead extends Model
 
     public function canRequestReanalysis(): bool
     {
+        if (!$this->reanalysis_unlocked_at) {
+            return false;
+        }
+
         $lastAnalysis = $this->insuranceAnalyses()
             ->latest('created_at')
             ->first();
@@ -158,11 +163,6 @@ class Lead extends Model
             return true;
         }
 
-        $lastLeadUpdate = collect([
-            $this->updated_at,
-            optional($this->endereco)->updated_at,
-        ])->filter()->max();
-
-        return $lastLeadUpdate && $lastLeadUpdate->gt($lastAnalysis->created_at);
+        return $this->reanalysis_unlocked_at->gt($lastAnalysis->created_at);
     }
 }

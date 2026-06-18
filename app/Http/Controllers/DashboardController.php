@@ -204,7 +204,13 @@ class DashboardController extends Controller
          * Query principal dos leads exibidos na tabela.
          */
         $leadsQuery = $company->leads()
-            ->with('endereco')
+            ->with([
+                'endereco',
+                'despesas',
+                'conjuge',
+                'imobiliariaInformada',
+                'locador',
+            ])
             ->orderBy('created_at', 'desc');
 
         if (filled($selectedTag)) {

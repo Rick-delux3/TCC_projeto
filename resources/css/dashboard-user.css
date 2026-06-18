@@ -2540,6 +2540,72 @@
     background: rgba(255, 255, 255, 0.07) !important;
     border-color: rgba(255, 255, 255, 0.16) !important;
 }
-    
 
+/* =========================================================
+   LISTA DE LEADS EM LARGURA TOTAL
+   Ajuste estrutural: não altera cores nem lógica visual.
+========================================================= */
 
+/* =========================================================
+   LISTA DE LEADS COMPACTA
+   Tags ficam na mesma linha do status, antes do botão visualizar.
+========================================================= */
+
+.lead-list {
+    width: 100%;
+}
+
+.lead-list-item {
+    position: relative;
+    overflow: hidden;
+}
+
+.lead-list-item .card-body {
+    min-height: auto;
+}
+
+.lead-list-item .lead-avatar {
+    width: 58px;
+    height: 58px;
+    flex: 0 0 58px;
+}
+
+.lead-list-item .min-w-0 {
+    min-width: 0;
+}
+
+.lead-list-item .text-truncate {
+    max-width: 100%;
+}
+
+.lead-list-item .btn {
+    min-height: 38px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.lead-list-item .dashboard-tag-chip {
+    max-width: 150px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+@media (max-width: 1199px) {
+    .lead-list-item .card-body {
+        padding: 18px !important;
+    }
+}
+
+@media (max-width: 576px) {
+    .lead-list-item {
+        border-radius: 24px !important;
+    }
+
+    .lead-list-item .lead-avatar {
+        width: 48px;
+        height: 48px;
+        flex-basis: 48px;
+    }
+}

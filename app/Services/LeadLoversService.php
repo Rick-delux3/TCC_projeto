@@ -179,30 +179,48 @@ class LeadLoversService
                 'success' => false,
                 'status' => null,
                 'response' => [],
+                'raw_body' => null,
+                'payload' => $payload,
                 'error' => 'Configuração da LeadLovers incompleta.',
             ];
         }
 
-        $url = $baseUrl . '/Lead?' . http_build_query([
-            'token' => $token,
-        ]);
+        $payload = array_filter($payload, function ($value) {
+            return filled($value);
+        });
 
+        $endpoint = $this->baseUrl . 'Lead';
+        
         try {
-            $response = \Illuminate\Support\Facades\Http::asJson()
+            $response = Http::asJson()
                 ->acceptJson()
                 ->timeout(30)
-                ->retry(2, 1000)
-                ->patch($url, $payload);
+                ->withQueryParameters([
+                    'token' => $this->token,
+                ])
+                ->patch($endpoint, $payload);
+
+            $json = $response->json();
+
+            if (!$response->successful()) {
+                Log::warning('LeadLovers recusou atualização do lead.', [
+                    'status' => $response->status(),
+                    'body' => $response->body(),
+                    'json' => $json,
+                    'payload' => $payload,
+                ]);
+            }
 
             return [
                 'success' => $response->successful(),
                 'status' => $response->status(),
-                'response' => $response->json() ?? [],
+                'response' => is_array($json) ? $json : [],
                 'raw_body' => $response->body(),
                 'payload' => $payload,
+                'error' => $response->successful() ? null : $response->body(),
             ];
         } catch (\Throwable $e) {
-            \Illuminate\Support\Facades\Log::error('Erro ao atualizar lead na LeadLovers', [
+            Log::warning('Falha ao tentar atualizar lead na LeadLovers.', [
                 'message' => $e->getMessage(),
                 'payload' => $payload,
             ]);
