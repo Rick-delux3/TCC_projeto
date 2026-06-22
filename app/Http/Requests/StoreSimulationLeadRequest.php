@@ -51,9 +51,10 @@ class StoreSimulationLeadRequest extends FormRequest
             'nome_imobiliaria_informada' => $this->limparTexto($this->nome_imobiliaria_informada),
             'cnpj_imobiliaria_informada' => $this->somenteNumeros($this->cnpj_imobiliaria_informada),
 
-            'nome_locador' => $this->limparTexto($this->nome_locador),
-            'telefone_locador' => $this->somenteNumeros($this->telefone_locador),
-            'email_locador' => $this->normalizarEmail($this->email_locador),
+            
+            'responsavel_nome' => $this->limparTexto($this->nome),
+            'responsavel_email' => $this->normalizarEmail($this->email),
+            'responsavel_telefone' => $this->somenteNumeros($this->tel),
         ]);
     }
 
@@ -89,6 +90,29 @@ class StoreSimulationLeadRequest extends FormRequest
                 'string',
                 'size:11',
                 'regex:/^\d{11}$/',
+            ],
+
+            'responsavel_tipo' => [
+                'required',
+                'in:imobiliaria_nao_cadastrada,locador',
+            ],
+
+            'responsavel_nome' => [
+                'required',
+                'string',
+                'max:255',
+            ],
+
+            'responsavel_email' => [
+                'required',
+                'email',
+                'max:255',
+            ],
+
+            'responsavel_telefone' => [
+                'required',
+                'string',
+                'max:20',
             ],
 
             'valor_aluguel' => ['required', 'numeric', 'min:1', 'max:999999.99'],
@@ -291,16 +315,17 @@ class StoreSimulationLeadRequest extends FormRequest
         |--------------------------------------------------------------------------
         */
 
-        'nome_locador.string' => 'O nome do locador deve ser um texto válido.',
-        'nome_locador.max' => 'O nome do locador não pode ter mais de :max caracteres.',
+        'responsavel_nome.string' => 'O nome do responsavel deve ser um texto válido.',
+        'responsavel_nome.max' => 'O nome do responsável não pode ter mais de :max caracteres.',
 
-        'telefone_locador.string' => 'O telefone do locador deve ser um texto válido.',
-        'telefone_locador.min' => 'O telefone do locador deve ter pelo menos :min dígitos.',
-        'telefone_locador.max' => 'O telefone do locador não pode ter mais de :max dígitos.',
+        'responsavel_telefone.string' => 'O telefone do responsável deve ser um texto válido.',
+        'responsavel_telefone.min' => 'O telefone do responsável deve ter pelo menos :min dígitos.',
+        'responsavel_telefone.max' => 'O telefone do responsável não pode ter mais de :max dígitos.',
 
-        'email_locador.email' => 'Informe um e-mail válido para o locador.',
-        'email_locador.max' => 'O e-mail do locador não pode ter mais de :max caracteres.',
+        'responsavel_email.email' => 'Informe um e-mail válido para o responsável.',
+        'responsavel_email.max' => 'O e-mail do responsável não pode ter mais de :max caracteres.',
 
+        'responsavel_tipo' => 'Informe o tipo do responsável!',
 
         /*
         |--------------------------------------------------------------------------

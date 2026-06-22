@@ -17,6 +17,12 @@ use App\Http\Controllers\InsuranceAnalysisController;
 use App\Http\Controllers\CepController;
 use App\Models\Imobiliaria;
 use App\Http\Controllers\DashboardLeadController;
+use App\Services\TooService;
+
+
+Route::get('/debug/too/auth', function (TooService $tooService) {
+    return response()->json($tooService->testAuthentication());
+});
 
 Route::get('/teste/token_acesso', [PottencialService::class, 'testAuthentication']);
 
@@ -134,11 +140,11 @@ Route::prefix('simulacao')
             ->name('registered-company.store');
 
         // Outros perfis.
-        Route::get('/imobiliaria-nao-cadastrada', [SimulationController::class, 'unregisteredCompanyForm'])
+        Route::get('/imobiliaria-nao-cadastrada/proprietario', [SimulationController::class, 'unregisteredCompanyForm'])
             ->middleware('throttle:simulation-page')
             ->name('unregistered-company.form');
 
-        Route::post('/imobiliaria-nao-cadastrada', [SimulationController::class, 'storeUnregisteredCompanyLead'])
+        Route::post('/imobiliaria-nao-cadastrada/proprietario', [SimulationController::class, 'storeUnregisteredCompanyLead'])
             ->middleware('throttle:simulation-submit')
             ->name('unregistered-company.store');
 
@@ -149,14 +155,6 @@ Route::prefix('simulacao')
         Route::post('/locatario', [SimulationController::class, 'storeTenantLead'])
             ->middleware('throttle:simulation-submit')
             ->name('tenant.store');
-
-        Route::get('/locador', [SimulationController::class, 'landlordForm'])
-            ->middleware('throttle:simulation-page')
-            ->name('landlord.form');
-
-        Route::post('/locador', [SimulationController::class, 'storeLandlordLead'])
-            ->middleware('throttle:simulation-submit')
-            ->name('landlord.store');
     });
 
 Route::get('/cep/{cep}', [CepController::class, 'show'])

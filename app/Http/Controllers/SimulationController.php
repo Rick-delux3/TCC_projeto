@@ -43,7 +43,7 @@ class SimulationController extends Controller
             'imobiliaria_cadastrada' => redirect()->route('simulation.registered-company.access'),
             'imobiliaria_nao_cadastrada' => redirect()->route('simulation.unregistered-company.form'),
             'locatario' => redirect()->route('simulation.tenant.form'),
-            'locador' => redirect()->route('simulation.landlord.form'),
+            'locador' => redirect()->route('simulation.unregistered-company.form'),
         };
     }
 
@@ -119,18 +119,23 @@ class SimulationController extends Controller
     /**
      * Formulário para imobiliária ainda não cadastrada.
      */
-    public function unregisteredCompanyForm()
+    public function unregisteredCompanyForm(Request $request)
     {
-        return view('simulation.forms.unregistered-company');
+        $responsavelTipo = $request->get('responsavel_tipo', 'imobiliaria_nao_cadastrada');
+
+        return view('simulation.forms.unregistered-company_landlord', compact('responsavelTipo'));
     }
 
     public function storeUnregisteredCompanyLead(StoreSimulationLeadRequest $request)
     {
-        $lead = DB::transaction(function () use ($request) {
+
+        $responsavelTipo = $request->validate('responsavel_tipo');
+
+        $lead = DB::transaction(function () use ($request, $responsavelTipo) {
             return $this->saveLead($request, [
-                'tipo_solicitante' => 'imobiliaria_nao_cadastrada',
+                'tipo_solicitante' => $responsavelTipo,
                 'company' => null,
-                'origem' => 'imobiliaria_nao_cadastrada',
+                'origem' => $responsavelTipo,
             ]);
         });
 
@@ -169,27 +174,8 @@ class SimulationController extends Controller
     /**
      * Formulário para locador.
      */
-    public function landlordForm()
-    {
-        return view('simulation.forms.landlord');
-    }
+    
 
-    public function storeLandlordLead(StoreSimulationLeadRequest $request)
-    {
-        $lead = DB::transaction(function () use ($request) {
-            return $this->saveLead($request, [
-                'tipo_solicitante' => 'locador',
-                'company' => null,
-                'origem' => 'locador',
-            ]);
-        });
-
-        $this->dispatchLeadFlow($lead);
-
-        return redirect()
-            ->route('simulation.success')
-            ->with('success', 'Solicitação enviada com sucesso. O resultado será enviado por e-mail.');
-    }
 
     /**
      * Busca imobiliária por código de acesso.
@@ -256,7 +242,11 @@ class SimulationController extends Controller
                 'cpf' => $data['cpf'] ?? null,
                 'tel' => $data['tel'] ?? null,
                 'estado_civil' => $data['estado_civil'] ?? null,
-                'imobiliaria' => $company?->name ?? ($data['nome_imobiliaria_informada'] ?? null),
+                'imobiliaria' => $company?->name 
+                    ?? 
+                    (($data['responsavel_tipo'] ?? null) === 'imobiliaria_nao_cadastrada'
+                    ? ($data['responsavel_nome'] ?? null)
+                    : null),
                 'tags_originais' => $this->tagsAsString($context['tipo_solicitante'], $company),
                 'status' => 'novo',
                 'origem' => $context['origem'],
@@ -307,40 +297,34 @@ class SimulationController extends Controller
             $lead->conjuge()->delete();
         }
 
-        if (
-            filled($data['nome_locador'] ?? null)
-            || filled($data['telefone_locador'] ?? null)
-            || filled($data['email_locador'] ?? null)
-        ) {
+        $responsavelTipo = $data['responsavel_tipo'] ?? null;
+
+        if ($responsavelTipo === 'locador') {
             $lead->locador()->updateOrCreate(
                 ['lead_id' => $lead->id],
                 [
-                    'nome' => $data['nome_locador'] ?? null,
-                    'telefone' => $data['telefone_locador'] ?? null,
-                    'email' => $data['email_locador'] ?? null,
+                    'nome' => $data['responsavel_nome'] ?? null,
+                    'telefone' => $data['responsavel_telefone'] ?? null,
+                    'email' => $data['responsavel_email'] ?? null,
                 ]
             );
-        } else {
-            $lead->locador()->delete();
+
+            // Garante que não fique dado duplicado na tabela de imobiliária informada.
+            $lead->imobiliariaInformada()->delete();
         }
 
-        if (
-            filled($data['nome_imobiliaria_informada'] ?? null)
-            || filled($data['cnpj_imobiliaria_informada'] ?? null)
-            || filled($data['responsavel_preenchimento'] ?? null)
-            || filled($data['telefone_responsavel'] ?? null)
-        ) {
+        if ($responsavelTipo === 'imobiliaria_nao_cadastrada') {
             $lead->imobiliariaInformada()->updateOrCreate(
                 ['lead_id' => $lead->id],
                 [
-                    'nome_imobiliaria_informada' => $data['nome_imobiliaria_informada'] ?? null,
-                    'cnpj_imobiliaria_informada' => $data['cnpj_imobiliaria_informada'] ?? null,
-                    'responsavel_preenchimento' => $data['responsavel_preenchimento'] ?? null,
-                    'telefone_responsavel' => $data['telefone_responsavel'] ?? null,
+                    'nome_imobiliaria_informada' => $data['responsavel_nome'] ?? null,
+                    'responsavel_preenchimento' => $data['responsavel_email'] ?? null,
+                    'telefone_responsavel' => $data['responsavel_telefone'] ?? null,
                 ]
             );
-        } else {
-            $lead->imobiliariaInformada()->delete();
+
+            // Garante que não fique dado duplicado na tabela de locador.
+            $lead->locador()->delete();
         }
 
         return $lead;

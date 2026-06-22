@@ -77,6 +77,24 @@ return [
 
     ],
 
+    'too' =>[
+        'base_url' => env('TOO_BASE_URL', 'https://openapi-uat.tooseguros.com.br'),
+        'client_id' => env('TOO_CLIENT_ID'),
+        'client_secret' => env('TOO_CLIENT_SECRET'),
+        'broker_cnpj' => env('TOO_BROKER_CNPJ'),
+        'broker_name' => env('TOO_BROKER_NAME'),
+        'default_rental_purpose' => env('TOO_DEFAULT_RENTAL_PURPOSE', 'Residencial'),
+        'default_rent_adjustment_index' => env('TOO_DEFAULT_RENT_ADJUSTMENT_INDEX', 'IPCA'),
+        'default_indemnity_period' => env('TOO_DEFAULT_INDEMNITY_PERIOD', 30),
+        'default_commission_percentage' => env('TOO_DEFAULT_COMMISSION_PERCENTAGE', 0.10),
+        'default_birthdate' => env('TOO_DEFAULT_BIRTHDATE', '1985/12/10'),
+        'default_monthly_income' => env('TOO_DEFAULT_MONTHLY_INCOME', 12500.24),
+        'default_employment' => env('TOO_DEFAULT_EMPLOYMENT', 'Autônomo'),
+        'default_profession' => env('TOO_DEFAULT_PROFESSION', 'Autônomo'),
+        'default_reside_property' => env('TOO_DEFAULT_RESIDE_PROPERTY', true),
+        'default_financial_responsible' => env('TOO_DEFAULT_FINANCIAL_RESPONSIBLE', true),
+    ],
+
     'porto' => [
         'base_url' => env('PORTO_BASE_URL'),
         'client_id' => env('PORTO_CLIENT_ID'),

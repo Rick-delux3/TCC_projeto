@@ -112,7 +112,7 @@ class InsuranceAnalysisController extends Controller
 
         $batches = $batchesQuery
             ->latest()
-            ->paginate(10)
+            ->paginate(2)
             ->withQueryString();
 
         $dashboardStats = [

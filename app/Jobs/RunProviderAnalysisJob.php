@@ -315,6 +315,19 @@ class RunProviderAnalysisJob implements ShouldQueue
             'status',
             'quote.status',
             'data.status',
+
+            'provider_original_status',
+            'situacao',
+            'situacaoProposta',
+            'statusProposta',
+            'statusCredito',
+            'resultado',
+            'parecer',
+
+            'too.status.response.status',
+            'too.status.response.situacao',
+            'too.status.response.situacaoProposta',
+            'too.status.response.statusProposta',
         ]);
 
         return $value !== null ? (string) $value : null;

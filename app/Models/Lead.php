@@ -37,6 +37,7 @@ class Lead extends Model
         'sent_to_leadlovers_at',
         'created_by_corretor_id',
         'updated_by_corretor_id',
+        'reanalysis_unlocked_at',
     ];
 
     protected $casts = [
@@ -117,7 +118,7 @@ class Lead extends Model
 
     public function ultimaAnaliseSeguro()
     {
-        return $this->hasOne(InsuranceAnalysis::class);
+        return $this->hasOne(InsuranceAnalysis::class)->latestOfMany();
     }
 
     public function insuranceAnalysesBatches()
@@ -164,5 +165,18 @@ class Lead extends Model
         }
 
         return $this->reanalysis_unlocked_at->gt($lastAnalysis->created_at);
+    }
+
+    public function canBeSentToToo()
+    {
+        if(!filled($this->cpf)) return false;
+
+        if($this->tipo_solicitante === 'locador') return false;
+
+        return in_array($this->tipo_solicitante, [
+            'imobiliaria_cadastrada',
+            'imobiliaria_nao_cadastrada',
+            'locatario',
+        ], true);
     }
 }

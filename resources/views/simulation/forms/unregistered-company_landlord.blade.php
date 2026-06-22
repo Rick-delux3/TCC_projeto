@@ -7,12 +7,12 @@
         <div class="card-body p-4">
 
             <h2 class="fw-bold mb-4">
-                Preencher com dados do pretendente à locação
+                Solicitação por imobiliária não cadastrada e Proprietário
             </h2>
 
             @include('simulation.partials.alerts')
 
-            <form action="{{ route('simulation.landlord.store') }}" method="POST">
+            <form action="{{ route('simulation.unregistered-company.store') }}" method="POST">
                 @csrf
 
                 @include('simulation.partials.honeypot')
@@ -66,14 +66,61 @@
                         <input type="text" name="conjuge_cpf" class="form-control" value="{{ old('conjuge_cpf') }}" placeholder="Se casado ou união estável">
                     </div>
 
+                    <div class="col-12 mt-3">
+                        <h5 class="fw-bold border-bottom pb-2">
+                            Dados do responsável pela solicitação
+                        </h5>
+                    </div>
+
+                    <div class="col-12">
+                        <label class="form-label fw-semibold">
+                            Quem está solicitando? <span class="text-danger">*</span>
+                        </label>
+
+                        <div class="d-flex flex-column flex-md-row gap-3">
+                            <div class="form-check">
+                                <input 
+                                    class="form-check-input" 
+                                    type="radio" 
+                                    name="responsavel_tipo" 
+                                    id="responsavel_imobiliaria" 
+                                    value="imobiliaria_nao_cadastrada"
+                                    @checked(old('responsavel_tipo', $responsavelTipo ?? 'imobiliaria_nao_cadastrada') === 'imobiliaria_nao_cadastrada')
+                                >
+                                <label class="form-check-label" for="responsavel_imobiliaria">
+                                    Imobiliária não cadastrada
+                                </label>
+                            </div>
+
+                            <div class="form-check">
+                                <input 
+                                    class="form-check-input" 
+                                    type="radio" 
+                                    name="responsavel_tipo" 
+                                    id="responsavel_locador" 
+                                    value="locador"
+                                    @checked(old('responsavel_tipo', $responsavelTipo ?? null) === 'locador')
+                                >
+                                <label class="form-check-label" for="responsavel_locador">
+                                    Proprietário / locador
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-12">
+                        <label class="form-label">Nome do responsável</label>
+                        <input type="text" name="responsavel_nome" class="form-control" value="{{ old('responsavel_nome') }}" placeholder="Nome do responsável">
+                    </div>
+
                     <div class="col-md-6">
-                        <label class="form-label">Nome do responsável pelo preenchimento</label>
-                        <input type="text" name="responsavel_preenchimento" class="form-control" value="{{ old('responsavel_preenchimento') }}" placeholder="Nome">
+                        <label class="form-label">Email do responsável</label>
+                        <input type="text" name="responsavel_email" class="form-control" value="{{ old('responsavel_email') }}" placeholder="Email do responsável">
                     </div>
 
                     <div class="col-md-6">
                         <label class="form-label">Telefone do responsável</label>
-                        <input type="text" name="telefone_responsavel" class="form-control" value="{{ old('telefone_responsavel') }}" placeholder="Telefone">
+                        <input type="text" name="responsavel_telefone" class="form-control" value="{{ old('responsavel_telefone') }}" placeholder="Telefone do responsável">
                     </div>
 
                     @include('simulation.partials.property-expenses-address')
