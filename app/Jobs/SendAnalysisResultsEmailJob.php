@@ -34,6 +34,9 @@ class SendAnalysisResultsEmailJob implements ShouldQueue
         $batch = InsuranceAnalysisBatch::with([
             'lead',
             'analyses.events',
+            'lead.company',
+            'lead.imobiliariaInformada',
+            'lead.locador',
         ])->findOrFail($this->batchId);
 
         /*
@@ -49,26 +52,41 @@ class SendAnalysisResultsEmailJob implements ShouldQueue
 
         $lead = $batch->lead;
 
-        if (!$lead || !$lead->email) {
+        if (!$lead) {
             $batch->update([
                 'email_status' => 'failed',
                 'email_failed_at' => now(),
-                'email_error' => 'Lead sem e-mail válido.',
+                'email_error' => 'Lead não encontrado.',
+            ]);
+
+            return;
+        }
+
+        $recipients = $this->resolveEmailRecipients($lead);
+
+        if (empty($recipients['to'])) {
+            $batch->update([
+                'email_status' => 'failed',
+                'email_failed_at' => now(),
+                'email_error' => 'Nenhum destinatário válido encontrado para envio do resultado.',
             ]);
 
             $this->registerEmailEvent(
                 batch: $batch,
                 eventType: 'email_failed',
-                message: 'Lead sem e-mail válido.',
+                message: 'Nenhum destinatário válido encontrado para envio do resultado.',
                 payload: [
                     'attempt_id' => $this->attemptId,
                     'is_reanalysis' => $this->isReanalysis,
-                    'lead_id' => $lead->id ?? null,
+                    'lead_id' => $lead->id,
+                    'tipo_solicitante' => $lead->tipo_solicitante,
+                    'resolved_recipients' => $recipients,
                 ]
             );
 
             return;
         }
+
 
         $resultEvents = $this->resultEventsForCurrentAttempt($batch);
 
@@ -76,13 +94,17 @@ class SendAnalysisResultsEmailJob implements ShouldQueue
             $body = $this->buildMessage($batch, $resultEvents);
             $attachments = $this->generatePdfAttachments($batch, $resultEvents);
 
-            Mail::raw($body, function ($message) use ($lead, $attachments) {
+            Mail::raw($body, function ($message) use ($recipients, $attachments) {
                 $subject = $this->isReanalysis
                     ? 'Resultado da sua reanálise de Seguro Fiança'
                     : 'Resultado da sua análise de Seguro Fiança';
 
-                $message->to($lead->email)
+                $message->to($recipients['to'])
                     ->subject($subject);
+
+                if (!empty($recipients['cc'])) {
+                    $message->cc($recipients['cc']);
+                }
 
                 foreach ($attachments as $attachment) {
                     $message->attach($attachment['path'], [
@@ -116,6 +138,7 @@ class SendAnalysisResultsEmailJob implements ShouldQueue
                     'attempt_id' => $this->attemptId,
                     'is_reanalysis' => $this->isReanalysis,
                     'lead_id' => $lead->id,
+                    'recipients' => $recipients,
                     'email' => $lead->email,
                     'attachments' => collect($attachments)->pluck('name')->values()->all(),
                 ],
@@ -364,6 +387,90 @@ class SendAnalysisResultsEmailJob implements ShouldQueue
                 'message' => $e->getMessage(),
             ]);
         }
+    }
+
+    private function resolveEmailRecipients($lead): array
+    {
+        $lead->loadMissing([
+            'company',
+            'imobiliariaInformada',
+            'locador',
+        ]);
+
+        $to = [];
+        $cc = [];
+
+        switch ($lead->tipo_solicitante) {
+            case 'imobiliaria_cadastrada':
+                $to[] = $lead->company?->email;
+
+                if ($lead->email) {
+                    $cc[] = $lead->email;
+                }
+
+                break;
+
+            case 'imobiliaria_nao_cadastrada':
+                $to[] = $lead->imobiliariaInformada?->responsavel_preenchimento;
+
+                if ($lead->email) {
+                    $cc[] = $lead->email;
+                }
+
+                break;
+
+            case 'locador':
+                $to[] = $lead->locador?->email;
+
+                if ($lead->email) {
+                    $cc[] = $lead->email;
+                }
+
+                break;
+
+            case 'locatario':
+            default:
+                $to[] = $lead->email;
+                break;
+        }
+
+        $to = $this->validEmails($to);
+
+        /*
+        |--------------------------------------------------------------------------
+        | Fallback de segurança
+        |--------------------------------------------------------------------------
+        | Se não encontrou e-mail específico do tipo solicitante,
+        | tenta enviar para o e-mail principal do lead.
+        */
+        if (empty($to) && $lead->email) {
+            $to[] = $lead->email;
+        }
+
+        $cc = $this->validEmails($cc);
+
+        /*
+        |--------------------------------------------------------------------------
+        | Evita duplicidade
+        |--------------------------------------------------------------------------
+        */
+        $cc = array_values(array_diff($cc, $to));
+
+        return [
+            'to' => array_values(array_unique($to)),
+            'cc' => array_values(array_unique($cc)),
+        ];
+    }
+
+    private function validEmails(array $emails): array
+    {
+        return collect($emails)
+            ->filter()
+            ->map(fn ($email) => trim((string) $email))
+            ->filter(fn ($email) => filter_var($email, FILTER_VALIDATE_EMAIL))
+            ->unique()
+            ->values()
+            ->all();
     }
 
     private function buildMessage(InsuranceAnalysisBatch $batch, Collection $resultEvents): string
