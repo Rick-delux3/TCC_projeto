@@ -5,9 +5,14 @@ namespace App\Services\Insurance\Payloads;
 use App\Models\InsuranceAnalysis;
 use App\Models\Lead;
 use Illuminate\Support\Carbon;
+use App\Services\CpfLookupService;
 
 class TooRentalGuaranteePayloadBuilder
 {
+    public function __construct(
+        private CpfLookupService $cpfLookupService
+    )
+    {}
     /**
      * Monta o payload para:
      *
@@ -43,7 +48,7 @@ class TooRentalGuaranteePayloadBuilder
                      * Como o banco atual não possui esse campo,
                      * usamos valor padrão de sandbox via .env.
                      */
-                    'dataNascimento' => config('services.too.default_birthdate', '1985/12/10'),
+                    'dataNascimento' => $this->birthdateForToo($lead),
 
                     /*
                      * Para sandbox/TCC, consideramos que o solicitante:
@@ -61,7 +66,7 @@ class TooRentalGuaranteePayloadBuilder
                      * Como você não pode alterar o banco agora, esses dados
                      * ficam configurados no .env para sandbox.
                      */
-                    'rendaFixaMensal' => (float) config('services.too.default_monthly_income', 12500.24),
+                    'rendaFixaMensal' => $this->monthlyIncomeForToo($lead),
                     'vinculoEmpregaticio' => config('services.too.default_employment', 'Autônomo'),
                     'profissao' => mb_substr((string) config('services.too.default_profession', 'Autônomo'), 0, 40),
 
@@ -287,6 +292,12 @@ class TooRentalGuaranteePayloadBuilder
             throw new \RuntimeException('Valor do aluguel para Too deve ser no mínimo 200.');
         }
 
+        $rendaMensal = $this->monthlyIncomeForToo($lead);
+
+        if ($rendaMensal <= 0) {
+            throw new \RuntimeException('Renda fixa mensal inválida para envio à Too.');
+        }
+
         $total = $aluguel
             + ($this->expenseValue($lead, 'valor_condominio') ?? 0)
             + ($this->expenseValue($lead, 'valor_iptu') ?? 0)
@@ -358,5 +369,33 @@ class TooRentalGuaranteePayloadBuilder
         }
 
         return filter_var($value, FILTER_VALIDATE_BOOLEAN);
+    }
+    
+    private function monthlyIncomeForToo(Lead $lead): float
+    {
+        $aluguel = $this->expenseValue($lead, 'valor_aluguel') ?? 0.0;
+
+        return $this->money($aluguel * 4);
+    }
+    /**
+ * Busca a data de nascimento do pretendente usando o CpfLookupService.
+ *
+ * No ambiente de testes, se a API falhar, pode usar fallback.
+ * Em produção, o ideal é configurar CPF_LOOKUP_FAILS_ANALYSIS=true
+ * para não enviar data falsa para a seguradora.
+ */
+    private function birthdateForToo(Lead $lead): string
+    {
+        $birthdate = $this->cpfLookupService->birthdateForToo($lead->cpf);
+
+        if ($birthdate) {
+            return $birthdate;
+        }
+
+        if (config('services.cpf_lookup.fail_analysis_if_missing_birthdate', false)) {
+            throw new \RuntimeException('Não foi possível obter a data de nascimento do CPF para envio à Too.');
+        }
+
+        return config('services.cpf_lookup.fallback_birthdate', '1985/12/10');
     }
 }

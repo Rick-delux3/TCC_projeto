@@ -35,6 +35,20 @@ return [
         ],
     ],
 
+    'cpf_lookup' => [
+        'enabled' => env('CPF_LOOKUP_PROVIDER', false),
+        'provider' => env('CPF_LOOKUP_PROVIDER', 'cpfhub'),
+
+        'cpfhub' => [
+            'base_url' => env('CPFHUB_BASE_URL', 'https://api.cpfhub.io'),
+            'api_key' => env('CPFHUB_API_KEY'),
+        ],
+
+        'cache_minutes' => env('CPF_LOOKUP_CACHE_MINUTES', 10080),
+        'fallback_birthdate' => env('CPF_LOOKUP_FALLBACK_BIRTHDATE', '1985/12/10'),
+        'fail_analysis_if_missing_birthdate' => env('CPF_LOOKUP_FAILS_ANALYSIS', false),
+    ],
+
     'leadlovers' => [
         'base_url' => env('LEADLOVERS_BASE_URL', 'https://llapi.leadlovers.com/webapi/'),
         'email' => env('LEADLOVERS_EMAIL'),
