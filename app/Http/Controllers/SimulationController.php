@@ -128,8 +128,9 @@ class SimulationController extends Controller
 
     public function storeUnregisteredCompanyLead(StoreSimulationLeadRequest $request)
     {
-
-        $responsavelTipo = $request->validate('responsavel_tipo');
+        $data = $request->validated();
+        
+        $responsavelTipo = $data['responsavel_tipo'];
 
         $lead = DB::transaction(function () use ($request, $responsavelTipo) {
             return $this->saveLead($request, [

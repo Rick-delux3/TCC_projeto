@@ -426,13 +426,17 @@ class TooInsuranceProvider implements InsuranceProviderInterface
     private function extractProviderStatus(array $data): ?string
     {
         $status = $this->extractFirstValue($data, [
-            'status',
+            'descricaoStatus',
+            'descricao_status',
+            'statusDescricao',
+            'status_description',
             'situacao',
             'situacaoProposta',
             'statusProposta',
             'statusCredito',
             'parecer',
             'resultado',
+            'status',
         ]);
 
         return $status !== null ? (string) $status : null;
@@ -448,12 +452,13 @@ class TooInsuranceProvider implements InsuranceProviderInterface
             'approved',
             'creditoaprovado',
             'propostaaprovada',
+            'analiseaprovada',
         ], true)) {
             return 'Approved';
         }
 
         if (in_array($normalized, [
-            'recusado',
+             'recusado',
             'recusada',
             'reprovado',
             'reprovada',
@@ -464,6 +469,7 @@ class TooInsuranceProvider implements InsuranceProviderInterface
             'declined',
             'creditorecusado',
             'propostarecusada',
+            'analiserecusada',
         ], true)) {
             return 'Denied';
         }

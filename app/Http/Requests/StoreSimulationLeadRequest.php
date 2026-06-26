@@ -52,14 +52,17 @@ class StoreSimulationLeadRequest extends FormRequest
             'cnpj_imobiliaria_informada' => $this->somenteNumeros($this->cnpj_imobiliaria_informada),
 
             
-            'responsavel_nome' => $this->limparTexto($this->nome),
-            'responsavel_email' => $this->normalizarEmail($this->email),
-            'responsavel_telefone' => $this->somenteNumeros($this->tel),
+            'responsavel_tipo' => $this->normalizarMinusculo($this->responsavel_tipo),
+            'responsavel_nome' => $this->limparTexto($this->responsavel_nome),
+            'responsavel_email' => $this->normalizarEmail($this->responsavel_email),
+            'responsavel_telefone' => $this->somenteNumeros($this->responsavel_telefone),
         ]);
     }
 
     public function rules(): array
     {
+        $requiresResponsibleType = $this->routeIs('simulation.unregistered-company.store');
+
         return [
             // Campo invisível contra bots.
             'website' => ['nullable', 'size:0'],
@@ -93,24 +96,24 @@ class StoreSimulationLeadRequest extends FormRequest
             ],
 
             'responsavel_tipo' => [
-                'required',
+                $requiresResponsibleType ? 'required' : 'nullable',
                 'in:imobiliaria_nao_cadastrada,locador',
             ],
 
             'responsavel_nome' => [
-                'required',
+                $requiresResponsibleType ? 'required' : 'nullable',
                 'string',
                 'max:255',
             ],
 
             'responsavel_email' => [
-                'required',
+                $requiresResponsibleType ? 'required' : 'nullable',
                 'email',
                 'max:255',
             ],
 
             'responsavel_telefone' => [
-                'required',
+                $requiresResponsibleType ? 'required' : 'nullable',
                 'string',
                 'max:20',
             ],

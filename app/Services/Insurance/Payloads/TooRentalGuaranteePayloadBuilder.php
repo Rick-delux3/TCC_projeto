@@ -67,8 +67,8 @@ class TooRentalGuaranteePayloadBuilder
                      * ficam configurados no .env para sandbox.
                      */
                     'rendaFixaMensal' => $this->monthlyIncomeForToo($lead),
-                    'vinculoEmpregaticio' => config('services.too.default_employment', 'Autônomo'),
-                    'profissao' => mb_substr((string) config('services.too.default_profession', 'Autônomo'), 0, 40),
+                    'vinculoEmpregaticio' => $this->employmentTypeForToo(),
+                    'profissao' => $this->professionForToo(),
 
                     'principal' => true,
                 ],
@@ -397,5 +397,82 @@ class TooRentalGuaranteePayloadBuilder
         }
 
         return config('services.cpf_lookup.fallback_birthdate', '1985/12/10');
+    }
+
+    
+    private function employmentTypeForToo(): string
+    {
+        $value = (string) config('services.too.default_employment', 'Clt');
+
+        $normalized = $this->normalizeEnumValue($value);
+
+        $map = [
+            'clt' => 'Clt',
+            'carteiraassinada' => 'Clt',
+
+            /*
+            * Pode funcionar na Too sem acento.
+            * Se a API ainda recusar, mantenha Clt no .env.
+            */
+            'autonomo' => 'Autonomo',
+
+            'empresario' => 'Empresario',
+            'aposentado' => 'Aposentado',
+            'funcionariopublico' => 'FuncionarioPublico',
+            'profissionalliberal' => 'ProfissionalLiberal',
+            'estagiario' => 'Estagiario',
+            'estudante' => 'Estudante',
+            'outros' => 'Outros',
+        ];
+
+        if (!isset($map[$normalized])) {
+            throw new \RuntimeException(
+                "Vínculo empregatício inválido para Too: {$value}. Use Clt, Autonomo, Empresario, Aposentado ou outro valor aceito."
+            );
+        }
+
+        return $map[$normalized];
+    }
+
+   
+    private function professionForToo(): string
+    {
+        $profession = (string) config('services.too.default_profession', 'Analista');
+
+        $profession = trim($profession);
+
+        if ($profession === '') {
+            $profession = 'Analista';
+        }
+
+        return mb_substr($profession, 0, 40);
+    }
+
+
+    private function normalizeEnumValue(?string $value): string
+    {
+        $value = mb_strtolower(trim((string) $value));
+
+        $from = [
+            'á', 'à', 'ã', 'â',
+            'é', 'ê',
+            'í',
+            'ó', 'ô', 'õ',
+            'ú',
+            'ç',
+        ];
+
+        $to = [
+            'a', 'a', 'a', 'a',
+            'e', 'e',
+            'i',
+            'o', 'o', 'o',
+            'u',
+            'c',
+        ];
+
+        $value = str_replace($from, $to, $value);
+
+        return preg_replace('/[^a-z0-9]/', '', $value);
     }
 }
