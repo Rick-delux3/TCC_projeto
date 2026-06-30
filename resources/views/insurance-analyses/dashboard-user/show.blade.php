@@ -414,10 +414,36 @@
                                 $analysisStatus = $analysis->status ?? 'pending';
                                 $analysisLabel = $analysisStatusLabels[$analysisStatus] ?? ucfirst(str_replace('_', ' ', $analysisStatus));
                                 $analysisBadge = $analysisStatusBadges[$analysisStatus] ?? 'text-bg-secondary';
+                                
+                                $tooAutoStopped = $analysis->provider === 'too'
+                                    && (bool) data_get($analysis->response_payload, 'too_status_check_stopped', false);
 
-                                $canRetry = in_array($analysis->status, ['failed', 'manual_review', 'rejected'], true);
-                                $canSync = filled($analysis->quote_id)
+                                $tooManualSyncAvailable = $analysis->provider === 'too'
+                                    && (bool) data_get($analysis->response_payload, 'too_manual_sync_available', false);
+
+                                $canManualSyncToo = $analysis->provider === 'too'
+                                    && filled($analysis->proposal_id)
+                                    && $tooAutoStopped
+                                    && $tooManualSyncAvailable
+                                    && in_array($analysis->status, ['manual_review', 'pending', 'processing'], true)
+                                    && !in_array($analysis->status, ['approved', 'rejected', 'failed'], true);
+
+                                $canDefaultSync = $analysis->provider !== 'too'
+                                    && filled($analysis->quote_id)
                                     && in_array($analysis->status, ['manual_review', 'quoted', 'pending', 'processing'], true);
+
+                                $canSync = $canDefaultSync || $canManualSyncToo;
+
+                                /*
+                                * Evita confusão:
+                                * se a Too está apenas aguardando retorno, não mostramos "Reenviar análise".
+                                * Reenviar criaria outra proposta, o que não é o objetivo.
+                                */
+                                $canRetry = in_array($analysis->status, ['failed', 'rejected'], true)
+                                    || (
+                                        $analysis->provider !== 'too'
+                                        && in_array($analysis->status, ['manual_review'], true)
+                                    );
 
                                 $premium = $analysis->commercial_premium
                                     ?? $analysis->premium_amount
@@ -535,6 +561,18 @@
                                     </div>
                                 @endif
 
+                                @if($canManualSyncToo)
+                                    <div class="alert alert-info rounded-4 mt-3 mb-0">
+                                        <strong>A Too ainda está analisando o crédito.</strong>
+
+                                        <div class="small mt-1">
+                                            A verificação automática foi encerrada após
+                                            {{ data_get($analysis->response_payload, 'too_status_check_attempts', 'algumas') }}
+                                            tentativas. Você pode verificar manualmente se a companhia já atualizou o status.
+                                        </div>
+                                    </div>
+                                @endif
+
                                 <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mt-3">
                                     <div class="small text-muted">
                                         Solicitada em:
@@ -552,7 +590,11 @@
                                                 @csrf
 
                                                 <button type="submit" class="btn btn-sm btn-outline-primary">
-                                                    Sincronizar status
+                                                    @if ($canManualSyncToo)
+                                                        Verificar status na Too
+                                                    @else
+                                                        Sincronizar status
+                                                    @endif
                                                 </button>
                                             </form>
                                         @endif

@@ -166,7 +166,7 @@ class TooService
         $cpf = $this->onlyNumbers($cpf);
 
         return $this->getJson(
-            "/fianca/proposta/{$cpf}/status/{$numeroProposta}"
+            "/fianca/proposta/v3/{$cpf}/status/{$numeroProposta}"
         );
     }
 

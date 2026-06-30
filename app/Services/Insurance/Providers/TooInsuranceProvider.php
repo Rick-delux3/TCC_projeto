@@ -20,25 +20,17 @@ class TooInsuranceProvider implements InsuranceProviderInterface
     }
 
     /**
-     * Executa o fluxo de análise/cotação da Too.
+     * Executa o fluxo inicial da Too:
      *
-     * Fluxo:
-     * 1. Cria ficha/proposta.
+     * 1. Registra ficha/proposta.
      * 2. Envia para análise de crédito.
      * 3. Consulta status.
-     * 4. Se aprovado, solicita cotação.
-     * 5. Retorna resposta padronizada para o RunProviderAnalysisJob.
+     * 4. Se status 8, solicita cotação.
+     * 5. Se status 5 ou 16, mantém em análise/manual_review.
      */
     public function requestAnalysis(InsuranceAnalysis $analysis): array
     {
-        $analysis->loadMissing([
-            'lead.company',
-            'lead.endereco',
-            'lead.despesas',
-            'lead.conjuge',
-            'lead.locador',
-            'lead.imobiliariaInformada',
-        ]);
+        $this->loadTooRelations($analysis);
 
         $lead = $analysis->lead;
 
@@ -58,27 +50,24 @@ class TooInsuranceProvider implements InsuranceProviderInterface
             );
         }
 
-        /*
-         * ============================================================
-         * 1. Monta e envia ficha/proposta.
-         * ============================================================
-         */
         if (!$lead->canBeSentToToo()) {
-            return [
-                'success' => true,
-                'http_status' => null,
-                'endpoint' => 'too_flow',
-                'response' => [
-                    'status' => 'UnderAnalysis',
-                    'provider' => 'too',
+            return $this->successResult(
+                status: 'UnderAnalysis',
+                quoteId: null,
+                premiumAmount: null,
+                responses: [],
+                extra: [
                     'provider_original_status' => 'skipped',
                     'message' => 'Lead não enviado para Too: tipo_solicitante ou CPF incompatível com o fluxo da Too.',
-                ],
-                'raw_body' => null,
-                'headers' => [],
-            ];
+                ]
+            );
         }
-        
+
+        /*
+        |--------------------------------------------------------------------------
+        | 1. Registra ficha/proposta
+        |--------------------------------------------------------------------------
+        */
         $fichaPayload = $this->payloadBuilder->buildFichaPayload($analysis);
 
         $analysis->update([
@@ -122,8 +111,8 @@ class TooInsuranceProvider implements InsuranceProviderInterface
         ]);
 
         /*
-         * Em alguns ambientes, a Too pode retornar só um número.
-         * Para sandbox, usamos fallback entre proposta/ficha.
+         * Em homologação, a Too pode retornar apenas numeroFicha.
+         * Nesse fluxo, usamos o mesmo número como proposta/ficha.
          */
         $numeroProposta = $numeroProposta ?: $numeroFicha;
         $numeroFicha = $numeroFicha ?: $numeroProposta;
@@ -149,10 +138,10 @@ class TooInsuranceProvider implements InsuranceProviderInterface
         ]);
 
         /*
-         * ============================================================
-         * 2. Envia para análise de crédito.
-         * ============================================================
-         */
+        |--------------------------------------------------------------------------
+        | 2. Envia para análise de crédito
+        |--------------------------------------------------------------------------
+        */
         $creditResponse = $this->tooService->submitCreditAnalysis(
             cpf: $cpf,
             numeroProposta: $numeroProposta
@@ -174,10 +163,10 @@ class TooInsuranceProvider implements InsuranceProviderInterface
         }
 
         /*
-         * ============================================================
-         * 3. Consulta status da proposta/análise.
-         * ============================================================
-         */
+        |--------------------------------------------------------------------------
+        | 3. Consulta status da proposta
+        |--------------------------------------------------------------------------
+        */
         $statusResponse = $this->tooService->getProposalStatus(
             cpf: $cpf,
             numeroProposta: $numeroProposta
@@ -199,120 +188,34 @@ class TooInsuranceProvider implements InsuranceProviderInterface
             );
         }
 
-        $statusData = $statusResponse['response'] ?? [];
-
-        $tooOriginalStatus = $this->extractProviderStatus($statusData);
-
-        /*
-         * Converte o status da Too para um status que seu
-         * RunProviderAnalysisJob já entende.
-         */
-        $canonicalStatus = $this->canonicalStatus($tooOriginalStatus);
-
-        /*
-         * Se ainda está pendente, em análise ou recusado,
-         * não solicitamos cotação agora.
-         */
-        if (in_array($canonicalStatus, ['Pending', 'UnderAnalysis', 'Denied'], true)) {
-            return $this->successResult(
-                status: $canonicalStatus,
-                quoteId: null,
-                premiumAmount: null,
-                responses: [
-                    'ficha' => $fichaResponse,
-                    'credit' => $creditResponse,
-                    'status' => $statusResponse,
-                ],
-                extra: [
-                    'provider_original_status' => $tooOriginalStatus,
-                    'numeroProposta' => $numeroProposta,
-                    'numeroFicha' => $numeroFicha,
-                ]
-            );
-        }
-
-        /*
-         * ============================================================
-         * 4. Se aprovado, solicita cotação.
-         * ============================================================
-         */
-        $quotePayload = $this->payloadBuilder->buildQuotePayload(
+        return $this->handleStatusAndMaybeQuote(
             analysis: $analysis,
-            numeroFicha: $numeroFicha
-        );
-
-        $analysis->update([
-            'request_payload' => [
-                'provider' => 'too',
-                'ficha_payload' => $fichaPayload,
-                'quote_payload' => $quotePayload,
-            ],
-        ]);
-
-        $quoteResponse = $this->tooService->requestQuote($quotePayload);
-
-        if (!$this->responseWasSuccessful($quoteResponse)) {
-            return $this->failResult(
-                message: 'Erro ao solicitar cotação na Too.',
-                step: 'request_quote',
-                responses: [
-                    'ficha' => $fichaResponse,
-                    'credit' => $creditResponse,
-                    'status' => $statusResponse,
-                    'quote' => $quoteResponse,
-                ],
-                extra: [
-                    'numeroProposta' => $numeroProposta,
-                    'numeroFicha' => $numeroFicha,
-                    'provider_original_status' => $tooOriginalStatus,
-                ]
-            );
-        }
-
-        $quoteData = $quoteResponse['response'] ?? [];
-
-        $numeroCotacao = $this->extractFirstValue($quoteData, [
-            'numeroCotacao',
-            'NumeroCotacao',
-            'numero_cotacao',
-            'cotacao',
-            'quoteId',
-            'quote_id',
-            'idCotacao',
-        ]);
-
-        $premiumAmount = $this->extractPremiumAmount($quoteData);
-
-        $analysis->update([
-            'quote_id' => $numeroCotacao ? (string) $numeroCotacao : $analysis->quote_id,
-            'premium_amount' => $premiumAmount ?? $analysis->premium_amount,
-        ]);
-
-        return $this->successResult(
-            status: 'Approved',
-            quoteId: $numeroCotacao,
-            premiumAmount: $premiumAmount,
-            responses: [
+            statusResponse: $statusResponse,
+            baseResponses: [
                 'ficha' => $fichaResponse,
                 'credit' => $creditResponse,
                 'status' => $statusResponse,
-                'quote' => $quoteResponse,
             ],
-            extra: [
-                'provider_original_status' => $tooOriginalStatus,
+            baseExtra: [
                 'numeroProposta' => $numeroProposta,
                 'numeroFicha' => $numeroFicha,
-                'numeroCotacao' => $numeroCotacao,
-            ]
+            ],
+            scheduleNextCheck: true
         );
     }
 
     /**
      * Consulta status posterior da Too.
+     *
+     * Este método usa a mesma regra do requestAnalysis():
+     * - status 8: solicita cotação;
+     * - status 16: pré-aprovado, mas sem cotação por enquanto;
+     * - status 5: em análise;
+     * - status 6/11/12/14/15: recusado/cancelado/expirado.
      */
     public function getStatus(InsuranceAnalysis $analysis): array
     {
-        $analysis->loadMissing('lead');
+        $this->loadTooRelations($analysis);
 
         $lead = $analysis->lead;
 
@@ -323,31 +226,295 @@ class TooInsuranceProvider implements InsuranceProviderInterface
             );
         }
 
-        $response = $this->tooService->getProposalStatus(
+        $statusResponse = $this->tooService->getProposalStatus(
             cpf: $this->onlyNumbers($lead->cpf),
             numeroProposta: $analysis->proposal_id
         );
 
-        $statusData = $response['response'] ?? [];
-        $tooOriginalStatus = $this->extractProviderStatus($statusData);
-        $canonicalStatus = $this->canonicalStatus($tooOriginalStatus);
+        if (!$this->responseWasSuccessful($statusResponse)) {
+            return $this->failResult(
+                message: 'Erro ao consultar status posterior da proposta na Too.',
+                step: 'get_status',
+                responses: [
+                    'status' => $statusResponse,
+                ]
+            );
+        }
 
-        return [
-            'success' => $this->responseWasSuccessful($response),
-            'http_status' => $response['http_status'] ?? null,
-            'endpoint' => $response['endpoint'] ?? null,
-            'url' => $response['url'] ?? null,
-            'response' => [
-                'status' => $canonicalStatus,
-                'provider_original_status' => $tooOriginalStatus,
-                'proposalId' => $analysis->proposal_id,
-                'too' => [
-                    'status' => $response,
-                ],
+        $numeroFicha = data_get($analysis->response_payload, 'numeroFicha')
+            ?? data_get($analysis->response_payload, 'numeroProposta')
+            ?? $analysis->proposal_id;
+
+        return $this->handleStatusAndMaybeQuote(
+            analysis: $analysis,
+            statusResponse: $statusResponse,
+            baseResponses: [
+                'status' => $statusResponse,
             ],
-            'raw_body' => $response['raw_body'] ?? null,
-            'headers' => $response['headers'] ?? [],
+            baseExtra: [
+                'numeroProposta' => $analysis->proposal_id,
+                'numeroFicha' => $numeroFicha,
+            ],
+            scheduleNextCheck: false
+        );
+    }
+
+    /**
+     * Centraliza a regra de decisão da Too.
+     *
+     * requestAnalysis() e getStatus() passam por aqui.
+     */
+    private function handleStatusAndMaybeQuote(
+        InsuranceAnalysis $analysis,
+        array $statusResponse,
+        array $baseResponses,
+        array $baseExtra = [],
+        bool $scheduleNextCheck = false
+    ): array {
+        $statusData = $statusResponse['response'] ?? [];
+        $statusInfo = $this->tooCreditDecision($statusData);
+
+        $numeroFicha = $baseExtra['numeroFicha']
+            ?? data_get($analysis->response_payload, 'numeroFicha')
+            ?? data_get($analysis->response_payload, 'numeroProposta')
+            ?? $analysis->proposal_id;
+
+        $extra = array_merge($baseExtra, [
+            'provider_original_status' => $statusInfo['status_code'],
+            'provider_original_description' => $statusInfo['status_description'],
+            'too_internal_decision' => $statusInfo['canonical'],
+            'can_quote' => $statusInfo['can_quote'],
+        ]);
+
+        /*
+         * Se ainda não pode cotar, apenas retorna o resultado da análise.
+         *
+         * Status 5  = Em análise de crédito
+         * Status 16 = Pré-aprovado, mas sem cotação por enquanto
+         * Status 6/11/12/14/15 = recusado/cancelado/expirado
+         */
+        if (!$statusInfo['can_quote']) {
+            $analysis->update([
+                'provider_status' => $statusInfo['status_description'] ?? $statusInfo['status_code'],
+                'response_payload' => array_merge($analysis->response_payload ?? [], [
+                    'status_latest' => $statusResponse,
+                    'too_status_info' => $statusInfo,
+                ]),
+            ]);
+
+            if($scheduleNextCheck && $statusInfo['canonical'] === 'UnderAnalysis'){
+                \App\Jobs\SyncTooAnalysisStatusJob::dispatch(
+                    analysisId: $analysis->id,
+                    attemptNumber: 1
+                )->delay(now()->addSeconds(
+                        (int) config('services.too.status_check_delay_seconds', 20)
+                ));
+            }
+
+            return $this->successResult(
+                status: $this->statusForJob($statusInfo),
+                quoteId: null,
+                premiumAmount: null,
+                responses: $baseResponses,
+                extra: $extra
+            );
+        }
+
+        /*
+         * Status 8 = Análise aprovada.
+         * Agora sim solicitamos cotação.
+         */
+        return $this->requestQuoteAfterApprovedStatus(
+            analysis: $analysis,
+            numeroFicha: $numeroFicha,
+            statusResponse: $statusResponse,
+            baseResponses: $baseResponses,
+            statusInfo: $statusInfo,
+            extra: $extra
+        );
+    }
+
+    /**
+     * Solicita cotação depois que a Too retornar status 8.
+     */
+    private function requestQuoteAfterApprovedStatus(
+        InsuranceAnalysis $analysis,
+        string|int|null $numeroFicha,
+        array $statusResponse,
+        array $baseResponses,
+        array $statusInfo,
+        array $extra = []
+    ): array {
+        if (!$numeroFicha) {
+            return $this->failResult(
+                message: 'Número da ficha ausente para solicitar cotação na Too.',
+                step: 'request_quote_missing_numero_ficha',
+                responses: $baseResponses,
+                extra: $extra
+            );
+        }
+
+        $quotePayload = $this->payloadBuilder->buildQuotePayload(
+            analysis: $analysis,
+            numeroFicha: $numeroFicha
+        );
+
+        $analysis->update([
+            'request_payload' => array_merge($analysis->request_payload ?? [], [
+                'quote_payload' => $quotePayload,
+            ]),
+        ]);
+
+        $quoteResponse = $this->tooService->requestQuote($quotePayload);
+
+        $responses = array_merge($baseResponses, [
+            'quote' => $quoteResponse,
+        ]);
+
+        if (!$this->responseWasSuccessful($quoteResponse)) {
+            return $this->failResult(
+                message: 'Status aprovado, mas houve erro ao solicitar cotação na Too.',
+                step: 'request_quote',
+                responses: $responses,
+                extra: $extra
+            );
+        }
+
+        $quoteData = $quoteResponse['response'] ?? [];
+
+        $numeroCotacao = $this->extractQuoteNumber($quoteData);
+        $premiumAmount = $this->extractPremiumAmount($quoteData);
+        $paymentConditions = $this->extractPaymentConditions($quoteData);
+        $coverages = $this->extractQuoteCoverages($quoteData);
+
+        $analysis->update([
+            'quote_id' => $numeroCotacao ? (string) $numeroCotacao : $analysis->quote_id,
+            'quote_number' => $numeroCotacao ? (string) $numeroCotacao : $analysis->quote_number,
+            'premium_amount' => $premiumAmount ?? $analysis->premium_amount,
+            'commercial_premium' => $premiumAmount ?? $analysis->commercial_premium,
+            'available_plans' => $paymentConditions,
+            'available_assistances' => $coverages,
+            'provider_status' => $statusInfo['status_description'] ?? $statusInfo['status_code'],
+            'response_payload' => array_merge($analysis->response_payload ?? [], [
+                'status_latest' => $statusResponse,
+                'quote_latest' => $quoteResponse,
+                'too_status_info' => $statusInfo,
+                'quote_summary' => [
+                    'numeroCotacao' => $numeroCotacao,
+                    'premiumAmount' => $premiumAmount,
+                    'paymentConditions' => $paymentConditions,
+                    'coverages' => $coverages,
+                ],
+            ]),
+        ]);
+
+        return $this->successResult(
+            status: 'Approved',
+            quoteId: $numeroCotacao,
+            premiumAmount: $premiumAmount,
+            responses: $responses,
+            extra: array_merge($extra, [
+                'numeroCotacao' => $numeroCotacao,
+                'paymentConditions' => $paymentConditions,
+                'coverages' => $coverages,
+            ])
+        );
+    }
+
+    /**
+     * Decide o resultado da análise de crédito da Too.
+     */
+    private function tooCreditDecision(array $statusData): array
+    {
+        $proposta = data_get($statusData, 'proposta', []);
+
+        $statusCode = data_get($proposta, 'status');
+        $statusDescription = data_get($proposta, 'descricaoStatus');
+
+        $statusCode = $statusCode !== null ? (int) $statusCode : null;
+
+        /*
+         * 8 = Análise Aprovada.
+         * Este é o único status em que vamos solicitar cotação agora.
+         */
+        if ($statusCode === 8) {
+            return [
+                'canonical' => 'Approved',
+                'can_quote' => true,
+                'status_code' => $statusCode,
+                'status_description' => $statusDescription,
+            ];
+        }
+
+        /*
+         * 16 = Análise pré-aprovada.
+         * Como biometria não será implementada agora, não vamos cotar no 16.
+         */
+        if ($statusCode === 16) {
+            return [
+                'canonical' => 'PreApproved',
+                'can_quote' => false,
+                'status_code' => $statusCode,
+                'status_description' => $statusDescription,
+            ];
+        }
+
+        /*
+         * 6  = Análise Reprovada
+         * 11 = Proposta Expirada
+         * 12 = Proposta Cancelada
+         * 14 = Pagamento Não Autorizado
+         * 15 = Crédito Reprovado I
+         */
+        if (in_array($statusCode, [6, 11, 12, 14, 15], true)) {
+            return [
+                'canonical' => 'Denied',
+                'can_quote' => false,
+                'status_code' => $statusCode,
+                'status_description' => $statusDescription,
+            ];
+        }
+
+        /*
+         * 1 = Proposta Criada
+         * 2 = Aguardando Análise Automática
+         * 5 = Em Análise de Crédito
+         * 7 = Análise Pendenciada
+         */
+        return [
+            'canonical' => 'UnderAnalysis',
+            'can_quote' => false,
+            'status_code' => $statusCode,
+            'status_description' => $statusDescription,
         ];
+    }
+
+    /**
+     * Mantém compatibilidade com o RunProviderAnalysisJob.
+     *
+     * Se o Job ainda não entende "PreApproved", mandamos como UnderAnalysis,
+     * mas preservamos o detalhe em too_internal_decision.
+     */
+    private function statusForJob(array $statusInfo): string
+    {
+        return match ($statusInfo['canonical']) {
+            'Approved' => 'Approved',
+            'Denied' => 'Denied',
+            'PreApproved' => 'UnderAnalysis',
+            default => 'UnderAnalysis',
+        };
+    }
+
+    private function loadTooRelations(InsuranceAnalysis $analysis): void
+    {
+        $analysis->loadMissing([
+            'lead.company',
+            'lead.endereco',
+            'lead.despesas',
+            'lead.conjuge',
+            'lead.locador',
+            'lead.imobiliariaInformada',
+        ]);
     }
 
     private function responseWasSuccessful(array $response): bool
@@ -423,91 +590,61 @@ class TooInsuranceProvider implements InsuranceProviderInterface
         return $lastStatus;
     }
 
-    private function extractProviderStatus(array $data): ?string
+   
+    private function quoteRoot(array $quoteData): array
     {
-        $status = $this->extractFirstValue($data, [
-            'descricaoStatus',
-            'descricao_status',
-            'statusDescricao',
-            'status_description',
-            'situacao',
-            'situacaoProposta',
-            'statusProposta',
-            'statusCredito',
-            'parecer',
-            'resultado',
-            'status',
-        ]);
+        if (array_is_list($quoteData)) {
+            return $quoteData[0] ?? [];
+        }
 
-        return $status !== null ? (string) $status : null;
+        return $quoteData;
     }
 
-    private function canonicalStatus(?string $status): string
+    private function extractQuoteNumber(array $quoteData): ?string
     {
-        $normalized = $this->normalizeText($status);
+        $root = $this->quoteRoot($quoteData);
 
-        if (in_array($normalized, [
-            'aprovado',
-            'aprovada',
-            'approved',
-            'creditoaprovado',
-            'propostaaprovada',
-            'analiseaprovada',
-        ], true)) {
-            return 'Approved';
-        }
+        $value = data_get($root, 'numeroCotacao')
+            ?? data_get($root, 'NumeroCotacao')
+            ?? data_get($root, 'numero_cotacao')
+            ?? data_get($root, 'cotacao')
+            ?? data_get($root, 'quoteId')
+            ?? data_get($root, 'quote_id')
+            ?? data_get($root, 'idCotacao');
 
-        if (in_array($normalized, [
-             'recusado',
-            'recusada',
-            'reprovado',
-            'reprovada',
-            'negado',
-            'negada',
-            'denied',
-            'refused',
-            'declined',
-            'creditorecusado',
-            'propostarecusada',
-            'analiserecusada',
-        ], true)) {
-            return 'Denied';
-        }
-
-        if (in_array($normalized, [
-            'emandamento',
-            'emanalise',
-            'analise',
-            'analisecredito',
-            'underanalysis',
-            'underreview',
-        ], true)) {
-            return 'UnderAnalysis';
-        }
-
-        if (in_array($normalized, [
-            'pendente',
-            'pending',
-            'aguardando',
-            'emfila',
-        ], true)) {
-            return 'Pending';
-        }
-
-        return 'UnderAnalysis';
+        return $value !== null && $value !== '' ? (string) $value : null;
     }
 
-    private function extractPremiumAmount(array $data): ?float
+    private function extractPremiumAmount(array $quoteData): ?float
     {
-        $value = $this->extractFirstValue($data, [
-            'premiumAmount',
-            'premioTotal',
-            'valorPremioTotal',
-            'valorPremio',
-            'premio',
-            'valorTotal',
-            'total',
-        ]);
+        $root = $this->quoteRoot($quoteData);
+
+        $value = data_get($root, 'response.condicoesPagamento.premioBrutoTotal')
+            ?? data_get($root, 'response.condicoesPagamento.premioLiquido')
+            ?? data_get($root, 'condicoesPagamento.premioBrutoTotal')
+            ?? data_get($root, 'condicoesPagamento.premioLiquido')
+            ?? data_get($root, 'premiumAmount')
+            ?? data_get($root, 'premioTotal')
+            ?? data_get($root, 'valorPremioTotal')
+            ?? data_get($root, 'valorPremio')
+            ?? data_get($root, 'premio')
+            ?? data_get($root, 'valorTotal')
+            ?? data_get($root, 'total');
+
+        /*
+         * Fallback: se não vier total, soma os prêmios líquidos das coberturas.
+         */
+        if ($value === null) {
+            $coverages = data_get($root, 'response.coberturas')
+                ?? data_get($root, 'coberturas')
+                ?? [];
+
+            if (is_array($coverages) && count($coverages) > 0) {
+                $value = collect($coverages)->sum(function ($coverage) {
+                    return (float) ($coverage['premioLiquido'] ?? 0);
+                });
+            }
+        }
 
         if ($value === null || $value === '') {
             return null;
@@ -518,7 +655,27 @@ class TooInsuranceProvider implements InsuranceProviderInterface
             $value = str_replace(',', '.', $value);
         }
 
-        return is_numeric($value) ? (float) $value : null;
+        return is_numeric($value) ? round((float) $value, 2) : null;
+    }
+
+    private function extractPaymentConditions(array $quoteData): ?array
+    {
+        $root = $this->quoteRoot($quoteData);
+
+        $conditions = data_get($root, 'response.condicoesPagamento')
+            ?? data_get($root, 'condicoesPagamento');
+
+        return is_array($conditions) ? $conditions : null;
+    }
+
+    private function extractQuoteCoverages(array $quoteData): ?array
+    {
+        $root = $this->quoteRoot($quoteData);
+
+        $coverages = data_get($root, 'response.coberturas')
+            ?? data_get($root, 'coberturas');
+
+        return is_array($coverages) ? $coverages : null;
     }
 
     private function extractFirstValue(array $data, array $possibleKeys): mixed
@@ -551,18 +708,9 @@ class TooInsuranceProvider implements InsuranceProviderInterface
         return preg_replace('/[^a-z0-9]/', '', mb_strtolower($key));
     }
 
-    private function normalizeText(?string $text): string
-    {
-        $text = mb_strtolower(trim((string) $text));
-
-        $from = ['á', 'à', 'ã', 'â', 'é', 'ê', 'í', 'ó', 'ô', 'õ', 'ú', 'ç', ' '];
-        $to = ['a', 'a', 'a', 'a', 'e', 'e', 'i', 'o', 'o', 'o', 'u', 'c', ''];
-
-        return str_replace($from, $to, $text);
-    }
-
     private function onlyNumbers(?string $value): string
     {
         return preg_replace('/\D+/', '', (string) $value);
     }
 }
+

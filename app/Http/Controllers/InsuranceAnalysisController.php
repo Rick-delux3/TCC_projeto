@@ -209,26 +209,43 @@ class InsuranceAnalysisController extends Controller
     {
         $this->authorizeCompanyAccess($analysis);
 
-        if (!$analysis->quote_id) {
+        $tooAutoStopped = $analysis->provider === 'too' && (bool) data_get($analysis->request_payload, 'too_status_check_stopped', false);
+
+        $canSyncByQuote = filled($analysis->quote_id);
+
+        $canSyncTooManually = $analysis->provider === 'too'
+        && filled($analysis->proposal_id)
+        && $tooAutoStopped
+        && in_array($analysis->status, ['manual_review', 'pending', 'processing'], true);
+
+        if (!$canSyncByQuote && !$canSyncTooManually) {
             return back()->with(
                 'error',
-                'Não é possível consultar o status porque essa análise ainda não possui quote_id.'
+                'Essa análise ainda não está disponível para sincronização manual.'
             );
         }
 
         $analysis->events()->create([
-            'event_type' => 'sync_requested',
+            'event_type' => $canSyncTooManually ? 'too_manual_sync_requested' : 'sync_requested',
             'status' => $analysis->status,
-            'message' => 'Sincronização de status solicitada pela imobiliária.',
+            'message' => $canSyncTooManually
+                ? 'Verificação manual de status da Too solicitada pela imobiliária.'
+                : 'Sincronização de status solicitada pela imobiliária.',
             'payload' => [
                 'requested_by' => 'imobiliaria',
                 'requested_at' => now()->toDateTimeString(),
+                'provider' => $analysis->provider,
+                'proposal_id' => $analysis->proposal_id,
+                'quote_id' => $analysis->quote_id,
             ],
         ]);
 
         SyncProviderAnalysisStatusJob::dispatch($analysis->id);
 
-        return back()->with('success', 'Consulta de status enviada para a fila.');
+        return back()->with('success', $canSyncTooManually
+            ? 'Verificação manual do status da Too enviada para a fila.'
+            : 'Consulta de status enviada para a fila.'
+        );
     }
 
     /**
@@ -288,26 +305,43 @@ class InsuranceAnalysisController extends Controller
      */
     public function adminSyncStatus(InsuranceAnalysis $analysis)
     {
-        if (!$analysis->quote_id) {
+        $tooAutoStopped = $analysis->provider === 'too' && (bool) data_get($analysis->request_payload, 'too_status_check_stopped', false);
+
+        $canSyncByQuote = filled($analysis->quote_id);
+
+        $canSyncTooManually = $analysis->provider === 'too'
+        && filled($analysis->proposal_id)
+        && $tooAutoStopped
+        && in_array($analysis->status, ['manual_review', 'pending', 'processing'], true);
+
+        if (!$canSyncByQuote && !$canSyncTooManually) {
             return back()->with(
                 'error',
-                'Não é possível consultar o status porque essa análise ainda não possui quote_id.'
+                'Essa análise ainda não está disponível para sincronização manual.'
             );
         }
 
         $analysis->events()->create([
-            'event_type' => 'sync_requested',
+            'event_type' => $canSyncTooManually ? 'too_manual_sync_requested' : 'sync_requested',
             'status' => $analysis->status,
-            'message' => 'Sincronização de status solicitada pelo admin/corretor.',
+            'message' => $canSyncTooManually
+                ? 'Verificação manual de status da Too solicitada pela imobiliária.'
+                : 'Sincronização de status solicitada pela imobiliária.',
             'payload' => [
                 'requested_by' => 'admin',
                 'requested_at' => now()->toDateTimeString(),
+                'provider' => $analysis->provider,
+                'proposal_id' => $analysis->proposal_id,
+                'quote_id' => $analysis->quote_id,
             ],
         ]);
 
         SyncProviderAnalysisStatusJob::dispatch($analysis->id);
 
-        return back()->with('success', 'Consulta de status enviada para a fila.');
+        return back()->with('success', $canSyncTooManually
+            ? 'Verificação manual do status da Too enviada para a fila.'
+            : 'Consulta de status enviada para a fila.'
+        );
     }
 
     /**

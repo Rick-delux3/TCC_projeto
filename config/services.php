@@ -107,6 +107,8 @@ return [
         'default_profession' => env('TOO_DEFAULT_PROFESSION', 'Analista'),
         'default_reside_property' => env('TOO_DEFAULT_RESIDE_PROPERTY', true),
         'default_financial_responsible' => env('TOO_DEFAULT_FINANCIAL_RESPONSIBLE', true),
+        'status_check_delay_seconds' => env('TOO_STATUS_CHECK_DELAY_SECONDS', 20),
+        'status_check_max_attempts' => env('TOO_STATUS_CHECK_MAX_ATTEMPTS', 15),
     ],
 
     'porto' => [
