@@ -423,12 +423,17 @@
 
                                 $isToo = strtolower((string) $analysis->provider) === 'too';
 
-                                $tooAutoStopped = $isToo
-                                    && (bool) data_get($responsePayload, 'too_status_check_stopped', false);
+                                $tooAttempts = (int) data_get($responsePayload, 'too_status_check_attempts', 0);
+
+                                $tooMaxAttempts = (int) config('services.too.status_check_max_attempts', 15);
 
                                 $tooManualSyncAvailable = $isToo
-                                    && (bool) data_get($responsePayload, 'too_manual_sync_available', false);
+                                && (bool) data_get($responsePayload, 'too_manual_sync_available', false);
 
+                                $tooAutoStopped = $isToo
+                                    && ((bool) data_get($responsePayload, 'too_status_check_stopped', false)
+                                     || $tooManualSyncAvailable || ($analysisStatus === 'manual_review' && $tooAttempts >= $tooMaxAttempts));
+                                
                                 $tooFinalStatuses = [
                                     'approved',
                                     'Approved',
@@ -582,7 +587,7 @@
 
                                         <div class="small mt-1">
                                             A verificação automática foi encerrada após
-                                            {{ data_get($analysis->response_payload, 'too_status_check_attempts', 'algumas') }}
+                                            {{ data_get($responsePayload, 'too_status_check_attempts', 'algumas') }}
                                             tentativas. Você pode verificar manualmente se a companhia já atualizou o status.
                                         </div>
                                     </div>

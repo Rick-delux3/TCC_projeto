@@ -65,16 +65,24 @@ class SyncTooAnalysisStatusJob implements ShouldQueue
         }
 
         if($providerStatus === 'UnderAnalysis'){
-            $analysis->update([
+
+            $payload = $analysis->response_payload ?? [];
+
+            if(is_string($payload)) {
+                $payload = json_decode($payload, true) ?: [];
+            }
+            
+            $analysis->forceFill([
                 'status' => 'manual_review',
                 'provider_status' => 'Em Análise de Crédito - verificação automática encerrada',
                 'response_payload' => array_merge($analysis->response_payload ?? [], [
                     'too_status_check_stopped' => true,
                     'too_status_check_attempts' => $this->attemptNumber,
                     'too_last_auto_check_at' => now()->toDateTimeString(),
+                    'too_status_check_stopped_at' => now()->toDateTimeString(),
                     'too_manual_sync_available' => true,
                 ]),
-            ]);
+            ])->save();
 
             $analysis->events()->create([
                 'event_type' => 'too_auto_status_check_stopped',

@@ -60,14 +60,17 @@ class SyncProviderAnalysisStatusJob implements ShouldQueue
             'lead.locador',
             'lead.imobiliariaInformada',
             'batch',
-        ])
-            ->findOrFail($this->analysisId);
+        ])->findOrFail($this->analysisId);
 
         /*
          * Para consultar status na companhia, normalmente precisamos do quote_id
          * retornado na primeira solicitação da análise.
          */
-        if (!$analysis->quote_id) {
+
+        $isToo = strtolower((string) $analysis->provider) === 'too';
+
+
+        if (!$isToo && !$analysis->quote_id) {
             $analysis->update([
                 'status' => 'failed',
                 'error_message' => 'Não foi possível sincronizar: quote_id não encontrado.',
@@ -85,6 +88,24 @@ class SyncProviderAnalysisStatusJob implements ShouldQueue
             return;
         }
 
+        if($isToo && !$analysis->proposal_id){
+            $analysis->update([
+                'status' => 'failed',
+                'error_message' => 'Não foi possível sincronizar: proposal_id não encontrado.',
+                'finished_at' => now(),
+            ]);
+
+            $analysis->events()->create([
+                'event_type' => 'sync_failed',
+                'status' => 'failed',
+                'message' => 'Não foi possível sincronizar o status porque a análise não possui proposal_id.',
+            ]);
+
+            $this->dispatchBatchCompletionCheck($analysis);
+
+            return;
+        }
+
         /*
          * Registra no histórico que a sincronização começou.
          */
@@ -95,6 +116,8 @@ class SyncProviderAnalysisStatusJob implements ShouldQueue
             'payload' => [
                 'provider' => $analysis->provider,
                 'quote_id' => $analysis->quote_id,
+                'proposal_id' => $analysis->proposal_id,
+                'manual_sync' => true,
             ],
         ]);
 
@@ -124,6 +147,13 @@ class SyncProviderAnalysisStatusJob implements ShouldQueue
             /*
              * Aplica o resultado recebido no banco.
              */
+
+            if($isToo){
+                $this->applyTooResult($analysis, $result);
+                return;
+            } 
+
+
             $this->applyResult($analysis, $result);
         } catch (\Throwable $e) {
             /*
@@ -163,6 +193,12 @@ class SyncProviderAnalysisStatusJob implements ShouldQueue
     private function applyResult(InsuranceAnalysis $analysis, array $result): void
     {
         $response = $result['response'] ?? [];
+
+        $currentPayload = $analysis->response_payload ?? [];
+
+        if (is_string($currentPayload)) {
+            $currentPayload = json_decode($currentPayload, true) ?: [];
+        }
 
         /*
          * Se a API retornou erro ou o provider sinalizou success false,
@@ -253,7 +289,9 @@ class SyncProviderAnalysisStatusJob implements ShouldQueue
             /*
              * Salva a resposta completa para auditoria/debug.
              */
-            'response_payload' => $response,
+            'response_payload' => array_merge($currentPayload,[
+                'sync_latest' => $response,
+            ]),
 
             /*
              * Como essa sincronização trouxe uma resposta atualizada,
@@ -289,6 +327,205 @@ class SyncProviderAnalysisStatusJob implements ShouldQueue
          * - SendAnalysisResultsEmailJob
          */
         $this->dispatchBatchCompletionCheck($analysis);
+    }
+
+    private function applyTooResult(InsuranceAnalysis $analysis, array $result): void
+    {
+        $response = $result['response'] ?? [];
+
+        $currentPayload = $analysis->response_payload ?? [];
+
+        if (is_string($currentPayload)) {
+            $currentPayload = json_decode($currentPayload, true) ?: [];
+        }
+
+        if (!($result['success'] ?? false)) {
+            $analysis->update([
+                'status' => 'manual_review',
+                'provider_status' => 'Erro ao verificar status manual da Too',
+                'error_message' => data_get($response, 'message')
+                    ?? data_get($result, 'error')
+                    ?? 'Falha ao verificar status manual da Too.',
+                'response_payload' => array_merge($currentPayload, [
+                    'too_manual_sync_available' => true,
+                    'too_status_check_stopped' => true,
+                    'too_last_manual_check_at' => now()->toDateTimeString(),
+                    'too_manual_status_latest' => $result,
+                ]),
+            ]);
+
+            $analysis->events()->create([
+                'event_type' => 'too_manual_sync_failed',
+                'status' => 'manual_review',
+                'message' => 'Falha ao verificar manualmente o status da Too.',
+                'response' => $result,
+            ]);
+
+            return;
+        }
+
+        $providerStatus = data_get($response, 'status');
+        $providerOriginalStatus = data_get($response, 'provider_original_status');
+        $providerOriginalDescription = data_get($response, 'provider_original_description');
+
+        /*
+        * A Too ainda está analisando.
+        * Mantém botão manual disponível e não finaliza a análise.
+        */
+        if (in_array($providerStatus, ['UnderAnalysis', 'Pending'], true)) {
+            $analysis->update([
+                'status' => 'manual_review',
+                'result' => 'manual_review',
+                'provider_status' => $providerOriginalDescription
+                    ?? $providerOriginalStatus
+                    ?? 'Em Análise de Crédito',
+                'error_message' => null,
+                'response_payload' => array_merge($currentPayload, [
+                    'too_status_check_stopped' => true,
+                    'too_manual_sync_available' => true,
+                    'too_last_manual_check_at' => now()->toDateTimeString(),
+                    'too_manual_status_latest' => $result,
+                ]),
+            ]);
+
+            $analysis->events()->create([
+                'event_type' => 'too_manual_status_synced',
+                'status' => 'manual_review',
+                'message' => 'A Too ainda retornou Em Análise de Crédito na verificação manual.',
+                'payload' => [
+                    'provider' => 'too',
+                    'proposal_id' => $analysis->proposal_id,
+                    'provider_status' => $providerStatus,
+                    'provider_original_status' => $providerOriginalStatus,
+                    'provider_original_description' => $providerOriginalDescription,
+                ],
+                'response' => $result,
+            ]);
+
+            return;
+        }
+
+        /*
+        * A Too recusou/reprovou/cancelou/expirou.
+        */
+        if ($providerStatus === 'Denied') {
+            $analysis->update([
+                'status' => 'rejected',
+                'result' => 'rejected',
+                'provider_status' => $providerOriginalDescription
+                    ?? $providerOriginalStatus
+                    ?? 'Recusada',
+                'error_message' => null,
+                'response_payload' => array_merge($currentPayload, [
+                    'too_status_check_stopped' => false,
+                    'too_manual_sync_available' => false,
+                    'too_last_manual_check_at' => now()->toDateTimeString(),
+                    'too_manual_status_latest' => $result,
+                ]),
+                'finished_at' => now(),
+            ]);
+
+            $analysis->events()->create([
+                'event_type' => 'too_manual_status_synced',
+                'status' => 'rejected',
+                'message' => 'Status da Too sincronizado manualmente: análise recusada.',
+                'payload' => [
+                    'provider' => 'too',
+                    'proposal_id' => $analysis->proposal_id,
+                    'provider_status' => $providerStatus,
+                    'provider_original_status' => $providerOriginalStatus,
+                    'provider_original_description' => $providerOriginalDescription,
+                ],
+                'response' => $result,
+            ]);
+
+            $this->dispatchBatchCompletionCheck($analysis);
+
+            return;
+        }
+
+        /*
+        * A Too aprovou e o provider já tentou solicitar cotação.
+        */
+        if ($providerStatus === 'Approved') {
+            $quoteId = data_get($response, 'quoteId');
+            $premiumAmount = data_get($response, 'premiumAmount');
+
+            $analysis->update([
+                'status' => 'approved',
+                'result' => 'approved',
+                'provider_status' => $providerOriginalDescription
+                    ?? $providerOriginalStatus
+                    ?? 'Aprovada',
+                'quote_id' => $quoteId ? (string) $quoteId : $analysis->quote_id,
+                'quote_number' => $quoteId ? (string) $quoteId : $analysis->quote_number,
+                'premium_amount' => $premiumAmount ?? $analysis->premium_amount,
+                'commercial_premium' => $premiumAmount ?? $analysis->commercial_premium,
+                'available_plans' => data_get($response, 'paymentConditions') ?? $analysis->available_plans,
+                'available_assistances' => data_get($response, 'coverages') ?? $analysis->available_assistances,
+                'error_message' => null,
+                'response_payload' => array_merge($currentPayload, [
+                    'too_status_check_stopped' => false,
+                    'too_manual_sync_available' => false,
+                    'too_last_manual_check_at' => now()->toDateTimeString(),
+                    'too_manual_status_latest' => $result,
+                ]),
+                'finished_at' => now(),
+            ]);
+
+            $analysis->events()->create([
+                'event_type' => 'too_manual_status_synced',
+                'status' => 'approved',
+                'message' => 'Status da Too sincronizado manualmente: análise aprovada e cotação atualizada.',
+                'payload' => [
+                    'provider' => 'too',
+                    'proposal_id' => $analysis->proposal_id,
+                    'quote_id' => $quoteId,
+                    'premium_amount' => $premiumAmount,
+                    'provider_status' => $providerStatus,
+                    'provider_original_status' => $providerOriginalStatus,
+                    'provider_original_description' => $providerOriginalDescription,
+                ],
+                'response' => $result,
+            ]);
+
+            $this->dispatchBatchCompletionCheck($analysis);
+
+            return;
+        }
+
+        /*
+        * Status inesperado, mas resposta foi sucesso.
+        * Mantém em análise manual.
+        */
+        $analysis->update([
+            'status' => 'manual_review',
+            'result' => 'manual_review',
+            'provider_status' => $providerOriginalDescription
+                ?? $providerOriginalStatus
+                ?? $providerStatus
+                ?? 'Status não reconhecido na Too',
+            'response_payload' => array_merge($currentPayload, [
+                'too_status_check_stopped' => true,
+                'too_manual_sync_available' => true,
+                'too_last_manual_check_at' => now()->toDateTimeString(),
+                'too_manual_status_latest' => $result,
+            ]),
+        ]);
+
+        $analysis->events()->create([
+            'event_type' => 'too_manual_status_synced',
+            'status' => 'manual_review',
+            'message' => 'Status manual da Too sincronizado, mas ainda não houve decisão final.',
+            'payload' => [
+                'provider' => 'too',
+                'proposal_id' => $analysis->proposal_id,
+                'provider_status' => $providerStatus,
+                'provider_original_status' => $providerOriginalStatus,
+                'provider_original_description' => $providerOriginalDescription,
+            ],
+            'response' => $result,
+        ]);
     }
 
     /**
