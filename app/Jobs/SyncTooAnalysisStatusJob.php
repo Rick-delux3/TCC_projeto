@@ -50,6 +50,7 @@ class SyncTooAnalysisStatusJob implements ShouldQueue
             $analysis->update([
                 'response_payload' => array_merge($analysis->response_payload ?? [], [
                     'too_status_check_stopped' => false,
+                    'too_manual_sync_available' => false,
                     'too_status_check_attempts' => $this->attemptNumber,
                     'too_last_auto_check_at' => now()->toDateTimeString(),
                 ]),
@@ -68,7 +69,7 @@ class SyncTooAnalysisStatusJob implements ShouldQueue
                 'status' => 'manual_review',
                 'provider_status' => 'Em Análise de Crédito - verificação automática encerrada',
                 'response_payload' => array_merge($analysis->response_payload ?? [], [
-                    'too_status_check_stopped' => false,
+                    'too_status_check_stopped' => true,
                     'too_status_check_attempts' => $this->attemptNumber,
                     'too_last_auto_check_at' => now()->toDateTimeString(),
                     'too_manual_sync_available' => true,
@@ -91,7 +92,7 @@ class SyncTooAnalysisStatusJob implements ShouldQueue
         }
 
         $analysis->update([
-            'response_payload' => array_merge($analysis->request_payload ?? [], [
+            'response_payload' => array_merge($analysis->response_payload ?? [], [
                 'too_status_check_stopped' => false,
                 'too_manual_sync_available' => false,
                 'too_last_auto_check_at' => now()->toDateTimeString(),

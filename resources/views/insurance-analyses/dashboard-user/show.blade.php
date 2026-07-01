@@ -415,20 +415,38 @@
                                 $analysisLabel = $analysisStatusLabels[$analysisStatus] ?? ucfirst(str_replace('_', ' ', $analysisStatus));
                                 $analysisBadge = $analysisStatusBadges[$analysisStatus] ?? 'text-bg-secondary';
                                 
-                                $tooAutoStopped = $analysis->provider === 'too'
-                                    && (bool) data_get($analysis->response_payload, 'too_status_check_stopped', false);
+                                $responsePayload = $analysis->response_payload ?? [];
 
-                                $tooManualSyncAvailable = $analysis->provider === 'too'
-                                    && (bool) data_get($analysis->response_payload, 'too_manual_sync_available', false);
+                                if (is_string($responsePayload)) {
+                                    $responsePayload = json_decode($responsePayload, true) ?: [];
+                                }
 
-                                $canManualSyncToo = $analysis->provider === 'too'
+                                $isToo = strtolower((string) $analysis->provider) === 'too';
+
+                                $tooAutoStopped = $isToo
+                                    && (bool) data_get($responsePayload, 'too_status_check_stopped', false);
+
+                                $tooManualSyncAvailable = $isToo
+                                    && (bool) data_get($responsePayload, 'too_manual_sync_available', false);
+
+                                $tooFinalStatuses = [
+                                    'approved',
+                                    'Approved',
+                                    'quoted',
+                                    'rejected',
+                                    'denied',
+                                    'Denied',
+                                    'failed',
+                                    'error',
+                                ];
+
+                                $canManualSyncToo = $isToo
                                     && filled($analysis->proposal_id)
                                     && $tooAutoStopped
                                     && $tooManualSyncAvailable
-                                    && in_array($analysis->status, ['manual_review', 'pending', 'processing'], true)
-                                    && !in_array($analysis->status, ['approved', 'rejected', 'failed'], true);
+                                    && !in_array($analysis->status, $tooFinalStatuses, true);
 
-                                $canDefaultSync = $analysis->provider !== 'too'
+                                $canDefaultSync = !$isToo
                                     && filled($analysis->quote_id)
                                     && in_array($analysis->status, ['manual_review', 'quoted', 'pending', 'processing'], true);
 
@@ -440,10 +458,7 @@
                                 * Reenviar criaria outra proposta, o que não é o objetivo.
                                 */
                                 $canRetry = in_array($analysis->status, ['failed', 'rejected'], true)
-                                    || (
-                                        $analysis->provider !== 'too'
-                                        && in_array($analysis->status, ['manual_review'], true)
-                                    );
+                                    || (!$isToo && in_array($analysis->status, ['manual_review'], true));
 
                                 $premium = $analysis->commercial_premium
                                     ?? $analysis->premium_amount

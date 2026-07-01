@@ -209,14 +209,25 @@ class InsuranceAnalysisController extends Controller
     {
         $this->authorizeCompanyAccess($analysis);
 
-        $tooAutoStopped = $analysis->provider === 'too' && (bool) data_get($analysis->request_payload, 'too_status_check_stopped', false);
+        $responsePayload = $analysis->response_payload ?? [];
 
-        $canSyncByQuote = filled($analysis->quote_id);
+        if(is_string($responsePayload)){
+            $responsePayload = json_decode($responsePayload, true);
+        }
 
-        $canSyncTooManually = $analysis->provider === 'too'
-        && filled($analysis->proposal_id)
-        && $tooAutoStopped
-        && in_array($analysis->status, ['manual_review', 'pending', 'processing'], true);
+        $isToo = strtolower((string) $analysis->provider) == 'too';
+
+        $tooAutoStopped = $isToo && (bool) data_get($responsePayload, 'too_status_check_stopped', false);
+
+        $tooManualSyncAvailable = $isToo && (bool) data_get($responsePayload, 'too_manual_sync_available', false);
+
+        $canSyncByQuote = !$isToo && filled($analysis->quote_id);
+
+        $canSyncTooManually = $isToo
+            && filled($analysis->proposal_id)
+            && $tooAutoStopped
+            && $tooManualSyncAvailable
+            && !in_array($analysis->status, ['approved', 'rejected', 'failed'], true);
 
         if (!$canSyncByQuote && !$canSyncTooManually) {
             return back()->with(
@@ -305,14 +316,27 @@ class InsuranceAnalysisController extends Controller
      */
     public function adminSyncStatus(InsuranceAnalysis $analysis)
     {
-        $tooAutoStopped = $analysis->provider === 'too' && (bool) data_get($analysis->request_payload, 'too_status_check_stopped', false);
+        $responsePayload = $analysis->response_payload ?? [];
 
-        $canSyncByQuote = filled($analysis->quote_id);
+        if (is_string($responsePayload)) {
+            $responsePayload = json_decode($responsePayload, true) ?: [];
+        }
 
-        $canSyncTooManually = $analysis->provider === 'too'
-        && filled($analysis->proposal_id)
-        && $tooAutoStopped
-        && in_array($analysis->status, ['manual_review', 'pending', 'processing'], true);
+        $isToo = strtolower((string) $analysis->provider) === 'too';
+
+        $tooAutoStopped = $isToo
+            && (bool) data_get($responsePayload, 'too_status_check_stopped', false);
+
+        $tooManualSyncAvailable = $isToo
+            && (bool) data_get($responsePayload, 'too_manual_sync_available', false);
+
+        $canSyncByQuote = !$isToo && filled($analysis->quote_id);
+
+        $canSyncTooManually = $isToo
+            && filled($analysis->proposal_id)
+            && $tooAutoStopped
+            && $tooManualSyncAvailable
+            && !in_array($analysis->status, ['approved', 'rejected', 'failed'], true);
 
         if (!$canSyncByQuote && !$canSyncTooManually) {
             return back()->with(
@@ -325,8 +349,8 @@ class InsuranceAnalysisController extends Controller
             'event_type' => $canSyncTooManually ? 'too_manual_sync_requested' : 'sync_requested',
             'status' => $analysis->status,
             'message' => $canSyncTooManually
-                ? 'Verificação manual de status da Too solicitada pela imobiliária.'
-                : 'Sincronização de status solicitada pela imobiliária.',
+                ? 'Verificação manual de status da Too solicitada pelo admin/corretor.'
+                : 'Sincronização de status solicitada pelo admin/corretor.',
             'payload' => [
                 'requested_by' => 'admin',
                 'requested_at' => now()->toDateTimeString(),
@@ -338,9 +362,11 @@ class InsuranceAnalysisController extends Controller
 
         SyncProviderAnalysisStatusJob::dispatch($analysis->id);
 
-        return back()->with('success', $canSyncTooManually
-            ? 'Verificação manual do status da Too enviada para a fila.'
-            : 'Consulta de status enviada para a fila.'
+        return back()->with(
+            'success',
+            $canSyncTooManually
+                ? 'Verificação manual do status da Too enviada para a fila.'
+                : 'Consulta de status enviada para a fila.'
         );
     }
 
