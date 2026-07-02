@@ -321,8 +321,7 @@ class StartInsuranceAnalysesBatchJob implements ShouldQueue
                 analysisId: $analysisId,
                 attemptId: $batchData['attempt_id'],
                 isReanalysis: $this->isReanalysis
-            ))
-            ->all();
+            ))->all();
 
         $isReanalysis = $this->isReanalysis;
         $batchModelId = (int) $batchData['batch_model_id'];

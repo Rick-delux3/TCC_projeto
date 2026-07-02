@@ -27,6 +27,8 @@ class RunProviderAnalysisJob implements ShouldQueue
 
     public function handle(InsuranceProviderResolver $resolver): void
     {
+        
+
         $analysis = InsuranceAnalysis::with([
             'lead.company',
             'lead.endereco',
@@ -37,6 +39,7 @@ class RunProviderAnalysisJob implements ShouldQueue
             'batch',
         ])->findOrFail($this->analysisId);
 
+        
         $analysis->update([
             'status' => 'processing',
             'requested_at' => now(),
@@ -93,6 +96,7 @@ class RunProviderAnalysisJob implements ShouldQueue
 
     private function applyResult(InsuranceAnalysis $analysis, array $result): void
     {
+        $isToo = strtolower((string) $analysis->provider) === 'too';
         $response = $result['response'] ?? [];
         $httpStatus = $result['http_status'] ?? null;
         $rawBody = $result['raw_body'] ?? null;
@@ -129,6 +133,12 @@ class RunProviderAnalysisJob implements ShouldQueue
             ]);
 
             $this->dispatchBatchCompletionCheck($analysis);
+
+            return;
+        }
+
+        if($isToo) {
+            $this->applyTooResult($analysis, $result, $debugPayload);
 
             return;
         }
@@ -243,6 +253,221 @@ class RunProviderAnalysisJob implements ShouldQueue
                 'available_assistances' => $analysis->available_assistances,
                 'debug' => $debugPayload,
             ],
+        ]);
+
+        $this->dispatchBatchCompletionCheck($analysis);
+    }
+
+    private function applyTooResult(InsuranceAnalysis $analysis, array $result, array $debugPayload): void
+    {
+        $response = $result['response'] ?? [];
+
+        $currentPayload = $this->payloadAsArray($analysis->response_payload);
+
+        $providerStatus = data_get($response, 'status');
+        $tooInternalDecision = data_get($response, 'too_internal_decision');
+        $providerOriginalStatus = data_get($response, 'provider_original_status');
+        $providerOriginalDescription = data_get($response, 'provider_original_description');
+
+        /*
+        * A Too ainda está analisando o crédito.
+        *
+        * Importante:
+        * - não marcar como manual_review ainda;
+        * - não preencher finished_at;
+        * - não fechar o lote;
+        * - não disparar e-mail/tag final ainda.
+        *
+        * O SyncTooAnalysisStatusJob continuará verificando automaticamente.
+        */
+        if (
+            in_array($providerStatus, ['UnderAnalysis', 'Pending'], true)
+            && $tooInternalDecision !== 'PreApproved'
+        ) {
+            $analysis->update([
+                'status' => 'processing',
+                'result' => null,
+                'provider_status' => $providerOriginalDescription
+                    ?? $providerOriginalStatus
+                    ?? 'Em Análise de Crédito',
+                'response_payload' => array_merge($currentPayload, [
+                    'too_initial_result' => $debugPayload,
+                    'too_status_check_stopped' => false,
+                    'too_manual_sync_available' => false,
+                    'too_last_auto_check_at' => now()->toDateTimeString(),
+                ]),
+                'error_message' => null,
+                'finished_at' => null,
+            ]);
+
+            $analysis->events()->create([
+                'event_type' => 'too_waiting_credit_analysis',
+                'status' => 'processing',
+                'message' => 'A Too recebeu a análise e ainda está processando o crédito. A verificação automática continuará em segundo plano.',
+                'payload' => $this->analysisSnapshot($analysis),
+                'response' => $debugPayload,
+            ]);
+
+            return;
+        }
+
+        /*
+        * Status 16: pré-aprovado.
+        *
+        * Como a biometria não será implementada agora,
+        * paramos como análise manual e liberamos consulta manual.
+        */
+        if ($tooInternalDecision === 'PreApproved') {
+            $analysis->update([
+                'status' => 'manual_review',
+                'result' => 'manual_review',
+                'provider_status' => $providerOriginalDescription
+                    ?? $providerOriginalStatus
+                    ?? 'Análise pré-aprovada',
+                'response_payload' => array_merge($currentPayload, [
+                    'too_initial_result' => $debugPayload,
+                    'too_status_check_stopped' => true,
+                    'too_manual_sync_available' => true,
+                    'too_status_check_stopped_at' => now()->toDateTimeString(),
+                ]),
+                'error_message' => null,
+                'finished_at' => now(),
+            ]);
+
+            $analysis->events()->create([
+                'event_type' => $this->isReanalysis ? 'reanalysis_completed' : 'analysis_completed',
+                'status' => 'manual_review',
+                'message' => 'A Too retornou análise pré-aprovada. Como a biometria não será tratada agora, a análise ficou em revisão manual.',
+                'payload' => $this->analysisSnapshot($analysis),
+                'response' => $debugPayload,
+            ]);
+
+            $this->dispatchBatchCompletionCheck($analysis);
+
+            return;
+        }
+
+        /*
+        * Too recusou/reprovou/cancelou/expirou.
+        */
+        if ($providerStatus === 'Denied') {
+            $analysis->update([
+                'status' => 'rejected',
+                'result' => 'rejected',
+                'provider_status' => $providerOriginalDescription
+                    ?? $providerOriginalStatus
+                    ?? 'Recusada',
+                'response_payload' => array_merge($currentPayload, [
+                    'too_initial_result' => $debugPayload,
+                    'too_status_check_stopped' => false,
+                    'too_manual_sync_available' => false,
+                ]),
+                'error_message' => null,
+                'finished_at' => now(),
+            ]);
+
+            $analysis->events()->create([
+                'event_type' => $this->isReanalysis ? 'reanalysis_completed' : 'analysis_completed',
+                'status' => 'rejected',
+                'message' => 'Análise da Too concluída como recusada.',
+                'payload' => $this->analysisSnapshot($analysis),
+                'response' => $debugPayload,
+            ]);
+
+            $this->dispatchBatchCompletionCheck($analysis);
+
+            return;
+        }
+
+        /*
+        * Too aprovou e o provider já solicitou cotação.
+        */
+        if ($providerStatus === 'Approved') {
+            $quoteId = data_get($response, 'quoteId');
+            $premiumAmount = data_get($response, 'premiumAmount');
+
+            $analysis->update([
+                'status' => 'approved',
+                'result' => 'approved',
+                'provider_status' => $providerOriginalDescription
+                    ?? $providerOriginalStatus
+                    ?? 'Aprovada',
+                'quote_id' => $quoteId ? (string) $quoteId : $analysis->quote_id,
+                'quote_number' => $quoteId ? (string) $quoteId : $analysis->quote_number,
+
+                'premium_amount' => $premiumAmount ?? $analysis->premium_amount,
+                'commercial_premium' => $premiumAmount ?? $analysis->commercial_premium,
+
+                'available_plans' => data_get($response, 'paymentConditions')
+                    ?? $analysis->available_plans,
+
+                'available_assistances' => data_get($response, 'coverages')
+                    ?? $analysis->available_assistances,
+
+                'response_payload' => array_merge($currentPayload, [
+                    'too_initial_result' => $debugPayload,
+                    'too_status_check_stopped' => false,
+                    'too_manual_sync_available' => false,
+                    'too_quote_result' => [
+                        'quote_id' => $quoteId,
+                        'premium_amount' => $premiumAmount,
+                        'payment_conditions' => data_get($response, 'paymentConditions'),
+                        'coverages' => data_get($response, 'coverages'),
+                    ],
+                ]),
+                'error_message' => null,
+                'finished_at' => now(),
+            ]);
+
+            $analysis->events()->create([
+                'event_type' => $this->isReanalysis ? 'reanalysis_completed' : 'analysis_completed',
+                'status' => 'approved',
+                'message' => 'Análise da Too aprovada e cotação registrada.',
+                'payload' => $this->analysisSnapshot($analysis),
+                'response' => [
+                    'provider' => $analysis->provider,
+                    'provider_status' => $analysis->provider_status,
+                    'quote_id' => $analysis->quote_id,
+                    'quote_number' => $analysis->quote_number,
+                    'premium_amount' => $analysis->premium_amount,
+                    'commercial_premium' => $analysis->commercial_premium,
+                    'available_plans' => $analysis->available_plans,
+                    'available_assistances' => $analysis->available_assistances,
+                    'debug' => $debugPayload,
+                ],
+            ]);
+
+            $this->dispatchBatchCompletionCheck($analysis);
+
+            return;
+        }
+
+        /*
+        * Qualquer resposta inesperada da Too.
+        * Mantém em análise manual para não perder o controle.
+        */
+        $analysis->update([
+            'status' => 'manual_review',
+            'result' => 'manual_review',
+            'provider_status' => $providerOriginalDescription
+                ?? $providerOriginalStatus
+                ?? $providerStatus
+                ?? 'Status não reconhecido na Too',
+            'response_payload' => array_merge($currentPayload, [
+                'too_initial_result' => $debugPayload,
+                'too_status_check_stopped' => true,
+                'too_manual_sync_available' => true,
+            ]),
+            'error_message' => null,
+            'finished_at' => now(),
+        ]);
+
+        $analysis->events()->create([
+            'event_type' => $this->isReanalysis ? 'reanalysis_completed' : 'analysis_completed',
+            'status' => 'manual_review',
+            'message' => 'A Too retornou um status não finalizado ou não reconhecido. A análise ficou em revisão manual.',
+            'payload' => $this->analysisSnapshot($analysis),
+            'response' => $debugPayload,
         ]);
 
         $this->dispatchBatchCompletionCheck($analysis);
@@ -471,5 +696,18 @@ class RunProviderAnalysisJob implements ShouldQueue
         $parts = explode('/', trim($location, '/'));
 
         return end($parts) ?: null;
+    }
+
+    private function payloadAsArray(mixed $payload): array
+    {
+        if (is_array($payload)) {
+            return $payload;
+        }
+
+        if (is_string($payload)) {
+            return json_decode($payload, true) ?: [];
+        }
+
+        return [];
     }
 }

@@ -17,17 +17,32 @@ class Corretor extends Authenticatable
         'cpf',
         'email',
         'password',
+        'first_login_verified_at',
+        'first_login_code_sent_at',
         'role',
         'active',
         'last_login_at',
     ];
 
-    protected $hidden = ['password'];
+    protected $hidden = ['password', 'remember_token'];
 
     protected $casts = [
+        'password' => 'hashed',
+        'first_login_verified_at' => 'datetime',
+        'first_login_code_sent_at' => 'datetime',
         'active' => 'boolean',
         'last_login_at' => 'datetime',
     ];
+
+    public function loginVerificationCodes()
+    {
+        return $this->hasMany(CorretorLoginVerificacaoCode::class);
+    }
+
+    public function hasVerifiedFirstLogin(): bool
+    {
+        return !is_null($this->first_login_verified_at);
+    }
 
     public function setSenhaAttribute($value)
     {

@@ -96,6 +96,14 @@ class SyncTooAnalysisStatusJob implements ShouldQueue
                 'response' => $result,
             ]);
 
+            if($analysis->insurance_analysis_batch_id){
+                CompleteInsuranceAnalysesBatchJob::dispatch(
+                    batchId: $analysis->insurance_analysis_batch_id,
+                    attemptId: null,
+                    isReanalysis: false,
+                );
+            }
+
             return;
         }
 
