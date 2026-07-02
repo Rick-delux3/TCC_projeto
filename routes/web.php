@@ -86,21 +86,28 @@ Route::middleware('auth')->group(function () {
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 });
 
+Route::middleware(['guest:admin', 'throttle:5,1', 'ceo.registration.open'])->group(function () {
+    Route::get(config('admin.ceo_registration_path'), [CorretorRegistrationController::class, 'showCeoRegistrationForm'])
+        ->name('admin.ceo.register.form');
 
-Route::middleware('guest:admin')->group(function () {
-    Route::get('/admin/login/form', [CorretorAuthController::class, 'showLoginForm'])->name('admin.login');
-    Route::post('/admin/login', [CorretorAuthController::class, 'login'])->name('admin.login.post');
+    Route::post(config('admin.ceo_registration_path'), [CorretorRegistrationController::class, 'storeCeo'])
+        ->name('admin.ceo.register.post');
+});
 
-    Route::get('/admins/cadastro', [CorretorRegistrationController::class, 'showRegistrationForm'])->name('admin.register.form');
-    Route::post('/admins/cadastro', [CorretorRegistrationController::class, 'store'])->name('admin.register.post');
+Route::middleware(['guest:admin', 'throttle:5,1'])->group(function () {
+    Route::get('/admin/login/form', [CorretorAuthController::class, 'showLoginForm'])
+        ->name('admin.login');
+
+    Route::post('/admin/login', [CorretorAuthController::class, 'login'])
+        ->name('admin.login.post');
 });
 
 Route::middleware('auth:admin')->group(function () {
-    Route::get('/admin/2fa', [CorretorAuthController::class, 'showTwoFactorForm'])->name('admin.2fa.form');
-    Route::post('/admin/2fa', [CorretorAuthController::class, 'verifyTwoFactor'])->name('admin.2fa.verify');
-    Route::post('/admin/2fa/resend', [CorretorAuthController::class, 'resendTwoFactor'])->name('admin.2fa.resend');
+    Route::get('/admins/2fa', [CorretorAuthController::class, 'showTwoFactorForm'])->name('admin.2fa.form');
+    Route::post('/admins/2fa', [CorretorAuthController::class, 'verifyTwoFactor'])->name('admin.2fa.verify');
+    Route::post('/admins/2fa/resend', [CorretorAuthController::class, 'resendTwoFactor'])->name('admin.2fa.resend');
 
-    Route::post('/admin/logout', [CorretorAuthController::class, 'logout'])->name('admin.logout');
+    Route::post('/admins/logout', [CorretorAuthController::class, 'logout'])->name('admin.logout');
 });
 
 

@@ -5,15 +5,43 @@ namespace App\Http\Middleware;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Symfony\Component\HttpFoundation\Response;
+
 
 class CorretorTwoFactorMiddleware
 {
-    public function handle(Request $request, Closure $next)
+    public function handle(Request $request, Closure $next): Response
     {
-        if (Auth::guard('admin')->check() && !session()->has('admin_2fa_passed')) {
-            return redirect()->route('admin.2fa.form');
+        $admin = Auth::guard('admin')->user();
+
+        if(! $admin) {
+            return redirect()->route('admin.login');
         }
 
-        return $next($request);
+        if(!$admin->isActive())
+        {
+            Auth::guard('admin')->logout();
+
+            $request->session()->invalidate();
+            $request->session()->regenerateToken();
+
+            return redirect()->route('admin.login');
+        }
+
+        if(!$admin->isCeo())
+        {
+            abort(403, 'Acesso negado. Apenas o CEO pode acessar esta área.');
+        }
+
+        if ($admin->hasVerifiedFirstLogin()) 
+        {
+            return $next($request);
+        }
+
+        if(session('admin_2fa_passed') === true) {
+            return $next($request);
+        }
+
+        return redirect()->route('admin.2fa.form');
     }
 }

@@ -24,7 +24,7 @@ class Corretor extends Authenticatable
         'last_login_at',
     ];
 
-    protected $hidden = ['password', 'remember_token'];
+    protected $hidden = ['password'];
 
     protected $casts = [
         'password' => 'hashed',
@@ -36,12 +36,22 @@ class Corretor extends Authenticatable
 
     public function loginVerificationCodes()
     {
-        return $this->hasMany(CorretorLoginVerificacaoCode::class);
+        return $this->hasMany(CorretorLoginVerificacaoCode::class, 'corretor_id');
     }
 
     public function hasVerifiedFirstLogin(): bool
     {
         return !is_null($this->first_login_verified_at);
+    }
+
+    public function isActive(): bool
+    {
+        return (bool) $this->active;
+    }
+
+    public function isCeo(): bool
+    {
+        return $this->role === 'ceo';
     }
 
     public function setSenhaAttribute($value)

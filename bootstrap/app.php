@@ -6,6 +6,7 @@
     use Illuminate\Auth\Middleware\Authenticate;
     use App\Http\Middleware\CorretorTwoFactorMiddleware;
     use App\Http\Middleware\TwoFactorMiddleware;
+    use App\Http\Middleware\EnsureCeoRegistrationIsOpen;
 
     return Application::configure(basePath: dirname(__DIR__))
         ->withRouting(
@@ -15,14 +16,15 @@
             health: '/up',
         )
         ->withMiddleware(function (Middleware $middleware): void {
-            // ✅ Define para onde redirecionar caso o usuário não esteja logado
+            
             $middleware->redirectTo = '/empresa/login';
 
-            // ✅ Cria apelidos para usar nas rotas
+            
             $middleware->alias([
                 'auth' => Authenticate::class,
                 '2fa' => TwoFactorMiddleware::class,
                 'admin.2fa' => CorretorTwoFactorMiddleware::class,
+                'ceo.registration.open' => EnsureCeoRegistrationIsOpen::class,
             ]);
         })
         ->withExceptions(function (Exceptions $exceptions): void {
