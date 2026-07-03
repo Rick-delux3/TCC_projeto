@@ -272,7 +272,7 @@ class InsuranceAnalysisController extends Controller
             ->latest()
             ->paginate(20);
 
-        return view('dashboard-admin', compact('batches'));
+        return view('corretor.dashboard-admin', compact('batches'));
     }
 
     /**
@@ -286,7 +286,7 @@ class InsuranceAnalysisController extends Controller
             'analyses.events',
         ]);
 
-        return view('dashboard-admin', compact('batch'));
+        return view('corretor.dashboard-admin', compact('batch'));
     }
 
     /**

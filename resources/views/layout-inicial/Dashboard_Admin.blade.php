@@ -49,8 +49,5 @@
     </main>
 
 
-    @include('layout-inicial.partials.footer_admin')
-
-
 </body>
 </html>

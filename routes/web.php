@@ -10,6 +10,8 @@ use App\Http\Controllers\ImobiliariaAuthController;
 use App\Http\Controllers\TwoFactorController;
 use App\Http\Controllers\CorretorRegistrationController;
 use App\Http\Controllers\CorretorAuthController;
+use App\Http\Controllers\CorretorDashboardController;
+use App\Http\Controllers\CorretorEquipeController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\SimulationController;
 use App\Services\PottencialService;
@@ -39,46 +41,89 @@ Route::get('/analise', fn () => redirect()->route('Dashboard'))
 
 Route::prefix('/Dashboard')->group(function () {
 
-    Route::get('/User',[DashboardController::class, 'index'])
-    ->middleware(['auth', '2fa'])
-    ->name('Dashboard');
+    Route::middleware(['auth', '2fa'])->group(function (){
 
-    Route::post('/sync-again', [DashboardController::class, 'syncAgain'])
-    ->middleware(['auth', '2fa'])
-    ->name('Dashboard.syncAgain');
+        Route::get('/User',[DashboardController::class, 'index'])
+        ->name('Dashboard');
+        
+        Route::post('/sync-again', [DashboardController::class, 'syncAgain'])
+        ->name('Dashboard.syncAgain');
+
+        Route::get('/sync-status', [DashboardController::class, 'syncStatus'])
+        ->middleware(['throttle:sync-status'])->name('Dashboard.syncStatus');
+        
+        Route::put('/leads/{lead}', [DashboardLeadController::class, 'update'])
+        ->name('dashboard.leads.update');
     
-    Route::put('/leads/{lead}', [DashboardLeadController::class, 'update'])
-    ->name('dashboard.leads.update');
-
-    Route::post('/leads/{lead}/reanalisar', [DashboardLeadController::class, 'reanalyze'])
-    ->name('dashboard.leads.reanalyze');
+        Route::post('/leads/{lead}/reanalisar', [DashboardLeadController::class, 'reanalyze'])
+        ->name('dashboard.leads.reanalyze');
+        
+        Route::get('/analises', [InsuranceAnalysisController::class, 'index'])
+        ->name('insurance-analyses.index');
     
-    Route::get('/analises', [InsuranceAnalysisController::class, 'index'])
-    ->middleware(['auth', '2fa'])
-    ->name('insurance-analyses.index');
-
-    Route::get('/analises/{batch}', [InsuranceAnalysisController::class, 'show'])
-    ->middleware(['auth', '2fa'])
-    ->name('insurance-analyses.show');
-
-    Route::post('/analises/provider/{analysis}/retry', [InsuranceAnalysisController::class, 'retry'])
-    ->middleware(['auth', '2fa'])
-    ->name('insurance-analyses.retry');
-
-    Route::post('/analises/provider/{analysis}/sync-status', [InsuranceAnalysisController::class, 'syncStatus'])
-    ->middleware(['auth', '2fa'])
-    ->name('insurance-analyses.sync-status');
-
+        Route::get('/analises/{batch}', [InsuranceAnalysisController::class, 'show'])
+        ->name('insurance-analyses.show');
     
-    Route::get('/Admin', function (){
-        return view('dashboard-admin');
-    })
-    ->middleware(['auth:admin', 'admin.2fa'])
-    ->name('Dashboard-Admin');
+        Route::post('/analises/provider/{analysis}/retry', [InsuranceAnalysisController::class, 'retry'])
+        ->name('insurance-analyses.retry');
+    
+        Route::post('/analises/provider/{analysis}/sync-status', [InsuranceAnalysisController::class, 'syncStatus'])
+        ->name('insurance-analyses.sync-status');
+    });
 
-    Route::get('/sync-status', [DashboardController::class, 'syncStatus'])
-    ->middleware(['auth', '2fa', 'throttle:sync-status'])->name('Dashboard.syncStatus');
+    Route::prefix('/Admin')->middleware(['auth:admin', 'admin.2fa'])->group(function() {
+        
+        Route::get('/', [CorretorDashboardController::class, 'index'])
+        ->middleware('can:view-leads')
+        ->name('Dashboard-Admin');
+
+        Route::get('/leads', function (){
+            return redirect()->to(route('Dashboard-Admin') . '#leads-section');
+        })
+        ->middleware('can:view-leads')
+        ->name('admin.leads.index');
+
+        Route::post('/leads/{lead}/reanalisar', [DashboardLeadController::class, 'reanalyze'])
+            ->middleware('can:create-analysis')
+            ->name('admin.leads.reanalyze');
+
+        Route::get('/analises', [InsuranceAnalysisController::class, 'adminIndex'])
+            ->middleware('can:view-analyses')
+            ->name('admin.insurance-analyses.index');
+
+        Route::get('/analises/{batch}', [InsuranceAnalysisController::class, 'adminShow'])
+            ->middleware('can:view-analyses')
+            ->name('admin.insurance-analyses.show');
+
+        Route::post('/analises/provider/{analysis}/retry', [InsuranceAnalysisController::class, 'adminRetry'])
+            ->middleware('can:create-analysis')
+            ->name('admin.insurance-analyses.retry');
+
+        Route::post('/analises/provider/{analysis}/sync-status', [InsuranceAnalysisController::class, 'adminSyncStatus'])
+            ->middleware('can:view-analyses')
+            ->name('admin.insurance-analyses.sync-status');
+
+
+        Route::prefix('/equipe')
+        ->name('admin.config-equipe.')
+        ->middleware('can:manage-organization')
+        ->group(function () {
+            Route::get('/', [CorretorEquipeController::class, 'index'])->name('index');
+
+            Route::get('/criar', [CorretorEquipeController::class, 'create'])->name('create');
+
+            Route::post('/', [CorretorEquipeController::class, 'store'])->name('store');
+
+            Route::get('/{corretor}/editar', [CorretorEquipeController::class, 'edit'])->name('edit');
+
+            Route::put('/{corretor}', [CorretorEquipeController::class, 'update'])->name('update');
+
+        });
+    });
 });
+    
+
+    
 
 Route::middleware('auth')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');

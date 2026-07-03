@@ -6,6 +6,8 @@ use Illuminate\Support\ServiceProvider;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
+use App\Models\Corretor;
+use Illuminate\Support\Facades\Gate;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -45,5 +47,54 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('sync-status', function (Request $request) {
             return Limit::perMinute(120)->by($request->ip());
         });
+
+        Gate::define('access-broker-dashboard', function (Corretor $corretor){
+            $corretor->active === true;
+        });
+        
+        Gate::define('manage-organization', function (Corretor $corretor){
+            $corretor->isCeo();
+        });
+
+        Gate::define('view-leads', function (Corretor $corretor){
+            $corretor->hasPermission('leads.visualizar');
+        });
+
+        Gate::define('create-analysis', function (Corretor $corretor){
+            $corretor->hasPermission('analises.criar');
+        });
+
+        Gate::define('reprocess-analysis', function (Corretor $corretor) {
+            return $corretor->hasPermission('analises.reprocessar');
+        });
+
+        Gate::define('edit-leads', function (Corretor $corretor) {
+        return $corretor->hasPermission('leads.editar');
+        });
+
+        Gate::define('delete-leads', function (Corretor $corretor) {
+            return $corretor->hasPermission('leads.excluir');
+        });
+
+        Gate::define('view-real-estate-companies', function (Corretor $corretor){
+            $corretor->hasPermission('imobiliarias.visualizar');
+        });
+
+        Gate::define('edit-real-estate-companies', function (Corretor $corretor) {
+            return $corretor->hasPermission('imobiliarias.editar');
+        });
+
+        Gate::define('configure-real-estate-companies', function (Corretor $corretor) {
+            return $corretor->hasPermission('imobiliarias.configurar');
+        });
+
+        Gate::define('manage-real-estate-companies', function (Corretor $corretor){
+            $corretor->hasPermission('imobiliarias.gerenciar');
+        });
+
+        Gate::define('view-activity-logs', function (Corretor $corretor) {
+            return $corretor->hasPermission('logs.visualizar');
+        });
+
     }
 }

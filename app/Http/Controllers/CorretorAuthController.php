@@ -24,7 +24,7 @@ class CorretorAuthController extends Controller
 
     public function showLoginForm()
     {
-        return view('admin-ceo-login');
+        return view('corretor.admin-ceo-login');
     }
 
     public function login(Request $request)

@@ -16,7 +16,7 @@ class ImobiliariaAuthController extends Controller
 {
     public function showLoginForm()
     {
-        return view('company-login');
+        return view('imobiliaria.company-login');
     }
 
     

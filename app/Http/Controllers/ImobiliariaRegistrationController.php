@@ -51,8 +51,7 @@ class ImobiliariaRegistrationController extends Controller
                 'title',
             ]);
 
-        return view('register-company', compact('tagsOficiais'));
-        // Ajuste o nome da view acima para o nome real do seu arquivo blade
+        return view('imobiliaria.register-company', compact('tagsOficiais'));
     }
 
     public function store(StoreCompanyRequest $request)

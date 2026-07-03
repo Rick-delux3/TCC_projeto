@@ -12,6 +12,9 @@ class Corretor extends Authenticatable
 
     protected $table = 'corretores';
 
+    public const ROLE_CEO = 'CEO';
+    public const ROLE_INTEGRANTE = 'integrante';
+
     protected $fillable = [
         'name',
         'cpf',
@@ -20,14 +23,23 @@ class Corretor extends Authenticatable
         'first_login_verified_at',
         'first_login_code_sent_at',
         'role',
+        'permissions',
         'active',
+        'invited_by_corretor_id',
+        'invited_at',
+        'invite_accepted_at',
+        'password_set_at',
         'last_login_at',
     ];
 
-    protected $hidden = ['password'];
+    protected $hidden = ['password', 'remember_token'];
 
     protected $casts = [
         'password' => 'hashed',
+        'permissions' => 'array',
+        'invited_at' => 'datetime',
+        'invite_accepted_at' => 'datetime',
+        'password_set_at' => 'datetime',
         'first_login_verified_at' => 'datetime',
         'first_login_code_sent_at' => 'datetime',
         'active' => 'boolean',
@@ -51,7 +63,12 @@ class Corretor extends Authenticatable
 
     public function isCeo(): bool
     {
-        return $this->role === 'ceo';
+        return $this->role === self::ROLE_CEO;
+    }
+
+    public function isIntegrante(): bool
+    {
+        return $this->role === self::ROLE_INTEGRANTE;
     }
 
     public function setSenhaAttribute($value)
@@ -67,5 +84,17 @@ class Corretor extends Authenticatable
     public function logsAtividades()
     {
         return $this->hasMany(CorretorActivityLog::class);
+    }
+
+    public function hasPermission(string $permission): bool
+    {
+        if($this->isCeo()) return true;
+
+        return in_array($permission, $this->permissions ?? [], true);
+    }
+
+    public function invitedBy()
+    {
+        return $this->belongsTo(Self::class, 'invited_by_corretor_id');
     }
 }

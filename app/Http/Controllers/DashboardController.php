@@ -299,7 +299,7 @@ class DashboardController extends Controller
          */
         $leadFormUrl = route('simulation.registered-company.access');
 
-        return view('dashboard-user', [
+        return view('imobiliaria.dashboard-user', [
             'company' => $company,
 
             'leads' => $leads,

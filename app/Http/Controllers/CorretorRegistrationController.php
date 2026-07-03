@@ -10,7 +10,7 @@ class CorretorRegistrationController extends Controller
 {
     public function showCeoRegistrationForm()
     {
-        return view('admin-ceo-register');
+        return view('corretor.admin-ceo-register');
     }
 
     public function storeCeo(Request $request){
