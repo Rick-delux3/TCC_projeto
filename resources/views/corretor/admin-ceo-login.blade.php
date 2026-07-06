@@ -60,7 +60,7 @@
             @endif
 
             <form
-                action="{{ route('admin.login.post') }}"
+                action="{{ route('admin.ceo.login.post') }}"
                 method="POST"
                 autocomplete="off"
                 class="admin-auth-form"

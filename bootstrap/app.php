@@ -7,6 +7,8 @@
     use App\Http\Middleware\CorretorTwoFactorMiddleware;
     use App\Http\Middleware\TwoFactorMiddleware;
     use App\Http\Middleware\EnsureCeoRegistrationIsOpen;
+    use Illuminate\Http\Request;
+
 
     return Application::configure(basePath: dirname(__DIR__))
         ->withRouting(
@@ -17,7 +19,42 @@
         )
         ->withMiddleware(function (Middleware $middleware): void {
             
-            $middleware->redirectTo = '/empresa/login';
+            $middleware->redirectGuestsTo(function (Request $request) {
+                /*
+                |--------------------------------------------------------------------------
+                | Área dos corretores/admins
+                |--------------------------------------------------------------------------
+                */
+                if (
+                    $request->is('Dashboard/Admin*') ||
+                    $request->is('admins/2fa*') ||
+                    $request->is('admins/logout')
+                ) {
+                    $fallbackRoute = session('admin_login_fallback_route', 'admin.member.login');
+
+                    return route($fallbackRoute);
+                }
+
+                /*
+                |--------------------------------------------------------------------------
+                | Área da imobiliária
+                |--------------------------------------------------------------------------
+                */
+                if (
+                    $request->is('Dashboard/User*') ||
+                    $request->is('empresa/*') ||
+                    $request->is('2fa*')
+                ) {
+                    return route('empresa.login');
+                }
+
+                /*
+                |--------------------------------------------------------------------------
+                | Fallback geral
+                |--------------------------------------------------------------------------
+                */
+                return route('empresa.login');
+            });
 
             
             $middleware->alias([

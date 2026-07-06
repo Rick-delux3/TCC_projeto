@@ -48,52 +48,42 @@ class AppServiceProvider extends ServiceProvider
             return Limit::perMinute(120)->by($request->ip());
         });
 
-        Gate::define('access-broker-dashboard', function (Corretor $corretor){
-            $corretor->active === true;
-        });
-        
-        Gate::define('manage-organization', function (Corretor $corretor){
-            $corretor->isCeo();
+        Gate::before(function ($user, string $ability) {
+            if ($user instanceof Corretor && $user->isActive() && $user->isCeo()) {
+                return true;
+            }
+
+            return null;
         });
 
-        Gate::define('view-leads', function (Corretor $corretor){
-            $corretor->hasPermission('leads.visualizar');
+        Gate::define('manage-organization', function (Corretor $corretor) {
+        return $corretor->isActive()
+            && $corretor->isCeo();
         });
 
-        Gate::define('create-analysis', function (Corretor $corretor){
-            $corretor->hasPermission('analises.criar');
+        Gate::define('view-leads', function (Corretor $corretor) {
+            return $corretor->isActive()
+                && $corretor->hasPermission('leads.visualizar');
         });
 
-        Gate::define('reprocess-analysis', function (Corretor $corretor) {
-            return $corretor->hasPermission('analises.reprocessar');
+        Gate::define('create-analysis', function (Corretor $corretor) {
+            return $corretor->isActive()
+                && $corretor->hasPermission('analises.criar');
         });
 
-        Gate::define('edit-leads', function (Corretor $corretor) {
-        return $corretor->hasPermission('leads.editar');
+        Gate::define('view-analyses', function (Corretor $corretor) {
+            return $corretor->isActive()
+                && $corretor->hasPermission('analises.visualizar');
         });
 
-        Gate::define('delete-leads', function (Corretor $corretor) {
-            return $corretor->hasPermission('leads.excluir');
+        Gate::define('view-real-estate-companies', function (Corretor $corretor) {
+            return $corretor->isActive()
+                && $corretor->hasPermission('imobiliarias.visualizar');
         });
 
-        Gate::define('view-real-estate-companies', function (Corretor $corretor){
-            $corretor->hasPermission('imobiliarias.visualizar');
-        });
-
-        Gate::define('edit-real-estate-companies', function (Corretor $corretor) {
-            return $corretor->hasPermission('imobiliarias.editar');
-        });
-
-        Gate::define('configure-real-estate-companies', function (Corretor $corretor) {
-            return $corretor->hasPermission('imobiliarias.configurar');
-        });
-
-        Gate::define('manage-real-estate-companies', function (Corretor $corretor){
-            $corretor->hasPermission('imobiliarias.gerenciar');
-        });
-
-        Gate::define('view-activity-logs', function (Corretor $corretor) {
-            return $corretor->hasPermission('logs.visualizar');
+        Gate::define('view-tags', function (Corretor $corretor) {
+            return $corretor->isActive()
+                && $corretor->hasPermission('tags.visualizar');
         });
 
     }

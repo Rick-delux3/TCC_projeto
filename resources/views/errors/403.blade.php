@@ -65,7 +65,7 @@
 
             <div class="d-grid gap-2">
                 <a
-                    href="{{ route('admin.login') }}"
+                    href="{{ route('admin.ceo.login') }}"
                     class="btn btn-lg text-white fw-bold"
                     style="border: 0; background: linear-gradient(125deg, #030133, #146FB6);"
                 >

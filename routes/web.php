@@ -131,7 +131,7 @@ Route::middleware('auth')->group(function () {
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 });
 
-Route::middleware(['guest:admin', 'throttle:5,1', 'ceo.registration.open'])->group(function () {
+Route::middleware(['ceo.registration.open', 'throttle:5,1'])->group(function () {
     Route::get(config('admin.ceo_registration_path'), [CorretorRegistrationController::class, 'showCeoRegistrationForm'])
         ->name('admin.ceo.register.form');
 
@@ -140,11 +140,20 @@ Route::middleware(['guest:admin', 'throttle:5,1', 'ceo.registration.open'])->gro
 });
 
 Route::middleware(['guest:admin', 'throttle:5,1'])->group(function () {
-    Route::get('/admin/login/form', [CorretorAuthController::class, 'showLoginForm'])
-        ->name('admin.login');
+    Route::get('/ceo/admin/login/form', [CorretorAuthController::class, 'ceoShowLoginForm'])
+        ->name('admin.ceo.login');
 
-    Route::post('/admin/login', [CorretorAuthController::class, 'login'])
-        ->name('admin.login.post');
+    Route::post('/ceo/admin/login', [CorretorAuthController::class, 'ceoLogin'])
+        ->name('admin.ceo.login.post');
+
+    Route::get('/member/admin/login/form', [CorretorAuthController::class, 'memberShowLoginForm'])
+        ->name('admin.member.login');
+
+    Route::post('/member/admin/login', [CorretorAuthController::class, 'memberLogin'])
+        ->name('admin.member.login.post');
+
+    Route::get('/admin/login/form', [CorretorAuthController::class, 'memberShowLoginForm'])
+        ->name('admin.login');
 });
 
 Route::middleware('auth:admin')->group(function () {

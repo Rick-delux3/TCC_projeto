@@ -43,7 +43,7 @@ class CorretorRegistrationController extends Controller
             ]
         );
 
-        if (Corretor::where('role', 'ceo')->exists()) {
+        if (Corretor::where('role', Corretor::ROLE_CEO)->exists()) {
             abort(403, 'O CEO já foi cadastrado. O cadastro inicial está fechado.');
         }
 
@@ -52,7 +52,7 @@ class CorretorRegistrationController extends Controller
             'email' => $data['email'],
             'password' => Hash::make($data['password']),
             'cpf' => $data['cpf'],
-            'role' => 'ceo',
+            'role' => Corretor::ROLE_CEO,
             'active' => true,
             'first_login_verified_at' => null,
             'first_login_code_sent_at' => null,

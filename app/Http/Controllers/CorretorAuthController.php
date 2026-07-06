@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\RateLimiter;
+use App\Models\Corretor;
 
 class CorretorAuthController extends Controller
 {
@@ -22,12 +23,17 @@ class CorretorAuthController extends Controller
     private const RESEND_DECAY_SECONDS = 600;
     private const RESEND_COOLDOWN_SECONDS = 60;
 
-    public function showLoginForm()
+    public function memberShowLoginForm()
+    {
+        return view('corretor.admin-member-login');
+    }
+    
+    public function ceoShowLoginForm()
     {
         return view('corretor.admin-ceo-login');
     }
 
-    public function login(Request $request)
+    public function ceoLogin(Request $request)
     {
         $request->merge([
             'cpf' => preg_replace('/\D/', '', (string) $request->cpf),
@@ -43,7 +49,7 @@ class CorretorAuthController extends Controller
             'password.min' => 'A senha deve ter pelo menos 6 caracteres.',
         ]);
 
-        $loginKey = $this->loginThrottleKey($data['cpf'], $request->ip());
+        $loginKey = $this->loginThrottleKey('ceo:' . $data['cpf'], $request->ip());
 
         if (RateLimiter::tooManyAttempts($loginKey, self::LOGIN_MAX_ATTEMPTS)) {
             $seconds = RateLimiter::availableIn($loginKey);
@@ -72,56 +78,147 @@ class CorretorAuthController extends Controller
 
         $request->session()->regenerate();
 
-        $admin = Auth::guard('admin')->user();
+        $corretor = Auth::guard('admin')->user();
 
-        if (! $admin) {
+        if (!$corretor) {
             return redirect()
-                ->route('admin.login')
+                ->route('admin.ceo.login')
                 ->withErrors([
                     'cpf' => 'Falha ao iniciar sessão administrativa.',
                 ]);
         }
 
-        if (! $admin->isActive()) {
-            Auth::guard('admin')->logout();
 
-            $request->session()->invalidate();
-            $request->session()->regenerateToken();
-
-            return redirect()
-                ->route('admin.login')
-                ->withErrors([
-                    'cpf' => 'Este corretor está inativo. Entre em contato com o administrador.',
-                ]);
-        }
-
-        if(! $admin->isCeo())
+        if(!$corretor->isCeo())
         {
-            Auth::guard('admin')->logout();
+            $this->logoutCurrentAdminSession($request);
 
-            $request->session()->invalidate();
-            $request->session()->regenerateToken();
 
-            return redirect()->route('admin.login')->withErrors([
+            return redirect()->route('admin.ceo.login')->withErrors([
                 'cpf' => 'Acesso negado. Apenas o CEO pode acessar esta área.',
             ]);
         }
 
-        if (! $admin->hasVerifiedFirstLogin()) {
-            $this->sendTwoFactorCode($admin, $request);
+        return $this->finishSuccessfulLogin($corretor, $request, 'admin.ceo.login');
+ 
+    }
+
+    public function memberLogin(Request $request)
+    {
+        $request->merge([
+            'email' => mb_strtolower(trim((string) $request->email)),
+        ]);
+
+        $data = $request->validate([
+            'email' => ['required', 'email', 'max:255'],
+            'password' => ['required', 'string', 'min:6']
+        ],
+        [
+            'email.required' => 'Informe o email!',
+            'email.email' => 'Informe um e-mail válido!',
+            'password.required' => 'Informe a senha!',
+            'password.min' => 'A senha deve conter pelo menos 6 caracteres!'
+        ]
+        );
+
+        $loginKey = $this->loginThrottleKey('member:' . $data['email'], $request->ip());
+
+        if (RateLimiter::tooManyAttempts($loginKey, self::LOGIN_MAX_ATTEMPTS)) {
+            $seconds = RateLimiter::availableIn($loginKey);
+
+            return back()
+                ->withInput($request->only('email'))
+                ->withErrors([
+                    'email' => "Muitas tentativas de login. Tente novamente em {$seconds} segundos.",
+                ]);
+        }
+
+        if(! Auth::guard('admin')->attempt([
+            'email' => $data['email'],
+            'password' => $data['password'],
+        ]))
+        {
+            RateLimiter::hit($loginKey, self::LOGIN_DECAY_SECONDS);
+
+            return back()
+                ->withInput($request->only('email'))
+                ->withErrors([
+                    'email' => 'E-mail ou senha incorretos.',
+            ]);
+        }
+
+        RateLimiter::clear($loginKey);
+
+        $request->session()->regenerate();
+
+        $corretor = Auth::guard('admin')->user();
+
+        if (! $corretor) {
+            return redirect()
+                ->route('admin.member.login')
+                ->withErrors([
+                    'email' => 'Falha ao iniciar sessão administrativa.',
+                ]);
+        }
+
+
+        if(! $corretor->isIntegrante())
+        {
+           $this->logoutCurrentAdminSession($request);
+
+            return redirect()->route('admin.member.login')->withErrors([
+                'email' => 'Acesso negado. Esta área é exclusiva para Integrantes',
+            ]);
+        }
+
+        return $this->finishSuccessfulLogin($corretor, $request, 'admin.member.login');
+
+    }
+
+    private function finishSuccessfulLogin(Corretor $corretor, Request $request, string $fallbackLoginRoute)
+    {
+        if (! $corretor->isActive()) {
+            $this->logoutCurrentAdminSession($request);
+
+            return redirect()
+                ->route($fallbackLoginRoute)
+                ->withErrors([
+                    'email' => 'Este corretor está inativo. Entre em contato com o CEO da corretora.',
+                    'cpf' => 'Este corretor está inativo. Entre em contato com o CEO da corretora.',
+                ]);
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | Guarda qual tela de login deve ser usada caso a sessão expire.
+        |--------------------------------------------------------------------------
+        */
+        session([
+            'admin_login_fallback_route' => $fallbackLoginRoute,
+        ]);
+
+        /*
+        |--------------------------------------------------------------------------
+        | 2FA único de primeiro acesso
+        |--------------------------------------------------------------------------
+        | Se first_login_verified_at estiver nulo, envia código e bloqueia
+        | o acesso ao dashboard até validar.
+        */
+        if (! $corretor->hasVerifiedFirstLogin()) {
+            $this->sendTwoFactorCode($corretor, $request);
 
             session()->forget('admin_2fa_passed');
 
-            RateLimiter::clear($this->verifyThrottleKey((int) $admin->id, $request->ip()));
-            RateLimiter::clear($this->resendThrottleKey((int) $admin->id, $request->ip()));
-            RateLimiter::clear($this->resendCooldownKey((int) $admin->id, $request->ip()));
+            RateLimiter::clear($this->verifyThrottleKey((int) $corretor->id, $request->ip()));
+            RateLimiter::clear($this->resendThrottleKey((int) $corretor->id, $request->ip()));
+            RateLimiter::clear($this->resendCooldownKey((int) $corretor->id, $request->ip()));
 
             return redirect()
                 ->route('admin.2fa.form')
                 ->with('success', 'Código enviado ao seu e-mail para confirmar o primeiro acesso.');
         }
 
-        $admin->forceFill([
+        $corretor->forceFill([
             'last_login_at' => now(),
         ])->save();
 
@@ -133,12 +230,16 @@ class CorretorAuthController extends Controller
     public function showTwoFactorForm()
     {
         if (! Auth::guard('admin')->check()) {
-            return redirect()->route('admin.login');
+            return redirect()->route(session(
+                'admin_login_fallback_route', 'admin.member.login'
+            ));
         }
 
-        $admin = Auth::guard('admin')->user();
+        $corretor = Auth::guard('admin')->user();
 
-        if ($admin && $admin->hasVerifiedFirstLogin()) {
+        if ($corretor && $corretor->hasVerifiedFirstLogin()) {
+            session(['admin_2fa_passed' => true]);
+
             return redirect()->route('Dashboard-Admin');
         }
 
@@ -154,20 +255,20 @@ class CorretorAuthController extends Controller
             'code.digits' => 'O código deve ter exatamente 6 dígitos.',
         ]);
 
-        $admin = Auth::guard('admin')->user();
+        $corretor = Auth::guard('admin')->user();
 
-        if (! $admin) {
-            return redirect()->route('admin.login');
+        if (! $corretor) {
+            return redirect()->route(session('admin_login_fallback_route', 'admin.member.login'));
         }
 
-        if ($admin->hasVerifiedFirstLogin()) {
+        if ($corretor->hasVerifiedFirstLogin()) {
             session(['admin_2fa_passed' => true]);
 
             return redirect()->route('Dashboard-Admin');
         }
 
-        $adminId = (int) $admin->id;
-        $verifyKey = $this->verifyThrottleKey($adminId, $request->ip());
+        $corretorId = (int) $corretor->id;
+        $verifyKey = $this->verifyThrottleKey($corretorId, $request->ip());
 
         if (RateLimiter::tooManyAttempts($verifyKey, self::VERIFY_MAX_ATTEMPTS)) {
             $seconds = RateLimiter::availableIn($verifyKey);
@@ -177,7 +278,7 @@ class CorretorAuthController extends Controller
             ]);
         }
 
-        $verification = CorretorLoginVerificacaoCode::where('corretor_id', $adminId)
+        $verification = CorretorLoginVerificacaoCode::where('corretor_id', $corretorId)
             ->whereNull('used_at')
             ->latest()
             ->first();
@@ -214,12 +315,12 @@ class CorretorAuthController extends Controller
             ]);
         }
 
-        DB::transaction(function () use ($admin, $verification) {
+        DB::transaction(function () use ($corretor, $verification) {
             $verification->update([
                 'used_at' => now(),
             ]);
 
-            $admin->forceFill([
+            $corretor->forceFill([
                 'first_login_verified_at' => now(),
                 'last_login_at' => now(),
             ])->save();
@@ -238,19 +339,21 @@ class CorretorAuthController extends Controller
 
     public function resendTwoFactor(Request $request)
     {
-        $admin = Auth::guard('admin')->user();
+        $corretor = Auth::guard('admin')->user();
 
-        if (! $admin) {
-            return redirect()->route('admin.login');
+        if (! $corretor) {
+            return redirect()->route(session('admin_login_fallback_route', 'admin.member.login'));
         }
 
-        if ($admin->hasVerifiedFirstLogin()) {
+        if ($corretor->hasVerifiedFirstLogin()) {
+            session(['admin_2fa_passed' => true]);
+
             return redirect()->route('Dashboard-Admin');
         }
 
-        $adminId = (int) $admin->id;
-        $resendKey = $this->resendThrottleKey($adminId, $request->ip());
-        $cooldownKey = $this->resendCooldownKey($adminId, $request->ip());
+        $corretorId = (int) $corretor->id;
+        $resendKey = $this->resendThrottleKey($corretorId, $request->ip());
+        $cooldownKey = $this->resendCooldownKey($corretorId, $request->ip());
 
         if (RateLimiter::tooManyAttempts($resendKey, self::RESEND_MAX_ATTEMPTS)) {
             $seconds = RateLimiter::availableIn($resendKey);
@@ -269,26 +372,27 @@ class CorretorAuthController extends Controller
         RateLimiter::hit($resendKey, self::RESEND_DECAY_SECONDS);
         RateLimiter::hit($cooldownKey, self::RESEND_COOLDOWN_SECONDS);
 
-        $this->sendTwoFactorCode($admin, $request);
+        $this->sendTwoFactorCode($corretor, $request);
 
         return back()->with('success', 'Novo código enviado para seu e-mail.');
     }
 
     public function logout(Request $request)
     {
-        Auth::guard('admin')->logout();
+        $corretor = Auth::guard('admin')->user();
 
-        $request->session()->invalidate();
-        $request->session()->regenerateToken();
+        $redirectRoute = $corretor && $corretor->isCeo() ? 'admin.ceo.login' : 'admin.member.login';
+
+        $this->logoutCurrentAdminSession($request);
 
         return redirect()
-            ->route('admin.login')
+            ->route($redirectRoute)
             ->with('success', 'Logout realizado com sucesso.');
     }
 
-    private function sendTwoFactorCode($admin, Request $request): void
+    private function sendTwoFactorCode(Corretor $corretor, Request $request): void
     {
-        CorretorLoginVerificacaoCode::where('corretor_id', $admin->id)
+        CorretorLoginVerificacaoCode::where('corretor_id', $corretor->id)
             ->whereNull('used_at')
             ->update([
                 'used_at' => now(),
@@ -298,7 +402,7 @@ class CorretorAuthController extends Controller
         $expiresAt = now()->addMinutes(10);
 
         CorretorLoginVerificacaoCode::create([
-            'corretor_id' => $admin->id,
+            'corretor_id' => $corretor->id,
             'code_hash' => Hash::make($code),
             'expires_at' => $expiresAt,
             'attempts' => 0,
@@ -307,19 +411,27 @@ class CorretorAuthController extends Controller
             'user_agent' => substr((string) $request->userAgent(), 0, 1000),
         ]);
 
-        $admin->forceFill([
+        $corretor->forceFill([
             'first_login_code_sent_at' => now(),
         ])->save();
 
         Mail::send('emails.admin-2fa-code', [
             'code' => $code,
             'expiresAt' => $expiresAt->format('H:i'),
-            'admin' => $admin,
-        ], function ($message) use ($admin) {
+            'admin' => $corretor,
+        ], function ($message) use ($corretor) {
             $message
-                ->to($admin->email)
+                ->to($corretor->email)
                 ->subject('Seu código de verificação administrativa');
         });
+    }
+
+    private function logoutCurrentAdminSession(Request $request)
+    {
+        Auth::guard('admin')->logout();
+
+        $request->session()->invalidate();
+        $request->session()->regenerateToken();
     }
 
     private function loginThrottleKey(string $cpf, string $ip): string
@@ -327,18 +439,18 @@ class CorretorAuthController extends Controller
         return 'admin:login:' . $cpf . ':' . $ip;
     }
 
-    private function verifyThrottleKey(int $adminId, string $ip): string
+    private function verifyThrottleKey(int $corretorId, string $ip): string
     {
-        return 'admin:2fa:verify:' . $adminId . ':' . $ip;
+        return 'admin:2fa:verify:' . $corretorId . ':' . $ip;
     }
 
-    private function resendThrottleKey(int $adminId, string $ip): string
+    private function resendThrottleKey(int $corretorId, string $ip): string
     {
-        return 'admin:2fa:resend:' . $adminId . ':' . $ip;
+        return 'admin:2fa:resend:' . $corretorId . ':' . $ip;
     }
 
-    private function resendCooldownKey(int $adminId, string $ip): string
+    private function resendCooldownKey(int $corretorId, string $ip): string
     {
-        return 'admin:2fa:resend-cooldown:' . $adminId . ':' . $ip;
+        return 'admin:2fa:resend-cooldown:' . $corretorId . ':' . $ip;
     }
 }
