@@ -76,6 +76,10 @@
         ? route('Dashboard-Admin')
         : url()->current();
 
+    $adminUpdateLeadRoute = function($lead) {
+        return Route::has('admin.leads.update') ? route('admin.leads.update', $lead) : '#';
+    };
+
     /*
     |--------------------------------------------------------------------------
     | A rota de análises fica separada.
@@ -96,8 +100,8 @@
             return route('insurance-analyses.create', ['lead' => $lead->id]);
         }
 
-        if (Route::has('dashboard.leads.reanalyze')) {
-            return route('dashboard.leads.reanalyze', $lead);
+        if (Route::has('admin.leads.reanalyze')) {
+            return route('admin.leads.reanalyze', $lead);
         }
 
         return '#';
@@ -794,6 +798,11 @@
                 ->map(fn ($tag) => trim($tag));
 
             $resultTone = $getLeadResultTone($allTags);
+
+            $lastAnalysis = $lead->insuranceAnalyses()->latest('created_at')->first();
+
+            $canReanalyze = $lead->canRequestReanalysis();
+
         @endphp
 
         <div
@@ -835,7 +844,7 @@
                                     type="button"
                                     role="tab"
                                 >
-                                    Dados do cliente
+                                    Dados para reanálise
                                 </button>
                             </li>
 
@@ -852,112 +861,290 @@
                                     </button>
                                 </li>
                             @endcan
+
+                            @can('create-analysis')
+                                <li class="nav-item" role="presentation">
+                                    <button
+                                        class="nav-link"
+                                        data-bs-toggle="pill"
+                                        data-bs-target="#admin-lead-reanalysis-pane-{{ $lead->id }}"
+                                        type="button"
+                                        role="tab"
+                                    >
+                                        Reanálise
+                                    </button>
+                                </li>
+                            @endcan
                         </ul>
 
                         <div class="tab-content">
 
-                            {{-- Dados do cliente --}}
+
                             <div
                                 class="tab-pane fade show active"
                                 id="admin-lead-data-pane-{{ $lead->id }}"
                                 role="tabpanel"
                             >
-                                <div class="row g-4">
-                                    <div class="col-12 col-lg-6">
-                                        <div class="card border rounded-4 h-100">
-                                            <div class="card-body">
-                                                <h6 class="fw-bold mb-3">
-                                                    Dados do solicitante
-                                                </h6>
+                            {{-- Dados do cliente --}}
+                                @can('edit-leads')
+                                    <form
+                                        method="POST"
+                                        action="{{ $adminUpdateLeadRoute($lead) }}"
+                                        id="adminLeadUpdateForm{{ $lead->id }}"
+                                        class="lead-update-form"
+                                    >
+                                        @csrf
+                                        @method('PUT')
 
-                                                <div class="vstack gap-2 small">
-                                                    <div><strong>Nome:</strong> {{ $lead->nome ?? 'Não informado' }}</div>
-                                                    <div><strong>E-mail:</strong> {{ $lead->email ?? 'Não informado' }}</div>
-                                                    <div><strong>Telefone:</strong> {{ $lead->tel ?? 'Não informado' }}</div>
-                                                    <div><strong>CPF/CNPJ:</strong> {{ $lead->cpf ?? 'Não informado' }}</div>
-                                                    <div><strong>Tipo:</strong> {{ $lead->tipo_solicitante ?? 'Não informado' }}</div>
-                                                    <div><strong>Status:</strong> {{ $lead->status ?? 'Não informado' }}</div>
-                                                    <div><strong>Entrada:</strong> {{ $lead->created_at?->format('d/m/Y H:i') ?? 'Não informado' }}</div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
+                                        <div class="row g-4">
+                                            <div class="col-12">
+                                                <div class="card border rounded-4">
+                                                    <div class="card-body">
+                                                        <h6 class="fw-bold mb-3">
+                                                            Dados do solicitante
+                                                        </h6>
 
-                                    <div class="col-12 col-lg-6">
-                                        <div class="card border rounded-4 h-100">
-                                            <div class="card-body">
-                                                <h6 class="fw-bold mb-3">
-                                                    Endereço do imóvel
-                                                </h6>
+                                                        <div class="row g-3">
+                                                            <div class="col-12 col-md-6">
+                                                                <label class="form-label">Nome</label>
+                                                                <input
+                                                                    type="text"
+                                                                    name="nome"
+                                                                    class="form-control"
+                                                                    value="{{ old('nome', $lead->nome) }}"
+                                                                >
+                                                            </div>
 
-                                                <div class="vstack gap-2 small">
-                                                    <div><strong>CEP:</strong> {{ $lead->endereco?->cep ?? 'Não informado' }}</div>
-                                                    <div><strong>Estado:</strong> {{ $lead->endereco?->estado ?? 'Não informado' }}</div>
-                                                    <div><strong>Cidade:</strong> {{ $lead->endereco?->cidade_imovel ?? 'Não informado' }}</div>
-                                                    <div><strong>Bairro:</strong> {{ $lead->endereco?->bairro ?? 'Não informado' }}</div>
-                                                    <div><strong>Logradouro:</strong> {{ $lead->endereco?->logradouro ?? 'Não informado' }}</div>
-                                                    <div><strong>Número:</strong> {{ $lead->endereco?->numero ?? 'Não informado' }}</div>
-                                                    <div><strong>Complemento:</strong> {{ $lead->endereco?->complemento ?? 'Não informado' }}</div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
+                                                            <div class="col-12 col-md-6">
+                                                                <label class="form-label">E-mail</label>
+                                                                <input
+                                                                    type="email"
+                                                                    name="email"
+                                                                    class="form-control"
+                                                                    value="{{ old('email', $lead->email) }}"
+                                                                >
+                                                            </div>
 
-                                    <div class="col-12">
-                                        <div class="card border rounded-4">
-                                            <div class="card-body">
-                                                <h6 class="fw-bold mb-3">
-                                                    Valores da locação
-                                                </h6>
+                                                            <div class="col-12 col-md-4">
+                                                                <label class="form-label">Telefone</label>
+                                                                <input
+                                                                    type="text"
+                                                                    name="tel"
+                                                                    class="form-control"
+                                                                    value="{{ old('tel', $lead->tel) }}"
+                                                                >
+                                                            </div>
 
-                                                <div class="row g-3 small">
-                                                    <div class="col-6 col-md-3">
-                                                        <strong>Aluguel:</strong><br>
-                                                        R$ {{ number_format((float) ($lead->despesas?->valor_aluguel ?? 0), 2, ',', '.') }}
-                                                    </div>
+                                                            <div class="col-12 col-md-4">
+                                                                <label class="form-label">CPF</label>
+                                                                <input
+                                                                    type="text"
+                                                                    name="cpf"
+                                                                    class="form-control"
+                                                                    value="{{ old('cpf', $lead->cpf) }}"
+                                                                >
+                                                            </div>
 
-                                                    <div class="col-6 col-md-3">
-                                                        <strong>Condomínio:</strong><br>
-                                                        R$ {{ number_format((float) ($lead->despesas?->valor_condominio ?? 0), 2, ',', '.') }}
-                                                    </div>
-
-                                                    <div class="col-6 col-md-3">
-                                                        <strong>IPTU:</strong><br>
-                                                        R$ {{ number_format((float) ($lead->despesas?->valor_iptu ?? 0), 2, ',', '.') }}
-                                                    </div>
-
-                                                    <div class="col-6 col-md-3">
-                                                        <strong>Total:</strong><br>
-                                                        R$ {{ number_format((float) ($lead->despesas?->valor_total_encargos ?? 0), 2, ',', '.') }}
-                                                    </div>
-                                                </div>
-
-                                                @can('create-analysis')
-                                                    <hr>
-
-                                                    @if ($solicitarAnaliseRoute($lead) !== '#')
-                                                        <form method="POST" action="{{ $solicitarAnaliseRoute($lead) }}">
-                                                            @csrf
-
-                                                            <button type="submit" class="btn btn-warning">
-                                                                <i class="bi bi-arrow-repeat me-1"></i>
-                                                                Solicitar análise
-                                                            </button>
-                                                        </form>
-                                                    @else
-                                                        <button type="button" class="btn btn-warning" disabled>
-                                                            Solicitar análise
-                                                        </button>
-
-                                                        <div class="small text-muted mt-2">
-                                                            Rota de análise ainda não configurada.
+                                                            <div class="col-12 col-md-4">
+                                                                <label class="form-label">Estado civil</label>
+                                                                <input
+                                                                    type="text"
+                                                                    name="estado_civil"
+                                                                    class="form-control"
+                                                                    value="{{ old('estado_civil', $lead->estado_civil) }}"
+                                                                >
+                                                            </div>
                                                         </div>
-                                                    @endif
-                                                @endcan
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {{-- Endereço --}}
+                                            <div class="col-12">
+                                                <div class="card border rounded-4">
+                                                    <div class="card-body">
+                                                        <h6 class="fw-bold mb-3">
+                                                            Endereço do imóvel
+                                                        </h6>
+
+                                                        <div class="row g-3">
+                                                            <div class="col-12 col-md-3">
+                                                                <label class="form-label">CEP</label>
+                                                                <input
+                                                                    type="text"
+                                                                    name="cep"
+                                                                    class="form-control"
+                                                                    value="{{ old('cep', $lead->endereco?->cep) }}"
+                                                                >
+                                                            </div>
+
+                                                            <div class="col-12 col-md-2">
+                                                                <label class="form-label">UF</label>
+                                                                <input
+                                                                    type="text"
+                                                                    name="estado"
+                                                                    class="form-control"
+                                                                    value="{{ old('estado', $lead->endereco?->estado) }}"
+                                                                >
+                                                            </div>
+
+                                                            <div class="col-12 col-md-4">
+                                                                <label class="form-label">Cidade</label>
+                                                                <input
+                                                                    type="text"
+                                                                    name="cidade_imovel"
+                                                                    class="form-control"
+                                                                    value="{{ old('cidade_imovel', $lead->endereco?->cidade_imovel) }}"
+                                                                >
+                                                            </div>
+
+                                                            <div class="col-12 col-md-3">
+                                                                <label class="form-label">Bairro</label>
+                                                                <input
+                                                                    type="text"
+                                                                    name="bairro"
+                                                                    class="form-control"
+                                                                    value="{{ old('bairro', $lead->endereco?->bairro) }}"
+                                                                >
+                                                            </div>
+
+                                                            <div class="col-12 col-md-8">
+                                                                <label class="form-label">Logradouro</label>
+                                                                <input
+                                                                    type="text"
+                                                                    name="logradouro"
+                                                                    class="form-control"
+                                                                    value="{{ old('logradouro', $lead->endereco?->logradouro) }}"
+                                                                >
+                                                            </div>
+
+                                                            <div class="col-12 col-md-2">
+                                                                <label class="form-label">Número</label>
+                                                                <input
+                                                                    type="text"
+                                                                    name="numero"
+                                                                    class="form-control"
+                                                                    value="{{ old('numero', $lead->endereco?->numero) }}"
+                                                                >
+                                                            </div>
+
+                                                            <div class="col-12 col-md-2">
+                                                                <label class="form-label">Complemento</label>
+                                                                <input
+                                                                    type="text"
+                                                                    name="complemento"
+                                                                    class="form-control"
+                                                                    value="{{ old('complemento', $lead->endereco?->complemento) }}"
+                                                                >
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {{-- Despesas --}}
+                                            <div class="col-12">
+                                                <div class="card border rounded-4">
+                                                    <div class="card-body">
+                                                        <h6 class="fw-bold mb-3">
+                                                            Valores da locação
+                                                        </h6>
+
+                                                        <div class="row g-3">
+                                                            <div class="col-6 col-md-3">
+                                                                <label class="form-label">Aluguel</label>
+                                                                <input
+                                                                    type="number"
+                                                                    step="0.01"
+                                                                    min="0"
+                                                                    name="valor_aluguel"
+                                                                    class="form-control"
+                                                                    value="{{ old('valor_aluguel', $lead->despesas?->valor_aluguel) }}"
+                                                                >
+                                                            </div>
+
+                                                            <div class="col-6 col-md-3">
+                                                                <label class="form-label">Água</label>
+                                                                <input
+                                                                    type="number"
+                                                                    step="0.01"
+                                                                    min="0"
+                                                                    name="valor_agua"
+                                                                    class="form-control"
+                                                                    value="{{ old('valor_agua', $lead->despesas?->valor_agua) }}"
+                                                                >
+                                                            </div>
+
+                                                            <div class="col-6 col-md-3">
+                                                                <label class="form-label">Luz</label>
+                                                                <input
+                                                                    type="number"
+                                                                    step="0.01"
+                                                                    min="0"
+                                                                    name="valor_luz"
+                                                                    class="form-control"
+                                                                    value="{{ old('valor_luz', $lead->despesas?->valor_luz) }}"
+                                                                >
+                                                            </div>
+
+                                                            <div class="col-6 col-md-3">
+                                                                <label class="form-label">Gás</label>
+                                                                <input
+                                                                    type="number"
+                                                                    step="0.01"
+                                                                    min="0"
+                                                                    name="valor_gas"
+                                                                    class="form-control"
+                                                                    value="{{ old('valor_gas', $lead->despesas?->valor_gas) }}"
+                                                                >
+                                                            </div>
+
+                                                            <div class="col-6 col-md-4">
+                                                                <label class="form-label">Condomínio</label>
+                                                                <input
+                                                                    type="number"
+                                                                    step="0.01"
+                                                                    min="0"
+                                                                    name="valor_condominio"
+                                                                    class="form-control"
+                                                                    value="{{ old('valor_condominio', $lead->despesas?->valor_condominio) }}"
+                                                                >
+                                                            </div>
+
+                                                            <div class="col-6 col-md-4">
+                                                                <label class="form-label">IPTU</label>
+                                                                <input
+                                                                    type="number"
+                                                                    step="0.01"
+                                                                    min="0"
+                                                                    name="valor_iptu"
+                                                                    class="form-control"
+                                                                    value="{{ old('valor_iptu', $lead->despesas?->valor_iptu) }}"
+                                                                >
+                                                            </div>
+
+                                                            <div class="col-12 col-md-4">
+                                                                <label class="form-label">Outras despesas</label>
+                                                                <input
+                                                                    type="number"
+                                                                    step="0.01"
+                                                                    min="0"
+                                                                    name="outras_despesas"
+                                                                    class="form-control"
+                                                                    value="{{ old('outras_despesas', $lead->despesas?->outras_despesas) }}"
+                                                                >
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
                                             </div>
                                         </div>
+                                    </form>
+                                @else
+                                    <div class="alert alert-warning rounded-4">
+                                        Você pode visualizar os dados, mas não possui permissão para editar leads.
                                     </div>
-                                </div>
+                                @endcan
                             </div>
 
                             {{-- Tags --}}
@@ -992,10 +1179,69 @@
                                     </div>
                                 </div>
                             @endcan
+
+
+                            @can('create-analysis')
+                                <div
+                                    class="tab-pane fade"
+                                    id="admin-lead-reanalysis-pane-{{ $lead->id }}"
+                                    role="tabpanel"
+                                >
+                                    @if ($canReanalyze)
+                                        <div class="alert alert-success rounded-4">
+                                            <strong>Reanálise liberada.</strong>
+                                            Este cliente possui alterações salvas depois da última análise.
+                                        </div>
+
+                                        <form
+                                            method="POST"
+                                            action="{{ $solicitarAnaliseRoute($lead) }}"
+                                        >
+                                            @csrf
+
+                                            <button
+                                                type="submit"
+                                                class="btn btn-warning"
+                                                @disabled($solicitarAnaliseRoute($lead) === '#')
+                                            >
+                                                <i class="bi bi-arrow-repeat me-1"></i>
+                                                Solicitar reanálise
+                                            </button>
+                                        </form>
+                                    @else
+                                        <div class="alert alert-info rounded-4">
+                                            <strong>Reanálise bloqueada.</strong>
+                                            Para solicitar uma nova análise, altere algum dado do cliente e clique em
+                                            <strong>Salvar alterações</strong>.
+                                        </div>
+
+                                        @if ($lastAnalysis)
+                                            <p class="text-muted small mb-0">
+                                                Última análise registrada em:
+                                                {{ $lastAnalysis->created_at->format('d/m/Y H:i') }}
+                                            </p>
+                                        @else
+                                            <p class="text-muted small mb-0">
+                                                Nenhuma análise anterior foi encontrada para este cliente.
+                                            </p>
+                                        @endif
+                                    @endif
+                                </div>
+                            @endcan
                         </div>
                     </div>
 
                     <div class="modal-footer border-0 pt-0">
+                        @can('edit-leads')
+                            <button
+                                type="submit"
+                                form="adminLeadUpdateForm{{ $lead->id }}"
+                                class="btn btn-primary"
+                            >
+                                Salvar alterações
+                            </button>
+                        @endcan
+
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
                             Fechar
                         </button>

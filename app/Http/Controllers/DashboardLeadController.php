@@ -10,8 +10,8 @@ use App\Http\Requests\StorePublicLeadRequest;
 use App\Jobs\UpdateLeadOnLeadLoversJob;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
-
-
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Gate;
 
 
 class DashboardLeadController extends Controller
@@ -46,6 +46,47 @@ class DashboardLeadController extends Controller
     {
         $this->authorizeCompanyLead($lead);
 
+        return $this->saveLeadsUpdates($request, $lead);
+    }
+
+    public function adminUpdate(Request $request, Lead $lead)
+    {
+        $this->authorizeAdminAbility('edit-leads');
+
+        return $this->saveLeadsUpdates($request, $lead);
+    }
+
+    public function reanalyze(Lead $lead)
+    {
+        $this->authorizeCompanyLead($lead);
+
+         
+        return $this->startLeadReanalysis($lead);
+    }
+
+    public function adminReanalysis(Lead $lead)
+    {
+        $this->authorizeAdminAbility('create-analysis');
+
+        return $this->startLeadReanalysis($lead);
+    }
+
+    private function authorizeAdminAbility(string $ability): void
+    {
+        $corretor = Auth::guard('admin')->user();
+
+        abort_if(!$corretor, 401, 'Corretor não identificado!');
+
+        abort_if(
+            Gate::forUser($corretor)->denies($ability),
+            403,
+            'Você não possui permição para executar essa ação!'
+        );
+
+    }
+
+    private function saveLeadsUpdates(Request $request, Lead $lead)
+    {
         $data = $request->validate([
             'nome' => ['nullable', 'string', 'max:255'],
             'email' => ['nullable', 'email', 'max:255'],
@@ -186,12 +227,9 @@ class DashboardLeadController extends Controller
             );
     }
 
-
-    public function reanalyze(Lead $lead)
+    private function startLeadReanalysis(Lead $lead)
     {
-        $this->authorizeCompanyLead($lead);
-
-         $lead->load(['endereco', 'despesas', 'conjuge']);
+        $lead->load(['endereco', 'despesas', 'conjuge']);
 
          if(!$lead->canRequestReanalysis()){
             return back()->with(

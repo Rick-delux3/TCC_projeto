@@ -8,6 +8,7 @@ class CorretorPermissions
     {
         return [
             'leads.visualizar' => 'Visualizar leads/clientes',
+            'leads.editar' => 'Editar dados de leads/clientes',
             'analises.visualizar' => 'Visualizar análises',
             'analises.criar' => 'Solicitar análises',
             'imobiliarias.visualizar' => 'Visualizar imobiliárias',

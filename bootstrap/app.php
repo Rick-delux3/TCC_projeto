@@ -25,14 +25,13 @@
                 | Área dos corretores/admins
                 |--------------------------------------------------------------------------
                 */
-                if (
+                if (    
                     $request->is('Dashboard/Admin*') ||
-                    $request->is('admins/2fa*') ||
-                    $request->is('admins/logout')
+                    $request->is('admin/*') ||
+                    $request->is('admins/*') ||
+                    $request->is('ceo/admin/*')
                 ) {
-                    $fallbackRoute = session('admin_login_fallback_route', 'admin.member.login');
-
-                    return route($fallbackRoute);
+                    return route(session('admin_login_fallback_route', 'admin.login'));
                 }
 
                 /*

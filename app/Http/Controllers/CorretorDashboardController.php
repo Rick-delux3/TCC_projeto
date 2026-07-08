@@ -27,8 +27,9 @@ class CorretorDashboardController extends Controller
             ->with([
                 'endereco',
                 'despesas',
+                'conjuge',
                 'imobiliaria',
-                'insuranceAnalysis',
+                'insuranceAnalyses',
             ])->latest();
         
         $leadsQuery->when($leadSearch, function ($query) use ($leadSearch){

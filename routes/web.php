@@ -83,7 +83,11 @@ Route::prefix('/Dashboard')->group(function () {
         ->middleware('can:view-leads')
         ->name('admin.leads.index');
 
-        Route::post('/leads/{lead}/reanalisar', [DashboardLeadController::class, 'reanalyze'])
+        Route::post('/leads/{lead}', [DashboardLeadController::class, 'adminUpdate'])
+            ->middleware('can:edit-leads')
+            ->name('admin.leads.update');
+
+        Route::post('/leads/{lead}/reanalisar', [DashboardLeadController::class, 'adminReanalyze'])
             ->middleware('can:create-analysis')
             ->name('admin.leads.reanalyze');
 
@@ -146,14 +150,12 @@ Route::middleware(['guest:admin', 'throttle:5,1'])->group(function () {
     Route::post('/ceo/admin/login', [CorretorAuthController::class, 'ceoLogin'])
         ->name('admin.ceo.login.post');
 
-    Route::get('/member/admin/login/form', [CorretorAuthController::class, 'memberShowLoginForm'])
-        ->name('admin.member.login');
+    Route::get('/admin/login/form', [CorretorAuthController::class, 'memberShowLoginForm'])
+        ->name('admin.login');
 
     Route::post('/member/admin/login', [CorretorAuthController::class, 'memberLogin'])
         ->name('admin.member.login.post');
 
-    Route::get('/admin/login/form', [CorretorAuthController::class, 'memberShowLoginForm'])
-        ->name('admin.login');
 });
 
 Route::middleware('auth:admin')->group(function () {

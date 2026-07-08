@@ -66,6 +66,11 @@ class AppServiceProvider extends ServiceProvider
                 && $corretor->hasPermission('leads.visualizar');
         });
 
+        Gate::define('edit-leads', function (Corretor $corretor){
+            return $corretor->isActive()
+                && $corretor->hasPermission('leads.editar');
+        });
+        
         Gate::define('create-analysis', function (Corretor $corretor) {
             return $corretor->isActive()
                 && $corretor->hasPermission('analises.criar');

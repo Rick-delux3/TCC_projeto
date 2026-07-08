@@ -264,15 +264,122 @@ class InsuranceAnalysisController extends Controller
      */
     public function adminIndex(Request $request)
     {
-        $batches = InsuranceAnalysisBatch::with([
-                'lead.despesas',
-                'company',
-                'analyses.events',
-            ])
-            ->latest()
-            ->paginate(20);
+        $selectedCompany = $request->query('company_id');
 
-        return view('corretor.dashboard-admin', compact('batches'));
+        $selectedStatus = $request->query('status');
+
+        $search = trim((string) $request->query('search'));
+
+        $imobiliarias = Imobiliaria::query()->orderBy('name')->get();
+
+        $batchesQuery = InsuranceAnalysis::with([
+            'lead.despesas',
+            'company',
+            'analyses.events',
+        ]);
+
+        if(filled($selectedCompany)){
+            $batchesQuery->where('company_id', $selectedCompany);
+        }
+
+        if(filled($selectedStatus)){
+            $batchesQuery->where('status', $selectedStatus);
+        }
+
+        if (filled($search)) {
+            $batchesQuery->where(function ($query) use ($search) {
+                $query->whereHas('lead', function ($leadQuery) use ($search) {
+                    $leadQuery
+                        ->where('nome', 'like', "%{$search}%")
+                        ->orWhere('email', 'like', "%{$search}%")
+                        ->orWhere('cpf', 'like', "%{$search}%");
+                })
+                ->orWhereHas('company', function ($companyQuery) use ($search) {
+                    $companyQuery
+                        ->where('name', 'like', "%{$search}%")
+                        ->orWhere('nome', 'like', "%{$search}%")
+                        ->orWhere('cnpj', 'like', "%{$search}%");
+                })
+                ->orWhereHas('analyses', function ($analysisQuery) use ($search) {
+                    $analysisQuery
+                        ->where('provider', 'like', "%{$search}%")
+                        ->orWhere('quote_id', 'like', "%{$search}%")
+                        ->orWhere('quote_number', 'like', "%{$search}%")
+                        ->orWhere('product_key', 'like', "%{$search}%");
+                });
+            });
+        }
+
+        $statsQuery = InsuranceAnalysisBatch::query();
+
+        if (filled($selectedCompany)) {
+            $statsQuery->where('company_id', $selectedCompany);
+        }
+
+        $analysisStatsQuery = InsuranceAnalysis::query();
+
+        if (filled($selectedCompany)) {
+            $analysisStatsQuery->where('company_id', $selectedCompany);
+        }
+
+        $dashboardStats = [
+            'totalBatches' => (clone $statsQuery)->count(),
+
+            'runningBatches' => (clone $statsQuery)
+                ->whereIn('status', ['pending', 'running', 'processing'])
+                ->count(),
+
+            'finishedBatches' => (clone $statsQuery)
+                ->whereIn('status', ['done', 'completed', 'completed_with_errors', 'finished'])
+                ->count(),
+
+            'failedBatches' => (clone $statsQuery)
+                ->whereIn('status', ['failed', 'error', 'completed_with_errors'])
+                ->count(),
+
+            'approvedAnalyses' => (clone $analysisStatsQuery)
+                ->whereIn('status', ['approved', 'Approved'])
+                ->count(),
+
+            'rejectedAnalyses' => (clone $analysisStatsQuery)
+                ->whereIn('status', ['rejected', 'refused', 'denied', 'Denied', 'Refused'])
+                ->count(),
+        ];
+
+        $inProgressAnalysesQuery = InsuranceAnalysis::with([
+                'lead',
+                'company',
+                'events',
+            ])
+            ->whereIn('status', ['pending', 'processing', 'queued', 'running']);
+
+        if (filled($selectedCompany)) {
+            $inProgressAnalysesQuery->where('company_id', $selectedCompany);
+        }
+
+        $inProgressAnalyses = $inProgressAnalysesQuery
+            ->latest('updated_at')
+            ->limit(6)
+            ->get();
+
+        $batches = $batchesQuery
+            ->latest()
+            ->paginate(10)
+            ->withQueryString();
+
+        return view('insurance-analyses.dashboard-admin.index', [
+            'batches' => $batches,
+            'imobiliarias' => $imobiliarias,
+            'inProgressAnalyses' => $inProgressAnalyses,
+            'dashboardStats' => $dashboardStats,
+            'selectedCompany' => $selectedCompany,
+            'selectedStatus' => $selectedStatus,
+            'search' => $search,
+        ]);
+
+
+
+
     }
 
     /**
@@ -282,11 +389,12 @@ class InsuranceAnalysisController extends Controller
     {
         $batch->load([
             'lead.despesas',
+            'lead.endereco',
             'company',
             'analyses.events',
         ]);
 
-        return view('corretor.dashboard-admin', compact('batch'));
+        return view('insurance-analyses.dashboard-admin.show', ['batch' => $batch,]);
     }
 
     /**

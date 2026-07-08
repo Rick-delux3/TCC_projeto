@@ -22,13 +22,13 @@ class CorretorEquipeController extends Controller
         $corretores = Corretor::query()
             ->when($search, function ($query) use ($search) {
                 $query->where(function ($subQuery) use ($search) {
-                    $subQuery->where('nome', 'like', "%{$search}%")
+                    $subQuery->where('name', 'like', "%{$search}%")
                         ->orWhere('email', 'like', "%{$search}%")
                         ->orWhere('role', 'like', "%{$search}%");
                 });
             })
             ->orderByRaw("CASE WHEN role = 'CEO' THEN 0 ELSE 1 END")
-            ->orderBy('nome')
+            ->orderBy('name')
             ->get();
 
         return view('corretor.config_equipe.index', compact('corretores', 'search'));
@@ -67,7 +67,7 @@ class CorretorEquipeController extends Controller
         );
 
         $integrante = Corretor::create([
-            'nome' => $validated['nome'],
+            'name' => $validated['nome'],
             'email' => mb_strtolower($validated['email']),
             'password' => Hash::make($validated['password']),
 
@@ -134,7 +134,7 @@ class CorretorEquipeController extends Controller
         );
 
         $data = [
-            'nome' => $validated['nome'],
+            'name' => $validated['nome'],
 
             'email' => mb_strtolower($validated['email']),
 
