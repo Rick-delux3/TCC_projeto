@@ -22,7 +22,8 @@ class RunProviderAnalysisJob implements ShouldQueue
     public function __construct(
         public int $analysisId,
         public ?string $attemptId = null,
-        public bool $isReanalysis = false
+        public bool $isReanalysis = false,
+        public array $options = []
     ) {}
 
     public function handle(InsuranceProviderResolver $resolver): void
@@ -57,7 +58,17 @@ class RunProviderAnalysisJob implements ShouldQueue
 
         try {
             $provider = $resolver->resolve($analysis->provider);
-            $result = $provider->requestAnalysis($analysis);
+            
+            if($this->isReanalysis) {
+                $result = $provider->requestReanalysis(
+                    analysis: $analysis,
+                    attemptId: $this->attemptId,
+                    options: $this->options ?? []
+
+                ); 
+            } else {
+                $result = $provider->requestAnalysis($analysis);
+            }
 
             Log::info('Resultado bruto recebido do provider', [
                 'analysis_id' => $analysis->id,

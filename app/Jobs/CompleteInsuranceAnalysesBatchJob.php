@@ -72,7 +72,11 @@ class CompleteInsuranceAnalysesBatchJob implements ShouldQueue
             return;
         }
 
-        ApplyFinalAnalysisTagToLeadLoversJob::dispatch($batch->id);
+        ApplyFinalAnalysisTagToLeadLoversJob::dispatch(
+            batchId: $batch->id,
+            attemptId: $this->attemptId,
+            isReanalysis: $this->isReanalysis
+        );
 
         /*
         |--------------------------------------------------------------------------

@@ -38,52 +38,32 @@ class TooRentalGuaranteePayloadBuilder
             'razaoSocialCorretor' => $this->brokerName(),
 
             'pretendentes' => [
-                [
-                    'nome' => $lead->nome,
-                    'nomeSocial' => null,
-                    'cpf' => $this->onlyNumbers($lead->cpf),
-
-                    /*
-                     * A Too exige data de nascimento.
-                     * Como o banco atual não possui esse campo,
-                     * usamos valor padrão de sandbox via .env.
-                     */
-                    'dataNascimento' => $this->birthdateForToo($lead),
-
-                    /*
-                     * Para sandbox/TCC, consideramos que o solicitante:
-                     * - residirá no imóvel;
-                     * - será o responsável financeiro;
-                     * - é o pretendente principal.
-                     */
-                    'residiraImovel' => $this->configBool('services.too.default_reside_property', true),
-                    'responsavelFinanceiroPeloImovel' => $this->configBool('services.too.default_financial_responsible', true),
-
-                    /*
-                     * A Too exige renda, vínculo e profissão para quem responde
-                     * financeiramente pelo imóvel.
-                     *
-                     * Como você não pode alterar o banco agora, esses dados
-                     * ficam configurados no .env para sandbox.
-                     */
-                    'rendaFixaMensal' => $this->monthlyIncomeForToo($lead),
-                    'vinculoEmpregaticio' => $this->employmentTypeForToo(),
-                    'profissao' => $this->professionForToo(),
-
-                    'principal' => true,
-                ],
+                $this->pretendentePayload($lead),
             ],
 
-            'locacao' => [
-                'finalidadeLocacao' => config('services.too.default_rental_purpose', 'Residencial'),
-                'cep' => $this->onlyNumbers($lead->endereco?->cep),
-                'logradouro' => $lead->endereco?->logradouro,
-                'numero' => $lead->endereco?->numero ?: 'S/N',
-                'complemento' => $lead->endereco?->complemento,
-                'bairro' => $lead->endereco?->bairro,
-                'cidade' => $lead->endereco?->cidade_imovel,
-                'uf' => strtoupper((string) $lead->endereco?->estado),
+            'locacao' => $this->locacaoPayload($lead)
+        ];
+    }
+
+    public function buildBasicDataPayload(InsuranceAnalysis $analysis): array
+    {
+        $this->loadRelations($analysis);
+
+        $lead = $analysis->lead;
+
+        if (!$lead) {
+            throw new \RuntimeException('Lead não encontrado para montar payload de atualização de dados básicos da Too.');
+        }
+
+        $this->validateBaseLeadData($lead);
+
+        return [
+            
+            'pretendentes' =>  [
+                $this->pretendentePayload($lead),
             ],
+
+            'locacao' => $this->locacaoPayload($lead),
 
             'coberturas' => $this->coverages($lead),
         ];
@@ -128,16 +108,49 @@ class TooRentalGuaranteePayloadBuilder
             'inicioVigenciaContratoLocacao' => $startDate->format('Y/m/d'),
             'finalVigenciaContratoLocacao' => $endDate->format('Y/m/d'),
 
-            'indiceDeReajusteAluguel' => config('services.too.default_rent_adjustment_index', 'IPCA'),
+            'indiceDeReajusteAluguel' => config('services.too.default_rent_adjustment_index', 'IGP_M'),
             'periodoIndenitario' => (int) config('services.too.default_indemnity_period', 30),
 
             /*
              * Mantemos configurável porque algumas APIs interpretam comissão
              * como 0.10 e outras como 10. Se a Too recusar, basta ajustar no .env.
              */
-            'percentualComissao' => (float) config('services.too.default_commission_percentage', 0.10),
+            'percentualComissao' => (float) config('services.too.default_commission_percentage', 0.25),
 
             'coberturas' => $this->coverages($lead),
+        ];
+    }
+
+    private function pretendentePayload(Lead $lead): array
+    {
+        return [
+            'nome' => $lead->nome,
+            'nomeSocial' => null,
+            'cpf' => $this->onlyNumbers($lead->cpf),
+            'dataNascimento' => $this->birthdateForToo($lead),
+
+            'residiraImovel' => $this->configBool('services.too.default_reside_property', true),
+            'responsavelFinanceiroPeloImovel' => $this->configBool('services.too.default_financial_responsible', true),
+
+            'rendaFixaMensal' => $this->monthlyIncomeForToo($lead),
+            'vinculoEmpregaticio' => $this->employmentTypeForToo(),
+            'profissao' => $this->professionForToo(),
+
+            'principal' => true,
+        ];
+    }
+
+    private function locacaoPayload(Lead $lead): array
+    {
+        return [
+            'finalidadeLocacao' => config('services.too.default_rental_purpose', 'Residencial'),
+            'cep' => $this->onlyNumbers($lead->endereco?->cep),
+            'logradouro' => $lead->endereco?->logradouro,
+            'numero' => $lead->endereco?->numero ?: 'S/N',
+            'complemento' => $lead->endereco?->complemento,
+            'bairro' => $lead->endereco?->bairro,
+            'cidade' => $lead->endereco?->cidade_imovel,
+            'uf' => strtoupper((string) $lead->endereco?->estado),
         ];
     }
 
@@ -272,12 +285,17 @@ class TooRentalGuaranteePayloadBuilder
             throw new \RuntimeException('Endereço do imóvel não encontrado para envio à Too.');
         }
 
+        if(!filled($lead->endereco?->numero)){
+            throw new \RuntimeException('Número do imóvel não informado para envio à Too.');
+        }
+
         $requiredAddressFields = [
             'cep' => 'CEP',
             'logradouro' => 'logradouro',
             'bairro' => 'bairro',
             'cidade_imovel' => 'cidade',
             'estado' => 'UF',
+            'numero' => 'numero'
         ];
 
         foreach ($requiredAddressFields as $field => $label) {
@@ -410,19 +428,20 @@ class TooRentalGuaranteePayloadBuilder
             'clt' => 'Clt',
             'carteiraassinada' => 'Clt',
 
-            /*
-            * Pode funcionar na Too sem acento.
-            * Se a API ainda recusar, mantenha Clt no .env.
-            */
+            'autonomo' => 'Autonomo',
             'autonomo' => 'Autonomo',
 
             'empresario' => 'Empresario',
-            'aposentado' => 'Aposentado',
+
             'funcionariopublico' => 'FuncionarioPublico',
-            'profissionalliberal' => 'ProfissionalLiberal',
-            'estagiario' => 'Estagiario',
+            'servidorpublico' => 'FuncionarioPublico',
+
+            'aposentado' => 'Aposentado',
+
+            'rendaprovenientealuguel' => 'RendaProvenienteAluguel',
+            'rendadealuguel' => 'RendaProvenienteAluguel',
+
             'estudante' => 'Estudante',
-            'outros' => 'Outros',
         ];
 
         if (!isset($map[$normalized])) {

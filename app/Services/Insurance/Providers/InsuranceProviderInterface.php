@@ -10,5 +10,13 @@ interface InsuranceProviderInterface
 
     public function requestAnalysis(InsuranceAnalysis $analysis): array;
 
+    public function requestReanalysis(
+        InsuranceAnalysis $analysis,
+        string $attemptId,
+        array $options = []
+    ): array {
+        return $this->requestAnalysis($analysis);
+    }
+
     public function getStatus(InsuranceAnalysis $analysis): array;
 }

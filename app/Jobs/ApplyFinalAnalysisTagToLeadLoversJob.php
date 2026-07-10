@@ -38,7 +38,9 @@ use Illuminate\Support\Facades\Log;
     private const TAG_KEY_NEGOTIATION = 'em_negociacao';
 
     public function __construct(
-        public int $batchId
+        public int $batchId,
+        public ?string $attemptId = null,
+        public bool $isReanalysis = false,
     ) {}
 
     public function handle(LeadLoversService $leadLoversService): void
@@ -60,6 +62,8 @@ use Illuminate\Support\Facades\Log;
             return;
         }
 
+       
+
         /*
          * Evita aplicar a mesma tag final mais de uma vez.
          * Isso é importante porque jobs podem ser executados novamente.
@@ -71,6 +75,18 @@ use Illuminate\Support\Facades\Log;
          * - ruim
          */
         $tagKey = $this->resolveFinalTagKey($batch);
+
+        $lead->forceFill([
+            'analysis_final_status' => match ($tagKey) {
+                self::TAG_KEY_APPROVED => 'approved',
+                self::TAG_KEY_REJECTED => 'rejected',
+                self::TAG_KEY_NEGOTIATION => 'negotiation',
+                default => null,
+            },
+            'analysis_final_tag_key' => $tagKey,
+            'last_analysis_batch_id' => $batch->id,
+            'analysis_finalized_at' => now(),
+        ])->save();
 
         if (!$tagKey) {
             $this->registerEventForAllAnalyses(
@@ -234,6 +250,7 @@ use Illuminate\Support\Facades\Log;
         $statuses = $batch->analyses
             ->pluck('status')
             ->filter()
+            ->map(fn ($status) => mb_strtolower((string) $status))
             ->values();
 
         if ($statuses->isEmpty()) {
@@ -243,7 +260,10 @@ use Illuminate\Support\Facades\Log;
         /*
          * Se qualquer companhia aprovou, o resultado comercial é bom.
          */
-        if ($statuses->contains('approved')) {
+        if ($statuses->contains(fn ($status) => in_array($status, [
+            'approved',
+            'quoted'
+        ], true))) {
             return self::TAG_KEY_APPROVED;
         }
 
@@ -251,10 +271,16 @@ use Illuminate\Support\Facades\Log;
          * Se ainda existe algo cotado, pendente ou em análise manual,
          * não tratamos como ruim.
          */
-        if (
-            $statuses->contains('manual_review') ||
-            $statuses->contains('quoted')
-        ) {
+        if ($statuses->contains(fn ($status) => in_array($status, [
+            'pending',
+            'processing',
+            'queued',
+            'running',
+            'manual_review',
+            'underanalysis',
+            'failed',
+            'error',
+        ], true))) {
             return self::TAG_KEY_NEGOTIATION;
         }
 
@@ -262,9 +288,11 @@ use Illuminate\Support\Facades\Log;
          * Se todas terminaram como rejected ou failed,
          * o lead entra como ruim.
          */
-        $allBad = $statuses->every(function ($status) {
-            return in_array($status, ['rejected', 'failed'], true);
-        });
+        $allBad = $statuses->every(fn ($status) => in_array($status, [
+            'rejected',
+            'denied',
+            'refused',
+        ],true));
 
         if ($allBad) {
             return self::TAG_KEY_REJECTED;
@@ -348,6 +376,35 @@ use Illuminate\Support\Facades\Log;
         if (!$alreadyExists) {
             $currentTags->push($tagTitle);
         }
+
+        $lead->forceFill([
+            'tags_originais' => $currentTags
+                ->unique(fn ($tag) => mb_strtolower($tag))
+                ->values()
+                ->implode(', '),
+        ])->save();
+    }
+
+    private function replaceLocalFinalTag(Lead $lead, string $tagTitle): void
+    {
+        $finalTagTitles = LeadLoversTag::query()
+            ->whereIn('key', [
+                self::TAG_KEY_APPROVED,
+                self::TAG_KEY_REJECTED,
+                self::TAG_KEY_NEGOTIATION,
+            ])
+            ->pluck('title')
+            ->filter()
+            ->map(fn ($title) => mb_strtolower(trim((string) $title)))
+            ->values();
+
+        $currentTags = collect(preg_split('/\s*,\s*/', (string) $lead->tags_originais))
+            ->filter(fn ($tag) => filled($tag))
+            ->map(fn ($tag) => trim($tag))
+            ->reject(fn ($tag) => $finalTagTitles->contains(mb_strtolower(trim($tag))))
+            ->values();
+
+        $currentTags->push($tagTitle);
 
         $lead->forceFill([
             'tags_originais' => $currentTags

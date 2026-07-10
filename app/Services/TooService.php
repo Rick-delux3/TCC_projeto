@@ -155,6 +155,7 @@ class TooService
         );
     }
 
+    
     /**
      * 3. Consultar status da proposta/análise.
      *
@@ -167,6 +168,38 @@ class TooService
 
         return $this->getJson(
             "/fianca/proposta/v3/{$cpf}/status/{$numeroProposta}"
+        );
+    }
+
+    //3.1 Atualizar dados básicos da ficha
+
+    public function updateProposalBasicData(string|int $numeroFicha, array $payload): array
+    {
+        return $this->putJson(
+            "/fianca/proposta/ficha/{$numeroFicha}/dados-basicos",
+            $payload
+        );
+    }
+
+    //3.2 Obter motivos de reanálise
+
+    public function getReanalysisReasons(): array
+    {
+        return $this->getJson('/fianca/credito/motivos-reanalise');
+    }
+
+    //3.3 Solicitar Reanálise
+
+    public function submitReanalysis(
+        string $cpf,
+        string|int $numeroProposta,
+        array $payload
+    ): array {
+        $cpf = $this->onlyNumbers($cpf);
+
+        return $this->postJson(
+            "/fianca/credito/{$cpf}/{$numeroProposta}/solicitar-reanalise",
+            $payload
         );
     }
 
@@ -300,6 +333,58 @@ class TooService
                 'http_status' => null,
                 'endpoint' => $endpoint,
                 'url' => $url,
+                'response' => [
+                    'message' => $e->getMessage(),
+                ],
+                'raw_body' => null,
+                'error' => $e->getMessage(),
+            ];
+        }
+    }
+
+    private function putJson(string $endpoint, array $payload): array
+    {
+        $url = $this->baseUrl . $endpoint;
+
+        if (!$this->baseUrl) {
+            return [
+                'success' => false,
+                'http_status' => null,
+                'endpoint' => $endpoint,
+                'url' => null,
+                'payload' => $payload,
+                'response' => [],
+                'raw_body' => null,
+                'error' => 'Configuração services.too.base_url não encontrada.',
+            ];
+        }
+
+        try {
+            $response = Http::asJson()
+                ->acceptJson()
+                ->timeout(60)
+                ->withHeaders($this->authHeaders())
+                ->put($url, $payload);
+
+            return $this->normalizeResponse(
+                response: $response,
+                endpoint: $endpoint,
+                url: $url,
+                payload: $payload
+            );
+        } catch (\Throwable $e) {
+            Log::error('Falha inesperada ao chamar API da Too com PUT', [
+                'endpoint' => $endpoint,
+                'url' => $url,
+                'message' => $e->getMessage(),
+            ]);
+
+            return [
+                'success' => false,
+                'http_status' => null,
+                'endpoint' => $endpoint,
+                'url' => $url,
+                'payload' => $payload,
                 'response' => [
                     'message' => $e->getMessage(),
                 ],

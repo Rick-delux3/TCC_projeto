@@ -179,4 +179,18 @@ class Lead extends Model
             'locatario',
         ], true);
     }
+
+    public function hasFinalInsuranceResultForReanalysis(): bool
+    {
+        return in_array($this->analysis_final_status, [
+            'approved',
+            'rejected',
+        ], true);
+    }
+
+    public function canRequestGeneralReanalysis(): bool
+    {
+        return $this->hasFinalInsuranceResultForReanalysis()
+            && filled($this->reanalysis_unlocked_at);
+    }
 }

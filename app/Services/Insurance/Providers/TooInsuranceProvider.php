@@ -204,6 +204,177 @@ class TooInsuranceProvider implements InsuranceProviderInterface
         );
     }
 
+    public function requestReanalysis(
+        InsuranceAnalysis $analysis,
+        string $attemptId,
+        array $options = [],
+    ): array {
+        $this->loadTooRelations($analysis);
+
+        $lead = $analysis->lead;
+
+        if(!$lead) {
+            return $this->failResult(
+                message: 'Lead não encontrado para reanálise na Too',
+                step: 'too_reanalysis_load_lead'
+            );
+        }
+
+        $cpf = $this->onlyNumbers($lead->cpf);
+
+        if(!$cpf){
+            return $this->failResult(
+                message: 'CPF do lead não encontrado para reanálise na Too.',
+                step: 'too_reanalysis_validate_cpf'
+            );
+        }
+
+        $numeroProposta = $analysis->tooNumeroProposta();
+        $numeroFicha = $analysis->tooNumeroFicha();
+
+        if (!$numeroProposta || !$numeroFicha) {
+            return $this->failResult(
+                message: 'Número da proposta/ficha ausente para reanálise na Too.',
+                step: 'too_reanalysis_missing_numbers',
+                extra: [
+                    'proposal_id' => $analysis->proposal_id,
+                    'numeroProposta' => $numeroProposta,
+                    'numeroFicha' => $numeroFicha,
+                ]
+            );
+        }
+
+        $statusBeforeResponse = $this->tooService->getProposalStatus(
+            cpf: $cpf,
+            numeroProposta: $numeroProposta
+        );
+
+        if (!$this->responseWasSuccessful($statusBeforeResponse)) {
+            return $this->failResult(
+                message: 'Erro ao consultar status antes da reanálise na Too.',
+                step: 'too_reanalysis_status_before',
+                responses: [
+                    'status_before' => $statusBeforeResponse,
+                ]
+            );
+        }
+
+        $statusBeforeInfo = $this->tooCreditDecision($statusBeforeResponse['response'] ?? []);
+        $statusCode = $statusBeforeInfo['status_code'];
+
+        if (!in_array($statusCode, [1, 6, 8], true)) {
+            return $this->failResult(
+                message: 'A proposta Too não está em status permitido para reanálise.',
+                step: 'too_reanalysis_status_not_allowed',
+                responses: [
+                    'status_before' => $statusBeforeResponse,
+                ],
+                extra: [
+                    'status_code' => $statusCode,
+                    'status_description' => $statusBeforeInfo['status_description'],
+                ]
+            );
+        }
+
+        $basicDataPayload = $this->payloadBuilder->buildBasicDataPayload($analysis);
+
+        $updateBasicDataResponse = $this->tooService->updateProposalBasicData(
+            numeroFicha: $numeroFicha,
+            payload: $basicDataPayload
+        );
+
+        if (!$this->responseWasSuccessful($updateBasicDataResponse)) {
+            return $this->failResult(
+                message: 'Erro ao atualizar dados básicos da ficha na Too.',
+                step: 'too_reanalysis_update_basic_data',
+                responses: [
+                    'status_before' => $statusBeforeResponse,
+                    'update_basic_data' => $updateBasicDataResponse,
+                ],
+                extra: [
+                    'numeroProposta' => $numeroProposta,
+                    'numeroFicha' => $numeroFicha,
+                ]
+            );
+        }
+
+        $motivos = $options['motivosReanalise'] ?? [10];
+
+        $observacoes = $options['observacoes']
+            ?? 'Reanálise solicitada pelo sistema após alteração dos dados do lead.';
+
+        $reanalysisPayload = [
+            'motivosReanalise' => array_values(array_map('intval', $motivos)),
+            'observacoes' => $observacoes,
+        ];
+
+        $reanalysisResponse = $this->tooService->submitReanalysis(
+            cpf: $cpf,
+            numeroProposta: $numeroProposta,
+            payload: $reanalysisPayload
+        );
+
+        if (!$this->responseWasSuccessful($reanalysisResponse)) {
+            return $this->failResult(
+                message: 'Erro ao solicitar reanálise de crédito na Too.',
+                step: 'too_reanalysis_submit',
+                responses: [
+                    'status_before' => $statusBeforeResponse,
+                    'update_basic_data' => $updateBasicDataResponse,
+                    'reanalysis' => $reanalysisResponse,
+                ],
+                extra: [
+                    'numeroProposta' => $numeroProposta,
+                    'numeroFicha' => $numeroFicha,
+                    'reanalysis_payload' => $reanalysisPayload,
+                ]
+            );
+        }
+
+        $statusAfterResponse = $this->tooService->getProposalStatus(
+            cpf: $cpf,
+            numeroProposta: $numeroProposta
+        );
+
+        if (!$this->responseWasSuccessful($statusAfterResponse)) {
+            return $this->failResult(
+                message: 'Reanálise solicitada, mas houve erro ao consultar novo status na Too.',
+                step: 'too_reanalysis_status_after',
+                responses: [
+                    'status_before' => $statusBeforeResponse,
+                    'update_basic_data' => $updateBasicDataResponse,
+                    'reanalysis' => $reanalysisResponse,
+                    'status_after' => $statusAfterResponse,
+                ],
+                extra: [
+                    'numeroProposta' => $numeroProposta,
+                    'numeroFicha' => $numeroFicha,
+                ]
+            );
+        }
+
+        return $this->handleStatusAndMaybeQuote(
+            analysis: $analysis,
+            statusResponse: $statusAfterResponse,
+            baseResponses: [
+                'status_before' => $statusBeforeResponse,
+                'update_basic_data' => $updateBasicDataResponse,
+                'reanalysis' => $reanalysisResponse,
+                'status_after' => $statusAfterResponse,
+            ],
+            baseExtra: [
+                'attempt_id' => $attemptId,
+                'is_reanalysis' => true,
+                'numeroProposta' => $numeroProposta,
+                'numeroFicha' => $numeroFicha,
+                'reanalysis_payload' => $reanalysisPayload,
+            ],
+            scheduleNextCheck: true
+        );
+
+
+    }
+
     /**
      * Consulta status posterior da Too.
      *

@@ -181,27 +181,39 @@ class InsuranceAnalysisController extends Controller
     {
         $this->authorizeCompanyAccess($analysis);
 
-        if (!in_array($analysis->status, ['failed', 'manual_review', 'rejected'], true)) {
+        if (!in_array(mb_strtolower((string) $analysis->status), ['failed', 'error'], true)) {
             return back()->with(
                 'warning',
-                'Essa análise não está em um status permitido para reenvio.'
+                'Essa análise não está em status de falha técnica para reenvio.'
             );
         }
 
-        $attemptId = $this->restartAnalysisAsReanalysis(
+        $attemptId = $this->restartAnalysisAsTechnicalRetry(
             analysis: $analysis,
-            message: 'Reenvio/reanálise da análise solicitado pela imobiliária.'
+            message: 'Reenvio da análise solicitado pela imobiliária.'
         );
 
         RunProviderAnalysisJob::dispatch(
             analysisId: $analysis->id,
             attemptId: $attemptId,
-            isReanalysis: true
+            isReanalysis: false
         );
 
         return back()->with('success', 'Análise reenviada para a fila como reanálise da companhia.');
     }
 
+    public function providerReanalysis(Request $request, InsuranceAnalysis $analysis)
+    {
+        $this->authorizeCompanyAccess($analysis);
+
+        return $this->startProviderReanalysisFromLeadUpdate(
+            request: $request,
+            analysis: $analysis,
+            requestedBy: 'Imobiliaria'
+        );
+    }
+
+    
     /**
      * Sincroniza o status de uma análise específica com a companhia.
      */
@@ -272,7 +284,7 @@ class InsuranceAnalysisController extends Controller
 
         $imobiliarias = Imobiliaria::query()->orderBy('name')->get();
 
-        $batchesQuery = InsuranceAnalysis::with([
+        $batchesQuery = InsuranceAnalysisBatch::with([
             'lead.despesas',
             'company',
             'analyses.events',
@@ -404,7 +416,14 @@ class InsuranceAnalysisController extends Controller
      */
     public function adminRetry(InsuranceAnalysis $analysis)
     {
-        $attemptId = $this->restartAnalysisAsReanalysis(
+         if (!in_array(mb_strtolower((string) $analysis->status), ['failed', 'error'], true)) {
+            return back()->with(
+                'warning',
+                'Essa análise não está em status de falha técnica para reenvio.'
+            );
+        }
+
+        $attemptId = $this->restartAnalysisAsTechnicalRetry(
             analysis: $analysis,
             message: 'Reenvio/reanálise da análise solicitado pelo admin/corretor.',
             requestedBy: 'admin'
@@ -413,10 +432,19 @@ class InsuranceAnalysisController extends Controller
         RunProviderAnalysisJob::dispatch(
             analysisId: $analysis->id,
             attemptId: $attemptId,
-            isReanalysis: true
+            isReanalysis: false
         );
 
-        return back()->with('success', 'Análise reenviada para a fila como reanálise da companhia.');
+        return back()->with('success', 'Análise reenviada para a fila como nova tentativa técnica.');
+    }
+
+    public function adminProviderReanalysis(Request $request, InsuranceAnalysis $analysis)
+    {
+        return $this->startProviderReanalysisFromLeadUpdate(
+            request: $request,
+            analysis: $analysis,
+            requestedBy: 'admin'
+        );
     }
 
     /**
@@ -478,19 +506,7 @@ class InsuranceAnalysisController extends Controller
         );
     }
 
-    /**
-     * Reinicia uma análise individual como reanálise da companhia.
-     *
-     * Esse método:
-     * - cria attempt_id;
-     * - registra snapshot anterior no evento;
-     * - limpa os campos de resultado;
-     * - marca o lote como processing;
-     * - NÃO cria outro lote;
-     * - NÃO cria outra análise;
-     * - preserva histórico em eventos_analises_seguro.
-     */
-    private function restartAnalysisAsReanalysis(
+    private function restartAnalysisAsTechnicalRetry(
         InsuranceAnalysis $analysis,
         string $message,
         string $requestedBy = 'imobiliaria'
@@ -506,6 +522,180 @@ class InsuranceAnalysisController extends Controller
         DB::transaction(function () use ($analysis, $attemptId, $message, $requestedBy) {
             /*
             |--------------------------------------------------------------------------
+            | Evento antes de limpar a tentativa com falha
+            |--------------------------------------------------------------------------
+            | Retry técnico não é reanálise. Ele serve para repetir uma análise que
+            | falhou por erro de API, timeout, payload inválido, instabilidade etc.
+            */
+            $analysis->events()->create([
+                'event_type' => 'technical_retry_requested',
+                'status' => 'pending',
+                'message' => $message,
+                'payload' => [
+                    'attempt_id' => $attemptId,
+                    'is_reanalysis' => false,
+                    'is_technical_retry' => true,
+                    'requested_by' => $requestedBy,
+                    'requested_at' => now()->toDateTimeString(),
+                    'provider' => $analysis->provider,
+
+                    'previous_status' => $analysis->status,
+                    'previous_result' => $analysis->result,
+                    'previous_provider_status' => $analysis->provider_status,
+
+                    'previous_proposal_id' => $analysis->proposal_id,
+                    'previous_quote_id' => $analysis->quote_id,
+                    'previous_quote_number' => $analysis->quote_number,
+
+                    'previous_premium_amount' => $analysis->premium_amount,
+                    'previous_commercial_premium' => $analysis->commercial_premium,
+                    'previous_gross_premium' => $analysis->gross_premium,
+                    'previous_iof' => $analysis->iof,
+                    'previous_insured_amount' => $analysis->insured_amount,
+
+                    'previous_error_message' => $analysis->error_message,
+
+                    'rent_amount' => $analysis->rent_amount,
+                    'charges_amount' => $analysis->charges_amount,
+                    'total_monthly_amount' => $analysis->total_monthly_amount,
+                ],
+                'response' => $analysis->response_payload,
+            ]);
+
+            /*
+            |--------------------------------------------------------------------------
+            | Limpa somente o resultado técnico da tentativa anterior
+            |--------------------------------------------------------------------------
+            | Como isso NÃO é reanálise, o próximo RunProviderAnalysisJob deve rodar
+            | com isReanalysis=false, executando o fluxo normal/inicial do provider.
+            */
+            $analysis->forceFill([
+                'status' => 'pending',
+                'result' => null,
+                'provider_status' => null,
+
+                /*
+                |--------------------------------------------------------------------------
+                | Em retry técnico, limpamos a proposta/cotação anterior.
+                |--------------------------------------------------------------------------
+                | Isso representa uma nova tentativa técnica da análise, não uma
+                | reanálise oficial de uma proposta aprovada/recusada.
+                */
+                'proposal_id' => null,
+                'quote_id' => null,
+                'quote_number' => null,
+                'product_key' => null,
+
+                'commercial_premium' => null,
+                'gross_premium' => null,
+                'iof' => null,
+
+                'request_payload' => null,
+                'response_payload' => null,
+
+                'available_plans' => null,
+                'available_assistances' => null,
+
+                'premium_amount' => null,
+                'insured_amount' => null,
+
+                'error_message' => null,
+                'requested_at' => null,
+                'finished_at' => null,
+            ])->save();
+
+            /*
+            |--------------------------------------------------------------------------
+            | Reabre o lote para processamento
+            |--------------------------------------------------------------------------
+            */
+            if ($analysis->batch) {
+                $completed = $analysis->batch->analyses()
+                    ->whereIn('status', [
+                        'quoted',
+                        'approved',
+                        'rejected',
+                        'denied',
+                        'refused',
+                        'manual_review',
+                    ])
+                    ->count();
+
+                $failed = $analysis->batch->analyses()
+                    ->whereIn('status', ['failed', 'error'])
+                    ->count();
+
+                $analysis->batch->forceFill([
+                    'status' => 'processing',
+                    'completed_providers' => $completed,
+                    'failed_providers' => $failed,
+                    'finished_at' => null,
+                    'started_at' => now(),
+                ])->save();
+            }
+        });
+
+        return $attemptId;
+    }
+
+    /**
+     * Reinicia uma análise individual como reanálise da companhia.
+     *
+     * Esse método:
+     * - cria attempt_id;
+     * - registra snapshot anterior no evento;
+     * - limpa os campos de resultado;
+     * - marca o lote como processing;
+     * - NÃO cria outro lote;
+     * - NÃO cria outra análise;
+     * - preserva histórico em eventos_analises_seguro.
+     */
+    private function restartAnalysisAsReanalysis(
+        InsuranceAnalysis $analysis,
+        string $message,
+        string $requestedBy = 'imobiliaria',
+        array $options = []
+    ): string {
+
+        $isToo = mb_strtolower((string) $analysis->provider) === 'too';
+
+        $previousResponsePayload = $analysis->response_payload ?? [];
+
+        if(is_string($previousResponsePayload)){
+            $previousResponsePayload = json_decode($previousResponsePayload, true) ?: [];
+        }
+
+        $tooNumeroProposta = data_get($previousResponsePayload, 'numeroProposta')
+            ?? data_get($previousResponsePayload, 'numero_proposta')
+            ?? $analysis->proposal_id;
+
+        $tooNumeroFicha = data_get($previousResponsePayload, 'numeroFicha')
+            ?? data_get($previousResponsePayload, 'numero_ficha')
+            ?? data_get($previousResponsePayload, 'numeroProposta')
+            ?? $analysis->proposal_id;
+
+        $attemptId = (string) Str::uuid();
+
+        $analysis->loadMissing([
+            'batch.analyses',
+            'lead.despesas',
+            'events',
+        ]);
+
+        DB::transaction(function () use (
+            $analysis,
+            $attemptId,
+            $message,
+            $requestedBy,
+            $options,
+            $isToo,
+            $previousResponsePayload,
+            $tooNumeroProposta,
+            $tooNumeroFicha
+            
+            ) {
+            /*
+            |--------------------------------------------------------------------------
             | Evento antes de limpar a análise
             |--------------------------------------------------------------------------
             | Guarda o estado anterior para comparação no histórico.
@@ -519,6 +709,8 @@ class InsuranceAnalysisController extends Controller
                     'is_reanalysis' => true,
                     'requested_by' => $requestedBy,
                     'requested_at' => now()->toDateTimeString(),
+                    'provider' => $analysis->provider,
+                    'reanalysis_options' => $options,
 
                     'previous_status' => $analysis->status,
                     'previous_result' => $analysis->result,
@@ -554,7 +746,14 @@ class InsuranceAnalysisController extends Controller
                 'gross_premium' => null,
                 'iof' => null,
                 'request_payload' => null,
-                'response_payload' => null,
+                'response_payload' => $isToo
+                    ? array_merge($previousResponsePayload, [
+                        'numeroProposta' => $tooNumeroProposta,
+                        'numeroFicha' => $tooNumeroFicha,
+                        'too_reanalysis_started_at' => now()->toDateTimeString(),
+                        'too_reanalysis_attempt_id' => $attemptId,
+                    ])
+                    : null,
                 'available_plans' => null,
                 'available_assistances' => null,
                 'premium_amount' => null,
@@ -572,11 +771,18 @@ class InsuranceAnalysisController extends Controller
             */
             if ($analysis->batch) {
                 $completed = $analysis->batch->analyses()
-                    ->whereIn('status', ['quoted', 'approved', 'rejected', 'manual_review'])
+                    ->whereIn('status', [
+                        'quoted',
+                        'approved',
+                        'rejected',
+                        'denied',
+                        'refused',
+                        'manual_review',
+                    ])
                     ->count();
 
                 $failed = $analysis->batch->analyses()
-                    ->where('status', 'failed')
+                    ->whereIn('status', ['failed', 'error'])
                     ->count();
 
                 $analysis->batch->forceFill([
@@ -590,6 +796,67 @@ class InsuranceAnalysisController extends Controller
         });
 
         return $attemptId;
+    }
+
+        private function startProviderReanalysisFromLeadUpdate(
+        Request $request,
+        InsuranceAnalysis $analysis,
+        string $requestedBy
+    ) {
+        $analysis->loadMissing([
+            'lead.endereco',
+            'lead.despesas', 
+            'lead.conjuge',
+            'batch.analyses',
+            'events',
+        ]);
+
+        if (! $analysis->canRequestProviderReanalysis()) {
+            return back()->with(
+                'error',
+                'Esta companhia só pode ser reanalisada se o resultado dela estiver aprovado ou recusado.'
+            );
+        }
+
+        $data = $this->validateProviderReanalysisRequest($request, $analysis);
+
+        /*
+        |--------------------------------------------------------------------------
+        | Atualização dos dados do lead
+        |--------------------------------------------------------------------------
+        | Ideal: extrair a lógica de atualização para um service reaproveitável,
+        | porque a mesma regra será usada no DashboardLeadController.
+        */
+        $changed = app(\App\Services\LeadReanalysisDataService::class)
+            ->updateLeadFromArray($analysis->lead, $data);
+
+        if (! $changed) {
+            return back()->with(
+                'error',
+                'Altere pelo menos um dado do lead antes de solicitar a reanálise desta companhia.'
+            );
+        }
+
+        $options = $this->reanalysisOptionsForProvider($analysis, $data);
+
+        $attemptId = $this->restartAnalysisAsReanalysis(
+            analysis: $analysis,
+            message: 'Reanálise por companhia solicitada após alteração dos dados do lead.',
+            requestedBy: $requestedBy,
+            options: $options
+        );
+
+        RunProviderAnalysisJob::dispatch(
+            analysisId: $analysis->id,
+            attemptId: $attemptId,
+            isReanalysis: true,
+            options: $options
+        );
+
+        return back()->with(
+            'success',
+            'Reanálise enviada somente para a companhia selecionada.'
+        );
     }
 
     /**
@@ -615,5 +882,61 @@ class InsuranceAnalysisController extends Controller
             403,
             'Você não tem permissão para acessar essa análise.'
         );
+    }
+
+    private function reanalysisOptionsForProvider(InsuranceAnalysis $analysis, array $data): array
+    {
+        if (! $analysis->isTooProvider()) {
+            return [];
+        }
+
+        $reason = (int) ($data['too_reanalysis_reason'] ?? 10);
+
+        return [
+            'motivosReanalise' => [$reason],
+            'observacoes' => $data['too_reanalysis_observations']
+                ?? 'Reanálise solicitada após alteração dos dados do lead.',
+        ];
+    }
+
+    private function validateProviderReanalysisRequest(Request $request, InsuranceAnalysis $analysis): array
+    {
+        $data = $request->validate([
+            'nome' => ['nullable', 'string', 'max:255'],
+            'email' => ['nullable', 'email', 'max:255'],
+            'tel' => ['nullable', 'string', 'max:30'],
+            'cpf' => ['nullable', 'string', 'max:20'],
+            'estado_civil' => ['nullable', 'string', 'max:100'],
+
+            'valor_aluguel' => ['nullable', 'numeric', 'min:0'],
+            'valor_agua' => ['nullable', 'numeric', 'min:0'],
+            'valor_luz' => ['nullable', 'numeric', 'min:0'],
+            'valor_gas' => ['nullable', 'numeric', 'min:0'],
+            'valor_condominio' => ['nullable', 'numeric', 'min:0'],
+            'valor_iptu' => ['nullable', 'numeric', 'min:0'],
+            'outras_despesas' => ['nullable', 'numeric', 'min:0'],
+
+            'cep' => ['nullable', 'string', 'max:20'],
+            'estado' => ['nullable', 'string', 'max:2'],
+            'cidade_imovel' => ['nullable', 'string', 'max:255'],
+            'bairro' => ['nullable', 'string', 'max:255'],
+            'logradouro' => ['nullable', 'string', 'max:255'],
+            'numero' => ['nullable', 'string', 'max:30'],
+            'complemento' => ['nullable', 'string', 'max:255'],
+
+            'too_reanalysis_reason' => ['nullable', 'integer', 'between:1,10'],
+            'too_reanalysis_observations' => ['nullable', 'string', 'max:1000'],
+        ]);
+
+        if ($analysis->isTooProvider()) {
+            $reason = (int) ($data['too_reanalysis_reason'] ?? 10);
+            $observations = $data['too_reanalysis_observations'] ?? null;
+
+            if (in_array($reason, [3, 7, 10], true) && blank($observations)) {
+                abort(422, 'Informe as observações para este motivo de reanálise da Too.');
+            }
+        }
+
+        return $data;
     }
 }

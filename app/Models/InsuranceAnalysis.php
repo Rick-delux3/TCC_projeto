@@ -116,4 +116,52 @@ class InsuranceAnalysis extends Model
     {
         return $this->hasMany(InsuranceAnalysisEvent::class, 'insurance_analysis_id');
     }
+
+    public function isApprovedResult(): bool
+    {
+        return in_array(mb_strtolower((string) $this->status),
+        [
+            'approved',
+            'quoted',
+        ], true);
+    }
+    public function isRejectedResult(): bool
+    {
+        return in_array(mb_strtolower((string) $this->status),
+        [
+            'rejected',
+            'denied',
+            'refused',
+        ], true);
+    }
+
+    public function hasFinalResultForReanalysis(): bool
+    {
+        return $this->isApprovedResult() || $this->isRejectedResult();
+    }
+
+    public function canRequestProviderReanalysis(): bool
+    {
+        return $this->hasFinalResultForReanalysis();
+    }
+
+    public function isTooProvider(): bool
+    {
+        return mb_strtolower((string) $this->provider) === 'too';
+    }
+
+    public function tooNumeroProposta(): ?string
+    {
+        return $this->proposal_id
+            ?? data_get($this->response_payload, 'numeroProposta');
+    }
+
+    public function tooNumeroFicha(): ?string
+    {
+        return data_get($this->response_payload, 'numeroFicha')
+            ?? data_get($this->response_payload, 'numeroProposta')
+            ?? $this->proposal_id;
+    }
+
+
 }
