@@ -66,6 +66,9 @@ Route::prefix('/Dashboard')->group(function () {
     
         Route::post('/analises/provider/{analysis}/retry', [InsuranceAnalysisController::class, 'retry'])
         ->name('insurance-analyses.retry');
+
+        Route::post('/analises/provider/{analysis}/reanalisar', [InsuranceAnalysisController::class, 'providerReanalysis'])
+        ->name('insurance-analyses.provider-reanalysis');
     
         Route::post('/analises/provider/{analysis}/sync-status', [InsuranceAnalysisController::class, 'syncStatus'])
         ->name('insurance-analyses.sync-status');
@@ -102,6 +105,10 @@ Route::prefix('/Dashboard')->group(function () {
         Route::post('/analises/provider/{analysis}/retry', [InsuranceAnalysisController::class, 'adminRetry'])
             ->middleware('can:create-analysis')
             ->name('admin.insurance-analyses.retry');
+
+        Route::post('/analises/provider/{analysis}/reanalisar', [InsuranceAnalysisController::class, 'adminProviderReanalysis'])
+        ->middleware('can:create-analysis')
+        ->name('admin.insurance-analyses.provider-reanalysis');
 
         Route::post('/analises/provider/{analysis}/sync-status', [InsuranceAnalysisController::class, 'adminSyncStatus'])
             ->middleware('can:view-analyses')
