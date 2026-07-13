@@ -10,6 +10,8 @@ use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use App\Jobs\SendAnalysisResultsEmailJob;
 use App\Jobs\ApplyFinalAnalysisTagToLeadLoversJob;
+use App\Models\InsuranceAnalysis;
+use Illuminate\Support\Facades\DB;
 
 class CompleteInsuranceAnalysesBatchJob implements ShouldQueue
 {
@@ -17,7 +19,7 @@ class CompleteInsuranceAnalysesBatchJob implements ShouldQueue
 
     public function __construct(
         public int $batchId,
-        public ?string $attemptId = null,
+        public string $attemptId,
         public bool $isReanalysis = false
     ) {}
 
@@ -99,37 +101,48 @@ class CompleteInsuranceAnalysesBatchJob implements ShouldQueue
 
     private function markEmailAsQueued(InsuranceAnalysisBatch $batch): bool
     {
-        $controlAnalysis = $batch->analyses->first();
+       return DB::transaction(function () use ($batch) {
+            $controlAnalysis = InsuranceAnalysis::query()
+            ->where(
+                'insurance_analysis_batch_id',
+                $batch->id
+            )
+            ->orderBy('id')
+            ->lockForUpdate()
+            ->first();
 
-        if (!$controlAnalysis) {
-            return false;
-        }
-
-        if ($this->attemptId) {
-            $alreadyQueued = $controlAnalysis->events()
-                ->where('event_type', 'email_queued')
-                ->where('payload->attempt_id', $this->attemptId)
-                ->exists();
-
-            if ($alreadyQueued) {
+            if(! $controlAnalysis) {
                 return false;
             }
-        }
 
-        $controlAnalysis->events()->create([
-            'event_type' => 'email_queued',
-            'status' => 'queued',
-            'message' => $this->isReanalysis
-                ? 'E-mail com PDFs da reanálise foi colocado na fila.'
-                : 'E-mail com PDFs da análise foi colocado na fila.',
-            'payload' => [
-                'attempt_id' => $this->attemptId,
-                'is_reanalysis' => $this->isReanalysis,
-                'batch_id' => $batch->id,
-                'queued_at' => now()->toDateTimeString(),
-            ],
-        ]);
+            $alreadyQueued = $controlAnalysis->events()
+            ->where('event_type', 'email_queued')
+            ->where(
+                'payload->attempt_id',
+                $this->attemptId
+            )->exists();
 
-        return true;
+
+            if($alreadyQueued){
+                return false;
+            }
+            
+           $controlAnalysis->events()->create([
+               'event_type' => 'email_queued',
+               'status' => 'queued',
+               'message' => $this->isReanalysis
+                   ? 'E-mail com PDFs da reanálise foi colocado na fila.'
+                   : 'E-mail com PDFs da análise foi colocado na fila.',
+               'payload' => [
+                   'attempt_id' => $this->attemptId,
+                   'is_reanalysis' => $this->isReanalysis,
+                   'batch_id' => $batch->id,
+                   'queued_at' => now()->toDateTimeString(),
+               ],
+           ]);
+   
+           return true;
+       });
     }
 }
+

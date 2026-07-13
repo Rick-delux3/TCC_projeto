@@ -21,7 +21,7 @@ class RunProviderAnalysisJob implements ShouldQueue
 
     public function __construct(
         public int $analysisId,
-        public ?string $attemptId = null,
+        public string $attemptId,
         public bool $isReanalysis = false,
         public array $options = []
     ) {}
@@ -67,7 +67,10 @@ class RunProviderAnalysisJob implements ShouldQueue
 
                 ); 
             } else {
-                $result = $provider->requestAnalysis($analysis);
+                $result = $provider->requestAnalysis(
+                    analysis: $analysis,
+                    attemptId: $this->attemptId
+                );
             }
 
             Log::info('Resultado bruto recebido do provider', [
@@ -125,18 +128,38 @@ class RunProviderAnalysisJob implements ShouldQueue
         ];
 
         if (!($result['success'] ?? false)) {
+            $currentPayload = $this->payloadAsArray(
+            $analysis->response_payload
+        );
+
+            $responsePayload = $isToo
+                ? array_merge($currentPayload, [
+                    'too_last_error' => $debugPayload,
+                    'too_reanalysis_failed_at' => $this->isReanalysis
+                        ? now()->toDateTimeString()
+                        : null,
+                ])
+                : $debugPayload;
+
             $analysis->update([
                 'status' => 'failed',
-                'response_payload' => $debugPayload,
+                'response_payload' => $responsePayload,
                 'error_message' => $result['error']
-                    ?? (is_array($response)
-                        ? json_encode($response, JSON_UNESCAPED_UNICODE)
-                        : (string) $rawBody),
+                    ?? (
+                        is_array($response)
+                            ? json_encode(
+                                $response,
+                                JSON_UNESCAPED_UNICODE
+                            )
+                            : (string) $rawBody
+                    ),
                 'finished_at' => now(),
             ]);
 
             $analysis->events()->create([
-                'event_type' => $this->isReanalysis ? 'reanalysis_failed' : 'failed',
+                'event_type' => $this->isReanalysis
+                    ? 'reanalysis_failed'
+                    : 'failed',
                 'status' => 'failed',
                 'message' => "Falha HTTP ao chamar {$analysis->provider}. Status: {$httpStatus}",
                 'payload' => $this->analysisSnapshot($analysis),
@@ -275,6 +298,8 @@ class RunProviderAnalysisJob implements ShouldQueue
 
         $currentPayload = $this->payloadAsArray($analysis->response_payload);
 
+        $resultPayloadKey = $this->isReanalysis ? 'too_reanalysis_result' : 'too_initial_result';
+
         $providerStatus = data_get($response, 'status');
         $tooInternalDecision = data_get($response, 'too_internal_decision');
         $providerOriginalStatus = data_get($response, 'provider_original_status');
@@ -302,7 +327,7 @@ class RunProviderAnalysisJob implements ShouldQueue
                     ?? $providerOriginalStatus
                     ?? 'Em Análise de Crédito',
                 'response_payload' => array_merge($currentPayload, [
-                    'too_initial_result' => $debugPayload,
+                    $resultPayloadKey => $debugPayload,
                     'too_status_check_stopped' => false,
                     'too_manual_sync_available' => false,
                     'too_last_auto_check_at' => now()->toDateTimeString(),
@@ -336,7 +361,7 @@ class RunProviderAnalysisJob implements ShouldQueue
                     ?? $providerOriginalStatus
                     ?? 'Análise pré-aprovada',
                 'response_payload' => array_merge($currentPayload, [
-                    'too_initial_result' => $debugPayload,
+                    $resultPayloadKey => $debugPayload,
                     'too_status_check_stopped' => true,
                     'too_manual_sync_available' => true,
                     'too_status_check_stopped_at' => now()->toDateTimeString(),
@@ -369,7 +394,7 @@ class RunProviderAnalysisJob implements ShouldQueue
                     ?? $providerOriginalStatus
                     ?? 'Recusada',
                 'response_payload' => array_merge($currentPayload, [
-                    'too_initial_result' => $debugPayload,
+                    $resultPayloadKey => $debugPayload,
                     'too_status_check_stopped' => false,
                     'too_manual_sync_available' => false,
                 ]),
@@ -416,7 +441,7 @@ class RunProviderAnalysisJob implements ShouldQueue
                     ?? $analysis->available_assistances,
 
                 'response_payload' => array_merge($currentPayload, [
-                    'too_initial_result' => $debugPayload,
+                    $resultPayloadKey => $debugPayload,
                     'too_status_check_stopped' => false,
                     'too_manual_sync_available' => false,
                     'too_quote_result' => [
@@ -465,7 +490,7 @@ class RunProviderAnalysisJob implements ShouldQueue
                 ?? $providerStatus
                 ?? 'Status não reconhecido na Too',
             'response_payload' => array_merge($currentPayload, [
-                'too_initial_result' => $debugPayload,
+                $resultPayloadKey => $debugPayload,
                 'too_status_check_stopped' => true,
                 'too_manual_sync_available' => true,
             ]),
@@ -489,6 +514,7 @@ class RunProviderAnalysisJob implements ShouldQueue
         return [
             'attempt_id' => $this->attemptId,
             'is_reanalysis' => $this->isReanalysis,
+            'reanalysis_options' => $this->options,
 
             'analysis_id' => $analysis->id,
             'batch_id' => $analysis->insurance_analysis_batch_id,

@@ -11,6 +11,9 @@ use DomainException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
+use App\Jobs\CompleteInsuranceAnalysesBatchJob;
+use Illuminate\Bus\Batch;
+use Illuminate\Support\Facades\Bus;
 
 class LeadReanalysisService
 {
@@ -165,6 +168,7 @@ class LeadReanalysisService
         string $requestedBy = 'imobiliaria',
         array $options = []
     ): int {
+
         $lead->loadMissing([
             'endereco',
             'despesas',
@@ -174,57 +178,104 @@ class LeadReanalysisService
         if (! $lead->canRequestGeneralReanalysis()) {
             throw new DomainException(
                 'Para solicitar reanálise geral, o lead precisa estar aprovado ou recusado e ter alterações salvas.'
-            );
+                );
         }
+                
+        $attemptId = (string) Str::uuid();
 
-        $batch = InsuranceAnalysisBatch::with([
+        $preparedAnalyses = DB::transaction(function () use (
+            $lead,
+            $requestedBy,
+            $options,
+            $attemptId
+        ) {
+            $batch = InsuranceAnalysisBatch::query()
+            ->where('lead_id', $lead->id)
+            ->latest('id')
+            ->lockForUpdate()
+            ->first();
+
+            if(! $batch) {
+                throw new DomainException(
+                    'Nenhum lote de análise encontrado para este lead.'
+                );
+            }
+
+            $batch->load([
                 'analyses.events',
                 'analyses.lead.endereco',
                 'analyses.lead.despesas',
                 'analyses.lead.conjuge',
-            ])
-            ->where('lead_id', $lead->id)
-            ->latest()
-            ->first();
+            ]);
 
-        if (! $batch) {
-            throw new DomainException('Nenhum lote de análise encontrado para este lead.');
-        }
+            $eligibleAnalyses = $batch->analyses
+                ->filter(
+                    fn (InsuranceAnalysis $analysis) => $analysis->canRequestProviderReanalysis()
+                )->values();
 
-        $eligibleAnalyses = $batch->analyses
-            ->filter(fn (InsuranceAnalysis $analysis) => $analysis->canRequestProviderReanalysis())
-            ->values();
+            if($eligibleAnalyses->isEmpty()){
+                throw new DomainException(
+                    'Nenhuma companhia deste lead está em status permitido para reanálise.'
+                );
 
-        if ($eligibleAnalyses->isEmpty()) {
-            throw new DomainException(
-                'Nenhuma companhia deste lead está em status permitido para reanálise.'
-            );
-        }
+            }
 
-        foreach ($eligibleAnalyses as $analysis) {
-            $providerOptions = $this->optionsForProvider($analysis, $options);
+            $prepared = [];
 
-            $attemptId = $this->restartAnalysisAsReanalysis(
-                analysis: $analysis,
-                message: 'Reanálise geral solicitada após alteração dos dados do lead.',
-                requestedBy: $requestedBy,
-                options: $providerOptions
-            );
+            foreach ($eligibleAnalyses as $analysis) {
+                $providerOptions = $this->optionsForProvider(
+                    $analysis,
+                    $options
+                );
 
-            RunProviderAnalysisJob::dispatch(
-                analysisId: $analysis->id,
+                $this->restartAnalysisAsReanalysis(
+                    analysis: $analysis,
+                    attemptId: $attemptId,
+                    message: 'Reanálise geral solicitada após alteração dos dados do lead.',
+                    requestedBy: $requestedBy,
+                    options: $providerOptions
+                );
+
+                $prepared[] = [
+                    'analysis_id' => $analysis->id,
+                    'options' => $providerOptions,
+                ];
+            }
+
+            $lead->forceFill([
+                'status' => 'em-andamento',
+                'reanalysis_unlocked_at' => null,
+            ])->save();
+
+            return [
+                'batch_id' => $batch->id,
+                'analyses' => $prepared,
+            ];
+
+        });
+
+        $jobs = collect($preparedAnalyses['analysis'])
+            ->map(fn (array $item) => new RunProviderAnalysisJob(
+                analysisId: $item['analysis_id'],
                 attemptId: $attemptId,
                 isReanalysis: true,
-                options: $providerOptions
-            );
-        }
+                options: $item['options']
+            ))->all();
+        $batchId = (int) $preparedAnalyses['batch_id'];
+        $leadId = (int) $lead->id;
 
-        $lead->forceFill([
-            'status' => 'em-andamento',
-            'reanalysis_unlocked_at' => null,
-        ])->save();
+        Bus::batch($jobs)
+            ->name("Reanálise do lead {$leadId}")
+            ->allowFailures()
+            ->finally(static function (Batch $batch) use ($batchId, $attemptId){
+                CompleteInsuranceAnalysesBatchJob::dispatch(
+                    batchId: $batchId,
+                    attemptId: $attemptId,
+                    isReanalysis: true
+                );
+            })->dispatch();
 
-        return $eligibleAnalyses->count();
+        return count($preparedAnalyses['analyses']);
     }
 
     public function startProviderReanalysis(
@@ -247,9 +298,12 @@ class LeadReanalysisService
         }
 
         $providerOptions = $this->optionsForProvider($analysis, $options);
+        
+        $attemptId = (string) Str::uuid();
 
-        $attemptId = $this->restartAnalysisAsReanalysis(
+        $this->restartAnalysisAsReanalysis(
             analysis: $analysis,
+            attemptId: $attemptId,
             message: 'Reanálise por companhia solicitada após alteração dos dados do lead.',
             requestedBy: $requestedBy,
             options: $providerOptions
@@ -268,45 +322,98 @@ class LeadReanalysisService
     public function restartAnalysisAsReanalysis(
         InsuranceAnalysis $analysis,
         string $message,
+        string $attemptId,
         string $requestedBy = 'imobiliaria',
         array $options = []
     ): string {
-        $attemptId = (string) Str::uuid();
-
-        $analysis->loadMissing([
-            'batch.analyses',
-            'lead.despesas',
-            'events',
-        ]);
-
-        $isToo = $analysis->isTooProvider();
-
-        $previousResponsePayload = $analysis->response_payload ?? [];
-
-        if (is_string($previousResponsePayload)) {
-            $previousResponsePayload = json_decode($previousResponsePayload, true) ?: [];
-        }
-
-        $tooNumeroProposta = data_get($previousResponsePayload, 'numeroProposta')
-            ?? data_get($previousResponsePayload, 'numero_proposta')
-            ?? $analysis->proposal_id;
-
-        $tooNumeroFicha = data_get($previousResponsePayload, 'numeroFicha')
-            ?? data_get($previousResponsePayload, 'numero_ficha')
-            ?? data_get($previousResponsePayload, 'numeroProposta')
-            ?? $analysis->proposal_id;
-
         DB::transaction(function () use (
             $analysis,
             $attemptId,
             $message,
             $requestedBy,
-            $options,
-            $isToo,
-            $previousResponsePayload,
-            $tooNumeroProposta,
-            $tooNumeroFicha
+            $options
         ) {
+            $analysis = InsuranceAnalysis::query()
+                ->whereKey($analysis->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+               
+            $analysis->loadMissing([
+                'batch.analyses',
+                'lead.despesas',
+                'events',
+            ]);
+
+            if (! $analysis->canRequestProviderReanalysis()) {
+            throw new DomainException(
+                'Esta análise já está sendo processada ou não permite reanálise.'
+            );
+            }
+
+            $isToo = $analysis->isTooProvider();
+
+            $previousResponsePayload = $analysis->response_payload ?? [];
+
+            if (is_string($previousResponsePayload)) {
+                $previousResponsePayload =
+                    json_decode($previousResponsePayload, true) ?: [];
+            }
+
+            $tooNumeroProposta =
+                data_get($previousResponsePayload, 'numeroProposta')
+                ?? data_get($previousResponsePayload, 'numero_proposta')
+                ?? $analysis->proposal_id;
+
+            $tooNumeroFicha =
+                data_get($previousResponsePayload, 'numeroFicha')
+                ?? data_get($previousResponsePayload, 'numero_ficha')
+                ?? data_get($previousResponsePayload, 'numeroProposta')
+                ?? $analysis->proposal_id;
+
+            if (
+                $isToo
+                && (
+                    blank($tooNumeroProposta)
+                    || blank($tooNumeroFicha)
+                )
+            ) {
+                throw new DomainException(
+                    'A análise da Too não possui número de proposta/ficha para solicitar reanálise.'
+                );
+            }
+
+            /*
+            |--------------------------------------------------------------------------
+            | Valores atuais do lead
+            |--------------------------------------------------------------------------
+            */
+
+            $despesas = $analysis->lead?->despesas;
+
+            $rentAmount = (float) ($despesas?->valor_aluguel ?? 0);
+
+            $totalMonthlyAmount = $despesas?->valor_total_encargos;
+
+            if ($totalMonthlyAmount === null || $totalMonthlyAmount === '') {
+                $totalMonthlyAmount =
+                    $rentAmount
+                    + (float) ($despesas?->valor_agua ?? 0)
+                    + (float) ($despesas?->valor_luz ?? 0)
+                    + (float) ($despesas?->valor_gas ?? 0)
+                    + (float) ($despesas?->valor_condominio ?? 0)
+                    + (float) ($despesas?->valor_iptu ?? 0)
+                    + (float) ($despesas?->outras_despesas ?? 0);
+            }
+
+            $totalMonthlyAmount = (float) $totalMonthlyAmount;
+            $chargesAmount = max(0, $totalMonthlyAmount - $rentAmount);
+
+            /*
+            |--------------------------------------------------------------------------
+            | Histórico anterior
+            |--------------------------------------------------------------------------
+            */
+
             $analysis->events()->create([
                 'event_type' => 'reanalysis_requested',
                 'status' => 'pending',
@@ -331,6 +438,156 @@ class LeadReanalysisService
                     'previous_iof' => $analysis->iof,
                     'previous_insured_amount' => $analysis->insured_amount,
 
+                    'previous_rent_amount' => $analysis->rent_amount,
+                    'previous_charges_amount' => $analysis->charges_amount,
+                    'previous_total_monthly_amount' => $analysis->total_monthly_amount,
+
+                    'new_rent_amount' => $rentAmount,
+                    'new_charges_amount' => $chargesAmount,
+                    'new_total_monthly_amount' => $totalMonthlyAmount,
+                ],
+                'response' => $analysis->response_payload,
+            ]);
+
+            /*
+            |--------------------------------------------------------------------------
+            | Prepara a rodada atual
+            |--------------------------------------------------------------------------
+            */
+
+            $analysis->forceFill([
+                'status' => 'pending',
+                'result' => null,
+                'provider_status' => null,
+
+                // Too mantém proposta. Outros providers podem criar nova solicitação.
+                'proposal_id' => $isToo
+                    ? (string) $tooNumeroProposta
+                    : null,
+
+                'quote_id' => null,
+                'quote_number' => null,
+                'product_key' => null,
+
+                'commercial_premium' => null,
+                'gross_premium' => null,
+                'iof' => null,
+
+                'request_payload' => null,
+
+                // Não carregamos status e resultados antigos para a rodada nova.
+                'response_payload' => $isToo
+                    ? [
+                        'provider' => 'too',
+                        'numeroProposta' => (string) $tooNumeroProposta,
+                        'numeroFicha' => (string) $tooNumeroFicha,
+                        'too_reanalysis_attempt_id' => $attemptId,
+                        'too_reanalysis_started_at' => now()->toDateTimeString(),
+                        'too_status_check_stopped' => false,
+                        'too_manual_sync_available' => false,
+                    ]
+                    : null,
+
+                'available_plans' => null,
+                'available_assistances' => null,
+
+                'premium_amount' => null,
+                'insured_amount' => null,
+
+                // Valores atualizados que serão enviados na nova rodada.
+                'rent_amount' => $rentAmount,
+                'charges_amount' => $chargesAmount,
+                'total_monthly_amount' => $totalMonthlyAmount,
+
+                'error_message' => null,
+                'requested_at' => null,
+                'finished_at' => null,
+            ])->save();
+
+            /*
+            |--------------------------------------------------------------------------
+            | Reabre o lote
+            |--------------------------------------------------------------------------
+            */
+
+            if ($analysis->batch) {
+                $completed = $analysis->batch->analyses()
+                    ->whereIn('status', [
+                        'quoted',
+                        'approved',
+                        'rejected',
+                        'denied',
+                        'refused',
+                        'manual_review',
+                    ])
+                    ->count();
+
+                $failed = $analysis->batch->analyses()
+                    ->whereIn('status', ['failed', 'error'])
+                    ->count();
+
+                $analysis->batch->forceFill([
+                    'status' => 'processing',
+                    'completed_providers' => $completed,
+                    'failed_providers' => $failed,
+                    'finished_at' => null,
+                    'started_at' => now(),
+                ])->save();
+            }
+
+        });
+
+        return $attemptId;
+    }
+
+    public function startTechnicalRetry(
+    InsuranceAnalysis $analysis,
+    string $requestedBy = 'imobiliaria'
+    ): string {
+        $normalizedStatus = mb_strtolower((string) $analysis->status);
+
+        if (! in_array($normalizedStatus, ['failed', 'error'], true)) {
+            throw new DomainException(
+                'Essa análise não está em status de falha técnica para reenvio.'
+            );
+        }
+
+        $attemptId = (string) Str::uuid();
+
+        $analysis->loadMissing([
+            'batch.analyses',
+            'lead.despesas',
+            'events',
+        ]);
+
+        DB::transaction(function () use ($analysis, $attemptId, $requestedBy) {
+            $analysis->events()->create([
+                'event_type' => 'technical_retry_requested',
+                'status' => 'pending',
+                'message' => $requestedBy === 'admin'
+                    ? 'Reenvio técnico da análise solicitado pelo admin/corretor.'
+                    : 'Reenvio técnico da análise solicitado pela imobiliária.',
+                'payload' => [
+                    'attempt_id' => $attemptId,
+                    'is_reanalysis' => false,
+                    'is_technical_retry' => true,
+                    'requested_by' => $requestedBy,
+                    'requested_at' => now()->toDateTimeString(),
+                    'provider' => $analysis->provider,
+
+                    'previous_status' => $analysis->status,
+                    'previous_result' => $analysis->result,
+                    'previous_provider_status' => $analysis->provider_status,
+                    'previous_proposal_id' => $analysis->proposal_id,
+                    'previous_quote_id' => $analysis->quote_id,
+                    'previous_quote_number' => $analysis->quote_number,
+                    'previous_premium_amount' => $analysis->premium_amount,
+                    'previous_commercial_premium' => $analysis->commercial_premium,
+                    'previous_gross_premium' => $analysis->gross_premium,
+                    'previous_iof' => $analysis->iof,
+                    'previous_insured_amount' => $analysis->insured_amount,
+                    'previous_error_message' => $analysis->error_message,
+
                     'rent_amount' => $analysis->rent_amount,
                     'charges_amount' => $analysis->charges_amount,
                     'total_monthly_amount' => $analysis->total_monthly_amount,
@@ -342,33 +599,31 @@ class LeadReanalysisService
                 'status' => 'pending',
                 'result' => null,
                 'provider_status' => null,
-                'quote_id' => null,
-                'quote_number' => null,
-                'product_key' => null,
-                'commercial_premium' => null,
-                'gross_premium' => null,
-                'iof' => null,
-                'request_payload' => null,
 
                 /*
                 |--------------------------------------------------------------------------
-                | Ponto crítico da Too
+                | Retry técnico não é reanálise
                 |--------------------------------------------------------------------------
-                | Não podemos apagar numeroProposta/numeroFicha.
+                | Aqui limpamos proposta/cotação para o provider executar o fluxo normal.
                 */
-                'response_payload' => $isToo
-                    ? array_merge($previousResponsePayload, [
-                        'numeroProposta' => $tooNumeroProposta,
-                        'numeroFicha' => $tooNumeroFicha,
-                        'too_reanalysis_started_at' => now()->toDateTimeString(),
-                        'too_reanalysis_attempt_id' => $attemptId,
-                    ])
-                    : null,
+                'proposal_id' => null,
+                'quote_id' => null,
+                'quote_number' => null,
+                'product_key' => null,
+
+                'commercial_premium' => null,
+                'gross_premium' => null,
+                'iof' => null,
+
+                'request_payload' => null,
+                'response_payload' => null,
 
                 'available_plans' => null,
                 'available_assistances' => null,
+
                 'premium_amount' => null,
                 'insured_amount' => null,
+
                 'error_message' => null,
                 'requested_at' => null,
                 'finished_at' => null,
@@ -400,6 +655,13 @@ class LeadReanalysisService
             }
         });
 
+        RunProviderAnalysisJob::dispatch(
+            analysisId: $analysis->id,
+            attemptId: $attemptId,
+            isReanalysis: false,
+            options: []
+        );
+
         return $attemptId;
     }
 
@@ -409,10 +671,36 @@ class LeadReanalysisService
             return $options;
         }
 
+        $defaultReason = (int) config(
+           'services.too.default_reanalysis_reason',
+           10 
+        );
+
+        $motivos = collect(
+            $options['motivosReanalise'] ?? [$defaultReason]
+        )->map(fn ($motivo) => (int) $motivo)
+        ->filter(fn ($motivo) => $motivo > 0)
+        ->unique()
+        ->values()
+        ->all();
+
+        $observacoes = trim((string) (
+            $options['observacoes']
+            ?? 'Reanálise solicitada após alteração dos dados do lead.'
+        ));
+
+        if (blank($observacoes)) {
+            throw new DomainException(
+                'Informe uma observação para a reanálise da Too.'
+            );
+        }
+
         return [
-            'motivosReanalise' => $options['motivosReanalise'] ?? [10],
-            'observacoes' => $options['observacoes']
-                ?? 'Reanálise solicitada após alteração dos dados do lead.',
+            'motivosReanalise' => $motivos,
+            'observacoes' => $observacoes,
         ];
+
+
+        
     }
 }

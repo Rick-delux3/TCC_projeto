@@ -10,6 +10,8 @@ use Illuminate\Http\Request;
 use App\Jobs\StartInsuranceAnalysesBatchJob;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\DB;
+use App\Models\InsuranceAnalysisBatch;
+use Illuminate\Support\Facades\Log;
 
 
 class SimulationController extends Controller
@@ -361,9 +363,29 @@ class SimulationController extends Controller
     }
 
     private function dispatchLeadFlow(Lead $lead): void {
+
+        $alreadyHasBatch = InsuranceAnalysisBatch::query()
+        ->where('lead_id', $lead->id)
+        ->exists();
+
+        if($alreadyHasBatch) {
+            SendLeadToLeadLoversJob::dispatch($lead->id);
+
+            Log::info(
+                'Análise inicial não disparada porque o lead já possui lote.',
+                [
+                    'lead_id' => $lead->id,
+                ]
+            );
+            return;
+        }
+
         Bus::chain([
             new SendLeadToLeadLoversJob($lead->id),
-            new StartInsuranceAnalysesBatchJob($lead->id),
+            new StartInsuranceAnalysesBatchJob(
+                leadId: $lead->id,
+                isReanalysis: false
+            ),
         ])->dispatch();
     }
 }

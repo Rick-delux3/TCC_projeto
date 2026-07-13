@@ -34,6 +34,12 @@ class StartInsuranceAnalysesBatchJob implements ShouldQueue
 
     public function handle(InsuranceProviderResolver $resolver): void
     {
+        if ($this->isReanalysis) {
+            throw new \LogicException(
+                'Reanálises devem ser iniciadas pelo LeadReanalysisService.'
+            );
+        }
+
         $lead = Lead::with([
             'despesas',
             'endereco',
@@ -42,6 +48,24 @@ class StartInsuranceAnalysesBatchJob implements ShouldQueue
             'locador',
             'imobiliariaInformada',  
         ])->findOrFail($this->leadId);
+
+        $existingBatch = InsuranceAnalysisBatch::query()
+        ->where('lead_id', $lead->id)
+        ->latest('id')
+        ->first();
+
+        if($existingBatch) {
+            Log::warning(
+                'Análise inicial não iniciada porque o lead já possui lote.',
+                [
+                    'lead_id' => $lead->id,
+                    'batch_id' => $existingBatch->id,
+                    'batch_status' => $existingBatch->status,
+                ]
+            );
+
+            return;
+        }
 
         $providers = $resolver->availableProviders();
 

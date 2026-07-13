@@ -109,6 +109,7 @@ return [
         'default_financial_responsible' => env('TOO_DEFAULT_FINANCIAL_RESPONSIBLE', true),
         'status_check_delay_seconds' => env('TOO_STATUS_CHECK_DELAY_SECONDS', 20),
         'status_check_max_attempts' => env('TOO_STATUS_CHECK_MAX_ATTEMPTS', 15),
+        'default_reanalysis_reason' => env('TOO_DEFAULT_REANALYSIS_REASON', 10),
     ],
 
     'porto' => [

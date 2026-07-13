@@ -33,7 +33,9 @@ class SyncProviderAnalysisStatusJob implements ShouldQueue
      * analises_seguro.id = 15
      */
     public function __construct(
-        public int $analysisId
+        public int $analysisId,
+        public string $attemptId,
+        public bool $isReanalysis = false
     ) {}
 
     /**
@@ -310,6 +312,8 @@ class SyncProviderAnalysisStatusJob implements ShouldQueue
             'status' => $internalStatus,
             'message' => "Status sincronizado com {$analysis->provider}.",
             'payload' => [
+                'attempt_id' => $this->attemptId,
+                'is_reanalysis' => $this->isReanalysis,
                 'provider' => $analysis->provider,
                 'quote_id' => $analysis->quote_id,
                 'provider_status' => $providerStatus,
@@ -727,7 +731,9 @@ class SyncProviderAnalysisStatusJob implements ShouldQueue
         }
 
         CompleteInsuranceAnalysesBatchJob::dispatch(
-            $analysis->insurance_analysis_batch_id
+            batchId: $analysis->insurance_analysis_batch_id,
+            attemptId: $this->attemptId,
+            isReanalysis: $this->isReanalysis
         );
     }
 }

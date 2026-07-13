@@ -8,15 +8,18 @@ interface InsuranceProviderInterface
 {
     public function name(): string;
 
-    public function requestAnalysis(InsuranceAnalysis $analysis): array;
+    public function requestAnalysis(InsuranceAnalysis $analysis, string $attemptId): array;
 
     public function requestReanalysis(
         InsuranceAnalysis $analysis,
         string $attemptId,
         array $options = []
-    ): array {
-        return $this->requestAnalysis($analysis);
-    }
-
+    ): array;
+    
     public function getStatus(InsuranceAnalysis $analysis): array;
 }
+
+
+
+
+

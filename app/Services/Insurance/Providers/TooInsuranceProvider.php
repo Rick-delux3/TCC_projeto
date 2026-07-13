@@ -6,6 +6,7 @@ use App\Models\InsuranceAnalysis;
 use App\Services\TooService;
 use App\Services\Insurance\Payloads\TooRentalGuaranteePayloadBuilder;
 use Illuminate\Support\Facades\Log;
+use App\Jobs\SyncTooAnalysisStatusJob;
 
 class TooInsuranceProvider implements InsuranceProviderInterface
 {
@@ -28,7 +29,7 @@ class TooInsuranceProvider implements InsuranceProviderInterface
      * 4. Se status 8, solicita cotação.
      * 5. Se status 5 ou 16, mantém em análise/manual_review.
      */
-    public function requestAnalysis(InsuranceAnalysis $analysis): array
+    public function requestAnalysis(InsuranceAnalysis $analysis, string $attemptId): array
     {
         $this->loadTooRelations($analysis);
 
@@ -134,7 +135,11 @@ class TooInsuranceProvider implements InsuranceProviderInterface
                 'ficha' => $fichaResponse,
                 'numeroProposta' => $numeroProposta,
                 'numeroFicha' => $numeroFicha,
+                'too_analysis_attempt_id' => $attemptId,
+                'too_is_reanalysis' => false,
             ],
+
+
         ]);
 
         /*
@@ -197,10 +202,14 @@ class TooInsuranceProvider implements InsuranceProviderInterface
                 'status' => $statusResponse,
             ],
             baseExtra: [
+                'attempt_id' => $attemptId,
+                'is_reanalysis' => false,
                 'numeroProposta' => $numeroProposta,
                 'numeroFicha' => $numeroFicha,
             ],
-            scheduleNextCheck: true
+            scheduleNextCheck: true,
+            attemptId: $attemptId,
+            isReanalysis: false
         );
     }
 
@@ -261,8 +270,9 @@ class TooInsuranceProvider implements InsuranceProviderInterface
 
         $statusBeforeInfo = $this->tooCreditDecision($statusBeforeResponse['response'] ?? []);
         $statusCode = $statusBeforeInfo['status_code'];
+        $blockedStatus = [9, 10, 12];
 
-        if (!in_array($statusCode, [1, 6, 8], true)) {
+        if ($statusCode === null || in_array($statusCode, $blockedStatus, true)) {
             return $this->failResult(
                 message: 'A proposta Too não está em status permitido para reanálise.',
                 step: 'too_reanalysis_status_not_allowed',
@@ -272,6 +282,7 @@ class TooInsuranceProvider implements InsuranceProviderInterface
                 extra: [
                     'status_code' => $statusCode,
                     'status_description' => $statusBeforeInfo['status_description'],
+                    'bloked_statuses' => $blockedStatus,
                 ]
             );
         }
@@ -331,102 +342,73 @@ class TooInsuranceProvider implements InsuranceProviderInterface
             );
         }
 
-        $statusAfterResponse = $this->tooService->getProposalStatus(
-            cpf: $cpf,
-            numeroProposta: $numeroProposta
-        );
+        $currentPayload = $analysis->response_payload ?? [];
 
-        if (!$this->responseWasSuccessful($statusAfterResponse)) {
-            return $this->failResult(
-                message: 'Reanálise solicitada, mas houve erro ao consultar novo status na Too.',
-                step: 'too_reanalysis_status_after',
-                responses: [
-                    'status_before' => $statusBeforeResponse,
-                    'update_basic_data' => $updateBasicDataResponse,
-                    'reanalysis' => $reanalysisResponse,
-                    'status_after' => $statusAfterResponse,
-                ],
-                extra: [
-                    'numeroProposta' => $numeroProposta,
-                    'numeroFicha' => $numeroFicha,
-                ]
-            );
+        if (is_string($currentPayload)) {
+            $currentPayload = json_decode($currentPayload, true) ?: [];
         }
 
-        return $this->handleStatusAndMaybeQuote(
-            analysis: $analysis,
-            statusResponse: $statusAfterResponse,
-            baseResponses: [
+        $analysis->forceFill([
+            'status' => 'processing',
+            'result' => null,
+            'provider_status' => 'Reanálise solicitada - aguardando processamento da Too',
+
+            'response_payload' => array_merge($currentPayload, [
+                'provider' => 'too',
+                'numeroProposta' => (string) $numeroProposta,
+                'numeroFicha' => (string) $numeroFicha,
+
+                'too_reanalysis_attempt_id' => $attemptId,
+                'too_is_reanalysis' => true,
+
+                'too_reanalysis_status_before' => $statusBeforeResponse,
+                'too_reanalysis_update_basic_data' => $updateBasicDataResponse,
+                'too_reanalysis_request' => $reanalysisResponse,
+                'too_reanalysis_payload' => $reanalysisPayload,
+
+                'too_status_check_stopped' => false,
+                'too_manual_sync_available' => false,
+                'too_reanalysis_requested_at' => now()->toDateTimeString(),
+            ]),
+
+            'error_message' => null,
+            'finished_at' => null,
+        ])->save();
+
+        SyncTooAnalysisStatusJob::dispatch(
+            analysisId: $analysis->id,
+            attemptId: $attemptId,
+            isReanalysis: true,
+            attemptNumber: 1
+        )->delay(
+            now()->addSeconds(
+                (int) config(
+                    'services.too.status_check_delay_seconds',
+                    20
+                )
+            )
+        );
+
+        return $this->successResult(
+            status: 'UnderAnalysis',
+            quoteId: null,
+            premiumAmount: null,
+            responses: [
                 'status_before' => $statusBeforeResponse,
                 'update_basic_data' => $updateBasicDataResponse,
                 'reanalysis' => $reanalysisResponse,
-                'status_after' => $statusAfterResponse,
             ],
-            baseExtra: [
+            extra: [
                 'attempt_id' => $attemptId,
                 'is_reanalysis' => true,
                 'numeroProposta' => $numeroProposta,
                 'numeroFicha' => $numeroFicha,
                 'reanalysis_payload' => $reanalysisPayload,
-            ],
-            scheduleNextCheck: true
-        );
-
-
-    }
-
-    /**
-     * Consulta status posterior da Too.
-     *
-     * Este método usa a mesma regra do requestAnalysis():
-     * - status 8: solicita cotação;
-     * - status 16: pré-aprovado, mas sem cotação por enquanto;
-     * - status 5: em análise;
-     * - status 6/11/12/14/15: recusado/cancelado/expirado.
-     */
-    public function getStatus(InsuranceAnalysis $analysis): array
-    {
-        $this->loadTooRelations($analysis);
-
-        $lead = $analysis->lead;
-
-        if (!$lead || !$lead->cpf || !$analysis->proposal_id) {
-            return $this->failResult(
-                message: 'CPF ou número da proposta ausente para consultar status na Too.',
-                step: 'get_status_validate'
-            );
-        }
-
-        $statusResponse = $this->tooService->getProposalStatus(
-            cpf: $this->onlyNumbers($lead->cpf),
-            numeroProposta: $analysis->proposal_id
-        );
-
-        if (!$this->responseWasSuccessful($statusResponse)) {
-            return $this->failResult(
-                message: 'Erro ao consultar status posterior da proposta na Too.',
-                step: 'get_status',
-                responses: [
-                    'status' => $statusResponse,
-                ]
-            );
-        }
-
-        $numeroFicha = data_get($analysis->response_payload, 'numeroFicha')
-            ?? data_get($analysis->response_payload, 'numeroProposta')
-            ?? $analysis->proposal_id;
-
-        return $this->handleStatusAndMaybeQuote(
-            analysis: $analysis,
-            statusResponse: $statusResponse,
-            baseResponses: [
-                'status' => $statusResponse,
-            ],
-            baseExtra: [
-                'numeroProposta' => $analysis->proposal_id,
-                'numeroFicha' => $numeroFicha,
-            ],
-            scheduleNextCheck: false
+                'provider_original_status' => 'ReanalysisRequested',
+                'provider_original_description' => 'Reanálise solicitada e aguardando processamento.',
+                'too_internal_decision' => 'UnderAnalysis',
+                'can_quote' => false,
+            ]
         );
     }
 
@@ -440,7 +422,9 @@ class TooInsuranceProvider implements InsuranceProviderInterface
         array $statusResponse,
         array $baseResponses,
         array $baseExtra = [],
-        bool $scheduleNextCheck = false
+        bool $scheduleNextCheck = false,
+        ?string $attemptId = null,
+        bool $isReanalysis = false,
     ): array {
         $statusData = $statusResponse['response'] ?? [];
         $statusInfo = $this->tooCreditDecision($statusData);
@@ -474,12 +458,18 @@ class TooInsuranceProvider implements InsuranceProviderInterface
             ]);
 
             if($scheduleNextCheck && $statusInfo['canonical'] === 'UnderAnalysis'){
-                \App\Jobs\SyncTooAnalysisStatusJob::dispatch(
+                if (blank($attemptId)) {
+                    throw new \LogicException(
+                        'attempt_id não informado para iniciar sincronização automática da Too.'
+                    );
+                }
+
+                SyncTooAnalysisStatusJob::dispatch(
                     analysisId: $analysis->id,
+                    attemptId: $attemptId,
+                    isReanalysis: $isReanalysis,
                     attemptNumber: 1
-                )->delay(now()->addSeconds(
-                        (int) config('services.too.status_check_delay_seconds', 20)
-                ));
+                );
             }
 
             return $this->successResult(
