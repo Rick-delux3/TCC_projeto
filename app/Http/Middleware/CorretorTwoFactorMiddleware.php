@@ -25,12 +25,9 @@ class CorretorTwoFactorMiddleware
             $request->session()->invalidate();
             $request->session()->regenerateToken();
 
-            return redirect()->route('admin.login');
-        }
-
-        if(!$admin->isCeo())
-        {
-            abort(403, 'Acesso negado. Apenas o CEO pode acessar esta área.');
+            return redirect()->route(
+                $admin->isCeo() ? 'admin.ceo.login' : 'admin.login'
+            );
         }
 
         if ($admin->hasVerifiedFirstLogin()) 

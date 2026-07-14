@@ -34,8 +34,22 @@
         (bool) ($integrante?->active ?? true) ? '1' : '0'
     ) === '1';
 
+    $conviteAceito = filled($integrante?->invite_accepted_at);
+
+    $conviteExpirado = ! $conviteAceito
+        && filled($integrante?->invite_expires_at)
+        && $integrante->invite_expires_at->isPast();
+
+    $convitePendente = ! $conviteAceito
+        && filled($integrante?->invite_expires_at)
+        && ! $integrante->invite_expires_at->isPast();
+
+    $conviteNaoEnviado = ! $conviteAceito
+        && blank($integrante?->invite_last_sent_at);
+
     $permissionIcons = [
         'leads.visualizar' => 'bi-people',
+        'leads.editar' => 'bi-pencil-square',
         'analises.visualizar' => 'bi-clipboard2-data',
         'analises.criar' => 'bi-shield-check',
         'imobiliarias.visualizar' => 'bi-buildings',
@@ -343,7 +357,7 @@
                                         type="text"
                                         id="nome"
                                         name="nome"
-                                        value="{{ old('nome', $integrante?->nome) }}"
+                                        value="{{ old('nome', $integrante?->name ?? $integrante?->nome) }}"
                                         class="form-control @error('nome') is-invalid @enderror"
                                         placeholder="Nome completo"
                                         autocomplete="name"
@@ -443,6 +457,53 @@
                         </div>
 
                         <div class="team-status-panel p-3 p-md-4 mt-4">
+                            <div class="d-flex align-items-start gap-3">
+                                <span class="team-permission-icon">
+                                    <i class="bi bi-envelope-check"></i>
+                                </span>
+
+                                <div class="flex-grow-1">
+                                    <h2 class="h6 fw-bold mb-2">Situação do convite</h2>
+
+                                    @if ($conviteAceito)
+                                        <span class="badge text-bg-success">Aceito</span>
+                                        @if (filled($integrante?->invite_accepted_at))
+                                            <div class="small text-muted mt-2">
+                                                Aceito em {{ $integrante->invite_accepted_at->format('d/m/Y H:i') }}
+                                            </div>
+                                        @endif
+                                    @elseif ($conviteExpirado)
+                                        <span class="badge text-bg-danger">Expirado</span>
+                                        <div class="small text-muted mt-2">
+                                            Expirou em {{ $integrante->invite_expires_at->format('d/m/Y H:i') }}
+                                        </div>
+                                    @elseif ($convitePendente)
+                                        <span class="badge text-bg-warning text-dark">Pendente</span>
+                                        <div class="small text-muted mt-2">
+                                            Expira em {{ $integrante->invite_expires_at->format('d/m/Y H:i') }}
+                                        </div>
+                                    @else
+                                        <span class="badge text-bg-secondary">Não enviado</span>
+                                    @endif
+
+                                    @if (filled($integrante?->invite_last_sent_at))
+                                        <div class="small text-muted mt-2">
+                                            Último envio: {{ $integrante->invite_last_sent_at->format('d/m/Y H:i') }}
+                                        </div>
+                                    @endif
+
+                                    <div class="small text-muted mt-1">
+                                        Quantidade de envios: {{ (int) ($integrante?->invite_send_count ?? 0) }}
+                                    </div>
+
+                                    <div class="small text-muted mt-2">
+                                        O reenvio de convite deve ser feito pela listagem da equipe.
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="team-status-panel p-3 p-md-4 mt-4">
                             <input type="hidden" name="active" value="0">
 
                             <div class="d-flex flex-column flex-sm-row justify-content-between align-items-sm-center gap-3">
@@ -458,6 +519,7 @@
 
                                         <div class="text-muted small">
                                             Controle se o integrante pode acessar a plataforma.
+                                            Integrantes inativos não podem entrar no sistema nem receber novos convites.
                                         </div>
                                     </div>
                                 </div>

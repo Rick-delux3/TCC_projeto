@@ -74,10 +74,10 @@ Route::prefix('/Dashboard')->group(function () {
         ->name('insurance-analyses.sync-status');
     });
 
-    Route::prefix('/Admin')->middleware(['auth:admin', 'admin.2fa'])->group(function() {
+    Route::prefix('/Admin')->middleware(['auth:admin', 'corretor.active', 'admin.2fa'])->group(function() {
         
         Route::get('/', [CorretorDashboardController::class, 'index'])
-        ->middleware('can:view-leads')
+        ->middleware('can:access-dashboard')
         ->name('Dashboard-Admin');
 
         Route::get('/leads', function (){
@@ -129,8 +129,18 @@ Route::prefix('/Dashboard')->group(function () {
 
             Route::put('/{corretor}', [CorretorEquipeController::class, 'update'])->name('update');
 
+            Route::post('/{corretor}/reenviar-convite', [CorretorEquipeController::class, 'resendInvitation'])
+                ->middleware('throttle:3,10')
+                ->name('resend-invitation');
+
         });
     });
+
+    Route::middleware('throttle:10,1')
+        ->get(
+            '/admin/integrante/convite/{corretor}',
+            [CorretorAuthController::class, 'acceptMemberInvitation']
+        )->name('admin.member.invite.accept');
 });
     
 
@@ -165,7 +175,7 @@ Route::middleware(['guest:admin', 'throttle:5,1'])->group(function () {
 
 });
 
-Route::middleware('auth:admin')->group(function () {
+Route::middleware(['auth:admin', 'corretor.active'])->group(function () {
     Route::get('/admins/2fa', [CorretorAuthController::class, 'showTwoFactorForm'])->name('admin.2fa.form');
     Route::post('/admins/2fa', [CorretorAuthController::class, 'verifyTwoFactor'])->name('admin.2fa.verify');
     Route::post('/admins/2fa/resend', [CorretorAuthController::class, 'resendTwoFactor'])->name('admin.2fa.resend');

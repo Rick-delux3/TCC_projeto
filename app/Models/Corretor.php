@@ -27,7 +27,11 @@ class Corretor extends Authenticatable
         'active',
         'invited_by_corretor_id',
         'invited_at',
+        'invite_version',
         'invite_accepted_at',
+        'invite_send_count',
+        'invite_expires_at',
+        'invite_last_sent_at',
         'password_set_at',
         'last_login_at',
     ];
@@ -37,12 +41,16 @@ class Corretor extends Authenticatable
     protected $casts = [
         'password' => 'hashed',
         'permissions' => 'array',
+        'active' => 'boolean',
+
         'invited_at' => 'datetime',
         'invite_accepted_at' => 'datetime',
+        'invite_expires_at' => 'datetime',
+        'invite_last_sent_at' => 'datetime',
         'password_set_at' => 'datetime',
+
         'first_login_verified_at' => 'datetime',
         'first_login_code_sent_at' => 'datetime',
-        'active' => 'boolean',
         'last_login_at' => 'datetime',
     ];
 
@@ -88,7 +96,9 @@ class Corretor extends Authenticatable
 
     public function hasPermission(string $permission): bool
     {
-        if($this->isCeo()) return true;
+        if($this->isCeo()){
+          return true;  
+        } 
 
         return in_array($permission, $this->permissions ?? [], true);
     }
@@ -97,4 +107,26 @@ class Corretor extends Authenticatable
     {
         return $this->belongsTo(Self::class, 'invited_by_corretor_id');
     }
+
+    public function hasAcceptedInvitation(): bool
+    {
+        return filled($this->invite_accepted_at);
+    }
+
+    public function hasPendingInvitation(): bool
+    {
+        return $this->isIntegrante() && !$this->hasAcceptedInvitation();
+    }
+
+    public function invitationIsExpired(): bool
+    {
+        return $this->hasPendingInvitation() && filled($this->invite_expires_at) && $this->invite_expires_at->isPast();
+    }
+
+    public function hasValidPendingInvitation(): bool
+    {
+        return $this->hasPendingInvitation() && filled($this->invite_expires_at) && ! $this->invite_expires_at->isPast() && (int) $this->invite_version > 0;
+    }
+
+
 }

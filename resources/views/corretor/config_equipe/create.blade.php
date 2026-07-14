@@ -28,6 +28,7 @@
 
     $permissionIcons = [
         'leads.visualizar' => 'bi-people',
+        'leads.editar' => 'bi-pencil-square',
         'analises.visualizar' => 'bi-clipboard2-data',
         'analises.criar' => 'bi-shield-check',
         'imobiliarias.visualizar' => 'bi-buildings',
@@ -304,7 +305,8 @@
                         </h1>
 
                         <p class="text-muted mb-0">
-                            Preencha os dados para cadastrar um novo integrante da equipe.
+                            Cadastre o integrante e envie por e-mail um convite com prazo de validade.
+                            Se o link expirar, o CEO poderá gerar um novo convite.
                         </p>
                     </div>
 
@@ -315,6 +317,14 @@
                             </div>
                         </div>
                     @endif
+
+                    <div class="alert alert-info rounded-4 border-0 mb-4 d-flex align-items-start gap-3">
+                        <i class="bi bi-envelope-check fs-4" aria-hidden="true"></i>
+                        <div>
+                            Após o cadastro, o sistema enviará ao integrante um link de convite com prazo de validade.
+                            Caso o link expire, será possível gerar um novo convite na listagem da equipe.
+                        </div>
+                    </div>
 
                     <form method="POST" action="{{ $storeRoute }}" class="team-create-form" novalidate>
                         @csrf
@@ -542,7 +552,7 @@
                         <div class="team-actions d-flex flex-column flex-sm-row-reverse gap-2 pt-4 mt-4">
                             <button type="submit" class="btn btn-primary px-4">
                                 <i class="bi bi-person-plus me-1"></i>
-                                Cadastrar e convidar
+                                Cadastrar e enviar convite
                             </button>
 
                             <a href="{{ $indexRoute }}" class="btn btn-outline-secondary px-4">

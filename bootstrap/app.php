@@ -7,7 +7,9 @@
     use App\Http\Middleware\CorretorTwoFactorMiddleware;
     use App\Http\Middleware\TwoFactorMiddleware;
     use App\Http\Middleware\EnsureCeoRegistrationIsOpen;
+    use App\Http\Middleware\CorretorAuth;
     use Illuminate\Http\Request;
+    use Illuminate\Support\Facades\Auth;
 
 
     return Application::configure(basePath: dirname(__DIR__))
@@ -26,12 +28,10 @@
                 |--------------------------------------------------------------------------
                 */
                 if (    
-                    $request->is('Dashboard/Admin*') ||
-                    $request->is('admin/*') ||
-                    $request->is('admins/*') ||
+                    $request->routeIs('admin.ceo.*') ||
                     $request->is('ceo/admin/*')
                 ) {
-                    return route(session('admin_login_fallback_route', 'admin.login'));
+                    return route('admin.ceo.login');
                 }
 
                 /*
@@ -40,7 +40,24 @@
                 |--------------------------------------------------------------------------
                 */
                 if (
+                    $request->routeIs('Dashboard-Admin') ||
+                    $request->routeIs('admin.*') ||
+                    $request->is('Dashboard/Admin*') ||
+                    $request->is('dashboard/admin*') ||
+                    $request->is('admin/*') ||
+                    $request->is('admins/*') ||
+                    $request->is('equipe') ||
+                    $request->is('equipe/*')
+                ) {
+                    return route('admin.login');
+                }
+
+                 if (
+                    $request->routeIs('empresa.*') ||
+                    $request->routeIs('Dashboard') ||
+                    $request->routeIs('2fa.*') ||
                     $request->is('Dashboard/User*') ||
+                    $request->is('dashboard/user*') ||
                     $request->is('empresa/*') ||
                     $request->is('2fa*')
                 ) {
@@ -55,11 +72,28 @@
                 return route('empresa.login');
             });
 
+            $middleware->redirectUsersTo(function (Request $request) {
+                if (Auth::guard('admin')->check()) {
+                    return route('Dashboard-Admin');
+                }
+
+                if (Auth::guard('company')->check()) {
+                    return route('Dashboard');
+                }
+
+                if (Auth::guard('web')->check()) {
+                    return route('dashboard');
+                }
+
+                return route('index');
+            });
+
             
             $middleware->alias([
                 'auth' => Authenticate::class,
                 '2fa' => TwoFactorMiddleware::class,
                 'admin.2fa' => CorretorTwoFactorMiddleware::class,
+                'corretor.active' => CorretorAuth::class,
                 'ceo.registration.open' => EnsureCeoRegistrationIsOpen::class,
             ]);
         })

@@ -30,11 +30,28 @@
         ->filter(fn ($corretor) => (bool) ($corretor->active ?? true))
         ->count();
 
-    $convitesPendentes = $corretores
+    $integrantesComConvitePendente = $corretores
         ->filter(function ($corretor) {
             return ($corretor->role ?? null) === 'integrante'
-                && blank($corretor->invite_accepted_at ?? null);
+                && blank($corretor->invite_accepted_at ?? null)
+                && filled($corretor->invite_expires_at ?? null)
+                && ! $corretor->invite_expires_at->isPast();
+        });
+
+    $convitesPendentes = $integrantesComConvitePendente->count();
+
+    $convitesExpirados = $corretores
+        ->filter(function ($corretor) {
+            return ($corretor->role ?? null) === 'integrante'
+                && blank($corretor->invite_accepted_at ?? null)
+                && filled($corretor->invite_expires_at ?? null)
+                && $corretor->invite_expires_at->isPast();
         })
+        ->count();
+
+    $convitesNaoAceitos = $corretores
+        ->filter(fn ($corretor) => ($corretor->role ?? null) === 'integrante'
+            && blank($corretor->invite_accepted_at ?? null))
         ->count();
 
     $search = request('search', '');
@@ -87,8 +104,31 @@
         @endif
 
         @if (session('error'))
-            <div class="alert alert-warning rounded-4 border-0 shadow-sm mb-4">
+            <div class="alert alert-danger rounded-4 border-0 shadow-sm mb-4">
                 {{ session('error') }}
+            </div>
+        @endif
+
+        @if (session('warning'))
+            <div class="alert alert-warning rounded-4 border-0 shadow-sm mb-4">
+                {{ session('warning') }}
+            </div>
+        @endif
+
+        @if (session('info'))
+            <div class="alert alert-info rounded-4 border-0 shadow-sm mb-4">
+                {{ session('info') }}
+            </div>
+        @endif
+
+        @if ($errors->any())
+            <div class="alert alert-danger rounded-4 border-0 shadow-sm mb-4">
+                <div class="fw-semibold mb-1">Revise os dados informados:</div>
+                <ul class="mb-0 ps-3">
+                    @foreach ($errors->all() as $error)
+                        <li>{{ $error }}</li>
+                    @endforeach
+                </ul>
             </div>
         @endif
 
@@ -219,7 +259,13 @@
                         </div>
 
                         <div class="text-muted small">
-                            pendentes de aceite
+                            aguardando aceite
+                        </div>
+
+                        <div class="small {{ $convitesExpirados > 0 ? 'text-danger' : 'text-muted' }}">
+                            {{ $convitesExpirados > 0
+                                ? $convitesExpirados . ' ' . ($convitesExpirados === 1 ? 'convite expirado' : 'convites expirados')
+                                : 'nenhum convite expirado' }}
                         </div>
                     </div>
                 </div>
@@ -316,6 +362,21 @@
 
                                     $conviteAceito = filled($corretor->invite_accepted_at ?? null);
 
+                                    $conviteExpirado = ! $conviteAceito
+                                        && filled($corretor->invite_expires_at ?? null)
+                                        && $corretor->invite_expires_at->isPast();
+
+                                    $convitePendente = ! $conviteAceito
+                                        && filled($corretor->invite_expires_at ?? null)
+                                        && ! $corretor->invite_expires_at->isPast();
+
+                                    $conviteNaoEnviado = ! $conviteAceito
+                                        && blank($corretor->invite_last_sent_at ?? null);
+
+                                    $resendInvitationRoute = Route::has('admin.config-equipe.resend-invitation')
+                                        ? route('admin.config-equipe.resend-invitation', $corretor)
+                                        : '#';
+
                                     $dataEntrada = $corretor->created_at
                                         ? $corretor->created_at->format('d/m/Y')
                                         : 'Não informado';
@@ -365,10 +426,29 @@
                                             <span class="badge text-bg-success">
                                                 Aceito
                                             </span>
+                                            @if (filled($corretor->invite_accepted_at ?? null))
+                                                <div class="small text-muted mt-1">
+                                                    {{ $corretor->invite_accepted_at->format('d/m/Y H:i') }}
+                                                </div>
+                                            @endif
+                                        @elseif ($conviteExpirado)
+                                            <span class="badge text-bg-danger">Expirado</span>
+                                            <div class="small text-danger mt-1">
+                                                Expirou em {{ $corretor->invite_expires_at->format('d/m/Y H:i') }}
+                                            </div>
+                                            <div class="small text-muted">Envie um novo convite</div>
+                                        @elseif ($convitePendente)
+                                            <span class="badge text-bg-warning text-dark">Pendente</span>
+                                            <div class="small text-muted mt-1">
+                                                Expira em {{ $corretor->invite_expires_at->format('d/m/Y H:i') }}
+                                            </div>
+                                            @if (filled($corretor->invite_last_sent_at ?? null))
+                                                <div class="small text-muted">
+                                                    Último envio: {{ $corretor->invite_last_sent_at->format('d/m/Y H:i') }}
+                                                </div>
+                                            @endif
                                         @else
-                                            <span class="badge text-bg-warning text-dark">
-                                                Pendente
-                                            </span>
+                                            <span class="badge text-bg-secondary">Não enviado</span>
                                         @endif
                                     </td>
 
@@ -427,13 +507,35 @@
                                                 CEO não editável
                                             </button>
                                         @else
-                                            <a
-                                                href="{{ $editRoute }}"
-                                                class="btn btn-sm btn-outline-primary {{ $editRoute === '#' ? 'disabled' : '' }}"
-                                            >
-                                                <i class="bi bi-pencil-square me-1"></i>
-                                                Editar
-                                            </a>
+                                            <div class="d-inline-flex flex-wrap justify-content-end gap-2">
+                                                <a
+                                                    href="{{ $editRoute }}"
+                                                    class="btn btn-sm btn-outline-primary {{ $editRoute === '#' ? 'disabled' : '' }}"
+                                                >
+                                                    <i class="bi bi-pencil-square me-1"></i>
+                                                    Editar
+                                                </a>
+
+                                                @if (! $conviteAceito)
+                                                    <form
+                                                        method="POST"
+                                                        action="{{ $resendInvitationRoute }}"
+                                                        class="d-inline"
+                                                        onsubmit="return confirm('Um novo convite será gerado e qualquer link anterior deixará de funcionar. Deseja continuar?')"
+                                                    >
+                                                        @csrf
+                                                        <button
+                                                            type="submit"
+                                                            class="btn btn-sm {{ $convitePendente ? 'btn-outline-warning' : 'btn-outline-danger' }}"
+                                                            title="{{ ! $isActive ? 'Ative o integrante antes de enviar um convite.' : 'Gera um novo convite e invalida o link anterior.' }}"
+                                                            @disabled(! $isActive || $resendInvitationRoute === '#')
+                                                        >
+                                                            <i class="bi bi-envelope-arrow-up me-1"></i>
+                                                            {{ $conviteExpirado || $conviteNaoEnviado ? 'Novo convite' : 'Reenviar convite' }}
+                                                        </button>
+                                                    </form>
+                                                @endif
+                                            </div>
                                         @endif
                                     </td>
                                 </tr>
@@ -479,8 +581,8 @@
                         </h2>
 
                         <p class="text-muted small mb-0">
-                            O CEO é o dono da corretora e não pode ser editado nesta tela.
-                            Integrantes podem ser editados, receber permissões e ter o acesso desabilitado pelo switch de status.
+                            O CEO não pode ser editado. Convites possuem prazo de validade, e cada reenvio invalida o link anterior.
+                            Integrantes inativos não recebem novos convites. O código 2FA é uma etapa de segurança diferente do convite de acesso.
                         </p>
                     </div>
                 </div>

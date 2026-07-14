@@ -9,6 +9,7 @@ use App\Models\Lead;
 use App\Models\InsuranceAnalysis;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Gate;
 
 
 class CorretorDashboardController extends Controller
@@ -16,6 +17,12 @@ class CorretorDashboardController extends Controller
     public function index(Request $request)
     {
         $corretor = Auth::guard('admin')->user();
+
+        abort_if(! $corretor, 401, 'Corretor não autenticado.');
+
+        $canViewLeads = Gate::forUser($corretor)->allows('view-leads');
+        $canViewRealEstateCompanies = Gate::forUser($corretor)
+            ->allows('view-real-estate-companies');
 
         $leadSearch = $request->input('lead_name', '');
 
@@ -60,33 +67,43 @@ class CorretorDashboardController extends Controller
             });
         });
 
-        $leads = $leadsQuery->paginate(6)->withQueryString();
+        $leads = $canViewLeads
+            ? $leadsQuery->paginate(6)->withQueryString()
+            : collect();
 
         $dashboardStats = [
-            'totalLeads' => Lead::count(),
-            'newLeads' => Lead::where('status', 'novo')->count(),
-            'recentLeads' => Lead::where('created_at', '>=', now()->subDays(7))->count(),
+            'totalLeads' => $canViewLeads ? Lead::count() : 0,
+            'newLeads' => $canViewLeads ? Lead::where('status', 'novo')->count() : 0,
+            'recentLeads' => $canViewLeads
+                ? Lead::where('created_at', '>=', now()->subDays(7))->count()
+                : 0,
 
-            'totalImobiliarias' => Imobiliaria::count(),
+            'totalImobiliarias' => $canViewRealEstateCompanies ? Imobiliaria::count() : 0,
 
             
-            'totalAprovados' => Lead::where('tags_originais', 'like', '%aprovad%')->count(),
+            'totalAprovados' => $canViewLeads
+                ? Lead::where('tags_originais', 'like', '%aprovad%')->count()
+                : 0,
 
-            'totalRecusados' => Lead::where(function ($query) {
-                $query->where('tags_originais', 'like', '%recusad%')
-                    ->orWhere('tags_originais', 'like', '%reprovad%')
-                    ->orWhere('tags_originais', 'like', '%ruim%');
-            })->count(),
+            'totalRecusados' => $canViewLeads
+                ? Lead::where(function ($query) {
+                    $query->where('tags_originais', 'like', '%recusad%')
+                        ->orWhere('tags_originais', 'like', '%reprovad%')
+                        ->orWhere('tags_originais', 'like', '%ruim%');
+                })->count()
+                : 0,
 
 
-            'latestLeadAt' => Lead::latest('created_at')->value('created_at'),
+            'latestLeadAt' => $canViewLeads
+                ? Lead::latest('created_at')->value('created_at')
+                : null,
 
 
         ];
 
-        $imobiliarias = Imobiliaria::query()
-            ->orderBy('name')
-            ->get();
+        $imobiliarias = $canViewLeads
+            ? Imobiliaria::query()->orderBy('name')->get()
+            : collect();
 
         return view('corretor.dashboard-admin', compact(
             'corretor',

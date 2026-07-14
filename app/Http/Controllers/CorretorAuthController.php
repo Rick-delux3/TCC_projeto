@@ -10,9 +10,16 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\RateLimiter;
 use App\Models\Corretor;
+use App\Services\CorretorInvitationService;
+use DomainException;
 
 class CorretorAuthController extends Controller
 {
+    public function __construct(
+        private CorretorInvitationService $invitationService
+    )
+    {}
+
     private const LOGIN_MAX_ATTEMPTS = 5;
     private const LOGIN_DECAY_SECONDS = 300;
 
@@ -121,6 +128,29 @@ class CorretorAuthController extends Controller
         ]
         );
 
+        $integrantePendente = Corretor::query()
+                    ->where('email', $data['email'])
+                    ->where('role', Corretor::ROLE_INTEGRANTE)
+                    ->first();
+
+        if (
+            $integrantePendente && ! $integrantePendente->hasAcceptedInvitation()
+        ) {
+            try {
+                $this->invitationService->assertFirstLoginCanContinue(
+                    request: $request,
+                    integrante: $integrantePendente
+                );
+            } catch (DomainException $exception) {
+                return back()
+                    ->withInput($request->only('email'))
+                    ->withErrors([
+                        'email' => $exception->getMessage(),
+                    ]);
+            }
+
+        }
+
         $loginKey = $this->loginThrottleKey('member:' . $data['email'], $request->ip());
 
         if (RateLimiter::tooManyAttempts($loginKey, self::LOGIN_MAX_ATTEMPTS)) {
@@ -155,27 +185,26 @@ class CorretorAuthController extends Controller
 
         if (! $corretor) {
             return redirect()
-                ->route('admin.member.login')
+                ->route('admin.login')
                 ->withErrors([
                     'email' => 'Falha ao iniciar sessão administrativa.',
                 ]);
         }
 
-
         if(! $corretor->isIntegrante())
         {
            $this->logoutCurrentAdminSession($request);
 
-            return redirect()->route('admin.member.login')->withErrors([
+            return redirect()->route('admin.login')->withErrors([
                 'email' => 'Acesso negado. Esta área é exclusiva para Integrantes',
             ]);
         }
 
-        return $this->finishSuccessfulLogin($corretor, $request, 'admin.member.login');
+        return $this->finishSuccessfulLogin($corretor, $request, 'admin.login', true);
 
     }
 
-    private function finishSuccessfulLogin(Corretor $corretor, Request $request, string $fallbackLoginRoute)
+    private function finishSuccessfulLogin(Corretor $corretor, Request $request, string $fallbackLoginRoute, bool $acceptMemberInvitation = false)
     {
         if (! $corretor->isActive()) {
             $this->logoutCurrentAdminSession($request);
@@ -186,6 +215,23 @@ class CorretorAuthController extends Controller
                     'email' => 'Este corretor está inativo. Entre em contato com o CEO da corretora.',
                     'cpf' => 'Este corretor está inativo. Entre em contato com o CEO da corretora.',
                 ]);
+        }
+
+        if ($acceptMemberInvitation) {
+            try {
+                $this->invitationService->acceptAfterSuccessfulLogin(
+                    request: $request,
+                    integrante: $corretor
+                );
+            } catch (DomainException $exception) {
+                $this->logoutCurrentAdminSession($request);
+
+                return redirect()
+                    ->route($fallbackLoginRoute)
+                    ->withErrors([
+                        'email' => $exception->getMessage(),
+                    ]);
+            }
         }
 
         /*
@@ -231,7 +277,7 @@ class CorretorAuthController extends Controller
     {
         if (! Auth::guard('admin')->check()) {
             return redirect()->route(session(
-                'admin_login_fallback_route', 'admin.member.login'
+                'admin_login_fallback_route', 'admin.login'
             ));
         }
 
@@ -258,7 +304,7 @@ class CorretorAuthController extends Controller
         $corretor = Auth::guard('admin')->user();
 
         if (! $corretor) {
-            return redirect()->route(session('admin_login_fallback_route', 'admin.member.login'));
+            return redirect()->route(session('admin_login_fallback_route', 'admin.login'));
         }
 
         if ($corretor->hasVerifiedFirstLogin()) {
@@ -342,7 +388,7 @@ class CorretorAuthController extends Controller
         $corretor = Auth::guard('admin')->user();
 
         if (! $corretor) {
-            return redirect()->route(session('admin_login_fallback_route', 'admin.member.login'));
+            return redirect()->route(session('admin_login_fallback_route', 'admin.login'));
         }
 
         if ($corretor->hasVerifiedFirstLogin()) {
@@ -381,7 +427,7 @@ class CorretorAuthController extends Controller
     {
         $corretor = Auth::guard('admin')->user();
 
-        $redirectRoute = $corretor && $corretor->isCeo() ? 'admin.ceo.login' : 'admin.member.login';
+        $redirectRoute = $corretor && $corretor->isCeo() ? 'admin.ceo.login' : 'admin.login';
 
         $this->logoutCurrentAdminSession($request);
 
@@ -424,6 +470,48 @@ class CorretorAuthController extends Controller
                 ->to($corretor->email)
                 ->subject('Seu código de verificação administrativa');
         });
+    }
+
+    public function acceptMemberInvitation(
+        Request $request,
+        Corretor $corretor
+    ) {
+        $routeLogin = route('admin.login');
+
+        if(! $request->hasValidSignature()) {
+            $expires = (int) $request->query('expires');
+
+            $message = $expires > 0 && now()->timestamp > $expires
+            ? 'Este convite expirou. Solicite ao CEO um novo convite.'
+            : 'Este convite é inválido ou foi alterado.';
+
+            return redirect($routeLogin)->withErrors([
+                'email' => $message,
+            ]);
+        }
+
+        try {
+            if (Auth::guard('admin')->check()) {
+                $this->logoutCurrentAdminSession($request);
+            }
+
+            $this->invitationService->rememberValidInvitation(
+                request: $request,
+                integrante: $corretor,
+                version: (int) $request->query('version')
+            );
+
+            return redirect()->route('admin.login', ['email' => $corretor->email])
+            ->with(
+                'success',
+                'Convite validado. Informe seu email e senha para continuar.'
+            );
+
+        } catch (DomainException $exception) {
+            return redirect($routeLogin)->withErrors([
+                'email' => $exception->getMessage(),
+            ]);
+        }
     }
 
     private function logoutCurrentAdminSession(Request $request)

@@ -15,9 +15,13 @@ class CorretorIntegranteLoginNotification extends Notification
     /**
      * Create a new notification instance.
      */
-    public function __construct()
+    public function __construct(
+        public string $invitationUrl,
+        public \Carbon\CarbonInterface $expiresAt,
+        public bool $isResend = false
+    )
     {
-        //
+        $this->afterCommit();
     }
 
     /**
@@ -36,15 +40,27 @@ class CorretorIntegranteLoginNotification extends Notification
     public function toMail(object $notifiable): MailMessage
     {
 
-        $loginUrl = Route::has('admin.login') ? route('admin.login') : url('/admin/login/form');
-
-        return (new MailMessage)
-            ->subject('Acesso ao painel da corretora')
-            ->greeting('Olá ' . ($notifiable->nome ?? 'integrante') . '!')
-            ->line('Você foi cadastrado como integrante da equipe da corretora!')
-            ->line('Use o email cadastrado para acessar o painel.')
-            ->action('Acessar painel', $loginUrl)
-            ->line('Caso você não reconheça este cadastro, ignore este e-mail.');
+       return (new MailMessage)
+        ->subject(
+            $this->isResend
+                ? 'Novo convite para acessar o painel'
+                : 'Convite para acessar o painel'
+        )
+        ->greeting("Olá, {$notifiable->name}!")
+        ->line(
+            $this->isResend
+                ? 'Um novo convite foi gerado. Qualquer link anterior deixou de ser válido.'
+                : 'Você foi convidado para integrar a equipe da corretora.'
+        )
+        ->action('Acessar convite', $this->invitationUrl)
+        ->line(
+            'Este convite expira em '
+            . $this->expiresAt->format('d/m/Y \à\s H:i')
+            . '.'
+        )
+        ->line(
+            'Caso expire, solicite ao CEO um novo envio.'
+        );
     }
 
     /**

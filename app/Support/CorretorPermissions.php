@@ -4,6 +4,23 @@ namespace App\Support;
 
 class CorretorPermissions
 {
+    /**
+     * Relação única entre as abilities usadas pelos Gates e as permissões
+     * persistidas no cadastro do integrante. Permissões de escrita também
+     * concedem a leitura necessária para que a ação seja utilizável na UI.
+     */
+    public static function abilities(): array
+    {
+        return [
+            'view-leads' => ['leads.visualizar', 'leads.editar'],
+            'edit-leads' => ['leads.editar'],
+            'view-analyses' => ['analises.visualizar', 'analises.criar'],
+            'create-analysis' => ['analises.criar'],
+            'view-real-estate-companies' => ['imobiliarias.visualizar'],
+            'view-tags' => ['tags.visualizar'],
+        ];
+    }
+
     public static function all(): array
     {
         return [

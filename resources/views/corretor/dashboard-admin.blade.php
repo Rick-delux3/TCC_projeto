@@ -895,6 +895,17 @@
                                     >
                                         @csrf
                                         @method('PUT')
+                                @else
+                                    <div class="alert alert-info rounded-4 d-flex align-items-start gap-2" role="status">
+                                        <i class="bi bi-eye mt-1" aria-hidden="true"></i>
+                                        <div>
+                                            <strong>Visualização somente leitura.</strong>
+                                            Você pode consultar todos os dados deste lead, mas não possui permissão para editá-los.
+                                        </div>
+                                    </div>
+
+                                    <fieldset disabled aria-label="Dados do lead disponíveis somente para visualização">
+                                @endcan
 
                                         <div class="row g-4">
                                             <div class="col-12">
@@ -1139,11 +1150,10 @@
                                                 </div>
                                             </div>
                                         </div>
+                                @can('edit-leads')
                                     </form>
                                 @else
-                                    <div class="alert alert-warning rounded-4">
-                                        Você pode visualizar os dados, mas não possui permissão para editar leads.
-                                    </div>
+                                    </fieldset>
                                 @endcan
                             </div>
 

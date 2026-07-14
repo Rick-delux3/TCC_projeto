@@ -3,18 +3,26 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
-use App\Notifications\CorretorIntegranteLoginNotification;
 use App\Support\CorretorPermissions;
 
 use App\Models\Corretor;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
+use App\Services\CorretorInvitationService;
+use DomainException;
+use Illuminate\Support\Facades\Log;
 
 
 
 class CorretorEquipeController extends Controller
 {
+
+    public function __construct(
+        private CorretorInvitationService $invitationService
+    )
+    {}
+
     public function index()
     {
         $search = request('search');
@@ -43,6 +51,16 @@ class CorretorEquipeController extends Controller
 
     public function store(Request $request)
     {
+        $ceo = Auth::guard('admin')->user();
+
+        abort_if(
+            ! $ceo || ! $ceo->isCeo(),
+            403,
+            'Apenas o CEO pode cadastrar e convidar integrantes.'
+        );
+
+        $routeIndex = route('admin.config-equipe.index');
+
         $validated = $request->validate([
             'nome' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255', 'unique:corretores,email'],
@@ -70,7 +88,8 @@ class CorretorEquipeController extends Controller
             'name' => $validated['nome'],
             'email' => mb_strtolower($validated['email']),
             'password' => Hash::make($validated['password']),
-
+            'password_set_at' => now(),
+ 
             'role' => Corretor::ROLE_INTEGRANTE,
 
             'permissions' => array_values($validated['permissions'] ?? []),
@@ -81,10 +100,33 @@ class CorretorEquipeController extends Controller
             'invited_at' => now(),
         ]);
 
-        $integrante->notify(new CorretorIntegranteLoginNotification());
+        try {
+            $this->invitationService->sendOrResend(
+                integrante: $integrante,
+                sentBy: $ceo,
+                request: $request
+            );
 
-        return redirect()->route('admin.config-equipe.index')
-        ->with('success', 'Corretor Integrante cadastrado com sucesso! O link para login foi enviado por email.');
+            return redirect($routeIndex)->with(
+                'success',
+                'Integrante Cadastrado e convite enviado com sucesso!'
+            );
+
+        } catch (DomainException $exception) {
+            return redirect($routeIndex)
+                ->with('error', $exception->getMessage());
+        } catch (\Throwable $exception) {
+            Log::error('Falha no envio do convite do integrante', [
+                'corretor_id' => $integrante->id,
+                'message' => $exception->getMessage(),
+            ]);
+
+           return redirect($routeIndex)
+            ->with(
+                'error',
+                'O integrante foi cadastrado, mas o convite não pôde ser enviado. Utilize o botão de reenvio.'
+            ); 
+        }
 
     }
 
@@ -153,6 +195,53 @@ class CorretorEquipeController extends Controller
         return redirect()->route('admin.config-equipe.index')
         ->with('success', 'Dados do integrante atualizados com sucesso!');
         
+    }
+
+    public function resendInvitation(
+        Request $request,
+        Corretor $corretor
+    ) {
+        $ceo = Auth::guard('admin')->user();
+
+        abort_if(
+            ! $ceo || ! $ceo->isCeo(),
+            403,
+            'Apenas o CEO pode reenviar convites.'
+        );
+
+        abort_if(
+            $corretor->isCeo(),
+            403,
+            'O CEO não utiliza convite de integrante.'
+        );
+
+        try {
+            $this->invitationService->sendOrResend(
+                integrante: $corretor,
+                sentBy: $ceo,
+                request: $request
+            );
+
+            return back()->with(
+                'success',
+                "Novo convite enviado para {$corretor->email}."
+            );
+        } catch (DomainException $exception) {
+            return back()->with(
+                'error',
+                $exception->getMessage()
+            );
+        } catch (\Throwable $exception) {
+            Log::error('Falha ao reenviar convite.', [
+                'corretor_id' => $corretor->id,
+                'message' => $exception->getMessage(),
+            ]);
+
+            return back()->with(
+                'error',
+                'Não foi possível reenviar o convite. Verifique a configuração de e-mail e a fila.'
+            );
+        }
     }
 }
  

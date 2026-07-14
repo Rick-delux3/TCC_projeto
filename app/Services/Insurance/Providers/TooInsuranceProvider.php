@@ -384,7 +384,7 @@ class TooInsuranceProvider implements InsuranceProviderInterface
             now()->addSeconds(
                 (int) config(
                     'services.too.status_check_delay_seconds',
-                    20
+                    30
                 )
             )
         );

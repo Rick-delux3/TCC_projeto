@@ -52,7 +52,7 @@
                         id="email"
                         name="email"
                         class="client-input"
-                        value="{{ old('email') }}"
+                        value="{{ old('email', request('email')) }}"
                         placeholder="integrante@corretora.com.br"
                         autocomplete="username"
                         required

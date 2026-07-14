@@ -7,6 +7,7 @@ use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
 use App\Models\Corretor;
+use App\Support\CorretorPermissions;
 use Illuminate\Support\Facades\Gate;
 
 class AppServiceProvider extends ServiceProvider
@@ -56,40 +57,23 @@ class AppServiceProvider extends ServiceProvider
             return null;
         });
 
+        Gate::define('access-dashboard', function (Corretor $corretor) {
+            return $corretor->isActive();
+        });
+
         Gate::define('manage-organization', function (Corretor $corretor) {
-        return $corretor->isActive()
-            && $corretor->isCeo();
+            return $corretor->isActive()
+                && $corretor->isCeo();
         });
 
-        Gate::define('view-leads', function (Corretor $corretor) {
-            return $corretor->isActive()
-                && $corretor->hasPermission('leads.visualizar');
-        });
-
-        Gate::define('edit-leads', function (Corretor $corretor){
-            return $corretor->isActive()
-                && $corretor->hasPermission('leads.editar');
-        });
-        
-        Gate::define('create-analysis', function (Corretor $corretor) {
-            return $corretor->isActive()
-                && $corretor->hasPermission('analises.criar');
-        });
-
-        Gate::define('view-analyses', function (Corretor $corretor) {
-            return $corretor->isActive()
-                && $corretor->hasPermission('analises.visualizar');
-        });
-
-        Gate::define('view-real-estate-companies', function (Corretor $corretor) {
-            return $corretor->isActive()
-                && $corretor->hasPermission('imobiliarias.visualizar');
-        });
-
-        Gate::define('view-tags', function (Corretor $corretor) {
-            return $corretor->isActive()
-                && $corretor->hasPermission('tags.visualizar');
-        });
+        foreach (CorretorPermissions::abilities() as $ability => $permissions) {
+            Gate::define($ability, function (Corretor $corretor) use ($permissions) {
+                return $corretor->isActive()
+                    && collect($permissions)->contains(
+                        fn (string $permission) => $corretor->hasPermission($permission)
+                    );
+            });
+        }
 
     }
 }
