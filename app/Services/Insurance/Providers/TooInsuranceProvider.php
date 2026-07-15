@@ -412,6 +412,118 @@ class TooInsuranceProvider implements InsuranceProviderInterface
         );
     }
 
+    public function getStatus(
+        InsuranceAnalysis $analysis
+    ): array
+    {
+        $this->loadTooRelations($analysis);
+
+        $lead = $analysis->lead;
+
+        $cpf = $this->onlyNumbers($lead?->cpf);
+
+        $correntPayload = $analysis->response_payload ?? [];
+
+        if(is_string($correntPayload)) {
+            $currentPayload = json_decode(
+                $correntPayload,
+                true
+            ) ?: [];
+        }
+
+        if(!is_array($correntPayload)){
+            $currentPayload = [];
+        }
+
+        $numeroProposta = $analysis->tooNumeroProposta() 
+        ?? data_get($currentPayload, 'numeroProposta')
+        ?? $analysis->proposal_id;
+
+        $numeroFicha = $analysis->tooNumeroFicha()
+        ?? data_get($currentPayload, 'numeroFicha')
+        ?? $numeroProposta;
+
+        if(
+            ! $lead
+            || blank($cpf)
+            || blank($numeroProposta)
+        ) {
+            return $this->failResult(
+                message: 'CPF ou número da proposta ausente para consultar status da Too.',
+                step: 'get_status_validate',
+                extra: [
+                    'analysis_id' => $analysis->id,
+                    'lead_id' => $analysis->lead_id,
+                    'numeroProposta' => $numeroProposta,
+                    'numeroFicha' => $numeroFicha,
+                ]
+            );
+        }
+
+        $statusResponse = $this->tooService->getProposalStatus(
+            cpf: $cpf,
+            numeroProposta: $numeroProposta
+        );
+
+        if(! $this->responseWasSuccessful($statusResponse)){
+            return $this->failResult(
+                message: 'Erro ao consultar o status da proposta na Too.',
+                step: 'get_status',
+                responses: [
+                    'status' => $statusResponse,
+                ],
+                extra: [
+                    'numeroProposta' => $numeroProposta,
+                    'numeroFicha' => $numeroFicha,
+                ]
+            );
+        }
+
+        $attemptId = data_get(
+            $currentPayload,
+            'too_reanalysis_attempt_id'
+        ) ??
+        data_get(
+            $currentPayload,
+            'attempt_id'
+        ) ??
+        data_get(
+            $currentPayload,
+            'too_analysis_attempt_id'
+        );
+
+        $isReanalysis = (bool) (
+            data_get(
+                $currentPayload,
+                'too_is_reanalysis'
+            ) ??
+            data_get(
+                $currentPayload,
+                'is_reanalysis',
+                false
+            )
+        );
+
+        return $this->handleStatusAndMaybeQuote(
+            analysis: $analysis,
+            statusResponse: $statusResponse,
+            baseResponses: [
+                'status' => $statusResponse,
+            ],
+            baseExtra: [
+                'attempt_id' => $attemptId,
+                'is_reanalysis' => $isReanalysis,
+                'numeroProposta' => $numeroProposta,
+                'numeroFicha' => $numeroFicha,
+            ],
+            scheduleNextCheck: false,
+            attemptId: $attemptId,
+            isReanalysis: $isReanalysis
+        );
+
+
+    }
+
     /**
      * Centraliza a regra de decisão da Too.
      *
@@ -426,6 +538,7 @@ class TooInsuranceProvider implements InsuranceProviderInterface
         ?string $attemptId = null,
         bool $isReanalysis = false,
     ): array {
+
         $statusData = $statusResponse['response'] ?? [];
         $statusInfo = $this->tooCreditDecision($statusData);
 

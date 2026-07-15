@@ -49,6 +49,15 @@
     $leadSearch = $leadSearch ?? request('lead_name', '');
     $selectedImobiliaria = $selectedImobiliaria ?? request('imobiliaria', '');
     $selectedResultado = $selectedResultado ?? request('resultado', '');
+    $selectedTipoSolicitante = $selectedTipoSolicitante
+        ?? request('tipo_solicitante', '');
+
+    $tipoSolicitantesOptions = $tipoSolicitantesOptions ?? [
+        'imobiliaria_cadastrada' => 'Imobiliária cadastrada',
+        'imobiliaria_nao_cadastrada' => 'Imobiliária não cadastrada',
+        'locador' => 'Proprietário / locador',
+        'locatario' => 'Locatário',
+    ];
 
     $filteredLeads = method_exists($leads, 'total')
         ? $leads->total()
@@ -64,7 +73,8 @@
 
     $isFiltering = filled($leadSearch)
         || filled($selectedImobiliaria)
-        || filled($selectedResultado);
+        || filled($selectedResultado)
+        || filled($selectedTipoSolicitante);
 
     /*
     |--------------------------------------------------------------------------
@@ -118,13 +128,18 @@
         'recusado' => 'Recusados/Reprovados',
     ];
 
-    $selectedImobiliariaModel = filled($selectedImobiliaria)
-        ? $imobiliarias->firstWhere('id', (int) $selectedImobiliaria)
-        : null;
+    if ($selectedImobiliaria === 'sem_vinculo') {
+        $selectedImobiliariaModel = null;
+        $selectedImobiliariaName = 'Sem imobiliária vinculada';
+    } else {
+        $selectedImobiliariaModel = filled($selectedImobiliaria)
+            ? $imobiliarias->firstWhere('id', (int) $selectedImobiliaria)
+            : null;
 
-    $selectedImobiliariaName = $selectedImobiliariaModel?->name
-        ?? $selectedImobiliariaModel?->nome
-        ?? null;
+        $selectedImobiliariaName = $selectedImobiliariaModel?->name
+            ?? $selectedImobiliariaModel?->nome
+            ?? null;
+    }
 
     $normalizeTag = function ($value) {
         return Str::of((string) $value)
@@ -169,11 +184,25 @@
     };
 
     $getImobiliariaName = function ($lead) {
-        return $lead->company?->name
-            ?? $lead->company?->nome
-            ?? $lead->imobiliaria?->name
-            ?? $lead->imobiliaria?->nome
-            ?? 'Não vinculada';
+        if ($lead->company_id) {
+            return $lead->imobiliariaVinculada?->name
+                ?? $lead->imobiliariaVinculada?->nome
+                ?? (is_string($lead->imobiliaria) ? $lead->imobiliaria : null)
+                ?? 'Imobiliária vinculada';
+        }
+
+        if ($lead->tipo_solicitante === 'imobiliaria_nao_cadastrada') {
+            return $lead->imobiliariaInformada?->nome_imobiliaria_informada
+                ?? (is_string($lead->imobiliaria) ? $lead->imobiliaria : null)
+                ?? 'Imobiliária não cadastrada';
+        }
+
+        return 'Sem imobiliária vinculada';
+    };
+
+    $getTipoSolicitanteLabel = function ($lead) use ($tipoSolicitantesOptions) {
+        return $tipoSolicitantesOptions[$lead->tipo_solicitante]
+            ?? 'Perfil não informado';
     };
 
     $getLeadCity = function ($lead) {
@@ -206,11 +235,11 @@
                 </span>
 
                 <h1 class="h2 fw-bold mb-1">
-                    Clientes das imobiliárias
+                    Central de leads
                 </h1>
 
                 <p class="text-muted mb-0">
-                    Visualize a base geral de clientes, filtre por imobiliária e refine por aprovação ou recusa.
+                    Visualize leads de imobiliárias cadastradas e solicitações públicas, filtrando por vínculo, perfil e resultado.
                 </p>
             </div>
 
@@ -386,17 +415,17 @@
                         </span>
 
                         <h2 class="h4 fw-bold mb-1">
-                            Lista de clientes
+                            Lista de leads
                         </h2>
 
                         <p class="text-muted mb-0">
-                            Filtre primeiro por imobiliária e depois por resultado, sem perder o filtro anterior.
+                            Combine busca, vínculo com imobiliária, perfil do solicitante e resultado.
                         </p>
                     </div>
 
                     <div class="text-xl-end">
                         <div class="fw-bold">
-                            {{ $filteredLeads }} cliente(s)
+                            {{ $filteredLeads }} lead(s)
                         </div>
 
                         <div class="small text-muted">
@@ -410,9 +439,9 @@
                         <div class="row g-3 align-items-end">
 
                             {{-- Busca --}}
-                            <div class="col-12 col-lg-4">
+                            <div class="col-12 col-xl-3">
                                 <label for="admin-lead-search" class="form-label small text-muted">
-                                    Buscar cliente
+                                    Buscar lead
                                 </label>
 
                                 <div class="input-group">
@@ -432,14 +461,21 @@
                                 </div>
                             </div>
 
-                            {{-- Imobiliária --}}
-                            <div class="col-12 col-lg-4">
+                            {{-- Vínculo com imobiliária --}}
+                            <div class="col-12 col-md-6 col-xl-3">
                                 <label for="admin-imobiliaria-filter" class="form-label small text-muted">
-                                    Imobiliária
+                                    Vínculo com imobiliária
                                 </label>
 
                                 <select id="admin-imobiliaria-filter" name="imobiliaria" class="form-select">
-                                    <option value="">Todas as imobiliárias</option>
+                                    <option value="">Todos os vínculos</option>
+
+                                    <option
+                                        value="sem_vinculo"
+                                        @selected($selectedImobiliaria === 'sem_vinculo')
+                                    >
+                                        Sem imobiliária vinculada
+                                    </option>
 
                                     @foreach ($imobiliarias as $imobiliaria)
                                         @php
@@ -458,8 +494,32 @@
                                 </select>
                             </div>
 
+                            {{-- Perfil do solicitante --}}
+                            <div class="col-12 col-md-6 col-xl-3">
+                                <label for="admin-tipo-solicitante-filter" class="form-label small text-muted">
+                                    Perfil do solicitante
+                                </label>
+
+                                <select
+                                    id="admin-tipo-solicitante-filter"
+                                    name="tipo_solicitante"
+                                    class="form-select"
+                                >
+                                    <option value="">Todos os perfis</option>
+
+                                    @foreach ($tipoSolicitantesOptions as $value => $label)
+                                        <option
+                                            value="{{ $value }}"
+                                            @selected($selectedTipoSolicitante === $value)
+                                        >
+                                            {{ $label }}
+                                        </option>
+                                    @endforeach
+                                </select>
+                            </div>
+
                             {{-- Resultado --}}
-                            <div class="col-12 col-lg-3">
+                            <div class="col-12 col-md-6 col-xl-2">
                                 <label for="admin-resultado-filter" class="form-label small text-muted">
                                     Resultado/tag
                                 </label>
@@ -476,7 +536,7 @@
                             </div>
 
                             {{-- Botão --}}
-                            <div class="col-12 col-lg-1 d-grid">
+                            <div class="col-12 col-md-6 col-xl-1 d-grid">
                                 <button type="submit" class="btn btn-primary" title="Filtrar">
                                     <i class="bi bi-funnel"></i>
                                 </button>
@@ -506,7 +566,17 @@
                                     href="{{ request()->fullUrlWithQuery(['imobiliaria' => null, 'page' => 1]) }}#leads-section"
                                     class="badge rounded-pill text-bg-success text-decoration-none px-3 py-2"
                                 >
-                                    Imobiliária: {{ $selectedImobiliariaName ?? 'Selecionada' }}
+                                    Vínculo: {{ $selectedImobiliariaName ?? 'Selecionado' }}
+                                    <i class="bi bi-x ms-1"></i>
+                                </a>
+                            @endif
+
+                            @if (filled($selectedTipoSolicitante))
+                                <a
+                                    href="{{ request()->fullUrlWithQuery(['tipo_solicitante' => null, 'page' => 1]) }}#leads-section"
+                                    class="badge rounded-pill text-bg-info text-decoration-none px-3 py-2"
+                                >
+                                    Perfil: {{ $tipoSolicitantesOptions[$selectedTipoSolicitante] ?? $selectedTipoSolicitante }}
                                     <i class="bi bi-x ms-1"></i>
                                 </a>
                             @endif
@@ -529,7 +599,7 @@
                         </div>
                     @endif
 
-                    {{-- Atalhos rápidos que preservam imobiliária e busca --}}
+                    {{-- Atalhos rápidos que preservam busca, vínculo e perfil --}}
                     <div class="d-flex flex-wrap gap-2 mt-4 pt-3 border-top">
                         <span class="small text-muted me-1">
                             Refinar rapidamente:
@@ -564,7 +634,7 @@
             </div>
         </div>
 
-        {{-- Lista de clientes --}}
+        {{-- Lista de leads --}}
         @can('view-leads')
             @if ($filteredLeads > 0)
                 <div class="lead-list vstack gap-3">
@@ -594,6 +664,7 @@
                                 ->implode('');
 
                             $imobiliariaName = $getImobiliariaName($lead);
+                            $tipoSolicitanteLabel = $getTipoSolicitanteLabel($lead);
                         @endphp
 
                         <article class="card border-0 shadow-sm rounded-5 lead-card lead-list-item {{ $resultTone['card'] }}">
@@ -615,19 +686,33 @@
                                                 <div class="small text-muted text-truncate">
                                                     {{ $leadCity }}
                                                 </div>
+
+                                                <span class="badge text-bg-info mt-1">
+                                                    {{ $tipoSolicitanteLabel }}
+                                                </span>
                                             </div>
                                         </div>
                                     </div>
 
-                                    {{-- Imobiliária --}}
+                                    {{-- Vínculo/origem --}}
                                     <div class="col-12 col-md-6 col-xl-3">
                                         <div class="small text-muted">
-                                            Imobiliária
+                                            Vínculo/origem
                                         </div>
 
                                         <div class="fw-semibold text-truncate">
                                             {{ $imobiliariaName }}
                                         </div>
+
+                                        @if ($lead->tipo_solicitante === 'imobiliaria_nao_cadastrada')
+                                            <div class="small text-muted">
+                                                Nome informado no formulário; sem vínculo cadastrado.
+                                            </div>
+                                        @elseif ($lead->tipo_solicitante === 'locador' && filled($lead->locador?->nome))
+                                            <div class="small text-muted text-truncate">
+                                                Proprietário: {{ $lead->locador->nome }}
+                                            </div>
+                                        @endif
                                     </div>
 
                                     {{-- E-mail --}}
@@ -739,7 +824,7 @@
                 <div class="card border-0 shadow-sm rounded-4 mt-4">
                     <div class="card-body d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
                         <p class="text-muted small mb-0">
-                            Exibindo {{ $currentStart }} a {{ $currentEnd }} de {{ $filteredLeads }} cliente(s){{ $isFiltering ? ' filtrados' : '' }}.
+                            Exibindo {{ $currentStart }} a {{ $currentEnd }} de {{ $filteredLeads }} lead(s){{ $isFiltering ? ' filtrados' : '' }}.
                         </p>
 
                         @if (method_exists($leads, 'hasPages') && $leads->hasPages())
@@ -753,16 +838,16 @@
                 <div class="card border-0 shadow-sm rounded-5">
                     <div class="card-body text-center p-5">
                         <span class="badge text-bg-light border mb-3">
-                            Nenhum cliente encontrado
+                            Nenhum lead encontrado
                         </span>
 
                         @if ($isFiltering)
                             <h3 class="h5 fw-bold">
-                                Nenhum cliente corresponde aos filtros atuais.
+                                Nenhum lead corresponde aos filtros atuais.
                             </h3>
 
                             <p class="text-muted">
-                                Tente alterar a imobiliária, mudar o resultado ou limpar os filtros.
+                                Tente alterar a busca, o vínculo, o perfil, o resultado ou limpar os filtros.
                             </p>
 
                             <a href="{{ $dashboardRoute }}#leads-section" class="btn btn-outline-secondary">
@@ -770,11 +855,11 @@
                             </a>
                         @else
                             <h3 class="h5 fw-bold">
-                                Ainda não há clientes cadastrados.
+                                Ainda não há leads cadastrados.
                             </h3>
 
                             <p class="text-muted">
-                                Assim que as imobiliárias enviarem simulações, os clientes aparecerão aqui.
+                                Assim que uma imobiliária ou um solicitante público enviar uma simulação, o lead aparecerá aqui.
                             </p>
                         @endif
                     </div>
@@ -785,13 +870,14 @@
 </div>
 
 
-{{-- Modais dos clientes --}}
+{{-- Modais dos leads --}}
 @can('view-leads')
     @foreach ($leads as $lead)
         @php
             $leadName = $lead->nome ?: 'Cliente sem nome';
 
             $imobiliariaName = $getImobiliariaName($lead);
+            $tipoSolicitanteLabel = $getTipoSolicitanteLabel($lead);
 
             $allTags = collect(preg_split('/\s*,\s*/', $lead->tags_originais ?? ''))
                 ->filter(fn ($tag) => filled($tag))
@@ -799,9 +885,13 @@
 
             $resultTone = $getLeadResultTone($allTags);
 
-            $lastAnalysis = $lead->insuranceAnalyses()->latest('created_at')->first();
+            $lastAnalysis = $lead->insuranceAnalyses
+                ->sortByDesc('created_at')
+                ->first();
 
-            $canReanalyze = $lead->canRequestReanalysis();
+            $canReanalyze = filled($lead->reanalysis_unlocked_at)
+                && (! $lastAnalysis
+                    || $lead->reanalysis_unlocked_at->gt($lastAnalysis->created_at));
 
         @endphp
 
@@ -817,16 +907,22 @@
 
                     <div class="modal-header border-0 pb-0">
                         <div>
-                            <span class="badge {{ $resultTone['badge'] }} mb-2">
-                                {{ $resultTone['label'] }}
-                            </span>
+                            <div class="d-flex flex-wrap gap-2 mb-2">
+                                <span class="badge {{ $resultTone['badge'] }}">
+                                    {{ $resultTone['label'] }}
+                                </span>
+
+                                <span class="badge text-bg-info">
+                                    {{ $tipoSolicitanteLabel }}
+                                </span>
+                            </div>
 
                             <h5 class="modal-title fw-bold" id="adminLeadModalLabel{{ $lead->id }}">
                                 {{ $leadName }}
                             </h5>
 
                             <p class="text-muted small mb-0">
-                                Imobiliária: {{ $imobiliariaName }}
+                                Vínculo/origem: {{ $imobiliariaName }}
                             </p>
                         </div>
 

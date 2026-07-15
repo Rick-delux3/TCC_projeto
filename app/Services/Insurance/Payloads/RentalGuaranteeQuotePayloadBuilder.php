@@ -12,8 +12,8 @@ class RentalGuaranteeQuotePayloadBuilder
     {
         /*
          * Carrega os relacionamentos necessários para montar o payload.
-         * A parte de imobiliária/company foi deixada flexível para não quebrar
-         * caso seu projeto ainda use company() ou já tenha mudado para imobiliaria().
+         * O vínculo com a imobiliária cadastrada usa o relacionamento
+         * imobiliariaVinculada() definido no model Lead.
          */
         $relations = [
             'lead.endereco',
@@ -23,11 +23,7 @@ class RentalGuaranteeQuotePayloadBuilder
             'lead.imobiliariaInformada',
         ];
 
-        if (method_exists(Lead::class, 'imobiliaria')) {
-            $relations[] = 'lead.imobiliaria';
-        } elseif (method_exists(Lead::class, 'company')) {
-            $relations[] = 'lead.company';
-        }
+        $relations[] = 'lead.imobiliariaVinculada';
 
         $analysis->loadMissing($relations);
 
@@ -144,7 +140,7 @@ class RentalGuaranteeQuotePayloadBuilder
         /*
          * PolicyOwner somente quando for imobiliária cadastrada.
          */
-        $imobiliaria = $lead?->company;
+        $imobiliaria = $lead?->imobiliariaVinculada;
 
         $companyDocument = \only_numbers($imobiliaria?->cnpj ?? '');
 

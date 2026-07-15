@@ -35,7 +35,9 @@ class CorretorDashboardController extends Controller
                 'endereco',
                 'despesas',
                 'conjuge',
-                'imobiliaria',
+                'imobiliariaVinculada',
+                'imobiliariaInformada',
+                'locador',
                 'insuranceAnalyses',
             ])->latest();
         
@@ -44,14 +46,51 @@ class CorretorDashboardController extends Controller
                 $subQuery->where('nome', 'like', "%$leadSearch%")
                     ->orWhere('email', 'like', "%$leadSearch%")
                     ->orWhere('cpf', 'like', "%$leadSearch%")
-                    ->orWhere('telefone', 'like', "%$leadSearch%");
+                    ->orWhere('tel', 'like', "%$leadSearch%");
             });
         });
 
+        $tipoSolicitantesOptions = [
+            'imobiliaria_cadastrada' => 'Imobiliária cadastrada',
+            'imobiliaria_nao_cadastrada' => 'Imobiliária não cadastrada',
+            'locador' => 'Proprietário / locador',
+            'locatario' => 'Locatário',
+        ];
 
-         $leadsQuery->when($selectedImobiliaria, function ($query) use ($selectedImobiliaria) {
-            $query->where('company_id', $selectedImobiliaria);
-        });
+        $selectedTipoSolicitante = (string) $request->input(
+            'tipo_solicitante',
+            ''
+        );
+
+        if (
+            $selectedTipoSolicitante !== ''
+            && ! array_key_exists(
+                $selectedTipoSolicitante,
+                $tipoSolicitantesOptions
+            )
+        ) {
+            $selectedTipoSolicitante = '';
+        }
+
+
+         if($selectedImobiliaria === 'sem_vinculo') {
+            $leadsQuery->whereNull('company_id');
+         } elseif ($selectedImobiliaria !== '') {
+            $leadsQuery->where(
+                'company_id',
+                (int) $selectedImobiliaria
+            );
+         }
+
+         $leadsQuery->when(
+            $selectedTipoSolicitante !== '',
+            function ($query) use ($selectedTipoSolicitante) {
+                $query->where(
+                    'tipo_solicitante',
+                    $selectedTipoSolicitante
+                );
+            }
+         );
 
         $leadsQuery->when($selectedResultado, function ($query) use ($selectedResultado) {
             $query->where(function ($subQuery) use ($selectedResultado) {
@@ -113,6 +152,8 @@ class CorretorDashboardController extends Controller
             'leadSearch',
             'selectedImobiliaria',
             'selectedResultado',
+            'selectedTipoSolicitante',
+            'tipoSolicitantesOptions',
         ));
         
     }

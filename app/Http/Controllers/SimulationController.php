@@ -12,7 +12,7 @@ use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\DB;
 use App\Models\InsuranceAnalysisBatch;
 use Illuminate\Support\Facades\Log;
-
+use Illuminate\Validation\ValidationException;
 
 class SimulationController extends Controller
 {
@@ -43,9 +43,13 @@ class SimulationController extends Controller
 
         return match ($data['tipo_solicitante']) {
             'imobiliaria_cadastrada' => redirect()->route('simulation.registered-company.access'),
-            'imobiliaria_nao_cadastrada' => redirect()->route('simulation.unregistered-company.form'),
+            'imobiliaria_nao_cadastrada' => redirect()->route('simulation.unregistered-company.form', [
+                'responsavel_tipo' => 'imobiliaria_nao_cadastrada',
+            ]),
             'locatario' => redirect()->route('simulation.tenant.form'),
-            'locador' => redirect()->route('simulation.unregistered-company.form'),
+            'locador' => redirect()->route('simulation.unregistered-company.form', [
+                'responsavel_tipo' => 'locador',
+            ]),
         };
     }
 
@@ -123,7 +127,16 @@ class SimulationController extends Controller
      */
     public function unregisteredCompanyForm(Request $request)
     {
-        $responsavelTipo = $request->get('responsavel_tipo', 'imobiliaria_nao_cadastrada');
+        $responsavelTipo = $request->query('responsavel_tipo', 'imobiliaria_nao_cadastrada');
+
+        abort_unless(
+            in_array(
+                $responsavelTipo,
+                ['imobiliaria_nao_cadastrada', 'locador'],
+                true
+            ),
+            404
+        );
 
         return view('simulation.forms.unregistered-company_landlord', compact('responsavelTipo'));
     }
@@ -132,7 +145,14 @@ class SimulationController extends Controller
     {
         $data = $request->validated();
         
-        $responsavelTipo = $data['responsavel_tipo'];
+        $responsavelTipo = $data['responsavel_tipo'] ?? null;
+
+        if(! in_array($responsavelTipo, ['imobiliaria_nao_cadastrada', 'locador'], true
+        )) {
+            throw ValidationException::withMessages([
+                'responsavel_tipo' => 'O perfil informado é inválido.',
+            ]);
+        }
 
         $lead = DB::transaction(function () use ($request, $responsavelTipo) {
             return $this->saveLead($request, [

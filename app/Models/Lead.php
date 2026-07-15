@@ -53,10 +53,10 @@ class Lead extends Model
      */
     public function company()
     {
-        return $this->imobiliaria();
+        return $this->imobiliariaVinculada();
     }
 
-    public function imobiliaria()
+    public function imobiliariaVinculada()
     {
         return $this->belongsTo(Imobiliaria::class, 'company_id');
     }
