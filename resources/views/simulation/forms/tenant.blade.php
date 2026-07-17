@@ -26,6 +26,7 @@
                     esta solicitação será registrada como locatário sem vínculo
                     com imobiliária.
                 </div>
+            @endif
 
             <form action="{{ $formAction }}" method="POST">
                 @csrf

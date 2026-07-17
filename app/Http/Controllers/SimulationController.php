@@ -19,7 +19,7 @@ use PhpParser\Node\Expr\FuncCall;
 class SimulationController extends Controller
 {
     private const ADMIN_UNLINKED_TYPES = [
-        'imobilaria_nao_cadastrada',
+        'imobiliaria_nao_cadastrada',
         'locatario',
         'locador',
     ];
@@ -343,7 +343,7 @@ class SimulationController extends Controller
             ->with('success', 'Solicitação enviada com sucesso. O resultado será enviado por e-mail.');
     }
 
-    private function adminResolveForm(Request $request)
+    public function adminResolveForm(Request $request)
     {
         $data = $request->validateWithBag('adminSimulation', [
             'vinculo' => [
@@ -357,7 +357,7 @@ class SimulationController extends Controller
             'company_id' => [
                 'exclude_unless:vinculo,imobiliaria_cadastrada',
                 'required_if:vinculo,imobiliaria_cadastrada',
-                'interger',
+                'integer',
 
                 Rule::exists('imobiliarias', 'id')
                     ->where(
