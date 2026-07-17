@@ -13,12 +13,18 @@ use Illuminate\Support\Facades\DB;
 use App\Models\InsuranceAnalysisBatch;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
+use Illuminate\Validation\Rule;
+use PhpParser\Node\Expr\FuncCall;
 
 class SimulationController extends Controller
 {
-    /**
-     * Mostra o questionário inicial.
-     */
+    private const ADMIN_UNLINKED_TYPES = [
+        'imobiliaria_nao_cadastrada',
+        'locatario',
+        'locador',
+    ];
+
+
     public function start()
     {
         return view('simulation.start');
@@ -101,6 +107,151 @@ class SimulationController extends Controller
         return view('simulation.forms.registered-company', compact('company'));
     }
 
+    public function adminRegisteredCompanyForm(Imobiliaria $company)
+    {
+        abort_unless(
+            (bool) $company->lead_form_active,
+            404,
+            'O formulário desta imobiliária está indisponível.'
+        );
+
+        return view('simulation.forms.registered-company', [
+            'company' => $company,
+
+            'formAction' => route(
+                'admin.simulations.registered-company.store', $company
+            ),
+
+            'isAdminSimulation' => true,
+        ]);
+    }
+
+    public function adminStoreRegisteredCompanyLead(
+        StoreSimulationLeadRequest $request,
+        Imobiliaria $company
+    ) {
+        abort_unless(
+            $company->lead_form_active,
+            404,
+            'O formulário dessa imobiliária está indisponível.'
+        );
+
+        $data = $request->validated();
+
+        $existingLead = $this->findExistingLeadWithBatch(
+            email: $data['email'],
+            company: $company,
+            origem: 'imobiliaria_cadastrada'
+        );
+
+        if($existingLead) {
+            return back()->withInput()
+                ->with(
+                    'error',
+                    "O cliente já possui uma análise. " . "Use a reanálise do lead #{$existingLead->id}."
+                
+                );
+        }
+
+        $lead = DB::transaction(function () use ($request, $company){
+            return $this->saveLead($request, [
+                'tipo_solicitante' => 'imobiliaria_cadastrada',
+                'company' => $company,
+                'origem' => 'imobiliaria_cadastrada',
+                'corretor_id' => (int) auth('admin')->id(),
+            ]);
+        });
+
+        $this->dispatchLeadFlow($lead);
+
+        return redirect()->route('Dashboard-Admin')
+        ->with('success', "Solicitação do lead #{$lead->id} adicionada à fila de análises.");
+
+    }
+
+    public function adminUnlinkedForm(string $tipo)
+    {
+        abort_unless(
+            in_array($tipo, self::ADMIN_UNLINKED_TYPES, true),
+            404
+        );
+
+        $formAction = route(
+            'admin.simulations.unlinked.store',
+            ['tipo' => $tipo]
+        );
+
+        $commonData = [
+            'formAction' => $formAction,
+            'isAdminSimulation' => true,
+        ];
+
+        if($tipo === 'locatario'){
+            return view('simulation.forms.tenant', $commonData);
+        }
+
+        return view('simulation.forms.unregistered-company_landlord',
+        [
+            ...$commonData,
+            'responsavelTipo' => $tipo,
+            'lockResponsavelTipo' => true,
+        ]
+        
+        );
+    }
+
+    public function adminStoreUnlinkedLead(
+        StoreSimulationLeadRequest $request,
+        string $tipo
+    ) {
+        abort_unless(
+            in_array($tipo, self::ADMIN_UNLINKED_TYPES, true),
+            404
+        );
+
+        $data = $request->validated();
+
+        if(
+            $tipo !== 'locatario' && ($data['responsavel_tipo'] ?? null) !== $tipo
+        ) {
+            throw ValidationException::withMessages([
+                'responsavel_tipo' => 'O tipo de solicitante não corresponde ao formulário aberto.',
+            ]);
+        }
+
+        $existingLead = $this->findExistingLeadWithBatch(
+            email: $data['email'],
+            company: null,
+            origem: $tipo
+        );
+
+        if($existingLead) {
+            return back()->withInput()
+                ->with(
+                    'error',
+                    "O cliente já possui uma análise. " . "Use a reanálise do lead #{$existingLead->id}."
+                
+                );
+        }
+
+        $lead = DB::transaction(function () use ($request, $tipo){
+            return $this->saveLead($request, [
+                'tipo_solicitante' => $tipo,
+                'company' => null,
+                'origem' => $tipo,
+                'corretor_id' => (int) auth('admin')->id(),
+            ]);
+        });
+
+        $this->dispatchLeadFlow($lead);
+
+        return redirect()->route('Dashboard-Admin')
+         ->with('success', "Solicitação do lead #{$lead->id} adicionada à fila de análises.");
+        
+
+
+    }
+
     /**
      * Salva lead de imobiliária cadastrada.
      */
@@ -169,9 +320,7 @@ class SimulationController extends Controller
             ->with('success', 'Solicitação enviada com sucesso. O resultado será enviado por e-mail.');
     }
 
-    /**
-     * Formulário para locatário.
-     */
+    
     public function tenantForm()
     {
         return view('simulation.forms.tenant');
@@ -194,9 +343,44 @@ class SimulationController extends Controller
             ->with('success', 'Solicitação enviada com sucesso. O resultado será enviado por e-mail.');
     }
 
-    /**
-     * Formulário para locador.
-     */
+    public function adminResolveForm(Request $request)
+    {
+        $data = $request->validateWithBag('adminSimulation', [
+            'vinculo' => [
+                'required',
+                Rule::in([
+                    'imobiliaria_cadastrada',
+                    'sem_vinculo',
+                ]),
+            ],
+
+            'company_id' => [
+                'exclude_unless:vinculo,imobiliaria_cadastrada',
+                'required_if:vinculo,imobiliaria_cadastrada',
+                'integer',
+
+                Rule::exists('imobiliarias', 'id')
+                    ->where(
+                        fn ($query) => $query->where(
+                            'lead_form_active',
+                            true
+                        )
+                     ),
+            ],
+
+            'tipo_solicitante' => [
+                'exclude_unless:vinculo,sem_vinculo',
+                'required_if:vinculo,sem_vinculo',
+                Rule::in(self::ADMIN_UNLINKED_TYPES),
+            ],
+        ]);
+
+        if($data['vinculo'] === 'imobiliaria_cadastrada') {
+            return redirect()->route('admin.simulations.registered-company.form', ['company' => (int) $data['company_id']]);
+        }
+
+        return redirect()->route('admin.simulations.unlinked.form', ['tipo' => $data['tipo_solicitante']]);
+    }
     
 
 
@@ -267,7 +451,7 @@ class SimulationController extends Controller
                 'estado_civil' => $data['estado_civil'] ?? null,
                 'imobiliaria' => $company?->name 
                     ?? 
-                    (($data['responsavel_tipo'] ?? null) === 'imobiliaria_nao_cadastrada'
+                    (($context['tipo_solicitante'] ?? null) === 'imobiliaria_nao_cadastrada'
                     ? ($data['responsavel_nome'] ?? null)
                     : null),
                 'tags_originais' => $this->tagsAsString($context['tipo_solicitante'], $company),
@@ -320,7 +504,7 @@ class SimulationController extends Controller
             $lead->conjuge()->delete();
         }
 
-        $responsavelTipo = $data['responsavel_tipo'] ?? null;
+        $responsavelTipo = $context['tipo_solicitante'] ?? ($data['responsavel_tipo'] ?? null);
 
         if ($responsavelTipo === 'locador') {
             $lead->locador()->updateOrCreate(
@@ -348,6 +532,18 @@ class SimulationController extends Controller
 
             // Garante que não fique dado duplicado na tabela de locador.
             $lead->locador()->delete();
+        }
+
+        $corretorId = $context['corretor_id'] ?? null;
+
+        if($corretorId) {
+            $audiColumn = $lead->wasRecentlyCreated
+            ? 'created_by_corretor_id'
+            : 'updated_by_corretor_id';
+
+            $lead->forceFill([
+                $audiColumn => (int) $corretorId,
+            ])->saveQuietly();
         }
 
         return $lead;
@@ -380,6 +576,30 @@ class SimulationController extends Controller
     };
 
         return collect($tags)->filter()->implode(', ');
+    }
+
+    private function findExistingLeadWithBatch(
+        string $email,
+        ?Imobiliaria $company,
+        string $origem
+    ): ?Lead {
+        $query = Lead::query()
+            ->where('email', trim($email));
+
+        if ($company) {
+            $query->where('company_id', $company->id);
+        } else {
+            $query
+                ->whereNull('company_id')
+                ->where('origem', $origem);
+        }
+
+        return $query
+            ->whereIn(
+                'id',
+                InsuranceAnalysisBatch::query()->select('lead_id')
+            )
+            ->first();
     }
 
     private function dispatchLeadFlow(Lead $lead): void {

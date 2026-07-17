@@ -80,6 +80,37 @@ Route::prefix('/Dashboard')->group(function () {
         ->middleware('can:access-dashboard')
         ->name('Dashboard-Admin');
 
+        Route::prefix('simulacoes')->name('admin.simulations.')->middleware('can:create-analysis')
+            ->group(function () {
+                Route::get('/abrir', [SimulationController::class, 'adminResolveForm'])->name('open');
+
+                Route::get('/imobiliaria/{company}', [SimulationController::class, 'adminRegisteredCompanyForm'])
+                    ->name('registered-company.form');
+
+                Route::post('/imobiliaria/{company}', [SimulationController::class, 'adminStoreRegisteredCompanyLead'])
+                    ->middleware('throttle:simulation-submit')
+                    ->name('registered-company.store');
+
+                Route::get('/sem-vinculo/{tipo}', [SimulationController::class, 'adminUnlinkedForm'])
+                    ->whereIn('tipo', [
+                        'imobiliaria_nao_cadastrada',
+                        'locatario',
+                        'locador',
+                    ])
+                    ->name('unlinked.form');
+
+                Route::post('/sem-vinculo/{tipo}', [SimulationController::class, 'adminStoreUnlinkedLead'])
+                    ->whereIn('tipo', [
+                        'imobiliaria_nao_cadastrada',
+                        'locatario',
+                        'locador',
+                    ])
+                    ->middleware('throttle:simulation-submit')
+                    ->name('unlinked.store');
+
+                
+            });
+
         Route::get('/leads', function (){
             return redirect()->to(route('Dashboard-Admin') . '#leads-section');
         })
