@@ -2,6 +2,14 @@
 
 @section('content')
 
+@php
+    $isAdminSimulation = $isAdminSimulation ?? false;
+    $lockResponsavelTipo = $lockResponsavelTipo ?? false;
+
+    $formAction = $formAction
+        ?? route('simulation.unregistered-company.store');
+@endphp
+
 <div class="container py-5">
     <div class="card border-0 shadow-sm rounded-4 mx-auto" style="max-width: 950px;">
         <div class="card-body p-4">
@@ -12,7 +20,7 @@
 
             @include('simulation.partials.alerts')
 
-            <form action="{{ route('simulation.unregistered-company.store') }}" method="POST">
+            <form action="{{ $formAction }}" method="POST">
                 @csrf
 
                 @include('simulation.partials.honeypot')
@@ -76,35 +84,50 @@
                         <label class="form-label fw-semibold">
                             Quem está solicitando? <span class="text-danger">*</span>
                         </label>
+                        @if ($lockResponsavelTipo)
+                            <input
+                                type="hidden"
+                                name="responsavel_tipo"
+                                value="{{ $responsavelTipo }}"
+                            >
 
-                        <div class="d-flex flex-column flex-md-row gap-3">
-                            <div class="form-check">
-                                <input 
-                                    class="form-check-input" 
-                                    type="radio" 
-                                    name="responsavel_tipo" 
-                                    id="responsavel_imobiliaria" 
-                                    value="imobiliaria_nao_cadastrada"
-                                    @checked(old('responsavel_tipo', $responsavelTipo ?? 'imobiliaria_nao_cadastrada') === 'imobiliaria_nao_cadastrada')
-                                >
-                                <label class="form-check-label" for="responsavel_imobiliaria">
-                                    Imobiliária não cadastrada
-                                </label>
-                            </div>
+                            <div class="alert alert-info mb-0">
+                                <strong>Tipo selecionado:</strong>
 
-                            <div class="form-check">
-                                <input 
-                                    class="form-check-input" 
-                                    type="radio" 
-                                    name="responsavel_tipo" 
-                                    id="responsavel_locador" 
-                                    value="locador"
-                                    @checked(old('responsavel_tipo', $responsavelTipo ?? null) === 'locador')
-                                >
-                                <label class="form-check-label" for="responsavel_locador">
-                                    Proprietário / locador
-                                </label>
+                                {{ $responsavelTipo === 'locador'
+                                    ? 'Proprietário / locador'
+                                    : 'Imobiliária não cadastrada' }}
                             </div>
+                        @else
+                            <div class="d-flex flex-column flex-md-row gap-3">
+                                <div class="form-check">
+                                    <input 
+                                        class="form-check-input" 
+                                        type="radio" 
+                                        name="responsavel_tipo" 
+                                        id="responsavel_imobiliaria" 
+                                        value="imobiliaria_nao_cadastrada"
+                                        @checked(old('responsavel_tipo', $responsavelTipo ?? 'imobiliaria_nao_cadastrada') === 'imobiliaria_nao_cadastrada')
+                                    >
+                                    <label class="form-check-label" for="responsavel_imobiliaria">
+                                        Imobiliária não cadastrada
+                                    </label>
+                                </div>
+
+                                <div class="form-check">
+                                    <input 
+                                        class="form-check-input" 
+                                        type="radio" 
+                                        name="responsavel_tipo" 
+                                        id="responsavel_locador" 
+                                        value="locador"
+                                        @checked(old('responsavel_tipo', $responsavelTipo ?? null) === 'locador')
+                                    >
+                                    <label class="form-check-label" for="responsavel_locador">
+                                        Proprietário / locador
+                                    </label>
+                                </div>
+                        @endif
                         </div>
                     </div>
 

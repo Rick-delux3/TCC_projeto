@@ -2,6 +2,7 @@
 
 @section('content_a')
 @php
+    use Illuminate\Support\Facades\Gate;
     use Illuminate\Support\Facades\Route;
     use Illuminate\Support\Str;
 
@@ -45,6 +46,38 @@
 
     $leads = $leads ?? collect();
     $imobiliarias = $imobiliarias ?? collect();
+
+    $canCreateAnalysis = $canCreateAnalysis
+        ?? (
+            $corretor
+                ? Gate::forUser($corretor)->allows('create-analysis')
+                : false
+        );
+
+    $simulationCompanies = collect(
+        $simulationCompanies
+            ?? $imobiliarias
+            ?? []
+    )
+        ->filter(
+            fn ($company) => (bool) data_get(
+                $company,
+                'lead_form_active',
+                true
+            )
+        )
+        ->sortBy(
+            fn ($company) => mb_strtolower(
+                (string) data_get($company, 'name', '')
+            )
+        )
+        ->values();
+
+    $adminSimulationRouteExists = Route::has('admin.simulations.open');
+
+    $adminSimulationOpenRoute = $adminSimulationRouteExists
+        ? route('admin.simulations.open')
+        : '#';
 
     $leadSearch = $leadSearch ?? request('lead_name', '');
     $selectedImobiliaria = $selectedImobiliaria ?? request('imobiliaria', '');
@@ -259,7 +292,7 @@
 
         {{-- Hero principal --}}
         <div class="row g-4 mb-4">
-            <div class="col-12">
+            <div class="col-12 {{ $canCreateAnalysis ? 'col-xl-7' : '' }}">
                 <div class="card border-0 shadow-sm rounded-5 dashboard-hero-card text-white">
                     <div class="card-body p-4 p-lg-5">
                         <div class="row g-4 align-items-end">
@@ -316,6 +349,52 @@
                     </div>
                 </div>
             </div>
+
+            @if ($canCreateAnalysis)
+                <div class="col-12 col-xl-5">
+                    <div class="card border-0 shadow-sm rounded-5 h-100 dashboard-stat-card">
+                        <div class="card-body p-4 p-lg-5 d-flex flex-column">
+                            <div>
+                                <span class="badge text-bg-primary-subtle text-primary mb-3">
+                                    Acesso rápido
+                                </span>
+
+                                <h2 class="h3 fw-bold mb-3">
+                                    Nova solicitação de análise
+                                </h2>
+
+                                <p class="text-muted mb-3">
+                                    Escolha o vínculo e abra o formulário adequado para solicitar uma nova análise.
+                                </p>
+
+                                <p class="small text-muted mb-4">
+                                    <i class="bi bi-shield-check me-1" aria-hidden="true"></i>
+                                    O corretor não precisa digitar nem visualizar a chave de acesso da imobiliária.
+                                </p>
+                            </div>
+
+                            <div class="mt-auto">
+                                <button
+                                    type="button"
+                                    class="btn btn-primary"
+                                    data-bs-toggle="modal"
+                                    data-bs-target="#adminSimulationModal"
+                                    @disabled(! $adminSimulationRouteExists)
+                                >
+                                    <i class="bi bi-clipboard-plus me-1" aria-hidden="true"></i>
+                                    {{ $adminSimulationRouteExists ? 'Solicitar análise' : 'Solicitação indisponível' }}
+                                </button>
+
+                                @unless ($adminSimulationRouteExists)
+                                    <div class="form-text">
+                                        Recurso temporariamente indisponível.
+                                    </div>
+                                @endunless
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            @endif
         </div>
 
         {{-- Métricas focadas somente em clientes --}}
@@ -869,6 +948,191 @@
     </div>
 </div>
 
+@if ($canCreateAnalysis)
+    {{-- Seleção global do formulário de nova análise --}}
+    <div
+        class="modal fade"
+        id="adminSimulationModal"
+        tabindex="-1"
+        aria-labelledby="adminSimulationModalLabel"
+        aria-hidden="true"
+    >
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content rounded-5 border-0 shadow-lg">
+                <form
+                    method="GET"
+                    action="{{ $adminSimulationOpenRoute }}"
+                    target="_blank"
+                    id="adminSimulationSelectionForm"
+                >
+                    <div class="modal-header border-0 pb-0">
+                        <div>
+                            <h2 class="modal-title h5 fw-bold" id="adminSimulationModalLabel">
+                                Escolha o formulário
+                            </h2>
+                            <p class="text-muted small mb-0 mt-2">
+                                Defina se a solicitação será vinculada a uma imobiliária. O formulário será aberto em uma nova aba.
+                            </p>
+                        </div>
+
+                        <button
+                            type="button"
+                            class="btn-close"
+                            data-bs-dismiss="modal"
+                            aria-label="Fechar"
+                        ></button>
+                    </div>
+
+                    <div class="modal-body p-4">
+                        @if ($errors->adminSimulation->any())
+                            <div class="alert alert-danger rounded-4">
+                                <ul class="mb-0">
+                                    @foreach ($errors->adminSimulation->all() as $message)
+                                        <li>{{ $message }}</li>
+                                    @endforeach
+                                </ul>
+                            </div>
+                        @endif
+
+                        <div class="mb-3">
+                            <label for="adminSimulationLinkType" class="form-label fw-semibold">
+                                Vínculo
+                            </label>
+                            <select
+                                name="vinculo"
+                                id="adminSimulationLinkType"
+                                class="form-select"
+                                required
+                            >
+                                <option value="">Selecione</option>
+                                <option
+                                    value="imobiliaria_cadastrada"
+                                    @selected(old('vinculo') === 'imobiliaria_cadastrada')
+                                    @disabled($simulationCompanies->isEmpty())
+                                >
+                                    Vincular a uma imobiliária cadastrada
+                                </option>
+                                <option
+                                    value="sem_vinculo"
+                                    @selected(old('vinculo') === 'sem_vinculo')
+                                >
+                                    Não vincular a uma imobiliária
+                                </option>
+                            </select>
+                        </div>
+
+                        <div id="adminSimulationCompanyGroup" class="mb-3 d-none">
+                            <label for="adminSimulationCompany" class="form-label fw-semibold">
+                                Imobiliária
+                            </label>
+                            <select
+                                name="company_id"
+                                id="adminSimulationCompany"
+                                class="form-select"
+                                disabled
+                            >
+                                <option value="">Selecione</option>
+                                @foreach ($simulationCompanies as $company)
+                                    @php
+                                        $companyCity = data_get($company, 'city')
+                                            ?? data_get($company, 'cidade');
+                                        $companyState = data_get($company, 'state')
+                                            ?? data_get($company, 'uf');
+                                        $companyLocation = collect([$companyCity, $companyState])
+                                            ->filter(fn ($value) => filled($value))
+                                            ->implode('/');
+                                    @endphp
+                                    <option
+                                        value="{{ data_get($company, 'id') }}"
+                                        @selected((string) old('company_id') === (string) data_get($company, 'id'))
+                                    >
+                                        {{ data_get($company, 'name', data_get($company, 'nome', 'Imobiliária')) }}{{ $companyLocation ? ' — '.$companyLocation : '' }}
+                                    </option>
+                                @endforeach
+                            </select>
+                            <div class="form-text">
+                                O tipo será registrado automaticamente como imobiliária cadastrada.
+                            </div>
+                        </div>
+
+                        <div id="adminSimulationTypeGroup" class="mb-3 d-none">
+                            <label for="adminSimulationType" class="form-label fw-semibold">
+                                Tipo do solicitante
+                            </label>
+                            <select
+                                name="tipo_solicitante"
+                                id="adminSimulationType"
+                                class="form-select"
+                                disabled
+                            >
+                                <option value="">Selecione</option>
+                                <option
+                                    value="imobiliaria_nao_cadastrada"
+                                    @selected(old('tipo_solicitante') === 'imobiliaria_nao_cadastrada')
+                                >
+                                    Imobiliária não cadastrada
+                                </option>
+                                <option value="locatario" @selected(old('tipo_solicitante') === 'locatario')>
+                                    Locatário
+                                </option>
+                                <option value="locador" @selected(old('tipo_solicitante') === 'locador')>
+                                    Proprietário / locador
+                                </option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="modal-footer border-0 pt-0">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                            Cancelar
+                        </button>
+                        <button type="submit" class="btn btn-primary" @disabled(! $adminSimulationRouteExists)>
+                            Abrir formulário
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const linkType = document.getElementById('adminSimulationLinkType');
+            const companyGroup = document.getElementById('adminSimulationCompanyGroup');
+            const company = document.getElementById('adminSimulationCompany');
+            const typeGroup = document.getElementById('adminSimulationTypeGroup');
+            const type = document.getElementById('adminSimulationType');
+
+            if (!linkType || !companyGroup || !company || !typeGroup || !type) {
+                return;
+            }
+
+            const updateSimulationFields = function () {
+                const usesRegisteredCompany = linkType.value === 'imobiliaria_cadastrada';
+                const hasNoCompanyLink = linkType.value === 'sem_vinculo';
+
+                companyGroup.classList.toggle('d-none', !usesRegisteredCompany);
+                company.disabled = !usesRegisteredCompany;
+                company.required = usesRegisteredCompany;
+
+                typeGroup.classList.toggle('d-none', !hasNoCompanyLink);
+                type.disabled = !hasNoCompanyLink;
+                type.required = hasNoCompanyLink;
+            };
+
+            updateSimulationFields();
+            linkType.addEventListener('change', updateSimulationFields);
+
+            @if ($errors->adminSimulation->any())
+                const modalElement = document.getElementById('adminSimulationModal');
+
+                if (modalElement && window.bootstrap?.Modal) {
+                    window.bootstrap.Modal.getOrCreateInstance(modalElement).show();
+                }
+            @endif
+        });
+    </script>
+@endif
 
 {{-- Modais dos leads --}}
 @can('view-leads')

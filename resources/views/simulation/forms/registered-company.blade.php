@@ -2,6 +2,14 @@
 
 @section('content')
 
+@php
+    $isAdminSimulation = $isAdminSimulation ?? false;
+    
+    $formAction = $formAction ?? route('simulation.registered-company.store', $company->lead_access_code);
+
+
+@endphp
+
 <div class="container py-5">
     <div class="card border-0 shadow-sm rounded-4 mx-auto" style="max-width: 950px;">
         <div class="card-body p-4">
@@ -18,9 +26,16 @@
                 <strong>Imobiliária:</strong> {{ $company->name }}
             </div>
 
+            @if ($isAdminSimulation)
+                <div class="alert alert-info">
+                    <strong>Preenchimento interno:</strong>
+                    esta solicitação será registrada pelo corretor logado e vinculada à imobiliária {{ $company->name }}.
+                </div>
+            @endif
+
             @include('simulation.partials.alerts')
 
-            <form action="{{ route('simulation.registered-company.store', $company->lead_access_code) }}" method="POST">
+            <form action="{{ $formAction }}" method="POST">
                 @csrf
 
                 @include('simulation.partials.honeypot')
