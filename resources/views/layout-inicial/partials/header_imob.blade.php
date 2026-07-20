@@ -59,7 +59,7 @@
             </button>
 
             {{-- Marca / logo --}}
-            <a class="navbar-brand dashboard-client-brand ms-2" href="{{ route('Dashboard') }}">
+            <a class="navbar-brand dashboard-client-brand ms-2" href="{{ route('company.dashboard') }}">
                 <span class="dashboard-client-brand__logo">
                     <img src="{{ asset('imgs/Logo_NVS.png') }}" alt="NVS Seguros">
                 </span>
@@ -115,7 +115,7 @@
                                             Existem leads em fase inicial aguardando acompanhamento.
                                         </div>
 
-                                        <a href="{{ route('Dashboard') }}#leads-section" class="small fw-semibold text-decoration-none">
+                                        <a href="{{ route('company.dashboard') }}#leads-section" class="small fw-semibold text-decoration-none">
                                             Ver leads
                                         </a>
                                     </div>
@@ -239,12 +239,12 @@
 
         {{-- Navegação principal --}}
         <nav class="dashboard-sidebar-nav">
-            <a href="{{ route('Dashboard') }}" class="dashboard-sidebar-link active">
+            <a href="{{ route('company.dashboard') }}" class="dashboard-sidebar-link active">
                 <i class="bi bi-grid-1x2"></i>
                 <span>Dashboard</span>
             </a>
 
-            <a href="{{ route('Dashboard') }}#leads-section" class="dashboard-sidebar-link">
+            <a href="{{ route('company.dashboard') }}#leads-section" class="dashboard-sidebar-link">
                 <i class="bi bi-people"></i>
                 <span>Leads</span>
             </a>

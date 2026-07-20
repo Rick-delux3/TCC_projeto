@@ -31,11 +31,11 @@ Route::get('/teste/token_acesso', [PottencialService::class, 'testAuthentication
 
 Route::view('/', 'index')->name('index');
 
-Route::get('/dashboard', fn () => redirect()->route('Dashboard'))
+Route::get('/dashboard', fn () => redirect()->route('company.dashboard'))
     ->middleware(['auth', '2fa'])
     ->name('dashboard');
 
-Route::get('/analise', fn () => redirect()->route('Dashboard'))
+Route::get('/analise', fn () => redirect()->route('company.dashboard'))
     ->middleware(['auth', '2fa', 'analysis.enabled'])
     ->name('analise');
 
@@ -45,7 +45,7 @@ Route::prefix('/Dashboard')->group(function () {
     Route::middleware(['auth', '2fa'])->group(function (){
 
         Route::get('/User',[DashboardController::class, 'index'])
-        ->name('Dashboard');
+        ->name('company.dashboard');
         
         Route::post('/sync-again', [DashboardController::class, 'syncAgain'])
         ->name('Dashboard.syncAgain');

@@ -67,7 +67,7 @@ class TwoFactorController extends Controller
         // Cleanup all codes so the challenge cannot be replayed.
         TwoFactorCode::where('user_id', $user->id)->delete();
 
-        return redirect()->route('Dashboard')->with('success', 'Bem vindo!');
+        return redirect()->route('company.dashboard')->with('success', 'Bem vindo!');
     }
 
     public function resend(Request $request)

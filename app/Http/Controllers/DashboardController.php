@@ -354,12 +354,12 @@ class DashboardController extends Controller
 
         if (!$this->queueCompanySync($company, force: true)) {
             return redirect()
-                ->route('Dashboard')
+                ->route('company.dashboard')
                 ->with('success', 'A sincronização já está em andamento.');
         }
 
         return redirect()
-            ->route('Dashboard')
+            ->route('company.dashboard')
             ->with('success', 'Nova sincronização iniciada com sucesso.')
             ->with('sync_just_queued', true);
     }
