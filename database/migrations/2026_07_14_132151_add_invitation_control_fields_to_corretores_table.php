@@ -57,9 +57,7 @@ return new class extends Migration
                 'invite_version' => 1,
                 'invite_last_sent_at' => DB::raw('invited_at'),
                 'invite_send_count' => 1,
-                'invite_expires_at' => DB::raw(
-                    'DATE_SUB(NOW(), INTERVAL 1 SECOND)'
-                ),
+                'invite_expires_at' => now()->subSecond(),
             ]);
     }
 

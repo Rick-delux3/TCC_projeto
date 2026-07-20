@@ -7,6 +7,7 @@
     use App\Http\Middleware\CorretorTwoFactorMiddleware;
     use App\Http\Middleware\TwoFactorMiddleware;
     use App\Http\Middleware\EnsureCeoRegistrationIsOpen;
+    use App\Http\Middleware\EnsureInsuranceAnalysisEnabled;
     use App\Http\Middleware\CorretorAuth;
     use Illuminate\Http\Request;
     use Illuminate\Support\Facades\Auth;
@@ -95,6 +96,7 @@
                 'admin.2fa' => CorretorTwoFactorMiddleware::class,
                 'corretor.active' => CorretorAuth::class,
                 'ceo.registration.open' => EnsureCeoRegistrationIsOpen::class,
+                'analysis.enabled' => EnsureInsuranceAnalysisEnabled::class,
             ]);
         })
         ->withExceptions(function (Exceptions $exceptions): void {

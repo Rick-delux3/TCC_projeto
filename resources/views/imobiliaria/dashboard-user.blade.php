@@ -1043,17 +1043,19 @@
                         </button>
                     </li>
 
-                    <li class="nav-item" role="presentation">
-                        <button
-                            class="nav-link"
-                            data-bs-toggle="pill"
-                            data-bs-target="#lead-reanalysis-pane-{{ $lead->id }}"
-                            type="button"
-                            role="tab"
-                        >
-                            Reanálise
-                        </button>
-                    </li>
+                    @if (config('features.insurance_analysis.enabled', false))
+                        <li class="nav-item" role="presentation">
+                            <button
+                                class="nav-link"
+                                data-bs-toggle="pill"
+                                data-bs-target="#lead-reanalysis-pane-{{ $lead->id }}"
+                                type="button"
+                                role="tab"
+                            >
+                                Reanálise
+                            </button>
+                        </li>
+                    @endif
                 </ul>
 
                 <div class="tab-content">
@@ -1286,12 +1288,13 @@
                         </div>
                     </div>
 
-                    {{-- Aba 3: reanálise --}}
-                    <div
-                        class="tab-pane fade"
-                        id="lead-reanalysis-pane-{{ $lead->id }}"
-                        role="tabpanel"
-                    >
+                    @if (config('features.insurance_analysis.enabled', false))
+                        {{-- Aba 3: reanálise --}}
+                        <div
+                            class="tab-pane fade"
+                            id="lead-reanalysis-pane-{{ $lead->id }}"
+                            role="tabpanel"
+                        >
                         @if ($canReanalyze)
                             <div class="alert alert-success rounded-4">
                                 <strong>Reanálise liberada.</strong>
@@ -1327,7 +1330,8 @@
                                 </p>
                             @endif
                         @endif
-                    </div>
+                        </div>
+                    @endif
                 </div>
             </div>
             

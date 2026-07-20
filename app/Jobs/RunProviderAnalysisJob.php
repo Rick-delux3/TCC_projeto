@@ -28,6 +28,12 @@ class RunProviderAnalysisJob implements ShouldQueue
 
     public function handle(InsuranceProviderResolver $resolver): void
     {
+        if (! config('features.insurance_analysis.enabled', false)) {
+            logger()->notice('Job de análise ignorado porque o módulo está desativado.', ['job' => static::class]);
+
+            return;
+        }
+
         
 
         $analysis = InsuranceAnalysis::with([

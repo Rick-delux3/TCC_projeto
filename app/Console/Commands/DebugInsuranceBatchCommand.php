@@ -13,6 +13,12 @@ class DebugInsuranceBatchCommand extends Command
 
     public function handle(): int
     {
+        if (! config('features.insurance_analysis.enabled', false)) {
+            $this->error('O sistema de análises está temporariamente desativado.');
+
+            return self::FAILURE;
+        }
+
         $batch = InsuranceAnalysisBatch::with([
             'lead',
             'analyses.events',

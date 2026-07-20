@@ -68,7 +68,7 @@ class DashboardLeadController extends Controller
         return $this->startLeadReanalysis($lead, 'imobiliaria');
     }
 
-    public function adminReanalysis(Lead $lead)
+    public function adminReanalyze(Lead $lead)
     {
         $this->authorizeAdminAbility('create-analysis');
 

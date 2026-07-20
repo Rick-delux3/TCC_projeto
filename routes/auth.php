@@ -48,7 +48,7 @@ Route::middleware('auth')->group(function () {
         ->name('verification.send');
 
     Route::get('confirm-password', [ConfirmablePasswordController::class, 'show'])
-        ->name('password.confirm');
+        ->name('password.confirm.custom');
 
     Route::post('confirm-password', [ConfirmablePasswordController::class, 'store']);
 

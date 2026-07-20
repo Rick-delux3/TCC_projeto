@@ -246,15 +246,17 @@
                 <span>Leads</span>
             </a>
 
-            <a href="{{ route('insurance-analyses.index') }}" class="dashboard-sidebar-link">
-                <i class="bi bi-clipboard2-data"></i>
-                <span>Análises</span>
-            </a>
+            @if (config('features.insurance_analysis.enabled', false))
+                <a href="{{ route('insurance-analyses.index') }}" class="dashboard-sidebar-link">
+                    <i class="bi bi-clipboard2-data"></i>
+                    <span>Análises</span>
+                </a>
 
-            <a href="{{ route('simulation.registered-company.access') }}" class="dashboard-sidebar-link">
-                <i class="bi bi-link-45deg"></i>
-                <span>Página de simulação</span>
-            </a>
+                <a href="{{ route('simulation.registered-company.access') }}" class="dashboard-sidebar-link">
+                    <i class="bi bi-link-45deg"></i>
+                    <span>Página de simulação</span>
+                </a>
+            @endif
 
             <a href="{{ route('profile.edit') }}" class="dashboard-sidebar-link">
                 <i class="bi bi-person-gear"></i>
