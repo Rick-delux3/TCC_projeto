@@ -24,9 +24,10 @@ use App\Services\TooService;
 
 Route::get('/debug/too/auth', function (TooService $tooService) {
     return response()->json($tooService->testAuthentication());
-});
+})->middleware('analysis.enabled');
 
-Route::get('/teste/token_acesso', [PottencialService::class, 'testAuthentication']);
+Route::get('/teste/token_acesso', [PottencialService::class, 'testAuthentication'])
+    ->middleware('analysis.enabled');
 
 Route::view('/', 'index')->name('index');
 
@@ -35,7 +36,7 @@ Route::get('/dashboard', fn () => redirect()->route('Dashboard'))
     ->name('dashboard');
 
 Route::get('/analise', fn () => redirect()->route('Dashboard'))
-    ->middleware(['auth', '2fa'])
+    ->middleware(['auth', '2fa', 'analysis.enabled'])
     ->name('analise');
 
 
@@ -56,21 +57,27 @@ Route::prefix('/Dashboard')->group(function () {
         ->name('dashboard.leads.update');
     
         Route::post('/leads/{lead}/reanalisar', [DashboardLeadController::class, 'reanalyze'])
+        ->middleware('analysis.enabled')
         ->name('dashboard.leads.reanalyze');
         
         Route::get('/analises', [InsuranceAnalysisController::class, 'index'])
+        ->middleware('analysis.enabled')
         ->name('insurance-analyses.index');
     
         Route::get('/analises/{batch}', [InsuranceAnalysisController::class, 'show'])
+        ->middleware('analysis.enabled')
         ->name('insurance-analyses.show');
     
         Route::post('/analises/provider/{analysis}/retry', [InsuranceAnalysisController::class, 'retry'])
+        ->middleware('analysis.enabled')
         ->name('insurance-analyses.retry');
 
         Route::post('/analises/provider/{analysis}/reanalisar', [InsuranceAnalysisController::class, 'providerReanalysis'])
+        ->middleware('analysis.enabled')
         ->name('insurance-analyses.provider-reanalysis');
     
         Route::post('/analises/provider/{analysis}/sync-status', [InsuranceAnalysisController::class, 'syncStatus'])
+        ->middleware('analysis.enabled')
         ->name('insurance-analyses.sync-status');
     });
 
@@ -80,7 +87,7 @@ Route::prefix('/Dashboard')->group(function () {
         ->middleware('can:access-dashboard')
         ->name('Dashboard-Admin');
 
-        Route::prefix('simulacoes')->name('admin.simulations.')->middleware('can:create-analysis')
+        Route::prefix('simulacoes')->name('admin.simulations.')->middleware(['can:create-analysis', 'analysis.enabled'])
             ->group(function () {
                 Route::get('/abrir', [SimulationController::class, 'adminResolveForm'])->name('open');
 
@@ -122,27 +129,27 @@ Route::prefix('/Dashboard')->group(function () {
             ->name('admin.leads.update');
 
         Route::post('/leads/{lead}/reanalisar', [DashboardLeadController::class, 'adminReanalyze'])
-            ->middleware('can:create-analysis')
+            ->middleware(['can:create-analysis', 'analysis.enabled'])
             ->name('admin.leads.reanalyze');
 
         Route::get('/analises', [InsuranceAnalysisController::class, 'adminIndex'])
-            ->middleware('can:view-analyses')
+            ->middleware(['can:view-analyses', 'analysis.enabled'])
             ->name('admin.insurance-analyses.index');
 
         Route::get('/analises/{batch}', [InsuranceAnalysisController::class, 'adminShow'])
-            ->middleware('can:view-analyses')
+            ->middleware(['can:view-analyses', 'analysis.enabled'])
             ->name('admin.insurance-analyses.show');
 
         Route::post('/analises/provider/{analysis}/retry', [InsuranceAnalysisController::class, 'adminRetry'])
-            ->middleware('can:create-analysis')
+            ->middleware(['can:create-analysis', 'analysis.enabled'])
             ->name('admin.insurance-analyses.retry');
 
         Route::post('/analises/provider/{analysis}/reanalisar', [InsuranceAnalysisController::class, 'adminProviderReanalysis'])
-        ->middleware('can:create-analysis')
+        ->middleware(['can:create-analysis', 'analysis.enabled'])
         ->name('admin.insurance-analyses.provider-reanalysis');
 
         Route::post('/analises/provider/{analysis}/sync-status', [InsuranceAnalysisController::class, 'adminSyncStatus'])
-            ->middleware('can:view-analyses')
+            ->middleware(['can:view-analyses', 'analysis.enabled'])
             ->name('admin.insurance-analyses.sync-status');
 
 
@@ -191,7 +198,7 @@ Route::middleware(['ceo.registration.open', 'throttle:5,1'])->group(function () 
         ->name('admin.ceo.register.post');
 });
 
-Route::middleware(['guest:admin', 'throttle:5,1'])->group(function () {
+Route::middleware(['guest:admin', 'throttle:5,1', 'auth.unframed'])->group(function () {
     Route::get('/ceo/admin/login/form', [CorretorAuthController::class, 'ceoShowLoginForm'])
         ->name('admin.ceo.login');
 
@@ -218,6 +225,7 @@ Route::middleware(['auth:admin', 'corretor.active'])->group(function () {
 
 Route::prefix('simulacao')
     ->name('simulation.')
+    ->middleware('analysis.enabled')
     ->group(function () {
         // Página inicial do questionário.
         Route::get('/', [SimulationController::class, 'start'])
@@ -273,26 +281,31 @@ Route::get('/cep/{cep}', [CepController::class, 'show'])
     ->middleware('throttle:30,1')
     ->name('cep.show');
     
-Route::prefix('/empresa')->group( function () {
+Route::prefix('/empresa')->middleware(['guest', 'auth.unframed'])->group( function () {
     Route::get('/form', [ImobiliariaRegistrationController::class, 'showRegistrationForm'])->name('empresa.register.form');
     Route::post('/register', [ImobiliariaRegistrationController::class, 'store'])->name('empresa.register.post');
     Route::get('/login', [ImobiliariaAuthController::class, 'showLoginForm'])->name('empresa.login');
     Route::post('/login/post', [ImobiliariaAuthController::class, 'login'])->name('empresa.login.post');
-    Route::get('/logout', [ImobiliariaAuthController::class, 'logout'])->name('empresa.logout');
 });
+
+Route::post('/empresa/logout', [ImobiliariaAuthController::class, 'logout'])
+    ->middleware('auth')
+    ->name('empresa.logout');
     
 
-Route::middleware('guest')->group(function () {
+Route::middleware(['guest', 'auth.unframed'])->group(function () {
     Route::get('/empresa/forgot-password', [CompanyPasswordResetLinkController::class, 'create'])
         ->name('company.password.request');
 
     Route::post('/empresa/forgot-password', [CompanyPasswordResetLinkController::class, 'store'])
+        ->middleware('throttle:5,1')
         ->name('company.password.email');
 
     Route::get('/empresa/reset-password/{token}', [CompanyNewPasswordController::class, 'create'])
         ->name('company.password.reset');
 
     Route::post('/empresa/reset-password', [CompanyNewPasswordController::class, 'store'])
+        ->middleware('throttle:10,1')
         ->name('company.password.store');
 });
 

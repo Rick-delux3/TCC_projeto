@@ -41,6 +41,7 @@
                 method="POST"
                 autocomplete="off"
                 class="client-auth-form"
+                data-no-loader
             >
                 @csrf
 

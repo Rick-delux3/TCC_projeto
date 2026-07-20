@@ -168,6 +168,7 @@ class LeadReanalysisService
         string $requestedBy = 'imobiliaria',
         array $options = []
     ): int {
+        $this->ensureAnalysisEnabled();
 
         $lead->loadMissing([
             'endereco',
@@ -283,6 +284,7 @@ class LeadReanalysisService
         string $requestedBy = 'imobiliaria',
         array $options = []
     ): string {
+        $this->ensureAnalysisEnabled();
         $analysis->loadMissing([
             'lead.endereco',
             'lead.despesas',
@@ -317,6 +319,15 @@ class LeadReanalysisService
         );
 
         return $attemptId;
+    }
+
+    private function ensureAnalysisEnabled(): void
+    {
+        if (! config('features.insurance_analysis.enabled', false)) {
+            throw new \LogicException(
+                'O sistema de análises está temporariamente desativado.'
+            );
+        }
     }
 
     public function restartAnalysisAsReanalysis(

@@ -82,3 +82,54 @@ document.querySelectorAll('input[type="tel"], input[name="phone"]').forEach((inp
         }
     });
 });
+
+const pageLoader = {
+    element() {
+        return document.getElementById('page-loader-modal');
+    },
+
+    show() {
+        const modal = this.element();
+
+        if (! modal) {
+            return;
+        }
+
+        modal.classList.remove('is-hidden');
+        modal.setAttribute('aria-hidden', 'false');
+    },
+
+    hide() {
+        const modal = this.element();
+
+        if (! modal) {
+            return;
+        }
+
+        modal.classList.add('is-hidden');
+        modal.setAttribute('aria-hidden', 'true');
+    },
+};
+
+window.PageLoader = pageLoader;
+
+document.addEventListener('submit', (event) => {
+    const form = event.target;
+
+    if (! form || form.tagName !== 'FORM' || form.hasAttribute('data-no-loader')) {
+        return;
+    }
+
+    pageLoader.show();
+}, true);
+
+document.addEventListener('click', (event) => {
+    const trigger = event.target.closest('[data-show-loader]');
+
+    if (trigger) {
+        pageLoader.show();
+    }
+});
+
+document.addEventListener('DOMContentLoaded', () => pageLoader.hide());
+window.addEventListener('pageshow', () => pageLoader.hide());

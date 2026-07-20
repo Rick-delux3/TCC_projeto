@@ -603,6 +603,9 @@ class SimulationController extends Controller
     }
 
     private function dispatchLeadFlow(Lead $lead): void {
+        if (! config('features.insurance_analysis.enabled', false)) {
+            return;
+        }
 
         $alreadyHasBatch = InsuranceAnalysisBatch::query()
         ->where('lead_id', $lead->id)

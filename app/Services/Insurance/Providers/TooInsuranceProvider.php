@@ -31,6 +31,8 @@ class TooInsuranceProvider implements InsuranceProviderInterface
      */
     public function requestAnalysis(InsuranceAnalysis $analysis, string $attemptId): array
     {
+        $this->ensureEnabled();
+
         $this->loadTooRelations($analysis);
 
         $lead = $analysis->lead;
@@ -218,6 +220,8 @@ class TooInsuranceProvider implements InsuranceProviderInterface
         string $attemptId,
         array $options = [],
     ): array {
+        $this->ensureEnabled();
+
         $this->loadTooRelations($analysis);
 
         $lead = $analysis->lead;
@@ -538,6 +542,8 @@ class TooInsuranceProvider implements InsuranceProviderInterface
         ?string $attemptId = null,
         bool $isReanalysis = false,
     ): array {
+        $this->ensureEnabled();
+
 
         $statusData = $statusResponse['response'] ?? [];
         $statusInfo = $this->tooCreditDecision($statusData);
@@ -606,6 +612,14 @@ class TooInsuranceProvider implements InsuranceProviderInterface
             statusInfo: $statusInfo,
             extra: $extra
         );
+    }
+
+    private function ensureEnabled(): void
+    {
+        if (! config('features.insurance_analysis.enabled', false)
+            || ! config('services.too.enabled', false)) {
+            throw new \LogicException('O provider too está desativado.');
+        }
     }
 
     /**

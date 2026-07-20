@@ -31,6 +31,12 @@ class SendAnalysisResultsEmailJob implements ShouldQueue
 
     public function handle(): void
     {
+        if (! config('features.insurance_analysis.enabled', false)) {
+            logger()->notice('Job de análise ignorado porque o módulo está desativado.', ['job' => static::class]);
+
+            return;
+        }
+
         $batch = InsuranceAnalysisBatch::with([
             'lead',
             'analyses.events',

@@ -45,6 +45,13 @@ use Illuminate\Support\Facades\Log;
 
     public function handle(LeadLoversService $leadLoversService): void
     {
+        if (! config('features.insurance_analysis.enabled', false)
+            || ! config('services.leadlovers.enabled', false)) {
+            logger()->notice('Job de análise ignorado porque o módulo está desativado.', ['job' => static::class]);
+
+            return;
+        }
+
         /*
          * Carrega o lote com:
          * - lead: para pegar e-mail e dados do lead;

@@ -23,7 +23,8 @@ class CorretorDashboardController extends Controller
         $canViewLeads = Gate::forUser($corretor)->allows('view-leads');
         $canViewRealEstateCompanies = Gate::forUser($corretor)
             ->allows('view-real-estate-companies');
-        $canCreateAnalysis = Gate::forUser($corretor)->allows('create-analysis');
+        $canCreateAnalysis = config('features.insurance_analysis.enabled', false)
+            && Gate::forUser($corretor)->allows('create-analysis');
 
         $leadSearch = $request->input('lead_name', '');
 

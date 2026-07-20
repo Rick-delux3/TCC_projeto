@@ -36,7 +36,7 @@ return [
     ],
 
     'cpf_lookup' => [
-        'enabled' => env('CPF_LOOKUP_PROVIDER', false),
+        'enabled' => env('CPF_LOOKUP_ENABLED', false),
         'provider' => env('CPF_LOOKUP_PROVIDER', 'cpfhub'),
 
         'cpfhub' => [
@@ -50,6 +50,7 @@ return [
     ],
 
     'leadlovers' => [
+        'enabled' => env('LEADLOVERS_ENABLED', false),
         'base_url' => env('LEADLOVERS_BASE_URL', 'https://llapi.leadlovers.com/webapi/'),
         'email' => env('LEADLOVERS_EMAIL'),
         'token' => env('LEADLOVERS_TOKEN'),
@@ -69,6 +70,7 @@ return [
     ],
 
     'pottencial' => [
+        'enabled' => env('POTTENCIAL_ENABLED', false),
         'base_url' => env('POTTENCIAL_API_URL', 'https://api-sandbox.pottencial.com.br'),
         'rental_endpoint' => env('POTTENCIAL_RENTAL_GUARANTEE_ENDPOINT', '/insurance/v1/fianca-locaticia-mensalizado-pf/quotes'),
         'client_id' => env('POTTENCIAL_CLIENT_ID'),
@@ -92,6 +94,7 @@ return [
     ],
 
     'too' =>[
+        'enabled' => env('TOO_ENABLED', false),
         'base_url' => env('TOO_BASE_URL', 'https://openapi-uat.tooseguros.com.br'),
         'client_id' => env('TOO_CLIENT_ID'),
         'client_secret' => env('TOO_CLIENT_SECRET'),
@@ -113,6 +116,7 @@ return [
     ],
 
     'porto' => [
+        'enabled' => env('PORTO_ENABLED', false),
         'base_url' => env('PORTO_BASE_URL'),
         'client_id' => env('PORTO_CLIENT_ID'),
         'client_secret' => env('PORTO_CLIENT_SECRET'),
