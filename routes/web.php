@@ -198,7 +198,7 @@ Route::middleware(['ceo.registration.open', 'throttle:5,1'])->group(function () 
         ->name('admin.ceo.register.post');
 });
 
-Route::middleware(['guest:admin', 'throttle:5,1'])->group(function () {
+Route::middleware(['guest:admin', 'throttle:5,1', 'auth.unframed'])->group(function () {
     Route::get('/ceo/admin/login/form', [CorretorAuthController::class, 'ceoShowLoginForm'])
         ->name('admin.ceo.login');
 
@@ -281,26 +281,31 @@ Route::get('/cep/{cep}', [CepController::class, 'show'])
     ->middleware('throttle:30,1')
     ->name('cep.show');
     
-Route::prefix('/empresa')->group( function () {
+Route::prefix('/empresa')->middleware(['guest', 'auth.unframed'])->group( function () {
     Route::get('/form', [ImobiliariaRegistrationController::class, 'showRegistrationForm'])->name('empresa.register.form');
     Route::post('/register', [ImobiliariaRegistrationController::class, 'store'])->name('empresa.register.post');
     Route::get('/login', [ImobiliariaAuthController::class, 'showLoginForm'])->name('empresa.login');
     Route::post('/login/post', [ImobiliariaAuthController::class, 'login'])->name('empresa.login.post');
-    Route::get('/logout', [ImobiliariaAuthController::class, 'logout'])->name('empresa.logout');
 });
+
+Route::post('/empresa/logout', [ImobiliariaAuthController::class, 'logout'])
+    ->middleware('auth')
+    ->name('empresa.logout');
     
 
-Route::middleware('guest')->group(function () {
+Route::middleware(['guest', 'auth.unframed'])->group(function () {
     Route::get('/empresa/forgot-password', [CompanyPasswordResetLinkController::class, 'create'])
         ->name('company.password.request');
 
     Route::post('/empresa/forgot-password', [CompanyPasswordResetLinkController::class, 'store'])
+        ->middleware('throttle:5,1')
         ->name('company.password.email');
 
     Route::get('/empresa/reset-password/{token}', [CompanyNewPasswordController::class, 'create'])
         ->name('company.password.reset');
 
     Route::post('/empresa/reset-password', [CompanyNewPasswordController::class, 'store'])
+        ->middleware('throttle:10,1')
         ->name('company.password.store');
 });
 

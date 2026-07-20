@@ -22,7 +22,7 @@ class CorretorRegistrationController extends Controller
 
         $data = $request->validate([
             'name' => 'required|string|max:255|unique:corretores,name',
-            'email' => 'required|string|lowercase|email:rfc,dns|max:255|unique:corretores,email',
+            'email' => 'required|string|lowercase|email:rfc|max:255|unique:corretores,email',
             'password' => 'required|string|min:6|confirmed',
             'cpf' => 'required|string|regex:/^\d{11}$/|unique:corretores,cpf',
 
@@ -59,7 +59,7 @@ class CorretorRegistrationController extends Controller
             'last_login_at' => null,
         ]);
 
-        return redirect()->route('admin.login')->with(
+        return redirect()->route('admin.ceo.login')->with(
             'success',
             'Cadastro realizado!! Faça login para continuar!!'
         );

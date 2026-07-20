@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rules\Password;
 
 class PasswordController extends Controller
@@ -20,9 +21,16 @@ class PasswordController extends Controller
             'password' => ['required', Password::defaults(), 'confirmed'],
         ]);
 
-        $request->user()->update([
-            'password' => Hash::make($validated['password']),
-        ]);
+        DB::transaction(function () use ($request, $validated) {
+            $password = Hash::make($validated['password']);
+            $user = $request->user();
+
+            $user->update(['password' => $password]);
+
+            if ($user->company_id && $user->company) {
+                $user->company->forceFill(['password' => $password])->save();
+            }
+        });
 
         return back()->with('status', 'password-updated');
     }

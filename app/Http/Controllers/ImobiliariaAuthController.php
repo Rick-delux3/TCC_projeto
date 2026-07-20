@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Log;
 
 class ImobiliariaAuthController extends Controller
 {
@@ -80,8 +81,14 @@ class ImobiliariaAuthController extends Controller
             });
 
         } catch (\Throwable $e) {
+            TwoFactorCode::where('user_id', $user->id)->delete();
 
-             Auth::logout();
+            Log::error('Falha ao enviar código de 2FA da imobiliária.', [
+                'exception' => $e::class,
+                'mailer' => config('mail.default'),
+            ]);
+
+            Auth::logout();
 
             $request->session()->invalidate();
             $request->session()->regenerateToken();

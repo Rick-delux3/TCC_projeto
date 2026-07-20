@@ -9,6 +9,9 @@ use Illuminate\Auth\Events\Registered;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use App\Http\Requests\StoreCompanyRequest;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Throwable;
 
 class ImobiliariaRegistrationController extends Controller
 {
@@ -62,38 +65,48 @@ class ImobiliariaRegistrationController extends Controller
             ->where('active', true)
             ->firstOrFail();
 
-        $company = Imobiliaria::create([
-            'name' => $companyTag->title,
-            'email' => $data['email'],
-            'phone' => $data['phone'],
-            'cnpj' => $data['cnpj'],
-            'city' => $data['city'],
-            'state' => $data['state'],
-            'password' => Hash::make($data['password']),
+        [$company, $user] = DB::transaction(function () use ($companyTag, $data) {
+            $password = Hash::make($data['password']);
 
+            $company = Imobiliaria::create([
+                'name' => $companyTag->title,
+                'email' => $data['email'],
+                'phone' => $data['phone'],
+                'cnpj' => $data['cnpj'],
+                'city' => $data['city'],
+                'state' => $data['state'],
+                'password' => $password,
+                'lead_form_token' => Str::random(64),
+                'lead_form_active' => true,
+                'leadlovers_tag_id' => $companyTag->leadlovers_tag_id,
+                'leadlovers_tag_name' => $companyTag->title,
+            ]);
 
-            'lead_form_token' => Str::random(64),
-            'lead_form_active' => true,
+            $user = User::create([
+                'name' => $companyTag->title,
+                'email' => $data['email'],
+                'password' => $password,
+                'company_id' => $company->id,
+            ]);
 
-            
-            'leadlovers_tag_id' => $companyTag?->leadlovers_tag_id,
-            'leadlovers_tag_name' => $companyTag?->title,
-        ]);
-
-        $user = User::create([
-            'name' => $companyTag->title,
-            'email' => $data['email'],
-            'password' => Hash::make($data['password']),
-            'company_id' => $company->id,
-        ]);
+            return [$company, $user];
+        });
 
         // Sends the standard Laravel email verification link.
-        event(new Registered($user));
+        try {
+            event(new Registered($user));
+        } catch (Throwable $exception) {
+            Log::error('Cadastro concluído, mas a verificação de e-mail não foi enviada.', [
+                'company_id' => $company->id,
+                'exception' => $exception::class,
+                'mailer' => config('mail.default'),
+            ]);
+        }
 
 
         return redirect()->route('empresa.login')->with(
             'success',
-            'Cadastro realizado com sucesso. Verifique seu e-mail antes de concluir o acesso.'
+            'Cadastro realizado com sucesso. Faça login para continuar.'
         );
     }
 }

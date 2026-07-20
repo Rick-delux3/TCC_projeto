@@ -35,7 +35,7 @@ class EnsureCeoRegistrationIsOpen
             abort(403, 'Chave de acesso inválida para cadastro do CEO.');
         }
 
-        if(Corretor::where('role', 'ceo')->exists())
+        if(Corretor::where('role', Corretor::ROLE_CEO)->exists())
         {
             abort(403, 'O CEO já foi cadastrado. O cadastro do CEO não pode ser realizado novamente.');
         }

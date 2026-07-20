@@ -181,10 +181,13 @@
                         <li><hr class="dropdown-divider"></li>
 
                         <li>
-                            <a class="dropdown-item py-2 text-danger" href="{{ route('empresa.logout') }}">
-                                <i class="bi bi-box-arrow-right me-2"></i>
-                                Sair
-                            </a>
+                            <form method="POST" action="{{ route('empresa.logout') }}">
+                                @csrf
+                                <button type="submit" class="dropdown-item py-2 text-danger">
+                                    <i class="bi bi-box-arrow-right me-2"></i>
+                                    Sair
+                                </button>
+                            </form>
                         </li>
                     </ul>
                 </div>
@@ -276,10 +279,13 @@
 
         {{-- Área inferior do menu --}}
         <div class="dashboard-sidebar-footer mt-4 pt-3 border-top">
-            <a href="{{ route('empresa.logout') }}" class="dashboard-sidebar-link dashboard-sidebar-link-danger">
-                <i class="bi bi-box-arrow-right"></i>
-                <span>Sair</span>
-            </a>
+            <form method="POST" action="{{ route('empresa.logout') }}">
+                @csrf
+                <button type="submit" class="dashboard-sidebar-link dashboard-sidebar-link-danger border-0 w-100">
+                    <i class="bi bi-box-arrow-right"></i>
+                    <span>Sair</span>
+                </button>
+            </form>
         </div>
     </div>
 </div>
