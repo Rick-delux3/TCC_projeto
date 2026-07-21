@@ -14,6 +14,7 @@ class SendLeadToLeadLoversJob implements ShouldQueue
     use Queueable;
 
     public int $tries = 3;
+
     public int $timeout = 120;
 
     public function __construct(
@@ -22,6 +23,10 @@ class SendLeadToLeadLoversJob implements ShouldQueue
 
     public function handle(LeadLoversService $leadLovers): void
     {
+        if (! config('services.leadlovers.enabled', false)) {
+            return;
+        }
+
         $lead = Lead::with([
             'company',
             'endereco',
@@ -38,7 +43,7 @@ class SendLeadToLeadLoversJob implements ShouldQueue
          */
         $mainTagId = $this->mainTagIdForLead($lead);
 
-        if (!$mainTagId) {
+        if (! $mainTagId) {
             Log::warning('Tag principal não encontrada para o lead', [
                 'lead_id' => $lead->id,
                 'tipo_solicitante' => $lead->tipo_solicitante,
@@ -58,7 +63,7 @@ class SendLeadToLeadLoversJob implements ShouldQueue
 
         $sequenceCode = $this->sequenceCodeForLead($lead);
 
-        if (!$sequenceCode) {
+        if (! $sequenceCode) {
             Log::warning('Sequência LeadLovers não encontrada para o lead', [
                 'lead_id' => $lead->id,
                 'tipo_solicitante' => $lead->tipo_solicitante,
@@ -98,10 +103,10 @@ class SendLeadToLeadLoversJob implements ShouldQueue
             'tipo_solicitante' => $lead->tipo_solicitante,
         ]);
 
-        if (!is_array($response) || !$this->leadLoversResponseWasSuccessful($response)) {
+        if (! is_array($response) || ! $this->leadLoversResponseWasSuccessful($response)) {
             Log::warning('Lead não enviado para LeadLovers', [
                 'lead_id' => $lead->id,
-                'email' => $lead->email,
+                'lead_ref' => hash('sha256', mb_strtolower(trim($lead->email))),
                 'status_code' => $response['StatusCode'] ?? null,
                 'message' => $response['Message'] ?? $response['message'] ?? null,
             ]);
@@ -152,7 +157,7 @@ class SendLeadToLeadLoversJob implements ShouldQueue
             default => null,
         };
 
-        if (!$tagKey) {
+        if (! $tagKey) {
             return null;
         }
 
@@ -166,7 +171,7 @@ class SendLeadToLeadLoversJob implements ShouldQueue
      */
     private function companyTagId(Lead $lead): ?int
     {
-        if (!$lead->company) {
+        if (! $lead->company) {
             return null;
         }
 
@@ -199,9 +204,10 @@ class SendLeadToLeadLoversJob implements ShouldQueue
         return $exception === null
             && mb_stripos($message, 'Novo lead inserido na fila para processamento') !== false;
     }
-    
-    private function sequenceCodeForLead(Lead $lead): ?int {
-         /*
+
+    private function sequenceCodeForLead(Lead $lead): ?int
+    {
+        /*
         |--------------------------------------------------------------------------
         | Regra de negócio das sequências
         |--------------------------------------------------------------------------
@@ -209,12 +215,11 @@ class SendLeadToLeadLoversJob implements ShouldQueue
         | Todos os outros perfis vão para a sequência padrão.
         */
 
-        if($lead->tipo_solicitante === 'locatario'){
+        if ($lead->tipo_solicitante === 'locatario') {
             return (int) config('services.leadlovers.sequence_2');
 
         }
-        
+
         return (int) config('services.leadlovers.sequence_1');
     }
-    
 }

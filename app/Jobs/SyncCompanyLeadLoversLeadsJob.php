@@ -4,25 +4,50 @@ namespace App\Jobs;
 
 use App\Models\Imobiliaria;
 use App\Services\LeadLoversSyncService;
+use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
-class SyncCompanyLeadLoversLeadsJob implements ShouldQueue
+class SyncCompanyLeadLoversLeadsJob implements ShouldBeUnique, ShouldQueue
 {
     use Queueable;
 
     public int $tries = 1;
-    public int $timeout = 900;
+
+    public int $timeout = 540;
+
     public bool $failOnTimeout = true;
+
+    public int $uniqueFor = 600;
 
     public function __construct(
         public int $companyId
     ) {}
 
+    public function uniqueId(): string
+    {
+        return "leadlovers-company:{$this->companyId}";
+    }
+
     public function handle(LeadLoversSyncService $syncService): void
     {
+        if (! config('services.leadlovers.enabled', false)) {
+            Imobiliaria::whereKey($this->companyId)->update([
+                'sync_status' => 'cancelled',
+                'sync_error' => 'A sincronização está temporariamente indisponível.',
+                'sync_finished_at' => now(),
+            ]);
+
+            Log::notice(
+                'Sincronização da LeadLovers ignorada: integração desativada.',
+                ['company_id' => $this->companyId]
+            );
+
+            return;
+        }
+
         $company = Imobiliaria::findOrFail($this->companyId);
 
         Log::info('JOB: sincronização iniciada', [
@@ -37,7 +62,23 @@ class SyncCompanyLeadLoversLeadsJob implements ShouldQueue
         ]);
 
         try {
-           $result = $syncService->syncCompanyLeads($company);
+            $result = $syncService->syncCompanyLeads($company);
+
+            if (! ($result['success'] ?? false)) {
+                $company->update([
+                    'sync_status' => 'failed',
+                    'sync_error' => $result['message']
+                        ?? 'Não foi possível sincronizar os leads.',
+                    'sync_finished_at' => now(),
+                ]);
+
+                Log::warning('JOB: serviço não concluiu a sincronização.', [
+                    'company_id' => $company->id,
+                    'stopped_reason' => $result['stopped_reason'] ?? null,
+                ]);
+
+                return;
+            }
 
             $partialReasons = [
                 'max_pages_reached',
@@ -63,7 +104,7 @@ class SyncCompanyLeadLoversLeadsJob implements ShouldQueue
                 'sync_error' => $isPartial
                     ? 'Sincronização parcial concluída. Foram importados leads suficientes para exibição no dashboard.'
                     : null,
-                
+
             ]);
 
             Log::info('JOB: sincronização finalizada com sucesso', [
@@ -78,6 +119,7 @@ class SyncCompanyLeadLoversLeadsJob implements ShouldQueue
             $company->update([
                 'sync_status' => 'failed',
                 'sync_error' => 'Não foi possível sincronizar os leads.',
+                'sync_finished_at' => now(),
             ]);
 
             throw $e;
@@ -91,7 +133,8 @@ class SyncCompanyLeadLoversLeadsJob implements ShouldQueue
         if ($company) {
             $company->update([
                 'sync_status' => 'failed',
-                'sync_error' => 'A sincronização falhou ou excedeu o tempo limite.',
+                'sync_error' => $company->sync_error
+                    ?: 'A sincronização falhou ou excedeu o tempo limite.',
                 'sync_finished_at' => now(),
             ]);
         }

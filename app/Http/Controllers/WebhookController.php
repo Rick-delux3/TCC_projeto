@@ -11,7 +11,7 @@ class WebhookController extends Controller
     public function handle(Request $request): JsonResponse
     {
         Log::info('Webhook LeadLovers recebido.', [
-            'payload' => $request->all(),
+            'field_names' => array_keys($request->all()),
         ]);
 
         return response()->json([
