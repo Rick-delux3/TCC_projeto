@@ -36,7 +36,7 @@ return [
     ],
 
     'cpf_lookup' => [
-        'enabled' => env('CPF_LOOKUP_PROVIDER', false),
+        'enabled' => env('CPF_LOOKUP_ENABLED', false),
         'provider' => env('CPF_LOOKUP_PROVIDER', 'cpfhub'),
 
         'cpfhub' => [
@@ -50,6 +50,7 @@ return [
     ],
 
     'leadlovers' => [
+        'enabled' => env('LEADLOVERS_ENABLED', false),
         'base_url' => env('LEADLOVERS_BASE_URL', 'https://llapi.leadlovers.com/webapi/'),
         'email' => env('LEADLOVERS_EMAIL'),
         'token' => env('LEADLOVERS_TOKEN'),
@@ -57,18 +58,20 @@ return [
         'sequence_1' => env('LEADLOVERS_SEQUENCE'),
         'sequence_2' => env('LEADLOVERS_SEQUENCE_LOCATARIO'),
         'step' => env('LEADLOVERS_STEP'),
-        'sync_max_pages' => env('SYNC_MAX_PAGES'),
-        'sync_page_size' => env('SYNC_PAGE_SIZE'),
-        'sync_max_imported_leads' => env('SYNC_MAX_IMPORTED_LEADS'),
-        'sync_max_scanned_leads' => env('SYNC_MAX_SCANNED_LEADS'),
+        'sync_max_pages' => env('SYNC_MAX_PAGES', 15),
+        'sync_page_size' => env('SYNC_PAGE_SIZE', 50),
+        'sync_max_imported_leads' => env('SYNC_MAX_IMPORTED_LEADS', 100),
+        'sync_max_scanned_leads' => env('SYNC_MAX_SCANNED_LEADS', 500),
+        'rate_limit_retry_seconds' => env('LEADLOVERS_RATE_LIMIT_RETRY_SECONDS', 60),
+        'rate_limit_max_retry_seconds' => env('LEADLOVERS_RATE_LIMIT_MAX_RETRY_SECONDS', 900),
         'dynamic_fields' => [
-            env('DYNAMIC_FIELD_CPF_LEAD')
-        ]
+            env('DYNAMIC_FIELD_CPF_LEAD'),
+        ],
 
-        
     ],
 
     'pottencial' => [
+        'enabled' => env('POTTENCIAL_ENABLED', false),
         'base_url' => env('POTTENCIAL_API_URL', 'https://api-sandbox.pottencial.com.br'),
         'rental_endpoint' => env('POTTENCIAL_RENTAL_GUARANTEE_ENDPOINT', '/insurance/v1/fianca-locaticia-mensalizado-pf/quotes'),
         'client_id' => env('POTTENCIAL_CLIENT_ID'),
@@ -87,11 +90,10 @@ return [
         'default_lease_months' => env('POTTENCIAL_DEFAULT_LEASE_MONTHS', 30),
         'default_policy_type' => env('POTTENCIAL_DEFAULT_POLICY_TYPE', 'Unico'),
 
-
-
     ],
 
-    'too' =>[
+    'too' => [
+        'enabled' => env('TOO_ENABLED', false),
         'base_url' => env('TOO_BASE_URL', 'https://openapi-uat.tooseguros.com.br'),
         'client_id' => env('TOO_CLIENT_ID'),
         'client_secret' => env('TOO_CLIENT_SECRET'),
@@ -113,11 +115,11 @@ return [
     ],
 
     'porto' => [
+        'enabled' => env('PORTO_ENABLED', false),
         'base_url' => env('PORTO_BASE_URL'),
         'client_id' => env('PORTO_CLIENT_ID'),
         'client_secret' => env('PORTO_CLIENT_SECRET'),
-        'env' => env('PORTO_ENV', 'sandbox')
-    ]
-
+        'env' => env('PORTO_ENV', 'sandbox'),
+    ],
 
 ];

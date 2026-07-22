@@ -50,6 +50,11 @@ class AppServiceProvider extends ServiceProvider
         });
 
         Gate::before(function ($user, string $ability) {
+            if (in_array($ability, ['view-analyses', 'create-analysis'], true)
+                && ! config('features.insurance_analysis.enabled', false)) {
+                return false;
+            }
+
             if ($user instanceof Corretor && $user->isActive() && $user->isCeo()) {
                 return true;
             }

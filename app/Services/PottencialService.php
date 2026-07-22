@@ -24,6 +24,8 @@ class PottencialService
      */
     public function getAccessToken(): ?string
     {
+        $this->ensureEnabled();
+
         return Cache::remember('pottencial_access_token', now()->addMinutes(55), function () {
             if (!$this->baseUrl) {
                 Log::error('Base URL da Pottencial não configurada.');
@@ -119,6 +121,8 @@ class PottencialService
 
     private function postJson(string $endpoint, array $payload): array
     {
+        $this->ensureEnabled();
+
         $url = $this->baseUrl . $endpoint;
 
         if(!$this->baseUrl){
@@ -174,6 +178,8 @@ class PottencialService
 
     private function getJson(string $endpoint): array
     {
+        $this->ensureEnabled();
+
         $url = $this->baseUrl . $endpoint;
 
         if(!$this->baseUrl){
@@ -217,6 +223,17 @@ class PottencialService
                 'raw_body' => null,
                 'error' => $e->getMessage(),
             ];
+        }
+    }
+
+    private function ensureEnabled(): void
+    {
+        if (! config('features.insurance_analysis.enabled', false)) {
+            throw new \LogicException('O sistema de análises está temporariamente desativado.');
+        }
+
+        if (! config('services.pottencial.enabled', false)) {
+            throw new \LogicException('O provider pottencial está desativado.');
         }
     }
     private function normalizeResponse($response, string $endpoint, string $url, ?array $payload = null): array

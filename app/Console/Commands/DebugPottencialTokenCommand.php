@@ -20,6 +20,13 @@ class DebugPottencialTokenCommand extends Command
 
     public function handle(PottencialService $pottencialService): int
     {
+        if (! config('features.insurance_analysis.enabled', false)
+            || ! config('services.pottencial.enabled', false)) {
+            $this->error('O sistema de análises ou o provider Pottencial está desativado.');
+
+            return self::FAILURE;
+        }
+
         /*
          * Segurança básica:
          * evita mostrar token completo em produção.

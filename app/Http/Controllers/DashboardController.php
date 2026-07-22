@@ -2,10 +2,9 @@
 
 namespace App\Http\Controllers;
 
-use Illuminate\Http\Request;
-use App\Models\Imobiliaria;
 use App\Jobs\SyncCompanyLeadLoversLeadsJob;
-use App\Models\LeadLoversTag;
+use App\Models\Imobiliaria;
+use Illuminate\Http\Request;
 
 class DashboardController extends Controller
 {
@@ -15,11 +14,15 @@ class DashboardController extends Controller
      */
     private function queueCompanySync(Imobiliaria $company, bool $force = false): bool
     {
+        if (! config('services.leadlovers.enabled')) {
+            return false;
+        }
+
         if (in_array($company->sync_status, ['queued', 'running'], true)) {
             return false;
         }
 
-        if (!$force && in_array($company->sync_status, [
+        if (! $force && in_array($company->sync_status, [
             'completed',
             'completed_with_warning',
             'failed',
@@ -27,7 +30,7 @@ class DashboardController extends Controller
             return false;
         }
 
-         if (!$force && !is_null($company->sincronizado_em)) {
+        if (! $force && ! is_null($company->sincronizado_em)) {
             return false;
         }
 
@@ -95,16 +98,16 @@ class DashboardController extends Controller
     {
         $companyId = session('company_id');
 
-        if (!$companyId) {
+        if (! $companyId) {
             return response()->json([
                 'authenticated' => false,
                 'message' => 'Usuário não autenticado.',
             ], 401);
-        };
+        }
 
         $company = Imobiliaria::find($companyId);
 
-        if (!$company) {
+        if (! $company) {
             return response()->json([
                 'authenticated' => false,
                 'message' => 'Empresa não encontrada.',
@@ -127,13 +130,13 @@ class DashboardController extends Controller
     {
         $companyId = session('company_id');
 
-        if (!$companyId) {
+        if (! $companyId) {
             return redirect()->route('empresa.login');
         }
 
         $company = Imobiliaria::find($companyId);
 
-        if (!$company) {
+        if (! $company) {
             return redirect()
                 ->route('empresa.login')
                 ->withErrors([
@@ -150,12 +153,13 @@ class DashboardController extends Controller
         /**
          * Primeira sincronização automática.
          */
-
         $syncJustQueued = (bool) session('sync_just_queued', false);
 
         if (
+            config('services.leadlovers.enabled', false)
+            &&
             is_null($company->sincronizado_em)
-            && !in_array($company->sync_status, [
+            && ! in_array($company->sync_status, [
                 'queued',
                 'running',
                 'completed',
@@ -163,15 +167,8 @@ class DashboardController extends Controller
                 'failed',
             ], true)
         ) {
-          $syncJustQueued = $this->queueCompanySync($company);
-
-
-          /*
-            * Recarrega os dados atualizados da imobiliária.
-            * Isso garante que sync_status venha como queued/running/completed
-            * depois que o método queueCompanySync fizer o update.
-            */
-          $company->refresh();
+            $syncJustQueued = $this->queueCompanySync($company);
+            $company->refresh();
         }
 
         $recentThreshold = now()->subDays(7);
@@ -217,7 +214,7 @@ class DashboardController extends Controller
             $leadsQuery->where(
                 'tags_originais',
                 'like',
-                '%' . addcslashes($selectedTag, '%_\\') . '%'
+                '%'.addcslashes($selectedTag, '%_\\').'%'
             );
         }
 
@@ -242,7 +239,7 @@ class DashboardController extends Controller
                 $leadsQuery->where(
                     'nome',
                     'like',
-                    addcslashes($leadSearch, '%_\\') . '%'
+                    addcslashes($leadSearch, '%_\\').'%'
                 );
             }
         }
@@ -288,9 +285,6 @@ class DashboardController extends Controller
             'latestLeadAt' => optional($latestLead)->created_at,
             'filteredLeads' => $leads->total(),
         ];
-
-
-        
 
         /**
          * Nova lógica de acesso:
@@ -338,7 +332,7 @@ class DashboardController extends Controller
     {
         $companyId = session('company_id');
 
-        if (!$companyId) {
+        if (! $companyId) {
             return redirect()
                 ->route('empresa.login')
                 ->with('success', 'Sua sessão expirou. Entre novamente para sincronizar os leads.');
@@ -346,20 +340,26 @@ class DashboardController extends Controller
 
         $company = Imobiliaria::find($companyId);
 
-        if (!$company) {
+        if (! $company) {
             return redirect()
                 ->route('empresa.login')
                 ->with('success', 'Empresa não encontrada para a sincronização.');
         }
 
-        if (!$this->queueCompanySync($company, force: true)) {
+        if (! config('services.leadlovers.enabled', false)) {
             return redirect()
-                ->route('Dashboard')
+                ->route('company.dashboard')
+                ->with('warning', 'A sincronização de leads está temporariamente indisponível.');
+        }
+
+        if (! $this->queueCompanySync($company, force: true)) {
+            return redirect()
+                ->route('company.dashboard')
                 ->with('success', 'A sincronização já está em andamento.');
         }
 
         return redirect()
-            ->route('Dashboard')
+            ->route('company.dashboard')
             ->with('success', 'Nova sincronização iniciada com sucesso.')
             ->with('sync_just_queued', true);
     }

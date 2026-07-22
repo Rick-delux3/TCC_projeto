@@ -238,20 +238,25 @@
             <div class="d-flex flex-column flex-sm-row gap-2">
                 <form method="POST" action="{{ route('Dashboard.syncAgain') }}">
                     @csrf
-
-                    <button
-                        type="submit"
-                        class="btn {{ $hasSyncFailed ? 'btn-danger' : 'btn-primary' }}"
-                        @disabled($isSyncBusy)
-                    >
-                        @if ($isSyncBusy)
-                            Sincronização em andamento
-                        @elseif ($hasSyncFailed)
-                            Tentar sincronização novamente
-                        @else
-                            Sincronizar leads
-                        @endif
-                    </button>
+                    @if (config('services.leadlovers.enabled'))
+                        <button
+                            type="submit"
+                            class="btn {{ $hasSyncFailed ? 'btn-danger' : 'btn-primary' }}"
+                            @disabled($isSyncBusy)
+                        >
+                            @if ($isSyncBusy)
+                                Sincronização em andamento
+                            @elseif ($hasSyncFailed)
+                                Tentar sincronização novamente
+                            @else
+                                Sincronizar leads
+                            @endif
+                        </button>
+                    @else
+                        <button type="button" class="btn btn-secondary" disabled>
+                            Sincronização temporariamente indisponível
+                        </button>
+                    @endif
                 </form>
 
                 <a
@@ -1043,17 +1048,19 @@
                         </button>
                     </li>
 
-                    <li class="nav-item" role="presentation">
-                        <button
-                            class="nav-link"
-                            data-bs-toggle="pill"
-                            data-bs-target="#lead-reanalysis-pane-{{ $lead->id }}"
-                            type="button"
-                            role="tab"
-                        >
-                            Reanálise
-                        </button>
-                    </li>
+                    @if (config('features.insurance_analysis.enabled', false))
+                        <li class="nav-item" role="presentation">
+                            <button
+                                class="nav-link"
+                                data-bs-toggle="pill"
+                                data-bs-target="#lead-reanalysis-pane-{{ $lead->id }}"
+                                type="button"
+                                role="tab"
+                            >
+                                Reanálise
+                            </button>
+                        </li>
+                    @endif
                 </ul>
 
                 <div class="tab-content">
@@ -1286,12 +1293,13 @@
                         </div>
                     </div>
 
-                    {{-- Aba 3: reanálise --}}
-                    <div
-                        class="tab-pane fade"
-                        id="lead-reanalysis-pane-{{ $lead->id }}"
-                        role="tabpanel"
-                    >
+                    @if (config('features.insurance_analysis.enabled', false))
+                        {{-- Aba 3: reanálise --}}
+                        <div
+                            class="tab-pane fade"
+                            id="lead-reanalysis-pane-{{ $lead->id }}"
+                            role="tabpanel"
+                        >
                         @if ($canReanalyze)
                             <div class="alert alert-success rounded-4">
                                 <strong>Reanálise liberada.</strong>
@@ -1327,7 +1335,8 @@
                                 </p>
                             @endif
                         @endif
-                    </div>
+                        </div>
+                    @endif
                 </div>
             </div>
             

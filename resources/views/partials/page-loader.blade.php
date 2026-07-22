@@ -55,51 +55,16 @@
     }
 </style>
 
-<div id="page-loader-modal" role="dialog" aria-modal="true" aria-label="Carregando">
+<div
+    id="page-loader-modal"
+    class="is-hidden"
+    role="status"
+    aria-live="polite"
+    aria-label="Carregando"
+    aria-hidden="true"
+>
     <div class="page-loader-card">
         <div class="page-loader-spinner"></div>
         <p class="page-loader-text">Carregando plataforma...</p>
     </div>
 </div>
-
-<script>
-    (function () {
-        let getModal = function () {
-            return document.getElementById('page-loader-modal');
-        };
-
-        var showLoader = function () {
-            var modal = getModal();
-            if (!modal) return;
-            modal.classList.remove('is-hidden');
-        };
-
-        var hideLoader = function () {
-            var modal = getModal();
-            if (!modal) return;
-            modal.classList.add('is-hidden');
-        };
-
-        document.addEventListener('submit', function (event) {
-            let form = event.target;
-            if (!form || form.tagName !== 'FORM') return;
-            if (form.hasAttribute('data-no-loader')) return;
-            showLoader();
-        }, true);
-
-        document.addEventListener('click', function (event) {
-            let trigger = event.target.closest('[data-show-loader]');
-            if (!trigger) return;
-            showLoader();
-        });
-
-        window.PageLoader = {
-            show: showLoader,
-            hide: hideLoader,
-        };
-
-        window.addEventListener('load', hideLoader);
-        window.addEventListener('pageshow', hideLoader);
-        setTimeout(hideLoader, 8000);
-    })();
-</script>

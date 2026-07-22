@@ -23,6 +23,8 @@ class PottencialInsuranceProvider implements InsuranceProviderInterface
         InsuranceAnalysis $analysis,
         string $attemptId
     ): array {
+        $this->ensureEnabled();
+
         return $this->requestQuote(
             analysis: $analysis,
             attemptId: $attemptId,
@@ -35,6 +37,8 @@ class PottencialInsuranceProvider implements InsuranceProviderInterface
         string $attemptId,
         array $options = []
     ): array {
+        $this->ensureEnabled();
+
         $analysis->events()->create([
             'event_type' => 'pottencial_reanalysis_fallback',
             'status' => 'processing',
@@ -56,6 +60,8 @@ class PottencialInsuranceProvider implements InsuranceProviderInterface
 
     public function getStatus(InsuranceAnalysis $analysis): array
     {
+        $this->ensureEnabled();
+
         if (empty($analysis->quote_id)) {
             throw new \RuntimeException(
                 'A análise da Pottencial não possui quote_id para consultar o status.'
@@ -72,6 +78,8 @@ class PottencialInsuranceProvider implements InsuranceProviderInterface
         string $attemptId,
         bool $isReanalysis
     ): array {
+        $this->ensureEnabled();
+
         $analysis->loadMissing([
             'lead',
             'lead.endereco',
@@ -105,5 +113,13 @@ class PottencialInsuranceProvider implements InsuranceProviderInterface
         return $this->pottencialService->createRentalGuaranteeQuote(
             $payload
         );
+    }
+
+    private function ensureEnabled(): void
+    {
+        if (! config('features.insurance_analysis.enabled', false)
+            || ! config('services.pottencial.enabled', false)) {
+            throw new \LogicException('O provider pottencial está desativado.');
+        }
     }
 }

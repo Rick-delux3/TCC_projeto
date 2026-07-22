@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\RateLimiter;
 use App\Models\Corretor;
 use App\Services\CorretorInvitationService;
@@ -251,7 +252,24 @@ class CorretorAuthController extends Controller
         | o acesso ao dashboard até validar.
         */
         if (! $corretor->hasVerifiedFirstLogin()) {
-            $this->sendTwoFactorCode($corretor, $request);
+            try {
+                $this->sendTwoFactorCode($corretor, $request);
+            } catch (\Throwable $exception) {
+                Log::error('Falha ao enviar código de 2FA administrativo.', [
+                    'corretor_id' => $corretor->id,
+                    'exception' => $exception::class,
+                    'mailer' => config('mail.default'),
+                ]);
+
+                $this->logoutCurrentAdminSession($request);
+
+                return redirect()
+                    ->route($fallbackLoginRoute)
+                    ->withErrors([
+                        'email' => 'Não foi possível enviar o código de verificação. Tente novamente.',
+                        'cpf' => 'Não foi possível enviar o código de verificação. Tente novamente.',
+                    ]);
+            }
 
             session()->forget('admin_2fa_passed');
 
@@ -418,7 +436,19 @@ class CorretorAuthController extends Controller
         RateLimiter::hit($resendKey, self::RESEND_DECAY_SECONDS);
         RateLimiter::hit($cooldownKey, self::RESEND_COOLDOWN_SECONDS);
 
-        $this->sendTwoFactorCode($corretor, $request);
+        try {
+            $this->sendTwoFactorCode($corretor, $request);
+        } catch (\Throwable $exception) {
+            Log::error('Falha ao reenviar código de 2FA administrativo.', [
+                'corretor_id' => $corretor->id,
+                'exception' => $exception::class,
+                'mailer' => config('mail.default'),
+            ]);
+
+            return back()->withErrors([
+                'code' => 'Não foi possível reenviar o código. Tente novamente.',
+            ]);
+        }
 
         return back()->with('success', 'Novo código enviado para seu e-mail.');
     }
@@ -461,15 +491,23 @@ class CorretorAuthController extends Controller
             'first_login_code_sent_at' => now(),
         ])->save();
 
-        Mail::send('emails.admin-2fa-code', [
-            'code' => $code,
-            'expiresAt' => $expiresAt->format('H:i'),
-            'admin' => $corretor,
-        ], function ($message) use ($corretor) {
-            $message
-                ->to($corretor->email)
-                ->subject('Seu código de verificação administrativa');
-        });
+        try {
+            Mail::send('emails.admin-2fa-code', [
+                'code' => $code,
+                'expiresAt' => $expiresAt->format('H:i'),
+                'admin' => $corretor,
+            ], function ($message) use ($corretor) {
+                $message
+                    ->to($corretor->email)
+                    ->subject('Seu código de verificação administrativa');
+            });
+        } catch (\Throwable $exception) {
+            CorretorLoginVerificacaoCode::where('corretor_id', $corretor->id)
+                ->whereNull('used_at')
+                ->update(['used_at' => now()]);
+
+            throw $exception;
+        }
     }
 
     public function acceptMemberInvitation(

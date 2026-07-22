@@ -15,6 +15,12 @@ class SyncLeadLoversTagsCommand extends Command
 
     public function handle(LeadLoversService $leadLovers): int
     {
+        if (! config('services.leadlovers.enabled', false)) {
+            $this->warn('Integração com a LeadLovers desativada. Nenhuma chamada foi realizada.');
+
+            return self::FAILURE;
+        }
+
         $this->info('Buscando tags na LeadLovers...');
 
         $response = $leadLovers->getAllTags();
@@ -22,7 +28,7 @@ class SyncLeadLoversTagsCommand extends Command
         // Ajuste conforme a resposta real da API.
         $tags = $response['Tags'] ?? $response['Data'] ?? $response;
 
-        if (!is_array($tags) || empty($tags)) {
+        if (! is_array($tags) || empty($tags)) {
             $this->error('Nenhuma tag encontrada ou resposta inesperada da API.');
             $this->line(json_encode($response, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
 
@@ -43,8 +49,9 @@ class SyncLeadLoversTagsCommand extends Command
                 ?? $tag['TagName']
                 ?? null;
 
-            if (!$tagId || !$title) {
-                $this->warn('Tag ignorada: ' . json_encode($tag, JSON_UNESCAPED_UNICODE));
+            if (! $tagId || ! $title) {
+                $this->warn('Tag ignorada: '.json_encode($tag, JSON_UNESCAPED_UNICODE));
+
                 continue;
             }
 

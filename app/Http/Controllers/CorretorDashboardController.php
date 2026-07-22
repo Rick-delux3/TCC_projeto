@@ -23,6 +23,8 @@ class CorretorDashboardController extends Controller
         $canViewLeads = Gate::forUser($corretor)->allows('view-leads');
         $canViewRealEstateCompanies = Gate::forUser($corretor)
             ->allows('view-real-estate-companies');
+        $canCreateAnalysis = config('features.insurance_analysis.enabled', false)
+            && Gate::forUser($corretor)->allows('create-analysis');
 
         $leadSearch = $request->input('lead_name', '');
 
@@ -62,17 +64,7 @@ class CorretorDashboardController extends Controller
             ''
         );
 
-        if (
-            $selectedTipoSolicitante !== ''
-            && ! array_key_exists(
-                $selectedTipoSolicitante,
-                $tipoSolicitantesOptions
-            )
-        ) {
-            $selectedTipoSolicitante = '';
-        }
-
-
+    
          if($selectedImobiliaria === 'sem_vinculo') {
             $leadsQuery->whereNull('company_id');
          } elseif ($selectedImobiliaria !== '') {
@@ -81,6 +73,16 @@ class CorretorDashboardController extends Controller
                 (int) $selectedImobiliaria
             );
          }
+
+         if (
+            $selectedTipoSolicitante !== ''
+            && ! array_key_exists(
+                $selectedTipoSolicitante,
+                $tipoSolicitantesOptions
+            )
+        ) {
+            $selectedTipoSolicitante = '';
+        }
 
          $leadsQuery->when(
             $selectedTipoSolicitante !== '',
@@ -144,6 +146,19 @@ class CorretorDashboardController extends Controller
             ? Imobiliaria::query()->orderBy('name')->get()
             : collect();
 
+        $simulationCompanies = $canCreateAnalysis
+            ? Imobiliaria::query()->where('lead_form_active', true)
+                ->orderBy('name')
+                ->get([
+                    'id',
+                    'name',
+                    'city',
+                    'state',
+                    'lead_form_active',
+                ]) : collect();
+
+            
+
         return view('corretor.dashboard-admin', compact(
             'corretor',
             'dashboardStats',
@@ -154,6 +169,8 @@ class CorretorDashboardController extends Controller
             'selectedResultado',
             'selectedTipoSolicitante',
             'tipoSolicitantesOptions',
+            'simulationCompanies',
+            'canCreateAnalysis',
         ));
         
     }

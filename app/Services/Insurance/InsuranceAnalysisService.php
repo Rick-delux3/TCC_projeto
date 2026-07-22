@@ -18,6 +18,8 @@ class InsuranceAnalysisService
 
     public function createPendingAnalysis(Lead $lead, ?string $startDate = null): InsuranceAnalysis
     {
+        $this->ensureEnabled();
+
         $lead->loadMissing('despesas');
 
         $leaseMonths = (int) config('services.pottencial.default_lease_months', 30);
@@ -77,6 +79,8 @@ class InsuranceAnalysisService
 
     public function sendToPottencial(InsuranceAnalysis $analysis): InsuranceAnalysis
     {
+        $this->ensureEnabled();
+
         $analysis->loadMissing([
             'lead.company',
             'lead.endereco',
@@ -220,6 +224,13 @@ class InsuranceAnalysisService
             'UnderAnalysis', 'Pending' => 'manual_review',
             default => null,
         };
+    }
+
+    private function ensureEnabled(): void
+    {
+        if (! config('features.insurance_analysis.enabled', false)) {
+            throw new \LogicException('O sistema de análises está temporariamente desativado.');
+        }
     }
 
     private function extractQuoteNumber(array $response): ?string

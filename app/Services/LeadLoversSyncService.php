@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Exceptions\LeadLoversRateLimitedException;
 use App\Models\Imobiliaria;
 use App\Models\Lead;
 use Illuminate\Support\Facades\Http;
@@ -10,6 +11,7 @@ use Illuminate\Support\Facades\Log;
 class LeadLoversSyncService
 {
     private string $baseUrl;
+
     private ?string $token;
 
     public function __construct()
@@ -17,7 +19,7 @@ class LeadLoversSyncService
         $this->baseUrl = rtrim(
             (string) config('services.leadlovers.base_url', 'https://llapi.leadlovers.com/webapi/'),
             '/'
-        ) . '/';
+        ).'/';
 
         $this->token = config('services.leadlovers.token');
     }
@@ -36,6 +38,16 @@ class LeadLoversSyncService
      */
     public function syncCompanyLeads(Imobiliaria $company): array
     {
+        if (! config('services.leadlovers.enabled', false)) {
+            return [
+                'success' => false,
+                'message' => 'Integração com a LeadLovers desativada.',
+                'stopped_reason' => 'integration_disabled',
+                'imported' => 0,
+                'scanned' => 0,
+            ];
+        }
+
         if (blank($this->token)) {
             Log::error('Token da LeadLovers não configurado.');
 
@@ -129,28 +141,59 @@ class LeadLoversSyncService
                 'page' => $page,
             ]);
 
-            $response = Http::timeout(30)
-                ->retry(2, 1000)
-                ->get($this->baseUrl . 'Leads', [
+            $response = Http::connectTimeout(10)
+                ->timeout(30)
+                ->get($this->baseUrl.'Leads', [
                     'token' => $this->token,
                     'page' => $page,
                     'numRegisters' => $numRegisters,
                 ]);
 
-            if (!$response->successful()) {
-                $stoppedReason = 'leadlovers_page_request_failed';
+            if ($response->status() === 429) {
+                Log::warning('Leadlovers limitou a busca de páginas', [
+                    'company_id' => $company->id,
+                    'page' => $page,
+                    'status' => 429,
+                    'retry_after' => $response->header('Retry-After'),
+                    'cloudflare_1015' => str_contains(
+                        mb_strtolower($response->body()),
+                        'error code: 1015',
+                    ),
+                ]);
+
+                throw LeadLoversRateLimitedException::fromResponse($response);
+            }
+
+            if (! $response->successful()) {
+                $stoppedReason = match (true) {
+                    in_array($response->status(), [401, 403], true) => 'authentication_failed',
+                    $response->serverError() => 'server_error',
+                    default => 'leadlovers_page_request_failed',
+                };
 
                 Log::warning('Erro ao buscar página de leads na LeadLovers', [
                     'company_id' => $company->id,
                     'page' => $page,
                     'status' => $response->status(),
-                    'body' => $response->body(),
                 ]);
 
                 break;
             }
 
             $data = $response->json();
+
+            if (! is_array($data) || ! isset($data['Data']) || ! is_array($data['Data'])) {
+                $stoppedReason = 'invalid_response';
+
+                Log::warning('Resposta inválida ao buscar página de leads na LeadLovers', [
+                    'company_id' => $company->id,
+                    'page' => $page,
+                    'status' => $response->status(),
+                ]);
+
+                break;
+            }
+
             $leadsDaPagina = $data['Data'] ?? [];
 
             Log::info('Página recebida da LeadLovers', [
@@ -204,27 +247,42 @@ class LeadLoversSyncService
 
                 $email = $leadData['Email'] ?? null;
 
-                if (!$email) {
+                if (! $email) {
                     $skippedWithoutEmail++;
+
                     continue;
                 }
 
                 /*
                  * Busca o lead completo para conferir tags.
                  */
-                $leadCompletoResponse = Http::timeout(30)
-                    ->retry(2, 1000)
-                    ->get($this->baseUrl . 'Lead', [
+                $leadCompletoResponse = Http::connectTimeout(10)
+                    ->timeout(30)
+                    ->get($this->baseUrl.'Lead', [
                         'token' => $this->token,
                         'email' => $email,
                     ]);
 
-                if (!$leadCompletoResponse->successful()) {
+                if ($leadCompletoResponse->status() === 429) {
+                    Log::warning('Leadlovers limitou a busca de lead.', [
+                        'company_id' => $company->id,
+                        'status' => 429,
+                        'retry_after' => $leadCompletoResponse->header('Retry-After'),
+                        'cloudflare_1015' => str_contains(
+                            mb_strtolower($leadCompletoResponse->body()),
+                            'error code: 1015',
+                        ),
+                    ]);
+
+                    throw LeadLoversRateLimitedException::fromResponse($leadCompletoResponse);
+                }
+
+                if (! $leadCompletoResponse->successful()) {
                     $failedFullLeadRequests++;
 
                     Log::warning('Erro ao buscar lead completo na LeadLovers', [
                         'company_id' => $company->id,
-                        'email' => $email,
+                        'lead_ref' => hash('sha256', mb_strtolower(trim($email))),
                         'status' => $leadCompletoResponse->status(),
                     ]);
 
@@ -233,12 +291,19 @@ class LeadLoversSyncService
 
                 $leadCompleto = $leadCompletoResponse->json();
 
+                if (! is_array($leadCompleto)) {
+                    $failedFullLeadRequests++;
+
+                    continue;
+                }
+
                 $tags = $this->extractTags($leadCompleto);
 
                 $temTagDaImobiliaria = $this->hasCompanyTag($tags, $companyTag);
 
-                if (!$temTagDaImobiliaria) {
+                if (! $temTagDaImobiliaria) {
                     $skippedWithoutCompanyTag++;
+
                     continue;
                 }
 
@@ -270,9 +335,20 @@ class LeadLoversSyncService
             $page++;
         }
 
+        $failureReasons = [
+            'missing_token',
+            'leadlovers_page_request_failed',
+            'authentication_failed',
+            'server_error',
+            'rate_limited',
+            'invalid_response',
+        ];
+
         $result = [
-            'success' => true,
-            'message' => 'Sincronização LeadLovers finalizada.',
+            'success' => (! in_array($stoppedReason, $failureReasons, true)),
+            'message' => in_array($stoppedReason, $failureReasons, true)
+                ? 'A sincronização não pôde ser concluída.'
+                : 'Sincronização LeadLovers finalizada.',
             'stopped_reason' => $stoppedReason,
             'imported' => $imported,
             'scanned' => $scanned,
@@ -355,7 +431,7 @@ class LeadLoversSyncService
             'status' => $this->definirStatus($tags, $company->name),
         ]);
 
-        if (!$lead->exists) {
+        if (! $lead->exists) {
             $lead->tipo_solicitante = 'imobiliaria_cadastrada';
             $lead->origem = 'leadlovers_sync';
         }
@@ -370,7 +446,7 @@ class LeadLoversSyncService
         /*
          * Endereço foi movido para subtabela, então continua pelo relacionamento.
          */
-        if (!filled($leadData['City'] ?? null) && !filled($leadData['State'] ?? null)) {
+        if (! filled($leadData['City'] ?? null) && ! filled($leadData['State'] ?? null)) {
             return;
         }
 

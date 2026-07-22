@@ -161,7 +161,7 @@
                         </p>
                     </div>
 
-                    <a href="{{ route('Dashboard') }}" class="btn btn-outline-primary">
+                    <a href="{{ route('company.dashboard') }}" class="btn btn-outline-primary">
                         Voltar ao dashboard
                     </a>
                 </div>

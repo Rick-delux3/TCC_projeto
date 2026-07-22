@@ -2,9 +2,19 @@
 
 @section('content')
 
-<div class="container py-5">
-    <div class="card border-0 shadow-sm rounded-4 mx-auto" style="max-width: 950px;">
-        <div class="card-body p-4">
+@php
+    $isAdminSimulation = $isAdminSimulation ?? false;
+    $lockResponsavelTipo = $lockResponsavelTipo ?? false;
+
+    $formAction = $formAction
+        ?? route('simulation.unregistered-company.store');
+@endphp
+
+<div class="container py-4 py-lg-5">
+    <div class="row justify-content-center">
+        <div class="col-12 col-xl-10">
+            <div class="card border-0 shadow-sm rounded-4">
+                <div class="card-body p-3 p-md-4 p-lg-5">
 
             <h2 class="fw-bold mb-4">
                 Solicitação por imobiliária não cadastrada e Proprietário
@@ -12,12 +22,12 @@
 
             @include('simulation.partials.alerts')
 
-            <form action="{{ route('simulation.unregistered-company.store') }}" method="POST">
+            <form action="{{ $formAction }}" method="POST">
                 @csrf
 
                 @include('simulation.partials.honeypot')
 
-                <div class="row g-3">
+                <div class="row g-3 align-items-start">
                     <div class="col-12">
                         <h5 class="fw-bold border-bottom pb-2">
                             Dados do pretendente à locação
@@ -76,36 +86,51 @@
                         <label class="form-label fw-semibold">
                             Quem está solicitando? <span class="text-danger">*</span>
                         </label>
+                        @if ($lockResponsavelTipo)
+                            <input
+                                type="hidden"
+                                name="responsavel_tipo"
+                                value="{{ $responsavelTipo }}"
+                            >
 
-                        <div class="d-flex flex-column flex-md-row gap-3">
-                            <div class="form-check">
-                                <input 
-                                    class="form-check-input" 
-                                    type="radio" 
-                                    name="responsavel_tipo" 
-                                    id="responsavel_imobiliaria" 
-                                    value="imobiliaria_nao_cadastrada"
-                                    @checked(old('responsavel_tipo', $responsavelTipo ?? 'imobiliaria_nao_cadastrada') === 'imobiliaria_nao_cadastrada')
-                                >
-                                <label class="form-check-label" for="responsavel_imobiliaria">
-                                    Imobiliária não cadastrada
-                                </label>
-                            </div>
+                            <div class="alert alert-info mb-0">
+                                <strong>Tipo selecionado:</strong>
 
-                            <div class="form-check">
-                                <input 
-                                    class="form-check-input" 
-                                    type="radio" 
-                                    name="responsavel_tipo" 
-                                    id="responsavel_locador" 
-                                    value="locador"
-                                    @checked(old('responsavel_tipo', $responsavelTipo ?? null) === 'locador')
-                                >
-                                <label class="form-check-label" for="responsavel_locador">
-                                    Proprietário / locador
-                                </label>
+                                {{ $responsavelTipo === 'locador'
+                                    ? 'Proprietário / locador'
+                                    : 'Imobiliária não cadastrada' }}
                             </div>
-                        </div>
+                        @else
+                            <div class="d-flex flex-column flex-md-row gap-3">
+                                <div class="form-check">
+                                    <input 
+                                        class="form-check-input" 
+                                        type="radio" 
+                                        name="responsavel_tipo" 
+                                        id="responsavel_imobiliaria" 
+                                        value="imobiliaria_nao_cadastrada"
+                                        @checked(old('responsavel_tipo', $responsavelTipo ?? 'imobiliaria_nao_cadastrada') === 'imobiliaria_nao_cadastrada')
+                                    >
+                                    <label class="form-check-label" for="responsavel_imobiliaria">
+                                        Imobiliária não cadastrada
+                                    </label>
+                                </div>
+
+                                <div class="form-check">
+                                    <input 
+                                        class="form-check-input" 
+                                        type="radio" 
+                                        name="responsavel_tipo" 
+                                        id="responsavel_locador" 
+                                        value="locador"
+                                        @checked(old('responsavel_tipo', $responsavelTipo ?? null) === 'locador')
+                                    >
+                                    <label class="form-check-label" for="responsavel_locador">
+                                        Proprietário / locador
+                                    </label>
+                                </div>
+                            </div>
+                        @endif
                     </div>
 
                     <div class="col-md-12">
@@ -128,10 +153,14 @@
 
                 @include('simulation.partials.consent-checkbox')
 
-                <button type="submit" class="btn btn-danger w-100 mt-3">
-                    ENVIAR
-                </button>
+                <div class="d-grid mt-4">
+                    <button type="submit" class="btn btn-danger">
+                        ENVIAR
+                    </button>
+                </div>
             </form>
+                </div>
+            </div>
         </div>
     </div>
 </div>

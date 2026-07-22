@@ -36,6 +36,10 @@ class CpfLookupService
      */
     public function birthdateForToo(?string $cpf): ?string
     {
+        if (! config('features.insurance_analysis.enabled', false)) {
+            return $this->fallbackBirthdate();
+        }
+
         $cpf = $this->onlyNumbers($cpf);
 
         if (strlen($cpf) !== 11) {

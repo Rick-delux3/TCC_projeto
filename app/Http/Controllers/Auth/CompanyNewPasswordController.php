@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Password;
 use Illuminate\Validation\Rules;
 use Illuminate\View\View;
+use Illuminate\Support\Facades\DB;
 
 class CompanyNewPasswordController extends Controller
 {
@@ -30,9 +31,12 @@ class CompanyNewPasswordController extends Controller
         $status = Password::broker('companies')->reset(
             $request->only('email', 'password', 'password_confirmation', 'token'),
             function (Imobiliaria $company) use ($request) {
-                $company->forceFill([
-                    'password' => Hash::make($request->password),
-                ])->save();
+                DB::transaction(function () use ($company, $request) {
+                    $password = Hash::make($request->password);
+
+                    $company->forceFill(['password' => $password])->save();
+                    $company->users()->update(['password' => $password]);
+                });
 
                 event(new PasswordReset($company));
             }

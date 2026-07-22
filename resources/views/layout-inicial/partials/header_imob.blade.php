@@ -59,7 +59,7 @@
             </button>
 
             {{-- Marca / logo --}}
-            <a class="navbar-brand dashboard-client-brand ms-2" href="{{ route('Dashboard') }}">
+            <a class="navbar-brand dashboard-client-brand ms-2" href="{{ route('company.dashboard') }}">
                 <span class="dashboard-client-brand__logo">
                     <img src="{{ asset('imgs/Logo_NVS.png') }}" alt="NVS Seguros">
                 </span>
@@ -115,7 +115,7 @@
                                             Existem leads em fase inicial aguardando acompanhamento.
                                         </div>
 
-                                        <a href="{{ route('Dashboard') }}#leads-section" class="small fw-semibold text-decoration-none">
+                                        <a href="{{ route('company.dashboard') }}#leads-section" class="small fw-semibold text-decoration-none">
                                             Ver leads
                                         </a>
                                     </div>
@@ -181,10 +181,13 @@
                         <li><hr class="dropdown-divider"></li>
 
                         <li>
-                            <a class="dropdown-item py-2 text-danger" href="{{ route('empresa.logout') }}">
-                                <i class="bi bi-box-arrow-right me-2"></i>
-                                Sair
-                            </a>
+                            <form method="POST" action="{{ route('empresa.logout') }}">
+                                @csrf
+                                <button type="submit" class="dropdown-item py-2 text-danger">
+                                    <i class="bi bi-box-arrow-right me-2"></i>
+                                    Sair
+                                </button>
+                            </form>
                         </li>
                     </ul>
                 </div>
@@ -236,25 +239,27 @@
 
         {{-- Navegação principal --}}
         <nav class="dashboard-sidebar-nav">
-            <a href="{{ route('Dashboard') }}" class="dashboard-sidebar-link active">
+            <a href="{{ route('company.dashboard') }}" class="dashboard-sidebar-link active">
                 <i class="bi bi-grid-1x2"></i>
                 <span>Dashboard</span>
             </a>
 
-            <a href="{{ route('Dashboard') }}#leads-section" class="dashboard-sidebar-link">
+            <a href="{{ route('company.dashboard') }}#leads-section" class="dashboard-sidebar-link">
                 <i class="bi bi-people"></i>
                 <span>Leads</span>
             </a>
 
-            <a href="{{ route('insurance-analyses.index') }}" class="dashboard-sidebar-link">
-                <i class="bi bi-clipboard2-data"></i>
-                <span>Análises</span>
-            </a>
+            @if (config('features.insurance_analysis.enabled', false))
+                <a href="{{ route('insurance-analyses.index') }}" class="dashboard-sidebar-link">
+                    <i class="bi bi-clipboard2-data"></i>
+                    <span>Análises</span>
+                </a>
 
-            <a href="{{ route('simulation.registered-company.access') }}" class="dashboard-sidebar-link">
-                <i class="bi bi-link-45deg"></i>
-                <span>Página de simulação</span>
-            </a>
+                <a href="{{ route('simulation.registered-company.access') }}" class="dashboard-sidebar-link">
+                    <i class="bi bi-link-45deg"></i>
+                    <span>Página de simulação</span>
+                </a>
+            @endif
 
             <a href="{{ route('profile.edit') }}" class="dashboard-sidebar-link">
                 <i class="bi bi-person-gear"></i>
@@ -274,10 +279,13 @@
 
         {{-- Área inferior do menu --}}
         <div class="dashboard-sidebar-footer mt-4 pt-3 border-top">
-            <a href="{{ route('empresa.logout') }}" class="dashboard-sidebar-link dashboard-sidebar-link-danger">
-                <i class="bi bi-box-arrow-right"></i>
-                <span>Sair</span>
-            </a>
+            <form method="POST" action="{{ route('empresa.logout') }}">
+                @csrf
+                <button type="submit" class="dashboard-sidebar-link dashboard-sidebar-link-danger border-0 w-100">
+                    <i class="bi bi-box-arrow-right"></i>
+                    <span>Sair</span>
+                </button>
+            </form>
         </div>
     </div>
 </div>
