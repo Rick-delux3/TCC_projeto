@@ -2,20 +2,22 @@
 
 namespace App\Jobs;
 
+use App\Exceptions\LeadLoversRateLimitedException;
 use App\Models\Lead;
 use App\Services\LeadLoversService;
 use Illuminate\Bus\Queueable;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\Log;
 
 class UpdateLeadOnLeadLoversJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public int $tries = 3;
+
     public int $timeout = 120;
 
     public function __construct(
@@ -30,13 +32,17 @@ class UpdateLeadOnLeadLoversJob implements ShouldQueue
 
     public function handle(LeadLoversService $leadLoversService): void
     {
-        $lead = Lead::with(['endereco', 'company'])->find($this->leadId);
-
-        if (!$lead) {
+        if (! config('services.leadlovers.enabled', false)) {
             return;
         }
 
-        if (!$this->originalEmail) {
+        $lead = Lead::with(['endereco', 'company'])->find($this->leadId);
+
+        if (! $lead) {
+            return;
+        }
+
+        if (! $this->originalEmail) {
             Log::warning('Lead sem e-mail original para atualização na LeadLovers.', [
                 'lead_id' => $lead->id,
             ]);
@@ -65,13 +71,45 @@ class UpdateLeadOnLeadLoversJob implements ShouldQueue
             return $value !== null && $value !== '';
         });
 
-        $response = $leadLoversService->updateLead($payload);
+        try {
+            $response = $leadLoversService->updateLead($payload);
+        } catch (LeadLoversRateLimitedException $e) {
+            if ($this->attempts() >= $this->tries) {
+                $lead->forceFill([
+                    'leadlovers_status' => 'update_failed',
+                    'leadlovers_response' => [
+                        'action' => 'update_lead',
+                        'success' => false,
+                        'message' => 'Limite de requisições persistiu após várias tentativas.',
+                    ],
+                ])->save();
 
-        if (!($response['success'] ?? false)) {
+                throw $e;
+            }
+
+            $retryAfter = max(
+                1,
+                $e->retryAfter
+                    ?? (int) config('services.leadlovers.rate_limit_retry_seconds', 60)
+            );
+
+            Log::notice('Atualização do lead devolvida à fila por rate limit.', [
+                'lead_id' => $lead->id,
+                'attempt' => $this->attempts(),
+                'retry_after' => $retryAfter,
+                'cloudflare_1015' => $e->cloudflareBlocked,
+            ]);
+
+            $this->release($retryAfter);
+
+            return;
+        }
+
+        if (! ($response['success'] ?? false)) {
             Log::warning('LeadLovers não confirmou atualização do lead.', [
                 'lead_id' => $lead->id,
-                'email' => $this->originalEmail,
-                'response' => $response,
+                'lead_ref' => hash('sha256', mb_strtolower(trim($this->originalEmail))),
+                'status' => $response['status'] ?? null,
             ]);
 
             $lead->forceFill([
@@ -101,7 +139,7 @@ class UpdateLeadOnLeadLoversJob implements ShouldQueue
 
         Log::info('Lead atualizado na LeadLovers com sucesso.', [
             'lead_id' => $lead->id,
-            'email' => $this->originalEmail,
+            'lead_ref' => hash('sha256', mb_strtolower(trim($this->originalEmail))),
         ]);
     }
 

@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Exceptions\LeadLoversRateLimitedException;
 use App\Models\Lead;
 use App\Models\LeadLoversTag;
 use App\Services\LeadLoversService;
@@ -14,6 +15,7 @@ class SendLeadToLeadLoversJob implements ShouldQueue
     use Queueable;
 
     public int $tries = 3;
+
     public int $timeout = 120;
 
     public function __construct(
@@ -22,6 +24,10 @@ class SendLeadToLeadLoversJob implements ShouldQueue
 
     public function handle(LeadLoversService $leadLovers): void
     {
+        if (! config('services.leadlovers.enabled', false)) {
+            return;
+        }
+
         $lead = Lead::with([
             'company',
             'endereco',
@@ -38,7 +44,7 @@ class SendLeadToLeadLoversJob implements ShouldQueue
          */
         $mainTagId = $this->mainTagIdForLead($lead);
 
-        if (!$mainTagId) {
+        if (! $mainTagId) {
             Log::warning('Tag principal não encontrada para o lead', [
                 'lead_id' => $lead->id,
                 'tipo_solicitante' => $lead->tipo_solicitante,
@@ -58,7 +64,7 @@ class SendLeadToLeadLoversJob implements ShouldQueue
 
         $sequenceCode = $this->sequenceCodeForLead($lead);
 
-        if (!$sequenceCode) {
+        if (! $sequenceCode) {
             Log::warning('Sequência LeadLovers não encontrada para o lead', [
                 'lead_id' => $lead->id,
                 'tipo_solicitante' => $lead->tipo_solicitante,
@@ -78,30 +84,60 @@ class SendLeadToLeadLoversJob implements ShouldQueue
         /**
          * Cria o lead na máquina da LeadLovers já com a tag principal.
          */
-        $response = $leadLovers->createLead([
-            'Name' => $lead->nome,
-            'Email' => $lead->email,
-            'Phone' => $lead->tel ?? '',
-            'City' => $lead->endereco?->cidade_imovel ?? '',
-            'State' => $lead->endereco?->estado ?? '',
-            'Company' => $lead->company?->name
-                ?? $lead->imobiliariaInformada?->nome_imobiliaria_informada
-                ?? $lead->imobiliaria
-                ?? '',
+        try {
+            $response = $leadLovers->createLead([
+                'Name' => $lead->nome,
+                'Email' => $lead->email,
+                'Phone' => $lead->tel ?? '',
+                'City' => $lead->endereco?->cidade_imovel ?? '',
+                'State' => $lead->endereco?->estado ?? '',
+                'Company' => $lead->company?->name
+                    ?? $lead->imobiliariaInformada?->nome_imobiliaria_informada
+                    ?? $lead->imobiliaria
+                    ?? '',
 
-            'Tag' => $mainTagId,
-            'Score' => 0,
+                'Tag' => $mainTagId,
+                'Score' => 0,
 
-            'EmailSequenceCode' => $sequenceCode,
-            'SequenceLevelCode' => (int) config('services.leadlovers.step', 1),
+                'EmailSequenceCode' => $sequenceCode,
+                'SequenceLevelCode' => (int) config('services.leadlovers.step', 1),
 
-            'tipo_solicitante' => $lead->tipo_solicitante,
-        ]);
+                'tipo_solicitante' => $lead->tipo_solicitante,
+            ]);
+        } catch (LeadLoversRateLimitedException $e) {
+            if ($this->attempts() >= $this->tries) {
+                $lead->update([
+                    'leadlovers_status' => 'failed',
+                    'leadlovers_response' => [
+                        'message' => 'Limite de requisições persistiu após várias tentativas.',
+                    ],
+                ]);
 
-        if (!is_array($response) || !$this->leadLoversResponseWasSuccessful($response)) {
+                throw $e;
+            }
+
+            $retryAfter = max(
+                1,
+                $e->retryAfter
+                    ?? (int) config('services.leadlovers.rate_limit_retry_seconds', 60)
+            );
+
+            Log::notice('Envio do lead devolvido à fila por rate limit.', [
+                'lead_id' => $lead->id,
+                'attempt' => $this->attempts(),
+                'retry_after' => $retryAfter,
+                'cloudflare_1015' => $e->cloudflareBlocked,
+            ]);
+
+            $this->release($retryAfter);
+
+            return;
+        }
+
+        if (! is_array($response) || ! $this->leadLoversResponseWasSuccessful($response)) {
             Log::warning('Lead não enviado para LeadLovers', [
                 'lead_id' => $lead->id,
-                'email' => $lead->email,
+                'lead_ref' => hash('sha256', mb_strtolower(trim($lead->email))),
                 'status_code' => $response['StatusCode'] ?? null,
                 'message' => $response['Message'] ?? $response['message'] ?? null,
             ]);
@@ -152,7 +188,7 @@ class SendLeadToLeadLoversJob implements ShouldQueue
             default => null,
         };
 
-        if (!$tagKey) {
+        if (! $tagKey) {
             return null;
         }
 
@@ -166,7 +202,7 @@ class SendLeadToLeadLoversJob implements ShouldQueue
      */
     private function companyTagId(Lead $lead): ?int
     {
-        if (!$lead->company) {
+        if (! $lead->company) {
             return null;
         }
 
@@ -189,7 +225,14 @@ class SendLeadToLeadLoversJob implements ShouldQueue
 
     private function leadLoversResponseWasSuccessful(array $response): bool
     {
-        if (($response['StatusCode'] ?? null) === 200) {
+        $statusCode = $response['StatusCode']
+            ?? $response['statusCode']
+            ?? $response['status']
+            ?? null;
+
+        if ($statusCode !== null
+            && (int) $statusCode >= 200
+            && (int) $statusCode < 300) {
             return true;
         }
 
@@ -199,9 +242,10 @@ class SendLeadToLeadLoversJob implements ShouldQueue
         return $exception === null
             && mb_stripos($message, 'Novo lead inserido na fila para processamento') !== false;
     }
-    
-    private function sequenceCodeForLead(Lead $lead): ?int {
-         /*
+
+    private function sequenceCodeForLead(Lead $lead): ?int
+    {
+        /*
         |--------------------------------------------------------------------------
         | Regra de negócio das sequências
         |--------------------------------------------------------------------------
@@ -209,12 +253,11 @@ class SendLeadToLeadLoversJob implements ShouldQueue
         | Todos os outros perfis vão para a sequência padrão.
         */
 
-        if($lead->tipo_solicitante === 'locatario'){
+        if ($lead->tipo_solicitante === 'locatario') {
             return (int) config('services.leadlovers.sequence_2');
 
         }
-        
+
         return (int) config('services.leadlovers.sequence_1');
     }
-    
 }
