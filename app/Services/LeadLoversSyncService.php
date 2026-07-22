@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Exceptions\LeadLoversRateLimitedException;
 use App\Models\Imobiliaria;
 use App\Models\Lead;
 use Illuminate\Support\Facades\Http;
@@ -160,14 +161,7 @@ class LeadLoversSyncService
                     ),
                 ]);
 
-                return [
-                    'success' => false,
-                    'message' => 'A LeadLovers limitou temporariamente as requisições.',
-                    'stopped_reason' => 'rate_limited',
-                    'imported' => $imported,
-                    'scanned' => $scanned,
-                    'retry_after' => $response->header('Retry-After'),
-                ];
+                throw LeadLoversRateLimitedException::fromResponse($response);
             }
 
             if (! $response->successful()) {
@@ -280,14 +274,7 @@ class LeadLoversSyncService
                         ),
                     ]);
 
-                    return [
-                        'success' => false,
-                        'message' => 'A LeadLovers limitou temporariamente as requisições.',
-                        'stopped_reason' => 'rate_limited',
-                        'imported' => $imported,
-                        'scanned' => $scanned,
-                        'retry_after' => $leadCompletoResponse->header('Retry-After'),
-                    ];
+                    throw LeadLoversRateLimitedException::fromResponse($leadCompletoResponse);
                 }
 
                 if (! $leadCompletoResponse->successful()) {

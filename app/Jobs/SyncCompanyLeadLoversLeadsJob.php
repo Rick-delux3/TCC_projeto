@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Exceptions\LeadLoversRateLimitedException;
 use App\Models\Imobiliaria;
 use App\Services\LeadLoversSyncService;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
@@ -14,17 +15,28 @@ class SyncCompanyLeadLoversLeadsJob implements ShouldBeUnique, ShouldQueue
 {
     use Queueable;
 
-    public int $tries = 1;
+    public int $tries = 4;
 
     public int $timeout = 540;
 
     public bool $failOnTimeout = true;
 
-    public int $uniqueFor = 600;
-
     public function __construct(
         public int $companyId
     ) {}
+
+    public function uniqueFor(): int
+    {
+        $maximumRetryDelay = max(
+            1,
+            (int) config('services.leadlovers.rate_limit_max_retry_seconds', 900)
+        );
+
+        return max(
+            7200,
+            (($this->timeout + $maximumRetryDelay) * $this->tries) + 600
+        );
+    }
 
     public function uniqueId(): string
     {
@@ -110,6 +122,38 @@ class SyncCompanyLeadLoversLeadsJob implements ShouldBeUnique, ShouldQueue
             Log::info('JOB: sincronização finalizada com sucesso', [
                 'company_id' => $company->id,
             ]);
+        } catch (LeadLoversRateLimitedException $e) {
+            $retryAfter = max(
+                1,
+                $e->retryAfter
+                    ?? (int) config('services.leadlovers.rate_limit_retry_seconds', 60)
+            );
+
+            if ($this->attempts() >= $this->tries) {
+                $company->update([
+                    'sync_status' => 'failed',
+                    'sync_error' => 'A LeadLovers manteve o bloqueio temporário após várias tentativas.',
+                    'sync_finished_at' => now(),
+                ]);
+
+                throw $e;
+            }
+
+            $company->update([
+                'sync_status' => 'queued',
+                'sync_error' => "A LeadLovers limitou as requisições. Nova tentativa em {$retryAfter} segundos.",
+                'sync_started_at' => null,
+                'sync_finished_at' => null,
+            ]);
+
+            Log::notice('JOB: sincronização devolvida à fila por rate limit.', [
+                'company_id' => $company->id,
+                'attempt' => $this->attempts(),
+                'retry_after' => $retryAfter,
+                'cloudflare_1015' => $e->cloudflareBlocked,
+            ]);
+
+            $this->release($retryAfter);
         } catch (Throwable $e) {
             Log::error('JOB: erro ao sincronizar leads da LeadLovers', [
                 'company_id' => $company->id,

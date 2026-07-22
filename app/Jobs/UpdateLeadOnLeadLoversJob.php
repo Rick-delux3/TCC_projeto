@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Exceptions\LeadLoversRateLimitedException;
 use App\Models\Lead;
 use App\Services\LeadLoversService;
 use Illuminate\Bus\Queueable;
@@ -70,7 +71,39 @@ class UpdateLeadOnLeadLoversJob implements ShouldQueue
             return $value !== null && $value !== '';
         });
 
-        $response = $leadLoversService->updateLead($payload);
+        try {
+            $response = $leadLoversService->updateLead($payload);
+        } catch (LeadLoversRateLimitedException $e) {
+            if ($this->attempts() >= $this->tries) {
+                $lead->forceFill([
+                    'leadlovers_status' => 'update_failed',
+                    'leadlovers_response' => [
+                        'action' => 'update_lead',
+                        'success' => false,
+                        'message' => 'Limite de requisições persistiu após várias tentativas.',
+                    ],
+                ])->save();
+
+                throw $e;
+            }
+
+            $retryAfter = max(
+                1,
+                $e->retryAfter
+                    ?? (int) config('services.leadlovers.rate_limit_retry_seconds', 60)
+            );
+
+            Log::notice('Atualização do lead devolvida à fila por rate limit.', [
+                'lead_id' => $lead->id,
+                'attempt' => $this->attempts(),
+                'retry_after' => $retryAfter,
+                'cloudflare_1015' => $e->cloudflareBlocked,
+            ]);
+
+            $this->release($retryAfter);
+
+            return;
+        }
 
         if (! ($response['success'] ?? false)) {
             Log::warning('LeadLovers não confirmou atualização do lead.', [

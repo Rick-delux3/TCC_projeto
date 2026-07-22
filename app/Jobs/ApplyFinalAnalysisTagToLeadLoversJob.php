@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Exceptions\LeadLoversRateLimitedException;
 use App\Models\InsuranceAnalysisBatch;
 use App\Models\Lead;
 use App\Models\LeadLoversTag;
@@ -203,6 +204,37 @@ class ApplyFinalAnalysisTagToLeadLoversJob implements ShouldQueue
                 ],
                 response: $response
             );
+        } catch (LeadLoversRateLimitedException $e) {
+            if ($this->attempts() >= $this->tries) {
+                $this->registerEventForAllAnalyses(
+                    batch: $batch,
+                    eventType: 'leadlovers_final_tag_failed',
+                    status: $tagKey,
+                    message: 'Limite de requisições persistiu após várias tentativas.',
+                    payload: [
+                        'tag_key' => $tagKey,
+                    ]
+                );
+
+                throw $e;
+            }
+
+            $retryAfter = max(
+                1,
+                $e->retryAfter
+                    ?? (int) config('services.leadlovers.rate_limit_retry_seconds', 60)
+            );
+
+            Log::notice('Aplicação da tag devolvida à fila por rate limit.', [
+                'batch_id' => $batch->id,
+                'lead_id' => $lead->id,
+                'tag_key' => $tagKey,
+                'attempt' => $this->attempts(),
+                'retry_after' => $retryAfter,
+                'cloudflare_1015' => $e->cloudflareBlocked,
+            ]);
+
+            $this->release($retryAfter);
         } catch (\Throwable $e) {
             Log::warning('Erro ao aplicar tag final no LeadLovers', [
                 'batch_id' => $batch->id,

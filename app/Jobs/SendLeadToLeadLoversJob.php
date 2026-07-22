@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Exceptions\LeadLoversRateLimitedException;
 use App\Models\Lead;
 use App\Models\LeadLoversTag;
 use App\Services\LeadLoversService;
@@ -83,25 +84,55 @@ class SendLeadToLeadLoversJob implements ShouldQueue
         /**
          * Cria o lead na máquina da LeadLovers já com a tag principal.
          */
-        $response = $leadLovers->createLead([
-            'Name' => $lead->nome,
-            'Email' => $lead->email,
-            'Phone' => $lead->tel ?? '',
-            'City' => $lead->endereco?->cidade_imovel ?? '',
-            'State' => $lead->endereco?->estado ?? '',
-            'Company' => $lead->company?->name
-                ?? $lead->imobiliariaInformada?->nome_imobiliaria_informada
-                ?? $lead->imobiliaria
-                ?? '',
+        try {
+            $response = $leadLovers->createLead([
+                'Name' => $lead->nome,
+                'Email' => $lead->email,
+                'Phone' => $lead->tel ?? '',
+                'City' => $lead->endereco?->cidade_imovel ?? '',
+                'State' => $lead->endereco?->estado ?? '',
+                'Company' => $lead->company?->name
+                    ?? $lead->imobiliariaInformada?->nome_imobiliaria_informada
+                    ?? $lead->imobiliaria
+                    ?? '',
 
-            'Tag' => $mainTagId,
-            'Score' => 0,
+                'Tag' => $mainTagId,
+                'Score' => 0,
 
-            'EmailSequenceCode' => $sequenceCode,
-            'SequenceLevelCode' => (int) config('services.leadlovers.step', 1),
+                'EmailSequenceCode' => $sequenceCode,
+                'SequenceLevelCode' => (int) config('services.leadlovers.step', 1),
 
-            'tipo_solicitante' => $lead->tipo_solicitante,
-        ]);
+                'tipo_solicitante' => $lead->tipo_solicitante,
+            ]);
+        } catch (LeadLoversRateLimitedException $e) {
+            if ($this->attempts() >= $this->tries) {
+                $lead->update([
+                    'leadlovers_status' => 'failed',
+                    'leadlovers_response' => [
+                        'message' => 'Limite de requisições persistiu após várias tentativas.',
+                    ],
+                ]);
+
+                throw $e;
+            }
+
+            $retryAfter = max(
+                1,
+                $e->retryAfter
+                    ?? (int) config('services.leadlovers.rate_limit_retry_seconds', 60)
+            );
+
+            Log::notice('Envio do lead devolvido à fila por rate limit.', [
+                'lead_id' => $lead->id,
+                'attempt' => $this->attempts(),
+                'retry_after' => $retryAfter,
+                'cloudflare_1015' => $e->cloudflareBlocked,
+            ]);
+
+            $this->release($retryAfter);
+
+            return;
+        }
 
         if (! is_array($response) || ! $this->leadLoversResponseWasSuccessful($response)) {
             Log::warning('Lead não enviado para LeadLovers', [
@@ -194,7 +225,14 @@ class SendLeadToLeadLoversJob implements ShouldQueue
 
     private function leadLoversResponseWasSuccessful(array $response): bool
     {
-        if (($response['StatusCode'] ?? null) === 200) {
+        $statusCode = $response['StatusCode']
+            ?? $response['statusCode']
+            ?? $response['status']
+            ?? null;
+
+        if ($statusCode !== null
+            && (int) $statusCode >= 200
+            && (int) $statusCode < 300) {
             return true;
         }
 

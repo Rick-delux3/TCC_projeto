@@ -1,7 +1,12 @@
 <?php
 
+use App\Exceptions\LeadLoversRateLimitedException;
+use App\Jobs\SendLeadToLeadLoversJob;
 use App\Jobs\SyncCompanyLeadLoversLeadsJob;
+use App\Jobs\UpdateLeadOnLeadLoversJob;
 use App\Models\Imobiliaria;
+use App\Models\Lead;
+use App\Models\LeadLoversTag;
 use App\Models\User;
 use App\Services\LeadLoversService;
 use App\Services\LeadLoversSyncService;
@@ -80,16 +85,142 @@ it('fails safely when the sync token is missing', function () {
     Http::assertNothingSent();
 });
 
-it('stops after one request on rate limit and preserves Retry-After', function () {
+it('signals rate limit after one request and preserves Retry-After', function () {
     config(['services.leadlovers.enabled' => true]);
     Http::fake(['*' => Http::response('error code: 1015', 429, ['Retry-After' => '45'])]);
 
-    $result = app(LeadLoversSyncService::class)->syncCompanyLeads(leadLoversCompany());
+    $exception = null;
 
-    expect($result['success'])->toBeFalse()
-        ->and($result['stopped_reason'])->toBe('rate_limited')
-        ->and($result['retry_after'])->toBe('45');
+    try {
+        app(LeadLoversSyncService::class)->syncCompanyLeads(leadLoversCompany());
+    } catch (LeadLoversRateLimitedException $e) {
+        $exception = $e;
+    }
+
+    expect($exception)->toBeInstanceOf(LeadLoversRateLimitedException::class)
+        ->and($exception->retryAfter)->toBe(45)
+        ->and($exception->cloudflareBlocked)->toBeTrue();
     Http::assertSentCount(1);
+});
+
+it('returns a rate-limited synchronization job to the queue', function () {
+    config(['services.leadlovers.enabled' => true]);
+    $company = leadLoversCompany(['sync_status' => 'queued']);
+    $service = Mockery::mock(LeadLoversSyncService::class);
+    $service->shouldReceive('syncCompanyLeads')
+        ->once()
+        ->andThrow(new LeadLoversRateLimitedException(45, true));
+
+    $job = (new SyncCompanyLeadLoversLeadsJob($company->id))
+        ->withFakeQueueInteractions();
+    $job->handle($service);
+
+    $job->assertReleased(45);
+    expect($company->refresh()->sync_status)->toBe('queued')
+        ->and($company->sync_started_at)->toBeNull()
+        ->and($company->sync_finished_at)->toBeNull()
+        ->and($company->sync_error)->toContain('45 segundos');
+});
+
+it('returns a rate-limited lead creation job to the queue', function () {
+    config([
+        'services.leadlovers.enabled' => true,
+        'services.leadlovers.sequence_2' => 10,
+    ]);
+    LeadLoversTag::create([
+        'leadlovers_tag_id' => 20,
+        'title' => 'Locatário',
+        'key' => 'locatario',
+        'active' => true,
+    ]);
+    $lead = Lead::create([
+        'tipo_solicitante' => 'locatario',
+        'nome' => 'Pessoa Teste',
+        'email' => 'person@example.test',
+    ]);
+    $service = Mockery::mock(LeadLoversService::class);
+    $service->shouldReceive('createLead')
+        ->once()
+        ->andThrow(new LeadLoversRateLimitedException(30, false));
+
+    $job = (new SendLeadToLeadLoversJob($lead->id))
+        ->withFakeQueueInteractions();
+    $job->handle($service);
+
+    $job->assertReleased(30);
+    expect($lead->refresh()->leadlovers_status)->toBe('pending');
+});
+
+it('returns a rate-limited lead update job to the queue', function () {
+    config(['services.leadlovers.enabled' => true]);
+    $lead = Lead::create([
+        'tipo_solicitante' => 'locatario',
+        'nome' => 'Pessoa Teste',
+        'email' => 'person@example.test',
+    ]);
+    $service = Mockery::mock(LeadLoversService::class);
+    $service->shouldReceive('updateLead')
+        ->once()
+        ->andThrow(new LeadLoversRateLimitedException(30, false));
+
+    $job = (new UpdateLeadOnLeadLoversJob($lead->id, $lead->email))
+        ->withFakeQueueInteractions();
+    $job->handle($service);
+
+    $job->assertReleased(30);
+    expect($lead->refresh()->leadlovers_status)->toBe('pending');
+});
+
+it('propagates rate limits from queued LeadLovers operations', function (string $method, array $arguments) {
+    config(['services.leadlovers.enabled' => true]);
+    Http::fake(['*' => Http::response('error code: 1015', 429, ['Retry-After' => '30'])]);
+
+    $exception = null;
+
+    try {
+        app(LeadLoversService::class)->{$method}(...$arguments);
+    } catch (LeadLoversRateLimitedException $e) {
+        $exception = $e;
+    }
+
+    expect($exception)->toBeInstanceOf(LeadLoversRateLimitedException::class)
+        ->and($exception->retryAfter)->toBe(30)
+        ->and($exception->cloudflareBlocked)->toBeTrue();
+    Http::assertSentCount(1);
+})->with([
+    'create lead' => ['createLead', [[
+        'Name' => 'Pessoa Teste',
+        'Email' => 'person@example.test',
+        'Tag' => 1,
+        'EmailSequenceCode' => 1,
+    ]]],
+    'update lead' => ['updateLead', [[
+        'Email' => 'person@example.test',
+        'Name' => 'Pessoa Teste',
+    ]]],
+    'add tag' => ['addTagToLeadById', ['person@example.test', 1]],
+]);
+
+it('preserves the HTTP error status when LeadLovers returns an empty or misleading body', function () {
+    config(['services.leadlovers.enabled' => true]);
+    Http::fake([
+        '*' => Http::sequence()
+            ->push([], 500)
+            ->push(['StatusCode' => 200], 500),
+    ]);
+    $service = app(LeadLoversService::class);
+
+    $createResponse = $service->createLead([
+        'Name' => 'Pessoa Teste',
+        'Email' => 'person@example.test',
+        'Tag' => 1,
+        'EmailSequenceCode' => 1,
+    ]);
+    $tagResponse = $service->addTagToLeadById('person@example.test', 1);
+
+    expect($createResponse['StatusCode'])->toBe(500)
+        ->and($tagResponse['StatusCode'])->toBe(500);
+    Http::assertSentCount(2);
 });
 
 it('distinguishes authentication server and invalid JSON failures from rate limits', function (int $status, string $body, string $reason) {

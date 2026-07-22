@@ -2,6 +2,8 @@
 
 namespace App\Services;
 
+use App\Exceptions\LeadLoversRateLimitedException;
+use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
@@ -153,7 +155,8 @@ class LeadLoversService
                 ])
                 ->post($this->baseUrl.'Lead', $payload);
 
-            $json = $response->json();
+            $this->throwIfRateLimited($response);
+            $result = $this->responseData($response);
 
             if (! $response->successful()) {
                 Log::warning('LeadLovers respondeu erro ao criar lead', [
@@ -162,11 +165,10 @@ class LeadLoversService
                 ]);
             }
 
-            return is_array($json) ? $json : [
-                'StatusCode' => $response->status(),
-                'Message' => $response->body(),
-            ];
+            return $result;
 
+        } catch (LeadLoversRateLimitedException $e) {
+            throw $e;
         } catch (\Throwable $e) {
             Log::error('Erro ao criar lead na LeadLovers', [
                 'lead_ref' => $this->emailReference($data['Email'] ?? null),
@@ -230,6 +232,7 @@ class LeadLoversService
                 ])
                 ->patch($endpoint, $payload);
 
+            $this->throwIfRateLimited($response);
             $json = $response->json();
 
             if (! $response->successful()) {
@@ -246,6 +249,8 @@ class LeadLoversService
                 'payload' => [],
                 'error' => $response->successful() ? null : 'A LeadLovers recusou a atualização.',
             ];
+        } catch (LeadLoversRateLimitedException $e) {
+            throw $e;
         } catch (\Throwable $e) {
             Log::warning('Falha ao tentar atualizar lead na LeadLovers.', [
                 'message' => $e->getMessage(),
@@ -288,7 +293,8 @@ class LeadLoversService
                     'Score' => $score,
                 ]);
 
-            $json = $response->json();
+            $this->throwIfRateLimited($response);
+            $result = $this->responseData($response);
 
             if (! $response->successful()) {
                 Log::warning('LeadLovers respondeu erro ao adicionar tag ao lead', [
@@ -301,10 +307,9 @@ class LeadLoversService
                 ]);
             }
 
-            return is_array($json) ? $json : [
-                'StatusCode' => $response->status(),
-                'Message' => $response->body(),
-            ];
+            return $result;
+        } catch (LeadLoversRateLimitedException $e) {
+            throw $e;
         } catch (\Throwable $e) {
             Log::error('Erro ao adicionar tag ao lead na LeadLovers', [
                 'lead_ref' => hash(
@@ -320,6 +325,35 @@ class LeadLoversService
                 'Message' => 'Falha ao adicionar tag ao lead.',
             ];
         }
+    }
+
+    private function throwIfRateLimited(Response $response): void
+    {
+        if ($response->status() === 429) {
+            throw LeadLoversRateLimitedException::fromResponse($response);
+        }
+    }
+
+    private function responseData(Response $response): array
+    {
+        $data = $response->json();
+        $data = is_array($data) ? $data : [];
+
+        if (! $response->successful()) {
+            $data['StatusCode'] = $response->status();
+        } elseif (! array_key_exists('StatusCode', $data)
+            && ! array_key_exists('statusCode', $data)
+            && ! array_key_exists('status', $data)) {
+            $data['StatusCode'] = $response->status();
+        }
+
+        if (! $response->successful()
+            && ! isset($data['Message'])
+            && ! isset($data['message'])) {
+            $data['Message'] = 'A LeadLovers recusou a operação.';
+        }
+
+        return $data;
     }
 
     private function emailReference(?string $email): ?string
