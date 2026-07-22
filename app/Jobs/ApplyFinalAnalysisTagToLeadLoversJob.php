@@ -2,9 +2,10 @@
 
 namespace App\Jobs;
 
+use App\Exceptions\LeadLoversRateLimitedException;
 use App\Models\InsuranceAnalysisBatch;
-use App\Models\LeadLoversTag;
 use App\Models\Lead;
+use App\Models\LeadLoversTag;
 use App\Services\LeadLoversService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -13,11 +14,12 @@ use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
 
-    class ApplyFinalAnalysisTagToLeadLoversJob implements ShouldQueue
+class ApplyFinalAnalysisTagToLeadLoversJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public int $tries = 3;
+
     public int $timeout = 120;
 
     /*
@@ -34,7 +36,9 @@ use Illuminate\Support\Facades\Log;
      * Key gerada pelo seu comando: "ruim"
      */
     private const TAG_KEY_APPROVED = 'aprovados';
+
     private const TAG_KEY_REJECTED = 'ruim';
+
     private const TAG_KEY_NEGOTIATION = 'em_negociacao';
 
     public function __construct(
@@ -65,11 +69,9 @@ use Illuminate\Support\Facades\Log;
 
         $lead = $batch->lead;
 
-        if (!$lead || !$lead->email) {
+        if (! $lead || ! $lead->email) {
             return;
         }
-
-       
 
         /*
          * Evita aplicar a mesma tag final mais de uma vez.
@@ -95,7 +97,7 @@ use Illuminate\Support\Facades\Log;
             'analysis_finalized_at' => now(),
         ])->save();
 
-        if (!$tagKey) {
+        if (! $tagKey) {
             $this->registerEventForAllAnalyses(
                 batch: $batch,
                 eventType: 'leadlovers_final_tag_not_resolved',
@@ -117,7 +119,7 @@ use Illuminate\Support\Facades\Log;
             ->where('active', true)
             ->first();
 
-        if (!$tag) {
+        if (! $tag) {
             $this->registerEventForAllAnalyses(
                 batch: $batch,
                 eventType: 'leadlovers_final_tag_not_found',
@@ -153,13 +155,16 @@ use Illuminate\Support\Facades\Log;
                 $tag->leadlovers_tag_id
             );
 
-            if (!$this->leadLoversResponseWasSuccessful($response)) {
+            if (! $this->leadLoversResponseWasSuccessful($response)) {
                 Log::warning('LeadLovers nao confirmou aplicacao da tag final', [
                     'batch_id' => $batch->id,
                     'lead_id' => $lead->id,
-                    'lead_email' => $lead->email,
+                    'lead_ref' => hash('sha256', mb_strtolower(trim($lead->email))),
                     'tag_key' => $tagKey,
-                    'response' => $response,
+                    'status' => $response['StatusCode']
+                        ?? $response['statusCode']
+                        ?? $response['status']
+                        ?? null,
                 ]);
 
                 $this->registerEventForAllAnalyses(
@@ -199,11 +204,42 @@ use Illuminate\Support\Facades\Log;
                 ],
                 response: $response
             );
+        } catch (LeadLoversRateLimitedException $e) {
+            if ($this->attempts() >= $this->tries) {
+                $this->registerEventForAllAnalyses(
+                    batch: $batch,
+                    eventType: 'leadlovers_final_tag_failed',
+                    status: $tagKey,
+                    message: 'Limite de requisições persistiu após várias tentativas.',
+                    payload: [
+                        'tag_key' => $tagKey,
+                    ]
+                );
+
+                throw $e;
+            }
+
+            $retryAfter = max(
+                1,
+                $e->retryAfter
+                    ?? (int) config('services.leadlovers.rate_limit_retry_seconds', 60)
+            );
+
+            Log::notice('Aplicação da tag devolvida à fila por rate limit.', [
+                'batch_id' => $batch->id,
+                'lead_id' => $lead->id,
+                'tag_key' => $tagKey,
+                'attempt' => $this->attempts(),
+                'retry_after' => $retryAfter,
+                'cloudflare_1015' => $e->cloudflareBlocked,
+            ]);
+
+            $this->release($retryAfter);
         } catch (\Throwable $e) {
             Log::warning('Erro ao aplicar tag final no LeadLovers', [
                 'batch_id' => $batch->id,
                 'lead_id' => $lead->id,
-                'lead_email' => $lead->email,
+                'lead_ref' => hash('sha256', mb_strtolower(trim($lead->email))),
                 'tag_key' => $tagKey,
                 'message' => $e->getMessage(),
             ]);
@@ -269,7 +305,7 @@ use Illuminate\Support\Facades\Log;
          */
         if ($statuses->contains(fn ($status) => in_array($status, [
             'approved',
-            'quoted'
+            'quoted',
         ], true))) {
             return self::TAG_KEY_APPROVED;
         }
@@ -299,7 +335,7 @@ use Illuminate\Support\Facades\Log;
             'rejected',
             'denied',
             'refused',
-        ],true));
+        ], true));
 
         if ($allBad) {
             return self::TAG_KEY_REJECTED;
@@ -355,14 +391,14 @@ use Illuminate\Support\Facades\Log;
     }
 
     /**
- * Adiciona a tag final no campo local tags_originais do lead.
- *
- * O dashboard da imobiliária não consulta a LeadLovers em tempo real.
- * Ele exibe e filtra tags a partir de leads.tags_originais.
- *
- * Por isso, toda tag aplicada na LeadLovers também precisa ser
- * espelhada neste campo local.
- */
+     * Adiciona a tag final no campo local tags_originais do lead.
+     *
+     * O dashboard da imobiliária não consulta a LeadLovers em tempo real.
+     * Ele exibe e filtra tags a partir de leads.tags_originais.
+     *
+     * Por isso, toda tag aplicada na LeadLovers também precisa ser
+     * espelhada neste campo local.
+     */
     private function appendLocalTag(Lead $lead, string $tagTitle): void
     {
         $tagTitle = trim($tagTitle);
@@ -380,7 +416,7 @@ use Illuminate\Support\Facades\Log;
             return mb_strtolower($tag) === mb_strtolower($tagTitle);
         });
 
-        if (!$alreadyExists) {
+        if (! $alreadyExists) {
             $currentTags->push($tagTitle);
         }
 

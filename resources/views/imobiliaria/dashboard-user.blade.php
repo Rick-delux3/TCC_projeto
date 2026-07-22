@@ -238,20 +238,25 @@
             <div class="d-flex flex-column flex-sm-row gap-2">
                 <form method="POST" action="{{ route('Dashboard.syncAgain') }}">
                     @csrf
-
-                    <button
-                        type="submit"
-                        class="btn {{ $hasSyncFailed ? 'btn-danger' : 'btn-primary' }}"
-                        @disabled($isSyncBusy)
-                    >
-                        @if ($isSyncBusy)
-                            Sincronização em andamento
-                        @elseif ($hasSyncFailed)
-                            Tentar sincronização novamente
-                        @else
-                            Sincronizar leads
-                        @endif
-                    </button>
+                    @if (config('services.leadlovers.enabled'))
+                        <button
+                            type="submit"
+                            class="btn {{ $hasSyncFailed ? 'btn-danger' : 'btn-primary' }}"
+                            @disabled($isSyncBusy)
+                        >
+                            @if ($isSyncBusy)
+                                Sincronização em andamento
+                            @elseif ($hasSyncFailed)
+                                Tentar sincronização novamente
+                            @else
+                                Sincronizar leads
+                            @endif
+                        </button>
+                    @else
+                        <button type="button" class="btn btn-secondary" disabled>
+                            Sincronização temporariamente indisponível
+                        </button>
+                    @endif
                 </form>
 
                 <a
