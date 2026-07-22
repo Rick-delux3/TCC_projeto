@@ -74,6 +74,74 @@ class LeadLoversService
         }
     }
 
+    public function createTag(string $title): array
+    {
+        if(! $this->isEnabled()){
+            return [
+                'success' => false,
+                'status' => 503,
+                'tag_id' => null,
+                'response' => [],
+                'error' => 'Integração com a LeadLovers desativada.',
+            ];
+        }
+
+        try {
+            $response = Http::asJson()->acceptJson()
+            ->connectTimeout(30)
+            ->timeout(30)
+            ->withQueryParameters([
+                'token' => $this->token,
+            ])
+            ->post($this->baseUrl . 'Tags', [
+                'Title' => $title,
+            ]);
+
+            $this->throwIfRateLimited($response);
+
+            $data = $this->responseData($response);
+
+            $value = $data['value'] ?? $data['Value'] ?? null;
+
+            $tagId = (is_numeric($value) ? (int) $value : null);
+
+            $success = ($response->successful() && $tagId !== null && $tagId > 0);
+
+            if (!$success) {
+                Log::warning('LeadLovers recusou a criação da tag', [
+                    'status' => $response->status(),
+                    'title' => $title,
+                ]);
+            }
+
+            return [
+                'success' => $success,
+                'status' => $response->status(),
+                'tag_id' => $tagId,
+                'response' => $data,
+                'error' => $success ? null : 'A LeadLovers não criou a tag solicitada.',
+            ];
+
+        } catch(LeadLoversRateLimitedException $exception) {
+            throw $exception;
+        } catch (\Throwable $exception) {
+            Log::error('Falha ao criar tag na LeadLovers', [
+                'title' => $title,
+                'message' => $exception->getMessage(),
+            ]);
+            
+            return [
+                'success' => false,
+                'status' => null,
+                'tag_id' => null,
+                'response' => [],
+                'error' => 'Falha ao conectar com a LeadLovers.',
+            ];
+            
+        }
+
+    }
+
     /**
      * Insere o lead na máquina da LeadLovers.
      * O campo Tag precisa receber o ID da tag principal.

@@ -6,6 +6,7 @@ use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
 use Illuminate\Validation\Validator;
+use App\Services\CompanyTagService;
 
 class StoreCompanyRequest extends FormRequest
 {
@@ -19,8 +20,13 @@ class StoreCompanyRequest extends FormRequest
      */
     protected function prepareForValidation(): void
     {
+        $companyTags = app(CompanyTagService::class);
+
         $this->merge([
             'leadlovers_tag_id' => $this->limparTexto($this->leadlovers_tag_id),
+            'company_name' => $companyTags->normalizeCompanyName(
+                $this->input('company_name')
+            ),
             'email' => mb_strtolower(trim((string) $this->email)),
             'phone' => $this->somenteNumeros($this->phone),
             'cnpj' => $this->somenteNumeros($this->cnpj),
@@ -32,16 +38,40 @@ class StoreCompanyRequest extends FormRequest
 
     public function rules(): array
     {
+
+        $companyTags = app(CompanyTagService::class);
+
+        $hasAvaiableTags = $companyTags->hasAvailableTags();
+
+
         return [
             // Campo invisível contra bots, se você quiser usar no form.
             'website' => ['nullable', 'size:0'],
 
             'leadlovers_tag_id' => [
-                'required',
+                'bail',
+                Rule::requiredIf($hasAvaiableTags),
+                Rule::prohibitedIf(! $hasAvaiableTags),
                 'integer',
                 Rule::exists('lead_lovers_tags', 'leadlovers_tag_id')
                     ->where('active', true),
                 Rule::unique('imobiliarias', 'leadlovers_tag_id'),
+
+                function (string $attribute, mixed $value, \Closure $fail) use ($companyTags) {
+                    if(! $companyTags->isAvailable((int) $value)) {
+                        $fail('A imobiliária selecionada não está mais disponível.');
+                    }
+                },
+            ],
+
+            'company_name' => [
+                'bail',
+                Rule::requiredIf(! $hasAvaiableTags),
+                Rule::prohibitedIf($hasAvaiableTags),
+                'string',
+                'max:255',
+                Rule::unique('imobiliarias', 'name'),
+                Rule::unique('lead_lovers_tags', 'title'),
             ],
 
             'email' => [
@@ -127,6 +157,17 @@ class StoreCompanyRequest extends FormRequest
             'leadlovers_tag_id.integer' => 'A imobiliária selecionada é inválida.',
             'leadlovers_tag_id.exists' => 'A imobiliária selecionada não foi encontrada ou não está disponível.',
             'leadlovers_tag_id.unique' => 'Esta imobiliária já possui cadastro no sistema.',
+            'leadlovers_tag_id.prohibited' => 'Não é possível utilizar uma tag neste momento. Atualize a página.',
+
+            'company_name.required' => 'Informe o nome da imobiliária.',
+
+            'company_name.prohibited' => 'Ainda existem imobiliárias disponíveis no campo de seleção.',
+
+            'company_name.string' => 'O nome da imobiliária é inválido.',
+
+            'company_name.max' => 'O nome da imobiliária deve ter no máximo 255 caracteres.',
+
+            'company_name.unique' => 'Já existe uma imobiliária ou tag cadastrada com esse nome.',
 
             'email.required' => 'Informe o e-mail da imobiliária.',
             'email.email' => 'Informe um e-mail válido.',

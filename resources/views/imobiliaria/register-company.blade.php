@@ -34,21 +34,55 @@
                 @csrf
 
                 <div class="client-field">
-                    <label for="leadlovers_tag_id" class="client-label">Nome da empresa</label>
-                    <select name="leadlovers_tag_id" id="leadlovers_tag_id" class="client-input client-select" required>
-                        <option value="" disabled selected>Selecione sua imobiliaria...</option>
+                    <label
+                        for="{{ $tagsOficiais->isNotEmpty() ? 'leadlovers_tag_id' : 'company_name' }}"
+                        class="client-label"
+                    >
+                        Nome da empresa
+                    </label>
 
-                        @forelse($tagsOficiais as $tagNome)
-                            <option value="{{ $tagNome->leadlovers_tag_id }}"
-                                @selected(old('leadlovers_tag_id') == $tagNome->leadlovers_tag_id)
-                            >{{ $tagNome->title }}</option>
-                        @empty
-                            <option value="" disabled>Nenhuma tag encontrada no sistema</option>
-                        @endforelse
-                    </select>
-                    @error('leadlovers_tag_id')
-                        <span class="client-field-error">{{ $message }}</span>
-                    @enderror
+                    @if($tagsOficiais->isNotEmpty())
+                        <select
+                            name="leadlovers_tag_id"
+                            id="leadlovers_tag_id"
+                            class="client-input client-select"
+                            required
+                        >
+                            <option value="" disabled @selected(! old('leadlovers_tag_id'))>
+                                Selecione sua imobiliária...
+                            </option>
+
+                            @foreach($tagsOficiais as $tagNome)
+                                <option
+                                    value="{{ $tagNome->leadlovers_tag_id }}"
+                                    @selected(
+                                        old('leadlovers_tag_id') == $tagNome->leadlovers_tag_id
+                                    )
+                                >
+                                    {{ $tagNome->title }}
+                                </option>
+                            @endforeach
+                        </select>
+
+                        @error('leadlovers_tag_id')
+                            <span class="client-field-error">{{ $message }}</span>
+                        @enderror
+                    @else
+                        <input
+                            type="text"
+                            name="company_name"
+                            id="company_name"
+                            class="client-input"
+                            value="{{ old('company_name') }}"
+                            maxlength="240"
+                            placeholder="Digite o nome da imobiliária"
+                            required
+                        >
+
+                        @error('company_name')
+                            <span class="client-field-error">{{ $message }}</span>
+                        @enderror
+                    @endif
                 </div>
 
                 <div class="client-field">
