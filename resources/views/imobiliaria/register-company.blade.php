@@ -8,10 +8,10 @@
             <img src="{{ asset('imgs/Logo_NVS.png') }}" alt="Logo NVS" class="auth-media-logo">
 
             <div class="client-register-overlay">
-                <span class="client-badge">Cadastro de clientes</span>
-                <h2>Crie o acesso da sua empresa</h2>
+                <span class="client-badge">Cadastro de imobiliária</span>
+                <h2>Crie o acesso da sua imobiliária</h2>
                 <p>
-                    Cadastre sua imobiliaria para iniciar as analises de seguro
+                    Cadastre sua imobiliária para iniciar as análises de seguro
                     com fluxo digital e acompanhamento centralizado.
                 </p>
 
@@ -26,8 +26,8 @@
         <div class="client-register-card">
             <header class="client-register-header">
                 <span class="client-register-kicker">Novo acesso</span>
-                <h1>Cadastro da empresa</h1>
-                <p>Preencha os dados abaixo para liberar o acesso da sua equipe.</p>
+                <h1>Cadastro da imobiliária</h1>
+                <p>Preencha os dados abaixo para liberar o acesso ao painel.</p>
             </header>
 
             <form action="{{ route('empresa.register.post') }}" method="POST" autocomplete="off" class="client-register-form">
@@ -38,7 +38,7 @@
                         for="{{ $tagsOficiais->isNotEmpty() ? 'leadlovers_tag_id' : 'company_name' }}"
                         class="client-label"
                     >
-                        Nome da empresa
+                        Nome da imobiliária
                     </label>
 
                     @if($tagsOficiais->isNotEmpty())

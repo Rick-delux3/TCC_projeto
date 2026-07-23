@@ -76,7 +76,7 @@ class LeadLoversService
 
     public function createTag(string $title): array
     {
-        if(! $this->isEnabled()){
+        if (! $this->isEnabled()) {
             return [
                 'success' => false,
                 'status' => 503,
@@ -88,27 +88,42 @@ class LeadLoversService
 
         try {
             $response = Http::asJson()->acceptJson()
-            ->connectTimeout(30)
-            ->timeout(30)
-            ->withQueryParameters([
-                'token' => $this->token,
-            ])
-            ->post($this->baseUrl . 'Tags', [
-                'Title' => $title,
-            ]);
+                ->connectTimeout(10)
+                ->timeout(30)
+                ->withQueryParameters([
+                    'token' => $this->token,
+                ])
+                ->post($this->baseUrl.'Tags', [
+                    'Title' => $title,
+                ]);
 
             $this->throwIfRateLimited($response);
 
-            $data = $this->responseData($response);
+            $creationResponse = $this->responseData($response);
+            $tagId = $this->extractTagId($creationResponse);
+            $tagData = null;
 
-            $value = $data['value'] ?? $data['Value'] ?? null;
+            /*
+             * A API nem sempre devolve o ID na criação. A consulta por título
+             * também torna a operação idempotente: se a criação anterior foi
+             * efetivada remotamente, uma nova tentativa reaproveita a tag.
+             */
+            if ($tagId === null) {
+                $tagData = $this->findTagByTitle($title);
 
-            $tagId = (is_numeric($value) ? (int) $value : null);
+                if ($tagData !== null) {
+                    $tagId = $this->extractTagId($tagData);
+                }
+            }
 
-            $success = ($response->successful() && $tagId !== null && $tagId > 0);
+            $success = $tagId !== null;
 
-            if (!$success) {
-                Log::warning('LeadLovers recusou a criação da tag', [
+            if (! $success) {
+                $message = $response->successful()
+                    ? 'LeadLovers criou a tag, mas o ID não foi localizado'
+                    : 'LeadLovers recusou a criação da tag';
+
+                Log::warning($message, [
                     'status' => $response->status(),
                     'title' => $title,
                 ]);
@@ -118,18 +133,22 @@ class LeadLoversService
                 'success' => $success,
                 'status' => $response->status(),
                 'tag_id' => $tagId,
-                'response' => $data,
-                'error' => $success ? null : 'A LeadLovers não criou a tag solicitada.',
+                'response' => $tagData ?? $creationResponse,
+                'error' => match (true) {
+                    $success => null,
+                    $response->successful() => 'A tag foi criada, mas seu ID não foi localizado.',
+                    default => 'A LeadLovers não criou a tag solicitada.',
+                },
             ];
-
-        } catch(LeadLoversRateLimitedException $exception) {
+        } catch (LeadLoversRateLimitedException $exception) {
             throw $exception;
         } catch (\Throwable $exception) {
             Log::error('Falha ao criar tag na LeadLovers', [
                 'title' => $title,
-                'message' => $exception->getMessage(),
+                'exception' => $exception::class,
+                'code' => $exception->getCode(),
             ]);
-            
+
             return [
                 'success' => false,
                 'status' => null,
@@ -137,9 +156,7 @@ class LeadLoversService
                 'response' => [],
                 'error' => 'Falha ao conectar com a LeadLovers.',
             ];
-            
         }
-
     }
 
     /**
@@ -393,6 +410,79 @@ class LeadLoversService
                 'Message' => 'Falha ao adicionar tag ao lead.',
             ];
         }
+    }
+
+    private function findTagByTitle(string $title): ?array
+    {
+        $response = $this->getAllTags();
+
+        /*
+        * O comando de sincronização existente já trabalha com
+        * estes possíveis formatos de retorno.
+        */
+        $tags = $response['Tags']
+            ?? $response['Data']
+            ?? $response;
+
+        if (! is_array($tags)) {
+            return null;
+        }
+
+        if (! array_is_list($tags) && $this->isTagPayload($tags)) {
+            $tags = [$tags];
+        }
+
+        $expectedTitle = mb_strtolower(trim($title));
+
+        foreach ($tags as $tag) {
+            if (! is_array($tag)) {
+                continue;
+            }
+
+            $currentTitle = $tag['Title']
+                ?? $tag['Name']
+                ?? $tag['TagName']
+                ?? null;
+
+            if (! is_string($currentTitle)) {
+                continue;
+            }
+
+            if (mb_strtolower(trim($currentTitle)) === $expectedTitle) {
+                return $tag;
+            }
+        }
+
+        return null;
+    }
+
+    private function extractTagId(array $tag): ?int
+    {
+        $value = $tag['Value']
+            ?? $tag['value']
+            ?? $tag['Id']
+            ?? $tag['id']
+            ?? $tag['ID']
+            ?? $tag['Code']
+            ?? $tag['code']
+            ?? $tag['Tag']
+            ?? $tag['tag']
+            ?? null;
+
+        if (! is_numeric($value)) {
+            return null;
+        }
+
+        $tagId = (int) $value;
+
+        return $tagId > 0 ? $tagId : null;
+    }
+
+    private function isTagPayload(array $payload): bool
+    {
+        return array_key_exists('Title', $payload)
+            || array_key_exists('Name', $payload)
+            || array_key_exists('TagName', $payload);
     }
 
     private function throwIfRateLimited(Response $response): void

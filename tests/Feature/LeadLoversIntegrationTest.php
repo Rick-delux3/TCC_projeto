@@ -68,11 +68,76 @@ it('blocks every public LeadLovers service operation when disabled', function ()
     $service = app(LeadLoversService::class);
 
     expect($service->getAllTags())->toBe([])
+        ->and($service->createTag('Imobiliária Teste')['status'])->toBe(503)
         ->and($service->createLead([])['StatusCode'])->toBe(503)
         ->and($service->updateLead([])['success'])->toBeFalse()
         ->and($service->addTagToLeadById('person@example.test', 1)['StatusCode'])->toBe(503);
 
     Http::assertNothingSent();
+});
+
+it('uses the id returned when creating a LeadLovers tag', function () {
+    config(['services.leadlovers.enabled' => true]);
+    Http::fake([
+        '*' => Http::response(['Value' => 321], 201),
+    ]);
+
+    $result = app(LeadLoversService::class)->createTag('Imobiliária Teste');
+
+    expect($result)
+        ->success->toBeTrue()
+        ->tag_id->toBe(321)
+        ->error->toBeNull();
+
+    Http::assertSentCount(1);
+});
+
+it('recovers a missing tag id from the LeadLovers tag list', function () {
+    config(['services.leadlovers.enabled' => true]);
+    Http::fake([
+        '*' => Http::sequence()
+            ->push([], 201)
+            ->push([
+                'Data' => [
+                    ['id' => 654, 'Title' => 'Imobiliária Teste'],
+                ],
+            ], 200),
+    ]);
+
+    $result = app(LeadLoversService::class)->createTag('Imobiliária Teste');
+
+    expect($result)
+        ->success->toBeTrue()
+        ->tag_id->toBe(654)
+        ->response->toMatchArray([
+            'id' => 654,
+            'Title' => 'Imobiliária Teste',
+        ])
+        ->error->toBeNull();
+
+    Http::assertSentCount(2);
+});
+
+it('reconciles an existing remote tag after a failed creation attempt', function () {
+    config(['services.leadlovers.enabled' => true]);
+    Http::fake([
+        '*' => Http::sequence()
+            ->push(['Message' => 'Tag already exists'], 409)
+            ->push([
+                'Id' => 987,
+                'Title' => 'Imobiliária Teste',
+            ], 200),
+    ]);
+
+    $result = app(LeadLoversService::class)->createTag('Imobiliária Teste');
+
+    expect($result)
+        ->success->toBeTrue()
+        ->status->toBe(409)
+        ->tag_id->toBe(987)
+        ->error->toBeNull();
+
+    Http::assertSentCount(2);
 });
 
 it('fails safely when the sync token is missing', function () {
