@@ -940,12 +940,71 @@ p{
     outline: none;
 }
 
+.client-input.is-invalid{
+    border-color: #dc2626 !important;
+}
+
+.client-input[readonly]{
+    background: #f8fafc !important;
+    color: #475569 !important;
+}
+
+.client-input-wrap{
+    position: relative;
+}
+
+.client-input-icon{
+    position: absolute;
+    z-index: 1;
+    top: 50%;
+    left: 12px;
+    display: inline-flex;
+    width: 18px;
+    height: 18px;
+    color: #64748b;
+    pointer-events: none;
+    transform: translateY(-50%);
+    transition: color 0.2s ease;
+}
+
+.client-input-icon svg{
+    width: 100%;
+    height: 100%;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.client-input-wrap:focus-within .client-input-icon{
+    color: var(--secundary-color);
+}
+
+.client-input-wrap .client-input--with-icon{
+    padding-left: 40px;
+}
+
 .client-field-error{
     display: block;
     margin-top: 6px;
     color: #b91c1c;
     font-size: 12px;
     font-weight: 700;
+}
+
+.client-field-hint{
+    display: block;
+    margin-top: 6px;
+    color: #64748b;
+    font-size: 12px;
+    line-height: 1.4;
+}
+
+.client-honeypot{
+    position: absolute !important;
+    left: -10000px !important;
+    width: 1px !important;
+    height: 1px !important;
+    overflow: hidden !important;
 }
 
 .client-select{
@@ -1250,7 +1309,7 @@ p{
 }
 
 .password-input-wrap .password-input{
-    padding-right: 72px;
+    padding-right: 52px;
 }
 
 .password-toggle-button{
@@ -1259,20 +1318,36 @@ p{
     top: 50%;
     transform: translateY(-50%);
     border: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
     border-radius: 7px;
     background: #eef2ff;
     color: var(--secundary-color);
-    font-size: 12px;
-    font-weight: 800;
-    line-height: 1;
-    padding: 8px 10px;
+    padding: 8px;
     cursor: pointer;
     transition: 0.2s ease;
 }
 
-.password-toggle-button:hover{
+.password-toggle-button svg{
+    width: 20px;
+    height: 20px;
+    stroke-width: 1.9;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.password-toggle-button:hover,
+.password-toggle-button:focus-visible{
     background: var(--secundary-color);
     color: #ffffff;
+}
+
+.password-toggle-button:focus-visible{
+    outline: 2px solid #ffffff;
+    box-shadow: 0 0 0 4px rgba(33, 40, 191, 0.35);
 }
 
 @keyframes formPageFade{

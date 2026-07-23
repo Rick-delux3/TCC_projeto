@@ -283,9 +283,13 @@ Route::get('/cep/{cep}', [CepController::class, 'show'])
     
 Route::prefix('/empresa')->middleware(['guest', 'auth.unframed'])->group( function () {
     Route::get('/form', [ImobiliariaRegistrationController::class, 'showRegistrationForm'])->name('empresa.register.form');
-    Route::post('/register', [ImobiliariaRegistrationController::class, 'store'])->name('empresa.register.post');
+    Route::post('/register', [ImobiliariaRegistrationController::class, 'store'])
+        ->middleware('throttle:5,1')
+        ->name('empresa.register.post');
     Route::get('/login', [ImobiliariaAuthController::class, 'showLoginForm'])->name('empresa.login');
-    Route::post('/login/post', [ImobiliariaAuthController::class, 'login'])->name('empresa.login.post');
+    Route::post('/login/post', [ImobiliariaAuthController::class, 'login'])
+        ->middleware('throttle:10,1')
+        ->name('empresa.login.post');
 });
 
 Route::post('/empresa/logout', [ImobiliariaAuthController::class, 'logout'])

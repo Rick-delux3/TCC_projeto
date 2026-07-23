@@ -93,6 +93,7 @@ class ImobiliariaRegistrationController extends Controller
                 'email' => $data['email'],
                 'phone' => $data['phone'],
                 'cnpj' => $data['cnpj'],
+                'cep' => $data['cep'],
                 'city' => $data['city'],
                 'state' => $data['state'],
                 'password' => $password,

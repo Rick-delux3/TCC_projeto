@@ -2,8 +2,22 @@
 
 use App\Models\Imobiliaria;
 use App\Models\LeadLoversTag;
+use App\Services\CepService;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Notification;
+use Mockery\MockInterface;
+
+beforeEach(function () {
+    $this->mock(CepService::class, function (MockInterface $mock) {
+        $mock->shouldReceive('find')
+            ->with('01001000')
+            ->andReturn([
+                'cep' => '01001000',
+                'cidade' => 'São Paulo',
+                'estado' => 'SP',
+            ]);
+    });
+});
 
 function validImobiliariaRegistrationPayload(array $overrides = []): array
 {
@@ -11,6 +25,7 @@ function validImobiliariaRegistrationPayload(array $overrides = []): array
         'email' => 'imobiliaria@example.test',
         'phone' => '(11) 99999-9999',
         'cnpj' => '11.222.333/0001-81',
+        'cep' => '01001-000',
         'password' => 'senha1234',
         'password_confirmation' => 'senha1234',
         'city' => 'São Paulo',
@@ -44,6 +59,7 @@ it('registers an imobiliaria using an available local tag', function () {
 
     expect($company)
         ->name->toBe('Imobiliária Auditada')
+        ->cep->toBe('01001000')
         ->leadlovers_tag_id->toBe(777);
 
     Http::assertNothingSent();
@@ -111,4 +127,17 @@ it('rejects fields from the inactive registration mode', function () {
         )
         ->assertRedirect(route('empresa.register.form'))
         ->assertSessionHasErrors('company_name');
+});
+
+it('rejects registration when the honeypot field is filled', function () {
+    $this->from(route('empresa.register.form'))
+        ->post(
+            route('empresa.register.post'),
+            validImobiliariaRegistrationPayload([
+                'company_name' => 'Robô',
+                'website' => 'https://spam.example',
+            ])
+        )
+        ->assertRedirect(route('empresa.register.form'))
+        ->assertSessionHasErrors('website');
 });

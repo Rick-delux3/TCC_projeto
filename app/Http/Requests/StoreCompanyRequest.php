@@ -7,9 +7,13 @@ use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
 use Illuminate\Validation\Validator;
+use App\Services\CepService;
 
 class StoreCompanyRequest extends FormRequest
 {
+
+    private ?array $resolvedCep = null;
+
     public function authorize(): bool
     {
         return true;
@@ -22,12 +26,23 @@ class StoreCompanyRequest extends FormRequest
     {
         $companyTags = app(CompanyTagService::class);
 
+        $cep = $this->somenteNumeros($this->input('cep'));
+
+        if(is_string($cep) && preg_match('/^\d{8}$/', $cep) === 1) {
+            $this->resolvedCep = app(CepService::class)->find($cep);
+        }
+
+        $city = $this->resolvedCep['cidade'] ?? $this->input('city');
+
+        $state = $this->resolvedCep['estado'] ?? $this->input('state');
+
         $normalizedData = [
             'email' => mb_strtolower(trim((string) $this->email)),
             'phone' => $this->somenteNumeros($this->phone),
             'cnpj' => $this->somenteNumeros($this->cnpj),
-            'city' => $this->limparTexto($this->city),
-            'state' => mb_strtoupper(trim((string) $this->state)),
+            'cep' => $cep,
+            'city' => $this->limparTexto($city),
+            'state' => mb_strtoupper(trim((string) $state)),
             'lead_form_active' => $this->boolean('lead_form_active', true),
         ];
 
@@ -57,6 +72,7 @@ class StoreCompanyRequest extends FormRequest
                 'email:rfc',
                 'max:255',
                 Rule::unique('imobiliarias', 'email'),
+                Rule::unique('users', 'email'),
             ],
 
             'phone' => [
@@ -75,6 +91,8 @@ class StoreCompanyRequest extends FormRequest
                 'regex:/^\d{14}$/',
                 Rule::unique('imobiliarias', 'cnpj'),
             ],
+
+            'cep' => ['bail', 'required', 'string', 'size:8', 'regex:/^\d{8}$/'],
 
             'password' => [
                 'required',
@@ -153,6 +171,19 @@ class StoreCompanyRequest extends FormRequest
                 if ($this->filled('cnpj') && ! $this->cnpjValido($this->cnpj)) {
                     $validator->errors()->add('cnpj', 'O CNPJ informado é inválido.');
                 }
+
+                $cepHasValidFormat = (is_string($this->cep) && preg_match('/^\d{8}$/', $this->cep) === 1);
+
+                if(
+                    $cepHasValidFormat
+                    && $this->resolvedCep === null
+                ) {
+                    $validator->errors()->add(
+                        'cep',
+                        'CEP não encontrado ou serviço temporariamente indisponível.'
+                    );
+                }
+
             },
         ];
     }
@@ -193,10 +224,17 @@ class StoreCompanyRequest extends FormRequest
             'cnpj.regex' => 'O CNPJ deve conter apenas números.',
             'cnpj.unique' => 'Já existe uma imobiliária cadastrada com esse CNPJ.',
 
+            'cep.required' => 'Informe o CEP da imobiliária.',
+            'cep.string' => 'O CEP deve ser um texto válido.',
+            'cep.size' => 'O CEP deve conter exatamente 8 dígitos.',
+            'cep.regex' => 'Informe um CEP válido, contendo apenas números.',
+
             'password.required' => 'Informe uma senha.',
             'password.confirmed' => 'A confirmação de senha não confere.',
             'password.min' => 'A senha deve ter pelo menos 8 caracteres.',
             'password.max' => 'A senha deve ter no máximo 72 caracteres.',
+            'password.letters' => 'A senha deve conter pelo menos uma letra.',
+            'password.numbers' => 'A senha deve conter pelo menos um número.',
 
             'city.required' => 'Informe a cidade.',
             'state.required' => 'Informe o estado.',
