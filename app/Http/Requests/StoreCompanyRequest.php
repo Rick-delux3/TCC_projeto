@@ -2,13 +2,18 @@
 
 namespace App\Http\Requests;
 
+use App\Services\CompanyTagService;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
 use Illuminate\Validation\Validator;
+use App\Services\CepService;
 
 class StoreCompanyRequest extends FormRequest
 {
+
+    private ?array $resolvedCep = null;
+
     public function authorize(): bool
     {
         return true;
@@ -19,30 +24,47 @@ class StoreCompanyRequest extends FormRequest
      */
     protected function prepareForValidation(): void
     {
-        $this->merge([
-            'leadlovers_tag_id' => $this->limparTexto($this->leadlovers_tag_id),
+        $companyTags = app(CompanyTagService::class);
+
+        $cep = $this->somenteNumeros($this->input('cep'));
+
+        if(is_string($cep) && preg_match('/^\d{8}$/', $cep) === 1) {
+            $this->resolvedCep = app(CepService::class)->find($cep);
+        }
+
+        $city = $this->resolvedCep['cidade'] ?? $this->input('city');
+
+        $state = $this->resolvedCep['estado'] ?? $this->input('state');
+
+        $normalizedData = [
             'email' => mb_strtolower(trim((string) $this->email)),
             'phone' => $this->somenteNumeros($this->phone),
             'cnpj' => $this->somenteNumeros($this->cnpj),
-            'city' => $this->limparTexto($this->city),
-            'state' => mb_strtoupper(trim((string) $this->state)),
+            'cep' => $cep,
+            'city' => $this->limparTexto($city),
+            'state' => mb_strtoupper(trim((string) $state)),
             'lead_form_active' => $this->boolean('lead_form_active', true),
-        ]);
+        ];
+
+        if ($this->has('leadlovers_tag_id')) {
+            $normalizedData['leadlovers_tag_id'] = $this->limparTexto($this->input('leadlovers_tag_id'));
+        }
+
+        if ($this->has('company_name')) {
+            $normalizedData['company_name'] = $companyTags->normalizeCompanyName($this->input('company_name'));
+        }
+
+        $this->merge($normalizedData);
     }
 
     public function rules(): array
     {
-        return [
-            // Campo invisível contra bots, se você quiser usar no form.
-            'website' => ['nullable', 'size:0'],
+        $companyTags = app(CompanyTagService::class);
 
-            'leadlovers_tag_id' => [
-                'required',
-                'integer',
-                Rule::exists('lead_lovers_tags', 'leadlovers_tag_id')
-                    ->where('active', true),
-                Rule::unique('imobiliarias', 'leadlovers_tag_id'),
-            ],
+        $hasAvailableTags = $companyTags->hasAvailableTags();
+
+        $rules = [
+            'website' => ['nullable', 'size:0'],
 
             'email' => [
                 'required',
@@ -50,6 +72,7 @@ class StoreCompanyRequest extends FormRequest
                 'email:rfc',
                 'max:255',
                 Rule::unique('imobiliarias', 'email'),
+                Rule::unique('users', 'email'),
             ],
 
             'phone' => [
@@ -68,6 +91,8 @@ class StoreCompanyRequest extends FormRequest
                 'regex:/^\d{14}$/',
                 Rule::unique('imobiliarias', 'cnpj'),
             ],
+
+            'cep' => ['bail', 'required', 'string', 'size:8', 'regex:/^\d{8}$/'],
 
             'password' => [
                 'required',
@@ -105,15 +130,60 @@ class StoreCompanyRequest extends FormRequest
                 'boolean',
             ],
         ];
+
+        if ($hasAvailableTags) {
+            $rules['leadlovers_tag_id'] = [
+                'bail',
+                'required',
+                'integer',
+                Rule::exists('lead_lovers_tags', 'leadlovers_tag_id')
+                    ->where('active', true),
+                Rule::unique('imobiliarias', 'leadlovers_tag_id'),
+
+                function (string $attribute, mixed $value, \Closure $fail) use ($companyTags) {
+                    if (! $companyTags->isAvailable((int) $value)) {
+                        $fail('A imobiliária selecionada não está mais disponível.');
+                    }
+                },
+            ];
+
+            $rules['company_name'] = ['prohibited'];
+        } else {
+            $rules['leadlovers_tag_id'] = ['prohibited'];
+
+            $rules['company_name'] = [
+                'bail',
+                'required',
+                'string',
+                'max:255',
+                Rule::unique('imobiliarias', 'name'),
+                Rule::unique('lead_lovers_tags', 'title'),
+            ];
+        }
+
+        return $rules;
     }
 
     public function after(): array
     {
         return [
             function (Validator $validator) {
-                if ($this->filled('cnpj') && !$this->cnpjValido($this->cnpj)) {
+                if ($this->filled('cnpj') && ! $this->cnpjValido($this->cnpj)) {
                     $validator->errors()->add('cnpj', 'O CNPJ informado é inválido.');
                 }
+
+                $cepHasValidFormat = (is_string($this->cep) && preg_match('/^\d{8}$/', $this->cep) === 1);
+
+                if(
+                    $cepHasValidFormat
+                    && $this->resolvedCep === null
+                ) {
+                    $validator->errors()->add(
+                        'cep',
+                        'CEP não encontrado ou serviço temporariamente indisponível.'
+                    );
+                }
+
             },
         ];
     }
@@ -127,6 +197,17 @@ class StoreCompanyRequest extends FormRequest
             'leadlovers_tag_id.integer' => 'A imobiliária selecionada é inválida.',
             'leadlovers_tag_id.exists' => 'A imobiliária selecionada não foi encontrada ou não está disponível.',
             'leadlovers_tag_id.unique' => 'Esta imobiliária já possui cadastro no sistema.',
+            'leadlovers_tag_id.prohibited' => 'Não é possível utilizar uma tag neste momento. Atualize a página.',
+
+            'company_name.required' => 'Informe o nome da imobiliária.',
+
+            'company_name.prohibited' => 'Ainda existem imobiliárias disponíveis no campo de seleção.',
+
+            'company_name.string' => 'O nome da imobiliária é inválido.',
+
+            'company_name.max' => 'O nome da imobiliária deve ter no máximo 255 caracteres.',
+
+            'company_name.unique' => 'Já existe uma imobiliária ou tag cadastrada com esse nome.',
 
             'email.required' => 'Informe o e-mail da imobiliária.',
             'email.email' => 'Informe um e-mail válido.',
@@ -143,10 +224,17 @@ class StoreCompanyRequest extends FormRequest
             'cnpj.regex' => 'O CNPJ deve conter apenas números.',
             'cnpj.unique' => 'Já existe uma imobiliária cadastrada com esse CNPJ.',
 
+            'cep.required' => 'Informe o CEP da imobiliária.',
+            'cep.string' => 'O CEP deve ser um texto válido.',
+            'cep.size' => 'O CEP deve conter exatamente 8 dígitos.',
+            'cep.regex' => 'Informe um CEP válido, contendo apenas números.',
+
             'password.required' => 'Informe uma senha.',
             'password.confirmed' => 'A confirmação de senha não confere.',
             'password.min' => 'A senha deve ter pelo menos 8 caracteres.',
             'password.max' => 'A senha deve ter no máximo 72 caracteres.',
+            'password.letters' => 'A senha deve conter pelo menos uma letra.',
+            'password.numbers' => 'A senha deve conter pelo menos um número.',
 
             'city.required' => 'Informe a cidade.',
             'state.required' => 'Informe o estado.',
@@ -175,7 +263,7 @@ class StoreCompanyRequest extends FormRequest
 
     private function cnpjValido(?string $cnpj): bool
     {
-        if (!$cnpj || strlen($cnpj) !== 14) {
+        if (! $cnpj || strlen($cnpj) !== 14) {
             return false;
         }
 

@@ -29,8 +29,8 @@ class ImobiliariaAuthController extends Controller
         ]);
 
         $data = $request->validate([
-            'email' => 'required|email',
-            'password' => 'required|string|min:6',
+            'email' => 'required|email|max:255',
+            'password' => 'required|string|max:72',
         ]);
 
         $throttleKey = 'company-login:' . Str::lower($data['email']) . '|' . $request->ip();

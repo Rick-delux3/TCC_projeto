@@ -9,61 +9,81 @@ use Illuminate\Auth\Events\Registered;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use App\Http\Requests\StoreCompanyRequest;
+use App\Services\CompanyTagService;
+use App\Services\LeadLoversService;
+use Illuminate\Validation\ValidationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
 class ImobiliariaRegistrationController extends Controller
 {
-    public function showRegistrationForm()
+    public function showRegistrationForm(CompanyTagService $companyTags)
     {
-       $blockedTerms = [
-            'morna',
-            'sem negocios',
-            'sem negócios',
-            'ativas',
-            'ativa',
-            'ativo',
-            'status',
-            'aprovado',
-            'recusado',
-            'reprovado',
-            'ruim',
-            'negociação',
-            'negociacao',
-            'carro',
-            'atraso',
-
-        ];
-
-        $tagsQuery = LeadLoversTag::query()
-            ->where('active', true)
-            ->where(function ($query) {
-                $query->where('title', 'like', 'Imobiliária %')
-                    ->orWhere('title', 'like', 'Imobiliaria %');
-            });
-
-        foreach ($blockedTerms as $term) {
-            $tagsQuery->where('title', 'not like', '%' . $term . '%');
-        }
-
-        $tagsOficiais = $tagsQuery
-            ->orderBy('title')
-            ->get([
-                'leadlovers_tag_id',
-                'title',
-            ]);
+       $tagsOficiais = $companyTags->availableTags();
 
         return view('imobiliaria.register-company', compact('tagsOficiais'));
     }
 
-    public function store(StoreCompanyRequest $request)
+    public function store(StoreCompanyRequest $request, CompanyTagService $companyTags, LeadLoversService $leadlovers)
     {
         $data = $request->validated();
 
-        $companyTag = LeadLoversTag::where('leadlovers_tag_id', $data['leadlovers_tag_id'])
-            ->where('active', true)
+        if(! empty($data['leadlovers_tag_id'])){
+            $companyTag = LeadLoversTag::query()
+            ->where(
+                'leadlovers_tag_id',
+                $data['leadlovers_tag_id']
+            )->where('active', true)
             ->firstOrFail();
+        } else {
+
+            if($companyTags->hasAvailableTags()) {
+                throw ValidationException::withMessages([
+                    'company_name' => 'Uma imobiliária ficou disponível. Atualize a página e selecione-a.'
+                ]);
+            }
+
+            $title = $data['company_name'];
+
+            $localTagExist = LeadLoversTag::query()->where('title', $title)
+            ->exists();
+
+            $companyExist = Imobiliaria::query()->where('name', $title)
+            ->exists();
+
+            if($localTagExist || $companyExist) {
+                throw ValidationException::withMessages([
+                    'company_name' => 'Já existe uma imobiliária ou tag cadastrada com esse nome'
+                ]);
+            }
+
+            $createTag = $leadlovers->createTag($title);
+
+            if(! $createTag['success'] || ! $createTag['tag_id']){
+                Log::warning('Cadastro interrompido: tag não criada', [
+                    'title' => $title,
+                    'status' => $createTag['status'],
+                    'error' => $createTag['error'],
+                ]);
+
+
+                throw ValidationException::withMessages([
+                    'company_name' => 'Não foi possível criar a tag na LeadLovers. Tente novamente em alguns minutos.',
+                ]);
+
+            }
+
+            $companyTag = LeadLoversTag::updateOrCreate(
+                ['leadlovers_tag_id' => $createTag['tag_id']],
+
+                [
+                    'title' => $title,
+                    'active' => true,
+                    'raw_payload' => $createTag['response'],
+                ]
+            );
+        }
 
         [$company, $user] = DB::transaction(function () use ($companyTag, $data) {
             $password = Hash::make($data['password']);
@@ -73,6 +93,7 @@ class ImobiliariaRegistrationController extends Controller
                 'email' => $data['email'],
                 'phone' => $data['phone'],
                 'cnpj' => $data['cnpj'],
+                'cep' => $data['cep'],
                 'city' => $data['city'],
                 'state' => $data['state'],
                 'password' => $password,

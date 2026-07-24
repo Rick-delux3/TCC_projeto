@@ -13,7 +13,6 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400..900&family=Press+Start+2P&family=Roboto+Condensed:ital,wght@0,100..900;1,100..900&family=Sansation:ital,wght@0,300;0,400;0,700;1,300;1,400;1,700&family=TASA+Explorer:wght@400..800&display=swap" rel="stylesheet">
     <title>NVS</title>
-</head>
     <script>
         document.addEventListener('DOMContentLoaded', function () {
             @if ($errors->any())
@@ -27,6 +26,8 @@
             @endif
         });
     </script>
+</head>
+
 <body class="auth-layout-body"> 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js" integrity="sha384-FKyoEForCGlyvwx9Hj09JcYn3nv7wiPVlz7YYwJrWVcXK/BmnVDxM+D2scQbITxI" crossorigin="anonymous"></script>
 
@@ -79,5 +80,6 @@
     </main>
 
     @include('partials.page-loader')
+    @stack('scripts')
 </body>
 </html>

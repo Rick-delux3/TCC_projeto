@@ -23,6 +23,7 @@ class Imobiliaria extends Model implements CanResetPasswordContract
 
     protected $fillable = [
         'name', 'email', 'phone', 'cnpj',
+        'cep',
         'password',
         'city', 'state', 'sincronizado_em',
         'sync_status', 'sync_started_at', 'sync_finished_at',
