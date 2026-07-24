@@ -99,6 +99,15 @@ class SendLeadToLeadLoversJob implements ShouldQueue
                 'Tag' => $mainTagId,
                 'Score' => 0,
 
+                'CPF' => $lead->cpf,
+                'telefone' => $lead->tel,
+                'CIVIL' => $lead->estado_civil,
+                'conjuge' => $lead->conjuge?->cpf,
+                'VALOR' => $lead->despesas?->valor_aluguel,
+                'OUTRO' => $lead->despesas?->outras_despesas,
+
+
+
                 'EmailSequenceCode' => $sequenceCode,
                 'SequenceLevelCode' => (int) config('services.leadlovers.step', 1),
 

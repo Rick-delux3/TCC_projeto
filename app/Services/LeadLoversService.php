@@ -222,6 +222,34 @@ class LeadLoversService
 
                 'Tag' => $tagId,
                 'Score' => isset($data['Score']) ? (int) $data['Score'] : 0,
+
+                'DynamicFields' => [
+                    [
+                        'Id' => 52672,
+                        'Value' => $data['CPF']
+                    ],
+
+                    [
+                        'Id' => 52668,
+                        'Value' => $data['CIVIL']
+                    ],
+
+                    [
+                        'Id' => 52671,
+                        'Value' => $data['conjuge']
+                    ],
+
+                    [
+                        'Id' => 52664,
+                        'Value' => $data['VALOR']
+                    ],
+
+                    [
+                        'Id' => 52666,
+                        'Value' => $data['OUTRO']
+                    ],
+          
+                ]
             ];
 
             Log::info('Enviando lead para LeadLovers', [
