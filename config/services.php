@@ -58,10 +58,6 @@ return [
         'sequence_1' => env('LEADLOVERS_SEQUENCE'),
         'sequence_2' => env('LEADLOVERS_SEQUENCE_LOCATARIO'),
         'step' => env('LEADLOVERS_STEP'),
-        'sync_max_pages' => env('SYNC_MAX_PAGES', 15),
-        'sync_page_size' => env('SYNC_PAGE_SIZE', 50),
-        'sync_max_imported_leads' => env('SYNC_MAX_IMPORTED_LEADS', 100),
-        'sync_max_scanned_leads' => env('SYNC_MAX_SCANNED_LEADS', 500),
         'rate_limit_retry_seconds' => env('LEADLOVERS_RATE_LIMIT_RETRY_SECONDS', 60),
         'rate_limit_max_retry_seconds' => env('LEADLOVERS_RATE_LIMIT_MAX_RETRY_SECONDS', 900),
         'dynamic_fields' => [
@@ -72,7 +68,7 @@ return [
 
     'pottencial' => [
         'enabled' => env('POTTENCIAL_ENABLED', false),
-        'base_url' => env('POTTENCIAL_API_URL', 'https://api-sandbox.pottencial.com.br'),
+        'base_url' => env('POTTENCIAL_API_URL', 'https://api-hml.pottencial.com.br'),
         'rental_endpoint' => env('POTTENCIAL_RENTAL_GUARANTEE_ENDPOINT', '/insurance/v1/fianca-locaticia-mensalizado-pf/quotes'),
         'client_id' => env('POTTENCIAL_CLIENT_ID'),
         'client_secret' => env('POTTENCIAL_CLIENT_SECRET'),

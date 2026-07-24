@@ -80,7 +80,7 @@
                 }
 
                 if (Auth::guard('company')->check()) {
-                    return route('Dashboard');
+                    return route('company.dashboard');
                 }
 
                 if (Auth::guard('web')->check()) {

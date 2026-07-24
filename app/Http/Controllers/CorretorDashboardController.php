@@ -2,15 +2,11 @@
 
 namespace App\Http\Controllers;
 
-use App\Http\Controllers\Controller;
-use App\Models\Corretor;
 use App\Models\Imobiliaria;
 use App\Models\Lead;
-use App\Models\InsuranceAnalysis;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Gate;
-
 
 class CorretorDashboardController extends Controller
 {
@@ -33,6 +29,7 @@ class CorretorDashboardController extends Controller
         $selectedResultado = $request->input('resultado', '');
 
         $leadsQuery = Lead::query()
+            ->createdThroughSystem()
             ->with([
                 'endereco',
                 'despesas',
@@ -42,9 +39,9 @@ class CorretorDashboardController extends Controller
                 'locador',
                 'insuranceAnalyses',
             ])->latest();
-        
-        $leadsQuery->when($leadSearch, function ($query) use ($leadSearch){
-            $query->where(function ($subQuery) use ($leadSearch){
+
+        $leadsQuery->when($leadSearch, function ($query) use ($leadSearch) {
+            $query->where(function ($subQuery) use ($leadSearch) {
                 $subQuery->where('nome', 'like', "%$leadSearch%")
                     ->orWhere('email', 'like', "%$leadSearch%")
                     ->orWhere('cpf', 'like', "%$leadSearch%")
@@ -64,17 +61,16 @@ class CorretorDashboardController extends Controller
             ''
         );
 
-    
-         if($selectedImobiliaria === 'sem_vinculo') {
+        if ($selectedImobiliaria === 'sem_vinculo') {
             $leadsQuery->whereNull('company_id');
-         } elseif ($selectedImobiliaria !== '') {
+        } elseif ($selectedImobiliaria !== '') {
             $leadsQuery->where(
                 'company_id',
                 (int) $selectedImobiliaria
             );
-         }
+        }
 
-         if (
+        if (
             $selectedTipoSolicitante !== ''
             && ! array_key_exists(
                 $selectedTipoSolicitante,
@@ -84,7 +80,7 @@ class CorretorDashboardController extends Controller
             $selectedTipoSolicitante = '';
         }
 
-         $leadsQuery->when(
+        $leadsQuery->when(
             $selectedTipoSolicitante !== '',
             function ($query) use ($selectedTipoSolicitante) {
                 $query->where(
@@ -92,7 +88,7 @@ class CorretorDashboardController extends Controller
                     $selectedTipoSolicitante
                 );
             }
-         );
+        );
 
         $leadsQuery->when($selectedResultado, function ($query) use ($selectedResultado) {
             $query->where(function ($subQuery) use ($selectedResultado) {
@@ -101,9 +97,9 @@ class CorretorDashboardController extends Controller
                 }
 
                 if ($selectedResultado === 'recusado') {
-                $subQuery->where('tags_originais', 'like', '%recusad%')
-                    ->orWhere('tags_originais', 'like', '%reprovad%')
-                    ->orWhere('tags_originais', 'like', '%ruim%');
+                    $subQuery->where('tags_originais', 'like', '%recusad%')
+                        ->orWhere('tags_originais', 'like', '%reprovad%')
+                        ->orWhere('tags_originais', 'like', '%ruim%');
                 }
             });
         });
@@ -113,32 +109,37 @@ class CorretorDashboardController extends Controller
             : collect();
 
         $dashboardStats = [
-            'totalLeads' => $canViewLeads ? Lead::count() : 0,
-            'newLeads' => $canViewLeads ? Lead::where('status', 'novo')->count() : 0,
+            'totalLeads' => $canViewLeads ? Lead::query()->createdThroughSystem()->count() : 0,
+            'newLeads' => $canViewLeads
+                ? Lead::query()->createdThroughSystem()->where('status', 'novo')->count()
+                : 0,
             'recentLeads' => $canViewLeads
-                ? Lead::where('created_at', '>=', now()->subDays(7))->count()
+                ? Lead::query()->createdThroughSystem()
+                    ->where('created_at', '>=', now()->subDays(7))
+                    ->count()
                 : 0,
 
             'totalImobiliarias' => $canViewRealEstateCompanies ? Imobiliaria::count() : 0,
 
-            
             'totalAprovados' => $canViewLeads
-                ? Lead::where('tags_originais', 'like', '%aprovad%')->count()
+                ? Lead::query()->createdThroughSystem()
+                    ->where('tags_originais', 'like', '%aprovad%')
+                    ->count()
                 : 0,
 
             'totalRecusados' => $canViewLeads
-                ? Lead::where(function ($query) {
+                ? Lead::query()->createdThroughSystem()->where(function ($query) {
                     $query->where('tags_originais', 'like', '%recusad%')
                         ->orWhere('tags_originais', 'like', '%reprovad%')
                         ->orWhere('tags_originais', 'like', '%ruim%');
                 })->count()
                 : 0,
 
-
             'latestLeadAt' => $canViewLeads
-                ? Lead::latest('created_at')->value('created_at')
+                ? Lead::query()->createdThroughSystem()
+                    ->latest('created_at')
+                    ->value('created_at')
                 : null,
-
 
         ];
 
@@ -157,8 +158,6 @@ class CorretorDashboardController extends Controller
                     'lead_form_active',
                 ]) : collect();
 
-            
-
         return view('corretor.dashboard-admin', compact(
             'corretor',
             'dashboardStats',
@@ -172,6 +171,6 @@ class CorretorDashboardController extends Controller
             'simulationCompanies',
             'canCreateAnalysis',
         ));
-        
+
     }
 }

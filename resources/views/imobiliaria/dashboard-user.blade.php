@@ -16,9 +16,6 @@
         'perdido' => 'Perdido',
     ];
 
-    $syncStatus = $syncStatus ?? 'idle';
-    $syncError = $syncError ?? null;
-
     $totalLeads = $dashboardStats['totalLeads'] ?? 0;
     $newLeads = $dashboardStats['newLeads'] ?? 0;
     $recentLeads = $dashboardStats['recentLeads'] ?? 0;
@@ -122,27 +119,6 @@
     $leadFormAvailable = filled($leadFormUrl);
     $leadAccessCodeAvailable = filled($leadAccessCode);
 
-    $hasSyncFailed = $syncStatus === 'failed';
-    $isSyncBusy = in_array($syncStatus, ['queued', 'running'], true);
-    $shouldAutoShowSyncToast = in_array($syncStatus, ['queued', 'running', 'failed'], true);
-
-    $syncBadgeClass = match ($syncStatus) {
-        'queued' => 'text-bg-warning',
-        'running' => 'text-bg-primary',
-        'completed' => 'text-bg-success',
-        'completed_with_warning' => 'text-bg-warning',
-        'failed' => 'text-bg-danger',
-        default => 'text-bg-secondary',
-    };
-
-    $syncLabel = match ($syncStatus) {
-        'queued' => 'Na fila',
-        'running' => 'Sincronizando',
-        'completed' => 'Atualizado',
-        'completed_with_warning' => 'Atualizado parcialmente',
-        'failed' => 'Falhou',
-        default => 'Aguardando',
-    };
 @endphp
 
 
@@ -160,65 +136,6 @@
             </div>
         @endif
 
-        {{-- Toast não bloqueante de sincronização --}}
-        <div id="syncFloatingPanel" class="sync-floating-panel d-none">
-            <div class="sync-floating-card p-3">
-                <div class="d-flex justify-content-between align-items-start gap-3 mb-2">
-                    <div>
-                        <span class="badge {{ $syncBadgeClass }} mb-2" id="sync-toast-badge">
-                            {{ $syncLabel }}
-                        </span>
-
-                        <h6 class="fw-bold mb-1" id="sync-toast-title">
-                            Status da sincronização
-                        </h6>
-                    </div>
-
-                    <button type="button" class="btn-close" id="sync-panel-close-button" aria-label="Fechar"></button>
-                </div>
-
-                <p class="text-muted small mb-2" id="sync-toast-description">
-                    Acompanhando a sincronização com a LeadLovers.
-                </p>
-
-                <div class="progress mb-2" style="height: 8px;">
-                    <div
-                        id="sync-toast-progress-bar"
-                        class="progress-bar progress-bar-striped progress-bar-animated"
-                        style="width: 0%;"
-                        role="progressbar"
-                        aria-valuenow="0"
-                        aria-valuemin="0"
-                        aria-valuemax="100"
-                    ></div>
-                </div>
-
-                <div class="d-flex justify-content-between align-items-center mb-2">
-                    <small class="text-muted" id="sync-toast-summary">
-                        Aguardando atualização.
-                    </small>
-
-                    <small class="fw-semibold text-muted" id="sync-toast-percent">
-                        0%
-                    </small>
-                </div>
-
-                <form method="POST" action="{{ route('Dashboard.syncAgain') }}" id="sync-toast-retry-form" class="d-none">
-                    @csrf
-                </form>
-
-                <div class="d-flex gap-2 mt-3">
-                    <button type="button" class="btn btn-sm btn-danger d-none" id="sync-toast-retry-button">
-                        Tentar novamente
-                    </button>
-
-                    <button type="button" class="btn btn-sm btn-outline-primary d-none" id="sync-panel-refresh-button">
-                        Atualizar painel
-                    </button>
-                </div>
-            </div>
-        </div>
-
         {{-- Cabeçalho moderno --}}
         <div class="d-flex flex-column flex-xl-row justify-content-between align-items-xl-center gap-3 mb-4">
             <div>
@@ -231,34 +148,11 @@
                 </h1>
 
                 <p class="text-muted mb-0">
-                    Acompanhe os leads vinculados à imobiliária, copie sua chave de acesso e consulte a sincronização com a LeadLovers.
+                    Acompanhe os leads enviados pelos formulários do sistema e copie sua chave de acesso.
                 </p>
             </div>
 
             <div class="d-flex flex-column flex-sm-row gap-2">
-                <form method="POST" action="{{ route('Dashboard.syncAgain') }}">
-                    @csrf
-                    @if (config('services.leadlovers.enabled'))
-                        <button
-                            type="submit"
-                            class="btn {{ $hasSyncFailed ? 'btn-danger' : 'btn-primary' }}"
-                            @disabled($isSyncBusy)
-                        >
-                            @if ($isSyncBusy)
-                                Sincronização em andamento
-                            @elseif ($hasSyncFailed)
-                                Tentar sincronização novamente
-                            @else
-                                Sincronizar leads
-                            @endif
-                        </button>
-                    @else
-                        <button type="button" class="btn btn-secondary" disabled>
-                            Sincronização temporariamente indisponível
-                        </button>
-                    @endif
-                </form>
-
                 <a
                     href="{{ $leadFormUrl ?? '#' }}"
                     target="_blank"
@@ -318,17 +212,17 @@
                                     </div>
 
                                     <div class="fw-bold">
-                                        {{ $latestLeadAt ? $latestLeadAt->format('d/m/Y H:i') : 'Sem leads sincronizados' }}
+                                        {{ $latestLeadAt ? $latestLeadAt->format('d/m/Y H:i') : 'Sem leads cadastrados' }}
                                     </div>
 
                                     <hr class="border-white border-opacity-25">
 
                                     <div class="small text-white-50 mb-1">
-                                        Status integração
+                                        Origem exibida
                                     </div>
 
-                                    <span class="badge {{ $syncBadgeClass }}">
-                                        {{ $syncLabel }}
+                                    <span class="badge text-bg-success">
+                                        Formulários do sistema
                                     </span>
                                 </div>
                             </div>
@@ -946,7 +840,7 @@
                                 </h3>
 
                                 <p class="text-muted">
-                                    Assim que novos contatos forem captados ou sincronizados, eles aparecerão aqui.
+                                    Assim que novos contatos forem enviados pelos formulários, eles aparecerão aqui.
                                 </p>
                             @endif
                         </div>
@@ -1362,32 +1256,12 @@
 <script id="dashboardUserConfig" type="application/json">
     {!! json_encode([
         'routes' => [
-            'syncStatus' => route('Dashboard.syncStatus'),
-
-            /*
-            |--------------------------------------------------------------------------
-            | Se você ainda não criou essa rota, pode deixar null.
-            | Quando criar a rota Dashboard.realtimeStatus, o JS já começa a usar.
-            |--------------------------------------------------------------------------
-            */
             'realtimeStatus' => \Illuminate\Support\Facades\Route::has('Dashboard.realtimeStatus')
                 ? route('Dashboard.realtimeStatus')
                 : null,
         ],
-
-        'syncStatus' => $syncStatus,
-        'syncError' => $syncError,
-        'totalLeads' => $totalLeads,
-        'syncJustQueued' => $syncJustQueued ?? false,
         'leadFormUrl' => $leadFormUrl,
         'leadAccessCode' => $leadAccessCode,
-        'shouldAutoShowSyncToast' => $shouldAutoShowSyncToast,
-
-        /*
-        |--------------------------------------------------------------------------
-        | Usado somente se você aplicar a atualização automática.
-        |--------------------------------------------------------------------------
-        */
         'dashboardActivityHash' => $dashboardActivityHash ?? null,
     ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) !!}
 </script>
