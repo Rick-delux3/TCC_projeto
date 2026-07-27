@@ -5,33 +5,14 @@ document.addEventListener('DOMContentLoaded', function () {
         ? JSON.parse(configElement.textContent || '{}')
         : {};
 
-    const statusUrl = config.routes?.syncStatus || null;
     const realtimeUrl = config.routes?.realtimeStatus || null;
 
-    const currentStatus = config.syncStatus || 'idle';
-    const initialSyncError = config.syncError || null;
-    const initialTotalLeads = Number(config.totalLeads || 0);
-    const syncJustQueued = Boolean(config.syncJustQueued);
     const leadFormUrl = config.leadFormUrl || null;
     const leadAccessCode = config.leadAccessCode || null;
-    const shouldAutoShowSyncToast = Boolean(config.shouldAutoShowSyncToast);
 
     const dashboardThemeRoot = document.getElementById('dashboardThemeRoot');
     const dashboardThemeToggle = document.getElementById('dashboardThemeToggle');
     const dashboardThemeStorageKey = 'dashboard-theme';
-
-    const syncFloatingPanel = document.getElementById('syncFloatingPanel');
-    const syncPanelCloseButton = document.getElementById('sync-panel-close-button');
-    const syncPanelRefreshButton = document.getElementById('sync-panel-refresh-button');
-
-    const toastBadgeEl = document.getElementById('sync-toast-badge');
-    const toastTitleEl = document.getElementById('sync-toast-title');
-    const toastDescriptionEl = document.getElementById('sync-toast-description');
-    const toastProgressEl = document.getElementById('sync-toast-progress-bar');
-    const toastPercentEl = document.getElementById('sync-toast-percent');
-    const toastSummaryEl = document.getElementById('sync-toast-summary');
-    const toastRetryButtonEl = document.getElementById('sync-toast-retry-button');
-    const toastRetryFormEl = document.getElementById('sync-toast-retry-form');
 
     const dashboardLeadAccessCodeCopyButton = document.getElementById('dashboardLeadAccessCodeCopyButton');
     const dashboardLeadAccessCodeInput = document.getElementById('dashboardLeadAccessCode');
@@ -40,9 +21,6 @@ document.addEventListener('DOMContentLoaded', function () {
     const dashboardLeadFormInput = document.getElementById('dashboardLeadFormLink');
     const dashboardLeadFormCopyStatus = document.getElementById('dashboardLeadFormCopyStatus');
     const dashboardLeadFormOpenButton = document.getElementById('dashboardLeadFormOpenButton');
-
-    let intervalId = null;
-    let doneReloadTimeout = null;
 
     /*
     |--------------------------------------------------------------------------
@@ -86,188 +64,6 @@ document.addEventListener('DOMContentLoaded', function () {
 
             applyDashboardTheme(nextTheme);
         });
-    }
-
-    /*
-    |--------------------------------------------------------------------------
-    | Painel flutuante de sincronização
-    |--------------------------------------------------------------------------
-    */
-    function showSyncPanel() {
-        if (syncFloatingPanel) {
-            syncFloatingPanel.classList.remove('d-none');
-        }
-    }
-
-    function hideSyncPanel() {
-        if (syncFloatingPanel) {
-            syncFloatingPanel.classList.add('d-none');
-        }
-    }
-
-    if (syncPanelCloseButton) {
-        syncPanelCloseButton.addEventListener('click', hideSyncPanel);
-    }
-
-    if (syncPanelRefreshButton) {
-        syncPanelRefreshButton.addEventListener('click', function () {
-            window.location.reload();
-        });
-    }
-
-    function stopPolling() {
-        if (intervalId) {
-            clearInterval(intervalId);
-            intervalId = null;
-        }
-    }
-
-    function progressForStatus(status, totalLeads) {
-        if (status === 'queued') {
-            return 18;
-        }
-
-        if (status === 'running') {
-            return Math.min(84, 46 + Math.min(Number(totalLeads || 0), 38));
-        }
-
-        if (status === 'completed' || status === 'completed_with_warning' || status === 'failed') {
-            return 100;
-        }
-
-        return 0;
-    }
-
-    function getToastCopy(status, payload) {
-        const leadsCount = Number(payload.totalLeads || 0);
-        const progress = progressForStatus(status, leadsCount);
-
-        if (status === 'queued') {
-            return {
-                variant: 'warning',
-                badge: 'Na fila',
-                title: 'Preparando sincronização',
-                description: 'A importação foi colocada na fila e será processada em instantes.',
-                progress,
-                summary: 'Aguardando início do processamento.',
-                retry: false,
-                refresh: false,
-            };
-        }
-
-        if (status === 'running') {
-            return {
-                variant: 'primary',
-                badge: 'Sincronizando',
-                title: 'Sincronização em andamento',
-                description: 'Os leads estão sendo sincronizados em segundo plano.',
-                progress,
-                summary: leadsCount > 0
-                    ? `${leadsCount} leads disponíveis até agora.`
-                    : 'Lendo registros da integração.',
-                retry: false,
-                refresh: false,
-            };
-        }
-
-        if (status === 'completed') {
-            return {
-                variant: 'success',
-                badge: 'Atualizado',
-                title: 'Sincronização concluída',
-                description: 'A base local foi atualizada com sucesso.',
-                progress: 100,
-                summary: `${leadsCount} leads disponíveis no painel.`,
-                retry: false,
-                refresh: true,
-            };
-        }
-
-        if (status === 'completed_with_warning') {
-            return {
-                variant: 'warning',
-                badge: 'Parcial',
-                title: 'Sincronização parcial concluída',
-                description: payload.syncError || 'A sincronização foi finalizada com uma quantidade suficiente de leads para o painel.',
-                progress: 100,
-                summary: `${leadsCount} leads disponíveis no painel.`,
-                retry: false,
-                refresh: true,
-            };
-        }
-
-        if (status === 'failed') {
-            return {
-                variant: 'danger',
-                badge: 'Falhou',
-                title: 'Falha na sincronização',
-                description: payload.syncError || 'Não foi possível concluir a sincronização.',
-                progress: 100,
-                summary: 'Revise a integração ou tente novamente.',
-                retry: true,
-                refresh: false,
-            };
-        }
-
-        return {
-            variant: 'secondary',
-            badge: 'Aguardando',
-            title: 'Sincronização aguardando',
-            description: 'Nenhuma sincronização em andamento.',
-            progress: 0,
-            summary: 'Aguardando atualização.',
-            retry: false,
-            refresh: false,
-        };
-    }
-
-    function renderToast(copy) {
-        if (!syncFloatingPanel) {
-            return;
-        }
-
-        if (toastBadgeEl) {
-            toastBadgeEl.className = `badge text-bg-${copy.variant} me-2`;
-            toastBadgeEl.textContent = copy.badge;
-        }
-
-        if (toastTitleEl) {
-            toastTitleEl.textContent = copy.title;
-        }
-
-        if (toastDescriptionEl) {
-            toastDescriptionEl.textContent = copy.description;
-        }
-
-        if (toastPercentEl) {
-            toastPercentEl.textContent = `${copy.progress}%`;
-        }
-
-        if (toastSummaryEl) {
-            toastSummaryEl.textContent = copy.summary;
-        }
-
-        if (toastProgressEl) {
-            toastProgressEl.style.width = `${copy.progress}%`;
-            toastProgressEl.setAttribute('aria-valuenow', copy.progress);
-            toastProgressEl.className = `progress-bar progress-bar-striped bg-${copy.variant}`;
-
-            if (copy.progress < 100) {
-                toastProgressEl.classList.add('progress-bar-animated');
-            } else {
-                toastProgressEl.classList.remove('progress-bar-animated');
-            }
-        }
-
-        if (toastRetryButtonEl) {
-            toastRetryButtonEl.classList.toggle('d-none', !copy.retry);
-        }
-
-        if (syncPanelRefreshButton) {
-            syncPanelRefreshButton.classList.toggle('d-none', !copy.refresh);
-        }
-
-        showSyncPanel();
     }
 
     /*
@@ -340,14 +136,6 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
-    if (toastRetryButtonEl) {
-        toastRetryButtonEl.addEventListener('click', function () {
-            if (toastRetryFormEl) {
-                toastRetryFormEl.submit();
-            }
-        });
-    }
-
     bindOpenButton(dashboardLeadFormOpenButton, leadFormUrl);
 
     bindCopyButton(
@@ -367,113 +155,6 @@ document.addEventListener('DOMContentLoaded', function () {
         'Link copiado com sucesso.',
         'Envie o link e a chave para quem for preencher.'
     );
-
-    /*
-    |--------------------------------------------------------------------------
-    | Consulta do status da sincronização
-    |--------------------------------------------------------------------------
-    */
-    async function checkSyncStatus() {
-        if (!statusUrl) {
-            return;
-        }
-
-        try {
-            const response = await fetch(statusUrl, {
-                method: 'GET',
-                headers: {
-                    Accept: 'application/json',
-                    'X-Requested-With': 'XMLHttpRequest',
-                },
-            });
-
-            if (!response.ok) {
-                stopPolling();
-                return;
-            }
-
-            const data = await response.json();
-
-            if (!data.authenticated) {
-                stopPolling();
-                return;
-            }
-
-            const status = data.sync_status;
-
-            if (status === 'queued' || status === 'running') {
-                renderToast(getToastCopy(status, {
-                    totalLeads: data.total_leads,
-                    syncError: data.sync_error,
-                }));
-
-                return;
-            }
-
-            if (status === 'completed' || status === 'completed_with_warning') {
-                stopPolling();
-
-                renderToast(getToastCopy(status, {
-                    totalLeads: data.total_leads,
-                    syncError: data.sync_error,
-                }));
-
-                return;
-            }
-
-            if (status === 'failed') {
-                stopPolling();
-
-                renderToast(getToastCopy('failed', {
-                    totalLeads: data.total_leads,
-                    syncError: data.sync_error,
-                }));
-
-                showSyncPanel();
-
-                return;
-            }
-
-            stopPolling();
-        } catch (error) {
-            console.error('Erro ao consultar status da sincronização:', error);
-        }
-    }
-
-    window.addEventListener('beforeunload', function () {
-        stopPolling();
-
-        if (doneReloadTimeout) {
-            clearTimeout(doneReloadTimeout);
-        }
-    });
-
-    if (currentStatus === 'queued' || currentStatus === 'running' || syncJustQueued) {
-        const statusToRender = currentStatus === 'queued' || currentStatus === 'running'
-            ? currentStatus
-            : 'queued';
-
-        renderToast(getToastCopy(statusToRender, {
-            totalLeads: initialTotalLeads,
-            syncError: initialSyncError,
-        }));
-
-        showSyncPanel();
-
-        intervalId = setInterval(checkSyncStatus, 5000);
-        checkSyncStatus();
-    }
-
-    if (currentStatus === 'failed') {
-        renderToast(getToastCopy('failed', {
-            totalLeads: initialTotalLeads,
-            syncError: initialSyncError,
-        }));
-
-        if (shouldAutoShowSyncToast) {
-            showSyncPanel();
-        }
-    }
 
     /*
     |--------------------------------------------------------------------------

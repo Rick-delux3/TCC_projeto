@@ -490,6 +490,44 @@ p{
     outline: none;
 }
 
+.admin-input.is-invalid{
+    border-color: #dc2626 !important;
+}
+
+.admin-input-wrap{
+    position: relative;
+}
+
+.admin-input-icon{
+    position: absolute;
+    z-index: 1;
+    top: 50%;
+    left: 12px;
+    display: inline-flex;
+    width: 18px;
+    height: 18px;
+    color: #64748b;
+    pointer-events: none;
+    transform: translateY(-50%);
+    transition: color 0.2s ease;
+}
+
+.admin-input-icon svg{
+    width: 100%;
+    height: 100%;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.admin-input-wrap:focus-within .admin-input-icon{
+    color: var(--secundary-color);
+}
+
+.admin-input-wrap .admin-input--with-icon{
+    padding-left: 40px;
+}
+
 .admin-actions{
     margin-top: 10px;
 }

@@ -44,6 +44,8 @@ it('renders an immediately usable member login without external calls', function
         ->assertDontSee('setTimeout(hideLoader', false);
 
     expect($response->headers->get('X-Frame-Options'))->toBe('DENY')
+        ->and($response->headers->get('Referrer-Policy'))->toBe('no-referrer')
+        ->and($response->headers->get('Cache-Control'))->toContain('no-store')
         ->and(strtolower((string) $response->headers->get('Content-Security-Policy')))
         ->toContain("frame-ancestors 'none'")
         ->not->toContain('sandbox');
@@ -110,6 +112,44 @@ it('does not authorize a pending member from an arbitrary email query string', f
         'email' => $member->email,
         'password' => 'password',
     ])->assertSessionHasErrors('email');
+});
+
+it('does not disclose a pending invitation before credentials are valid', function () {
+    $member = invitedMember();
+
+    $response = $this->post(route('admin.member.login.post'), [
+        'email' => $member->email,
+        'password' => 'incorrect-password',
+    ]);
+
+    $response
+        ->assertSessionHasErrors([
+            'email' => 'E-mail ou senha incorretos.',
+        ])
+        ->assertSessionDoesntHaveErrors('password');
+});
+
+it('does not accept one member invitation with another member credentials', function () {
+    $firstMember = invitedMember();
+    $secondMember = invitedMember([
+        'email' => 'outro-integrante@example.test',
+    ]);
+
+    $url = URL::temporarySignedRoute(
+        'admin.member.invite.accept',
+        now()->addHour(),
+        ['corretor' => $firstMember, 'version' => 1]
+    );
+
+    $this->get($url)->assertRedirect();
+
+    $this->post(route('admin.member.login.post'), [
+        'email' => $secondMember->email,
+        'password' => 'password',
+    ])->assertSessionHasErrors('email');
+
+    expect($secondMember->fresh()->hasAcceptedInvitation())->toBeFalse();
+    $this->assertGuest('admin');
 });
 
 it('logs in an accepted and verified member', function () {

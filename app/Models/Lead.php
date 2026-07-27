@@ -2,30 +2,35 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use App\Models\InsuranceAnalysis;
-use App\Models\InsuranceAnalysisBatch;
-
-
+use Illuminate\Database\Eloquent\Model;
 
 class Lead extends Model
 {
     use HasFactory;
 
+    public const SYSTEM_ORIGINS = [
+        'simulacao_publica',
+        'imobiliaria_cadastrada',
+        'imobiliaria_nao_cadastrada',
+        'locatario',
+        'locador',
+    ];
+
     protected $table = 'leads';
 
-    // Permite salvar dados em massa via Webhook
+    // Permite persistir os dados normalizados pelos formulários e serviços.
     protected $fillable = [
         'company_id',
         'tipo_solicitante',
         'cpf',
         'estado_civil',
         'imobiliaria',
-        'nome', 
-        'email', 
+        'nome',
+        'email',
         'tel',
-        'tags_originais', 
+        'tags_originais',
         'status',
         'origem',
         'ip',
@@ -45,7 +50,12 @@ class Lead extends Model
         'sent_to_leadlovers_at' => 'datetime',
         'aceite_termos' => 'boolean',
         'reanalysis_unlocked_at' => 'datetime',
-    ]; 
+    ];
+
+    public function scopeCreatedThroughSystem(Builder $query): Builder
+    {
+        return $query->whereIn('origem', self::SYSTEM_ORIGINS);
+    }
 
     /**
      * Um lead pode pertencer a uma imobiliária cadastrada.
@@ -130,6 +140,7 @@ class Lead extends Model
     {
         return $this->hasMany(InsuranceAnalysisBatch::class);
     }
+
     public function createdByAdmin()
     {
         return $this->createdByCorretor();
@@ -152,7 +163,7 @@ class Lead extends Model
 
     public function canRequestReanalysis(): bool
     {
-        if (!$this->reanalysis_unlocked_at) {
+        if (! $this->reanalysis_unlocked_at) {
             return false;
         }
 
@@ -160,7 +171,7 @@ class Lead extends Model
             ->latest('created_at')
             ->first();
 
-        if (!$lastAnalysis) {
+        if (! $lastAnalysis) {
             return true;
         }
 
@@ -169,9 +180,13 @@ class Lead extends Model
 
     public function canBeSentToToo()
     {
-        if(!filled($this->cpf)) return false;
+        if (! filled($this->cpf)) {
+            return false;
+        }
 
-        if($this->tipo_solicitante === 'locador') return false;
+        if ($this->tipo_solicitante === 'locador') {
+            return false;
+        }
 
         return in_array($this->tipo_solicitante, [
             'imobiliaria_cadastrada',

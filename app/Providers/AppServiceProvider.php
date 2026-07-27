@@ -2,13 +2,13 @@
 
 namespace App\Providers;
 
-use Illuminate\Support\ServiceProvider;
-use Illuminate\Cache\RateLimiting\Limit;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\RateLimiter;
 use App\Models\Corretor;
 use App\Support\CorretorPermissions;
+use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -25,7 +25,7 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-         /*
+        /*
         * Limite para abrir páginas de simulação.
         * Pode ser mais alto, porque o usuário/imobiliária pode acessar várias vezes.
         */
@@ -41,17 +41,11 @@ class AppServiceProvider extends ServiceProvider
             return Limit::perMinute(10)->by($request->ip());
         });
 
-        /*
-        * Limite para consultar status de sincronização via JavaScript.
-        * Como o dashboard consulta de tempos em tempos, precisa ser mais flexível.
-        */
-        RateLimiter::for('sync-status', function (Request $request) {
-            return Limit::perMinute(120)->by($request->ip());
-        });
-
         Gate::before(function ($user, string $ability) {
-            if (in_array($ability, ['view-analyses', 'create-analysis'], true)
-                && ! config('features.insurance_analysis.enabled', false)) {
+            if ( 
+                $ability === 'create-analysis'
+                && ! config('features.insurance_analysis.enabled', false)
+            ) {
                 return false;
             }
 
@@ -62,7 +56,12 @@ class AppServiceProvider extends ServiceProvider
             return null;
         });
 
+    
         Gate::define('access-dashboard', function (Corretor $corretor) {
+            return $corretor->isActive();
+        });
+
+        Gate::define('access-simulation-forms', function (Corretor $corretor){
             return $corretor->isActive();
         });
 

@@ -4,17 +4,16 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\StoreSimulationLeadRequest;
 use App\Jobs\SendLeadToLeadLoversJob;
+use App\Jobs\StartInsuranceAnalysesBatchJob;
 use App\Models\Imobiliaria;
+use App\Models\InsuranceAnalysisBatch;
 use App\Models\Lead;
 use Illuminate\Http\Request;
-use App\Jobs\StartInsuranceAnalysesBatchJob;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\DB;
-use App\Models\InsuranceAnalysisBatch;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Validation\ValidationException;
 use Illuminate\Validation\Rule;
-use PhpParser\Node\Expr\FuncCall;
+use Illuminate\Validation\ValidationException;
 
 class SimulationController extends Controller
 {
@@ -23,7 +22,6 @@ class SimulationController extends Controller
         'locatario',
         'locador',
     ];
-
 
     public function start()
     {
@@ -84,7 +82,7 @@ class SimulationController extends Controller
             ->where('lead_form_active', true)
             ->first();
 
-        if (!$company) {
+        if (! $company) {
             return back()
                 ->withInput()
                 ->withErrors([
@@ -144,16 +142,16 @@ class SimulationController extends Controller
             origem: 'imobiliaria_cadastrada'
         );
 
-        if($existingLead) {
+        if ($existingLead) {
             return back()->withInput()
                 ->with(
                     'error',
-                    "O cliente já possui uma análise. " . "Use a reanálise do lead #{$existingLead->id}."
-                
+                    'O cliente já possui uma análise. '."Use a reanálise do lead #{$existingLead->id}."
+
                 );
         }
 
-        $lead = DB::transaction(function () use ($request, $company){
+        $lead = DB::transaction(function () use ($request, $company) {
             return $this->saveLead($request, [
                 'tipo_solicitante' => 'imobiliaria_cadastrada',
                 'company' => $company,
@@ -165,7 +163,7 @@ class SimulationController extends Controller
         $this->dispatchLeadFlow($lead);
 
         return redirect()->route('Dashboard-Admin')
-        ->with('success', "Solicitação do lead #{$lead->id} adicionada à fila de análises.");
+            ->with('success', "Solicitação do lead #{$lead->id} adicionada à fila de análises.");
 
     }
 
@@ -186,17 +184,17 @@ class SimulationController extends Controller
             'isAdminSimulation' => true,
         ];
 
-        if($tipo === 'locatario'){
+        if ($tipo === 'locatario') {
             return view('simulation.forms.tenant', $commonData);
         }
 
         return view('simulation.forms.unregistered-company_landlord',
-        [
-            ...$commonData,
-            'responsavelTipo' => $tipo,
-            'lockResponsavelTipo' => true,
-        ]
-        
+            [
+                ...$commonData,
+                'responsavelTipo' => $tipo,
+                'lockResponsavelTipo' => true,
+            ]
+
         );
     }
 
@@ -211,7 +209,7 @@ class SimulationController extends Controller
 
         $data = $request->validated();
 
-        if(
+        if (
             $tipo !== 'locatario' && ($data['responsavel_tipo'] ?? null) !== $tipo
         ) {
             throw ValidationException::withMessages([
@@ -225,16 +223,16 @@ class SimulationController extends Controller
             origem: $tipo
         );
 
-        if($existingLead) {
+        if ($existingLead) {
             return back()->withInput()
                 ->with(
                     'error',
-                    "O cliente já possui uma análise. " . "Use a reanálise do lead #{$existingLead->id}."
-                
+                    'O cliente já possui uma análise. '."Use a reanálise do lead #{$existingLead->id}."
+
                 );
         }
 
-        $lead = DB::transaction(function () use ($request, $tipo){
+        $lead = DB::transaction(function () use ($request, $tipo) {
             return $this->saveLead($request, [
                 'tipo_solicitante' => $tipo,
                 'company' => null,
@@ -246,9 +244,7 @@ class SimulationController extends Controller
         $this->dispatchLeadFlow($lead);
 
         return redirect()->route('Dashboard-Admin')
-         ->with('success', "Solicitação do lead #{$lead->id} adicionada à fila de análises.");
-        
-
+            ->with('success', "Solicitação do lead #{$lead->id} adicionada à fila de análises.");
 
     }
 
@@ -259,14 +255,13 @@ class SimulationController extends Controller
     {
         $company = $this->findCompanyByCode($code);
 
-        $lead = DB::transaction(function () use ($request, $company){
+        $lead = DB::transaction(function () use ($request, $company) {
             return $this->saveLead($request, [
-                    'tipo_solicitante' => 'imobiliaria_cadastrada',
-                    'company' => $company,
-                    'origem' => 'imobiliaria_cadastrada',
-                ]);
+                'tipo_solicitante' => 'imobiliaria_cadastrada',
+                'company' => $company,
+                'origem' => 'imobiliaria_cadastrada',
+            ]);
         });
-        
 
         $this->dispatchLeadFlow($lead);
 
@@ -295,10 +290,10 @@ class SimulationController extends Controller
     public function storeUnregisteredCompanyLead(StoreSimulationLeadRequest $request)
     {
         $data = $request->validated();
-        
+
         $responsavelTipo = $data['responsavel_tipo'] ?? null;
 
-        if(! in_array($responsavelTipo, ['imobiliaria_nao_cadastrada', 'locador'], true
+        if (! in_array($responsavelTipo, ['imobiliaria_nao_cadastrada', 'locador'], true
         )) {
             throw ValidationException::withMessages([
                 'responsavel_tipo' => 'O perfil informado é inválido.',
@@ -320,7 +315,6 @@ class SimulationController extends Controller
             ->with('success', 'Solicitação enviada com sucesso. O resultado será enviado por e-mail.');
     }
 
-    
     public function tenantForm()
     {
         return view('simulation.forms.tenant');
@@ -328,7 +322,7 @@ class SimulationController extends Controller
 
     public function storeTenantLead(StoreSimulationLeadRequest $request)
     {
-       $lead = DB::transaction(function () use ($request) {
+        $lead = DB::transaction(function () use ($request) {
             return $this->saveLead($request, [
                 'tipo_solicitante' => 'locatario',
                 'company' => null,
@@ -365,7 +359,7 @@ class SimulationController extends Controller
                             'lead_form_active',
                             true
                         )
-                     ),
+                    ),
             ],
 
             'tipo_solicitante' => [
@@ -375,14 +369,12 @@ class SimulationController extends Controller
             ],
         ]);
 
-        if($data['vinculo'] === 'imobiliaria_cadastrada') {
+        if ($data['vinculo'] === 'imobiliaria_cadastrada') {
             return redirect()->route('admin.simulations.registered-company.form', ['company' => (int) $data['company_id']]);
         }
 
         return redirect()->route('admin.simulations.unlinked.form', ['tipo' => $data['tipo_solicitante']]);
     }
-    
-
 
     /**
      * Busca imobiliária por código de acesso.
@@ -435,7 +427,7 @@ class SimulationController extends Controller
             'email' => $data['email'],
         ];
 
-        if (!$company) {
+        if (! $company) {
             $leadIdentity['origem'] = $context['origem'];
         }
 
@@ -449,8 +441,8 @@ class SimulationController extends Controller
                 'cpf' => $data['cpf'] ?? null,
                 'tel' => $data['tel'] ?? null,
                 'estado_civil' => $data['estado_civil'] ?? null,
-                'imobiliaria' => $company?->name 
-                    ?? 
+                'imobiliaria' => $company?->name
+                    ??
                     (($context['tipo_solicitante'] ?? null) === 'imobiliaria_nao_cadastrada'
                     ? ($data['responsavel_nome'] ?? null)
                     : null),
@@ -536,7 +528,7 @@ class SimulationController extends Controller
 
         $corretorId = $context['corretor_id'] ?? null;
 
-        if($corretorId) {
+        if ($corretorId) {
             $audiColumn = $lead->wasRecentlyCreated
             ? 'created_by_corretor_id'
             : 'updated_by_corretor_id';
@@ -547,7 +539,7 @@ class SimulationController extends Controller
         }
 
         return $lead;
-        
+
     }
 
     /**
@@ -556,24 +548,24 @@ class SimulationController extends Controller
     private function tagsAsString(string $tipoSolicitante, ?Imobiliaria $company): string
     {
         $tags = match ($tipoSolicitante) {
-        'imobiliaria_cadastrada' => [
-            $company?->name,
-        ],
+            'imobiliaria_cadastrada' => [
+                $company?->name,
+            ],
 
-        'imobiliaria_nao_cadastrada' => [
-            'imobiliaria morna',
-        ],
+            'imobiliaria_nao_cadastrada' => [
+                'imobiliaria morna',
+            ],
 
-        'locatario' => [
-            'locatario',
-        ],
+            'locatario' => [
+                'locatario',
+            ],
 
-        'locador' => [
-            'diretoprop',
-        ],
+            'locador' => [
+                'diretoprop',
+            ],
 
-        default => [],
-    };
+            default => [],
+        };
 
         return collect($tags)->filter()->implode(', ');
     }
@@ -602,17 +594,20 @@ class SimulationController extends Controller
             ->first();
     }
 
-    private function dispatchLeadFlow(Lead $lead): void {
+    private function dispatchLeadFlow(Lead $lead): void
+    {
         if (! config('features.insurance_analysis.enabled', false)) {
+            SendLeadToLeadLoversJob::dispatch($lead->id)->afterCommit();
+
             return;
         }
 
         $alreadyHasBatch = InsuranceAnalysisBatch::query()
-        ->where('lead_id', $lead->id)
-        ->exists();
+            ->where('lead_id', $lead->id)
+            ->exists();
 
-        if($alreadyHasBatch) {
-            SendLeadToLeadLoversJob::dispatch($lead->id);
+        if ($alreadyHasBatch) {
+            SendLeadToLeadLoversJob::dispatch($lead->id)->afterCommit();
 
             Log::info(
                 'Análise inicial não disparada porque o lead já possui lote.',
@@ -620,6 +615,7 @@ class SimulationController extends Controller
                     'lead_id' => $lead->id,
                 ]
             );
+
             return;
         }
 

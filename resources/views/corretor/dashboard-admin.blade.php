@@ -47,12 +47,18 @@
     $leads = $leads ?? collect();
     $imobiliarias = $imobiliarias ?? collect();
 
-    $canCreateAnalysis = $canCreateAnalysis
+    $canAccessSimulationForms = $canAccessSimulationForms
         ?? (
             $corretor
-                ? Gate::forUser($corretor)->allows('create-analysis')
+                ? Gate::forUser($corretor)->allows('access-simulation-forms')
                 : false
         );
+
+    $canCreateAnalysis = $canCreateAnalysis
+    ?? (
+        $corretor ? Gate::forUser($corretor)->allows('create-analysis')
+        : false
+    );
 
     $simulationCompanies = collect(
         $simulationCompanies
@@ -292,7 +298,7 @@
 
         {{-- Hero principal --}}
         <div class="row g-4 mb-4">
-            <div class="col-12 {{ $canCreateAnalysis ? 'col-xl-7' : '' }}">
+            <div class="col-12 {{ $canAccessSimulationForms ? 'col-xl-7' : '' }}">
                 <div class="card border-0 shadow-sm rounded-5 dashboard-hero-card text-white">
                     <div class="card-body p-4 p-lg-5">
                         <div class="row g-4 align-items-end">
@@ -350,7 +356,7 @@
                 </div>
             </div>
 
-            @if ($canCreateAnalysis)
+            @if ($canAccessSimulationForms)
                 <div class="col-12 col-xl-5">
                     <div class="card border-0 shadow-sm rounded-5 h-100 dashboard-stat-card">
                         <div class="card-body p-4 p-lg-5 d-flex flex-column">
@@ -948,7 +954,7 @@
     </div>
 </div>
 
-@if ($canCreateAnalysis)
+@if ($canAccessSimulationForms)
     {{-- Seleção global do formulário de nova análise --}}
     <div
         class="modal fade"
