@@ -207,7 +207,55 @@ class LeadLoversService
                     'Message' => 'Sequência da LeadLovers não encontrada.',
                 ];
             }
+            
+            $dynamicFields = collect(
+                [
+                   [
+                       'Id' => 52672,
+                       'Value' => $data['CPF'] ?? null
+                   ],
+   
+                   [
+                       'Id' => 52668,
+                       'Value' => $data['CIVIL'] ?? null
+                   ],
+   
+                   [
+                       'Id' => 52671,
+                       'Value' => $data['conjuge'] ?? null
+                   ],
+   
+                   [
+                       'Id' => 52664,
+                       'Value' => $data['VALOR'] ?? null
+                   ],
 
+                   [
+                        'Id' => 121472,
+                        'Value' => $data['Condominio'] ?? null
+
+                   ],
+
+                   [
+                        'Id' => 121471,
+                        'Value' => $data['IPTU'] ?? null
+                   ],
+   
+                   [
+                       'Id' => 52666,
+                       'Value' => $data['OUTRO'] ?? null
+                   ],
+         
+            ])
+            ->filter(fn (array $field) => filled($field['Value']))
+            ->map(fn (array $field) => [
+                'Id' => (int) $field['Id'],
+                'Value' => trim((string) $field['Value']),
+            ])
+            ->values()
+            ->all();
+                
+            
             $payload = [
                 'Name' => $data['Name'],
                 'Email' => $data['Email'],
@@ -223,33 +271,9 @@ class LeadLoversService
                 'Tag' => $tagId,
                 'Score' => isset($data['Score']) ? (int) $data['Score'] : 0,
 
-                'DynamicFields' => [
-                    [
-                        'Id' => 52672,
-                        'Value' => $data['CPF']
-                    ],
-
-                    [
-                        'Id' => 52668,
-                        'Value' => $data['CIVIL']
-                    ],
-
-                    [
-                        'Id' => 52671,
-                        'Value' => $data['conjuge']
-                    ],
-
-                    [
-                        'Id' => 52664,
-                        'Value' => $data['VALOR']
-                    ],
-
-                    [
-                        'Id' => 52666,
-                        'Value' => $data['OUTRO']
-                    ],
-          
-                ]
+                'DynamicFields' => $dynamicFields
+                
+                
             ];
 
             Log::info('Enviando lead para LeadLovers', [

@@ -17,10 +17,14 @@ class CorretorDashboardController extends Controller
         abort_if(! $corretor, 401, 'Corretor não autenticado.');
 
         $canViewLeads = Gate::forUser($corretor)->allows('view-leads');
+
         $canViewRealEstateCompanies = Gate::forUser($corretor)
             ->allows('view-real-estate-companies');
-        $canCreateAnalysis = config('features.insurance_analysis.enabled', false)
-            && Gate::forUser($corretor)->allows('create-analysis');
+
+        $canAcessSimulationForms = Gate::forUser($corretor)
+            ->allows('access-simulation-forms');
+            
+        $canStartInsuranceAnalysis = Gate::forUser($corretor)->allows('create-analysis');
 
         $leadSearch = $request->input('lead_name', '');
 
@@ -147,7 +151,7 @@ class CorretorDashboardController extends Controller
             ? Imobiliaria::query()->orderBy('name')->get()
             : collect();
 
-        $simulationCompanies = $canCreateAnalysis
+        $simulationCompanies = $canAcessSimulationForms
             ? Imobiliaria::query()->where('lead_form_active', true)
                 ->orderBy('name')
                 ->get([
@@ -169,7 +173,8 @@ class CorretorDashboardController extends Controller
             'selectedTipoSolicitante',
             'tipoSolicitantesOptions',
             'simulationCompanies',
-            'canCreateAnalysis',
+            'canAcessSimulationForms',
+            'canStartInsuranceAnalysis',
         ));
 
     }

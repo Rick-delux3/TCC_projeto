@@ -104,6 +104,8 @@ class SendLeadToLeadLoversJob implements ShouldQueue
                 'CIVIL' => $lead->estado_civil,
                 'conjuge' => $lead->conjuge?->cpf,
                 'VALOR' => $lead->despesas?->valor_aluguel,
+                'IPTU' => $lead->despesas?->valor_iptu,
+                'Condominio' => $lead->despesas?->valor_condominio,
                 'OUTRO' => $lead->despesas?->outras_despesas,
 
 

@@ -75,7 +75,7 @@ Route::prefix('/Dashboard')->group(function () {
             ->middleware('can:access-dashboard')
             ->name('Dashboard-Admin');
 
-        Route::prefix('simulacoes')->name('admin.simulations.')->middleware(['can:create-analysis'])
+        Route::prefix('simulacoes')->name('admin.simulations.')->middleware(['can:access-simulation-forms'])
             ->group(function () {
                 Route::get('/abrir', [SimulationController::class, 'adminResolveForm'])->name('open');
 
