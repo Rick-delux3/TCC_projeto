@@ -49,12 +49,12 @@ class CorretorAuthController extends Controller
 
         $data = $request->validate([
             'cpf' => 'required|string|regex:/^\d{11}$/',
-            'password' => 'required|string|min:6',
+            'password' => 'required|string|max:72',
         ], [
             'cpf.required' => 'Informe o CPF.',
             'cpf.regex' => 'Informe um CPF válido com 11 números.',
             'password.required' => 'Informe a senha.',
-            'password.min' => 'A senha deve ter pelo menos 6 caracteres.',
+            'password.max' => 'A senha deve ter no máximo 72 caracteres.',
         ]);
 
         $loginKey = $this->loginThrottleKey('ceo:' . $data['cpf'], $request->ip());
@@ -119,38 +119,15 @@ class CorretorAuthController extends Controller
 
         $data = $request->validate([
             'email' => ['required', 'email', 'max:255'],
-            'password' => ['required', 'string', 'min:6']
+            'password' => ['required', 'string', 'max:72'],
         ],
         [
-            'email.required' => 'Informe o email!',
-            'email.email' => 'Informe um e-mail válido!',
-            'password.required' => 'Informe a senha!',
-            'password.min' => 'A senha deve conter pelo menos 6 caracteres!'
+            'email.required' => 'Informe o e-mail.',
+            'email.email' => 'Informe um e-mail válido.',
+            'password.required' => 'Informe a senha.',
+            'password.max' => 'A senha deve ter no máximo 72 caracteres.',
         ]
         );
-
-        $integrantePendente = Corretor::query()
-                    ->where('email', $data['email'])
-                    ->where('role', Corretor::ROLE_INTEGRANTE)
-                    ->first();
-
-        if (
-            $integrantePendente && ! $integrantePendente->hasAcceptedInvitation()
-        ) {
-            try {
-                $this->invitationService->assertFirstLoginCanContinue(
-                    request: $request,
-                    integrante: $integrantePendente
-                );
-            } catch (DomainException $exception) {
-                return back()
-                    ->withInput($request->only('email'))
-                    ->withErrors([
-                        'email' => $exception->getMessage(),
-                    ]);
-            }
-
-        }
 
         $loginKey = $this->loginThrottleKey('member:' . $data['email'], $request->ip());
 
@@ -220,6 +197,11 @@ class CorretorAuthController extends Controller
 
         if ($acceptMemberInvitation) {
             try {
+                $this->invitationService->assertFirstLoginCanContinue(
+                    request: $request,
+                    integrante: $corretor
+                );
+
                 $this->invitationService->acceptAfterSuccessfulLogin(
                     request: $request,
                     integrante: $corretor

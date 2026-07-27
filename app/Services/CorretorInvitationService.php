@@ -301,6 +301,10 @@ class CorretorInvitationService
             return;
         }
 
+        $sessionCorretorId = (int) $request->session()->get(
+            'member_invite_corretor_id'
+        );
+
         $sessionVersion = (int) $request->session()->get(
             'member_invite_version'
         );
@@ -308,6 +312,7 @@ class CorretorInvitationService
         DB::transaction(function () use (
             $request,
             $integrante,
+            $sessionCorretorId,
             $sessionVersion
         ) {
             $lockedIntegrante = Corretor::query()
@@ -319,7 +324,8 @@ class CorretorInvitationService
             }
 
             if (
-                $sessionVersion !== (int) $lockedIntegrante->invite_version
+                $sessionCorretorId !== (int) $lockedIntegrante->id
+                || $sessionVersion !== (int) $lockedIntegrante->invite_version
                 || $lockedIntegrante->invitationIsExpired()
             ) {
                 throw new DomainException(

@@ -173,7 +173,7 @@ Route::middleware('auth')->group(function () {
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 });
 
-Route::middleware(['ceo.registration.open', 'throttle:5,1'])->group(function () {
+Route::middleware(['auth.unframed', 'ceo.registration.open', 'throttle:5,1'])->group(function () {
     Route::get(config('admin.ceo_registration_path'), [CorretorRegistrationController::class, 'showCeoRegistrationForm'])
         ->name('admin.ceo.register.form');
 
@@ -181,7 +181,7 @@ Route::middleware(['ceo.registration.open', 'throttle:5,1'])->group(function () 
         ->name('admin.ceo.register.post');
 });
 
-Route::middleware(['guest:admin', 'throttle:5,1', 'auth.unframed'])->group(function () {
+Route::middleware(['auth.unframed', 'guest:admin', 'throttle:5,1'])->group(function () {
     Route::get('/ceo/admin/login/form', [CorretorAuthController::class, 'ceoShowLoginForm'])
         ->name('admin.ceo.login');
 
