@@ -11,7 +11,7 @@
                 Recebemos suas informações. Em breve, nossa equipe entrará em contato para dar continuidade à análise.
             </p>
 
-            <a href="{{ route('index') }}" class="btn btn-primary mt-3">
+            <a href="{{ route('simulation.start') }}" class="btn btn-primary mt-3">
                 Voltar para o início
             </a>
         </div>

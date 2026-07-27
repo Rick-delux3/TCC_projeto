@@ -231,6 +231,21 @@ class LeadLoversService
                    ],
 
                    [
+                        'Id' => 121473,
+                        'Value' => $data['Agua'] ?? null
+                   ],
+
+                   [
+                        'Id' => 121474,
+                        'Value' => $data['Luz'] ?? null
+                   ],
+
+                   [
+                        'Id' => 121475,
+                        'Value' => $data['Gas'] ?? null
+                   ],
+
+                   [
                         'Id' => 121472,
                         'Value' => $data['Condominio'] ?? null
 
