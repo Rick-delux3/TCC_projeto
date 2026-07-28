@@ -17,7 +17,9 @@ use App\Http\Controllers\SimulationController;
 use App\Http\Controllers\TwoFactorController;
 use App\Services\PottencialService;
 use App\Services\TooService;
+use App\Http\Controllers\AdminLeadTagController;
 use Illuminate\Support\Facades\Route;
+
 
 Route::get('/debug/too/auth', function (TooService $tooService) {
     return response()->json($tooService->testAuthentication());
@@ -158,6 +160,13 @@ Route::prefix('/Dashboard')->group(function () {
                     ->name('resend-invitation');
 
             });
+            
+        Route::patch(
+            '/admin/leads/{lead}/result-tag',
+            [AdminLeadTagController::class, 'update']
+        )
+            ->middleware('can:manage-lead-tags')
+            ->name('admin.leads.result-tag.update');
     });
 
     Route::middleware('throttle:10,1')

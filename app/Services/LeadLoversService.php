@@ -207,70 +207,69 @@ class LeadLoversService
                     'Message' => 'Sequência da LeadLovers não encontrada.',
                 ];
             }
-            
+
             $dynamicFields = collect(
                 [
-                   [
-                       'Id' => 52672,
-                       'Value' => $data['CPF'] ?? null
-                   ],
-   
-                   [
-                       'Id' => 52668,
-                       'Value' => $data['CIVIL'] ?? null
-                   ],
-   
-                   [
-                       'Id' => 52671,
-                       'Value' => $data['conjuge'] ?? null
-                   ],
-   
-                   [
-                       'Id' => 52664,
-                       'Value' => $data['VALOR'] ?? null
-                   ],
+                    [
+                        'Id' => 52672,
+                        'Value' => $data['CPF'] ?? null,
+                    ],
 
-                   [
+                    [
+                        'Id' => 52668,
+                        'Value' => $data['CIVIL'] ?? null,
+                    ],
+
+                    [
+                        'Id' => 52671,
+                        'Value' => $data['conjuge'] ?? null,
+                    ],
+
+                    [
+                        'Id' => 52664,
+                        'Value' => $data['VALOR'] ?? null,
+                    ],
+
+                    [
                         'Id' => 121473,
-                        'Value' => $data['Agua'] ?? null
-                   ],
+                        'Value' => $data['Agua'] ?? null,
+                    ],
 
-                   [
+                    [
                         'Id' => 121474,
-                        'Value' => $data['Luz'] ?? null
-                   ],
+                        'Value' => $data['Luz'] ?? null,
+                    ],
 
-                   [
+                    [
                         'Id' => 121475,
-                        'Value' => $data['Gas'] ?? null
-                   ],
+                        'Value' => $data['Gas'] ?? null,
+                    ],
 
-                   [
+                    [
                         'Id' => 121472,
-                        'Value' => $data['Condominio'] ?? null
+                        'Value' => $data['Condominio'] ?? null,
 
-                   ],
+                    ],
 
-                   [
+                    [
                         'Id' => 121471,
-                        'Value' => $data['IPTU'] ?? null
-                   ],
-   
-                   [
-                       'Id' => 52666,
-                       'Value' => $data['OUTRO'] ?? null
-                   ],
-         
-            ])
-            ->filter(fn (array $field) => filled($field['Value']))
-            ->map(fn (array $field) => [
-                'Id' => (int) $field['Id'],
-                'Value' => trim((string) $field['Value']),
-            ])
-            ->values()
-            ->all();
-                
-            
+                        'Value' => $data['IPTU'] ?? null,
+                    ],
+
+                    [
+                        'Id' => 52666,
+                        'Value' => $data['OUTRO'] ?? null,
+                    ],
+
+                ])
+                ->filter(fn (array $field) => filled($field['Value']))
+                ->map(fn (array $field) => [
+                    'Id' => (int) $field['Id'],
+                    'Value' => trim((string) $field['Value']),
+                ])
+                ->values()
+                ->all();
+
             $payload = [
                 'Name' => $data['Name'],
                 'Email' => $data['Email'],
@@ -286,9 +285,8 @@ class LeadLoversService
                 'Tag' => $tagId,
                 'Score' => isset($data['Score']) ? (int) $data['Score'] : 0,
 
-                'DynamicFields' => $dynamicFields
-                
-                
+                'DynamicFields' => $dynamicFields,
+
             ];
 
             Log::info('Enviando lead para LeadLovers', [
@@ -347,12 +345,7 @@ class LeadLoversService
                 'error' => 'Integração com a LeadLovers desativada',
             ];
         }
-        /*
-        * Endpoint da documentação:
-        * PATCH /webapi/Lead?token={token}
-        *
-        * O campo Email é obrigatório e normalmente identifica o lead.
-        */
+        
 
         $baseUrl = $this->baseUrl;
         $token = $this->token;
@@ -475,6 +468,213 @@ class LeadLoversService
             return [
                 'StatusCode' => 500,
                 'Message' => 'Falha ao adicionar tag ao lead.',
+            ];
+        }
+    }
+
+    public function getLeadByEmail(string $email): array
+    {
+        if (! $this->isEnabled()) {
+            return [
+                'StatusCode' => 503,
+                'Message' => 'Integração com LeadLovers desativada.',
+            ];
+        }
+
+        $email = trim($email);
+
+        if (
+            $email === ''
+            || filter_var($email, FILTER_VALIDATE_EMAIL) === false
+        ) {
+            return [
+                'StatusCode' => 422,
+                'Message' => 'E-mail do lead inválido.',
+            ];
+        }
+
+        try {
+            $response = Http::asJson()
+                ->connectTimeout(10)
+                ->timeout(30)
+                ->get($this->baseUrl.'Lead', [
+                    'token' => $this->token,
+                    'email' => $email,
+                ]);
+
+            $this->throwIfRateLimited($response);
+
+            $result = $this->responseData($response);
+
+            if (! $response->successful()) {
+                Log::warning('LeadLovers respondeu erro ao consultar lead por e-mail', [
+                    'status' => $response->status(),
+                    'lead_ref' => $this->emailReference($email),
+                    'api_code' => data_get(
+                        $result,
+                        'Code',
+                        data_get($result, 'code')
+                    ),
+                    'api_message' => data_get(
+                        $result,
+                        'Message',
+                        data_get(
+                            $result,
+                            'Message',
+                            data_get($result, 'message')
+                        ),
+                    )
+                ]);
+            }
+
+            return $result;
+        } catch (LeadLoversRateLimitedException $e) {
+            throw $e;
+        } catch (\Throwable $e) {
+            Log::error('Erro ao consultar lead por e-mail na LeadLovers', [
+                'lead_ref' => $this->emailReference($email),
+                'exception' => $e::class,
+                'code' => $e->getCode(),
+            ]);
+
+            return [
+                'StatusCode' => 500,
+                'Message' => 'Falha ao consultar o lead na LeadLovers.',
+            ];
+        }
+    }
+
+    public function getLeadTagsByCode(int|string $leadCode): array
+    {
+        if (! $this->isEnabled()) {
+            return [
+                'StatusCode' => 503,
+                'Message' => 'Integração com LeadLovers desativada.',
+            ];
+        }
+
+        $leadCode = trim((string) $leadCode);
+
+        if ($leadCode === '') {
+            return [
+                'StatusCode' => 422,
+                'Message' => 'Código externo do lead inválido.',
+            ];
+        }
+
+        try {
+            $response = Http::asJson()
+                ->connectTimeout(10)
+                ->timeout(30)
+                ->get($this->baseUrl.'Tag/Lead', [
+                    'token' => $this->token,
+                    'leadCode' => $leadCode,
+                ]);
+
+            $this->throwIfRateLimited($response);
+
+            $result = $this->responseData($response);
+
+            if (! $response->successful()) {
+                Log::warning('LeadLovers respondeu erro ao consultar tags do lead', [
+                    'status' => $response->status(),
+                ]);
+            }
+
+            return $result;
+        } catch (LeadLoversRateLimitedException $e) {
+            throw $e;
+        } catch (\Throwable $e) {
+            Log::error('Erro ao consultar tags do lead na LeadLovers', [
+                'exception' => $e::class,
+                'code' => $e->getCode(),
+            ]);
+
+            return [
+                'StatusCode' => 500,
+                'Message' => 'Falha ao consultar o lead na LeadLovers.',
+            ];
+        }
+    }
+
+    public function removeTagFromLead(
+        string $email,
+        int|string $tagId
+    ): array {
+        if (! $this->isEnabled()) {
+            return [
+                'StatusCode' => 503,
+                'Message' => 'Integração com LeadLovers desativada.',
+            ];
+        }
+
+        $email = trim($email);
+        $tagId = (int) $tagId;
+
+        if (
+            $email === ''
+            || filter_var($email, FILTER_VALIDATE_EMAIL) === false
+            || $tagId <= 0
+        ) {
+            return [
+                'StatusCode' => 422,
+                'Message' => 'Email ou tag inválidos.',
+            ];
+        }
+
+        try {
+            $response = Http::acceptJson()
+                ->connectTimeout(10)
+                ->timeout(30)
+                ->withQueryParameters([
+                    'token' => $this->token,
+                    'email' => $email,
+                    'tag' => $tagId,
+                ])
+                ->delete($this->baseUrl.'Tag');
+
+            $this->throwIfRateLimited($response);
+
+            $result = $this->responseData($response);
+
+            if (! $response->successful()) {
+                Log::warning('LeadLovers respondeu erro ao consultar lead por e-mail', [
+                    'status' => $response->status(),
+                    'lead_ref' => $this->emailReference($email),
+                    'api_code' => data_get(
+                        $result,
+                        'Code',
+                        data_get($result, 'code')
+                    ),
+                    'api_message' => data_get(
+                        $result,
+                        'Message',
+                        data_get(
+                            $result,
+                            'Message',
+                            data_get($result, 'message')
+                        ),
+                    )
+                ]);
+            }
+
+            return $result;
+        } catch (LeadLoversRateLimitedException $exception) {
+            throw $exception;
+        } catch (\Throwable $exception) {
+            Log::error(
+                'Erro ao remover tag do lead na LeadLovers',
+                [
+                    'lead_ref' => $this->emailReference($email),
+                    'tag_id' => $tagId,
+                    'exception' => $exception::class,
+                    'code' => $exception->getCode(),
+                ]
+            );
+
+            return [
+                'StatusCode' => 500,
+                'Message' => 'Falha ao remover a tag do lead.',
             ];
         }
     }
