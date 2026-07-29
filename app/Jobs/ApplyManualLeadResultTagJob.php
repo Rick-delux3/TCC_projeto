@@ -270,6 +270,22 @@ class ApplyManualLeadResultTagJob implements ShouldQueue, ShouldBeUnique
             $currentTagsResponse
         );
 
+        $otherFinalTags = $resultTagCatalog
+            ->filter(
+                fn (LeadLoversTag $tag): bool =>
+                    (string) $tag->key !== $selectedTagKey
+            );
+
+        $oldFinalTags = $otherFinalTags
+        ->filter(
+            fn (LeadLoversTag $tag): bool =>
+                $this->remoteTagsContain(
+                    $currentTags,
+                    $tag
+                )
+        )
+        ->values();
+
         /*
          * Aplica primeiro a nova tag.
          *
@@ -299,15 +315,7 @@ class ApplyManualLeadResultTagJob implements ShouldQueue, ShouldBeUnique
          * Tags da imobiliária, origem, campanha ou segmentação
          * não fazem parte do catálogo abaixo e são preservadas.
          */
-        foreach ($resultTagCatalog as $tagKey => $tag) {
-            if ($tagKey === $selectedTagKey) {
-                continue;
-            }
-
-            if (! $this->remoteTagsContain($currentTags, $tag)) {
-                continue;
-            }
-
+        foreach ($oldFinalTags as $tag) {
             $removeResponse = $leadLovers->removeTagFromLead(
                 $lead->email,
                 $tag->leadlovers_tag_id
@@ -352,8 +360,7 @@ class ApplyManualLeadResultTagJob implements ShouldQueue, ShouldBeUnique
         /*
          * Nenhuma das outras três tags finais pode permanecer.
          */
-        $remainingFinalTags = $resultTagCatalog
-            ->except([$selectedTagKey])
+        $remainingFinalTags = $otherFinalTags
             ->filter(
                 fn (LeadLoversTag $tag): bool =>
                     $this->remoteTagsContain(
@@ -363,6 +370,39 @@ class ApplyManualLeadResultTagJob implements ShouldQueue, ShouldBeUnique
             );
 
         if ($remainingFinalTags->isNotEmpty()) {
+            Log::warning(
+                'Foram identificadas tags finais conflitantes após a alteração.',
+                [
+                    'lead_id' => $this->leadId,
+                    'attempt' => $this->attempts(),
+
+                    'selected_tag' => [
+                        'key' => $selectedTagKey,
+                        'id' => (int) $selectedTag->leadlovers_tag_id,
+                    ],
+
+                    'remaining_final_tags' => $remainingFinalTags
+                        ->map(
+                            fn (
+                                LeadLoversTag $tag,
+                                string $key
+                            ): array => [
+                                'key' => $key,
+                                'id' => (int) $tag->leadlovers_tag_id,
+                            ]
+                        )
+                        ->values()
+                        ->all(),
+
+                    'confirmed_remote_tag_ids' => $confirmedTags
+                        ->pluck('id')
+                        ->filter()
+                        ->map(fn ($id): int => (int) $id)
+                        ->values()
+                        ->all(),
+                ]
+            );
+
             throw new RuntimeException(
                 'A LeadLovers ainda possui outra tag final no lead.'
             );
@@ -411,6 +451,22 @@ class ApplyManualLeadResultTagJob implements ShouldQueue, ShouldBeUnique
         if ($invalidTag instanceof LeadLoversTag) {
             throw new RuntimeException(
                 'Uma tag final possui ID LeadLovers inválido.'
+            );
+        }
+
+        $duplicateIds = $catalog
+            ->groupBy(
+                fn (LeadLoversTag $tag): string =>
+                    (string) ((int) $tag->leadlovers_tag_id)
+            )
+            ->filter(
+                fn (Collection $tags): bool =>
+                    $tags->count() > 1
+            );
+
+        if ($duplicateIds->isNotEmpty()) {
+            throw new RuntimeException(
+                'Existem tags finais diferentes utilizando o mesmo ID da LeadLovers.'
             );
         }
 
@@ -673,19 +729,25 @@ class ApplyManualLeadResultTagJob implements ShouldQueue, ShouldBeUnique
                 $expectedId,
                 $expectedTitle
             ): bool {
-                if (
-                    $remoteTag['id'] !== null
-                    && (int) $remoteTag['id'] === $expectedId
-                ) {
-                    return true;
+                $remoteId = $remoteTag['id'] ?? $remoteTag['Id'] ?? null;
+
+
+                if($remoteId !== null) {
+                    return (int) $remoteId === $expectedId;
                 }
 
-                if ($remoteTag['title'] === null) {
+                $remoteTitle = $remoteTag['title'] ?? $remoteTag['Title'] ?? null;
+
+                if(
+                    ! is_string($remoteTitle)
+                    || trim($remoteTitle) === ''
+                ) {
                     return false;
                 }
 
+
                 return $this->normalizeTagTitle(
-                    $remoteTag['title']
+                    $remoteTitle
                 ) === $expectedTitle;
             }
         );
