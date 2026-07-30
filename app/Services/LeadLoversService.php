@@ -6,6 +6,8 @@ use App\Exceptions\LeadLoversRateLimitedException;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\RateLimiter;
+use Closure;
 
 class LeadLoversService
 {
@@ -36,6 +38,49 @@ class LeadLoversService
         return (bool) config('services.leadlovers.enabled', false);
     }
 
+    private function sendRateLimitedRequest(
+        Closure $request
+    ): Response {
+        $key = 'leadlovers:requests:'.hash(
+            'sha256',
+            (string) $this->token
+        );
+
+        $maximumRequests = max(
+            1,
+            (int) config(
+                'services.leadlovers.requests_per_minute',
+                90
+            )
+        );
+
+        $windowSeconds = max(
+            1,
+            (int) config(
+                'services.leadlovers.rate_limit_window_seconds',
+                60
+            )
+        );
+
+        $response = RateLimiter::attempt(
+            $key,
+            $maximumRequests,
+            fn (): Response => $request(),
+            $windowSeconds
+        );
+
+        if (! $response instanceof Response) {
+            $retryAfter = max(
+                1,
+                RateLimiter::availableIn($key)
+            );
+
+            throw LeadLoversRateLimitedException::fromLocalLimiter($retryAfter);
+        }
+
+        return $response;
+    }
+
     /**
      * Busca todas as tags da conta LeadLovers.
      */
@@ -49,11 +94,15 @@ class LeadLoversService
             return [];
         }
         try {
-            $response = Http::connectTimeout(10)
+            $response = $this->sendRateLimitedRequest(
+                fn(): Response => Http::connectTimeout(10)
                 ->timeout(30)
                 ->get($this->baseUrl.'Tags', [
                     'token' => $this->token,
-                ]);
+                ])
+            );
+
+            $this->throwIfRateLimited($response);
 
             if (! $response->successful()) {
                 Log::warning('Erro ao buscar tags na LeadLovers', [
@@ -65,9 +114,13 @@ class LeadLoversService
 
             return $response->json() ?? [];
 
+        } catch (LeadLoversRateLimitedException $exception) {
+            throw $exception;
+
         } catch (\Throwable $e) {
             Log::error('Falha ao buscar tags na LeadLovers', [
-                'message' => $e->getMessage(),
+                'exception' => $e::class,
+                'code' => $e->getCode(),
             ]);
 
             return [];
@@ -87,7 +140,9 @@ class LeadLoversService
         }
 
         try {
-            $response = Http::asJson()->acceptJson()
+            $response = $this->sendRateLimitedRequest(
+                fn(): Response => 
+                Http::asJson()->acceptJson()
                 ->connectTimeout(10)
                 ->timeout(30)
                 ->withQueryParameters([
@@ -95,7 +150,8 @@ class LeadLoversService
                 ])
                 ->post($this->baseUrl.'Tags', [
                     'Title' => $title,
-                ]);
+                ])
+            );
 
             $this->throwIfRateLimited($response);
 
@@ -297,13 +353,15 @@ class LeadLoversService
                 'tag' => $payload['Tag'],
             ]);
 
-            $response = Http::asJson()
+            $response = $this->sendRateLimitedRequest(
+                fn(): Response => Http::asJson()
                 ->connectTimeout(10)
                 ->timeout(30)
                 ->withQueryParameters([
                     'token' => $this->token,
                 ])
-                ->post($this->baseUrl.'Lead', $payload);
+                ->post($this->baseUrl.'Lead', $payload)
+            );
 
             $this->throwIfRateLimited($response);
             $result = $this->responseData($response);
@@ -368,14 +426,17 @@ class LeadLoversService
         $endpoint = $this->baseUrl.'Lead';
 
         try {
-            $response = Http::asJson()
-                ->acceptJson()
-                ->connectTimeout(10)
-                ->timeout(30)
-                ->withQueryParameters([
-                    'token' => $this->token,
-                ])
-                ->patch($endpoint, $payload);
+            $response = $this->sendRateLimitedRequest(
+                fn(): Response => 
+                    Http::asJson()
+                    ->acceptJson()
+                    ->connectTimeout(10)
+                    ->timeout(30)
+                    ->withQueryParameters([
+                        'token' => $this->token,
+                    ])
+                    ->patch($endpoint, $payload)
+            );
 
             $this->throwIfRateLimited($response);
             $json = $response->json();
@@ -426,17 +487,20 @@ class LeadLoversService
         }
 
         try {
-            $response = Http::asJson()
-                ->connectTimeout(10)
-                ->timeout(30)
-                ->withQueryParameters([
-                    'token' => $this->token,
-                ])
-                ->post($this->baseUrl.'Tag', [
-                    'Email' => $email,
-                    'Tag' => (int) $tagId,
-                    'Score' => $score,
-                ]);
+            $response = $this->sendRateLimitedRequest(
+                fn(): Response => 
+                    Http::asJson()
+                    ->connectTimeout(10)
+                    ->timeout(30)
+                    ->withQueryParameters([
+                        'token' => $this->token,
+                    ])
+                    ->post($this->baseUrl.'Tag', [
+                        'Email' => $email,
+                        'Tag' => (int) $tagId,
+                        'Score' => $score,
+                    ])
+            );
 
             $this->throwIfRateLimited($response);
             $result = $this->responseData($response);
@@ -494,13 +558,16 @@ class LeadLoversService
         }
 
         try {
-            $response = Http::asJson()
-                ->connectTimeout(10)
-                ->timeout(30)
-                ->get($this->baseUrl.'Lead', [
-                    'token' => $this->token,
-                    'email' => $email,
-                ]);
+            $response = $this->sendRateLimitedRequest(
+                fn(): Response => 
+                    Http::asJson()
+                    ->connectTimeout(10)
+                    ->timeout(30)
+                    ->get($this->baseUrl.'Lead', [
+                        'token' => $this->token,
+                        'email' => $email,
+                    ])
+            );
 
             $this->throwIfRateLimited($response);
 
@@ -563,13 +630,16 @@ class LeadLoversService
         }
 
         try {
-            $response = Http::asJson()
-                ->connectTimeout(10)
-                ->timeout(30)
-                ->get($this->baseUrl.'Tag/Lead', [
-                    'token' => $this->token,
-                    'leadCode' => $leadCode,
-                ]);
+            $response = $this->sendRateLimitedRequest(
+                fn(): Response => 
+                    Http::asJson()
+                    ->connectTimeout(10)
+                    ->timeout(30)
+                    ->get($this->baseUrl.'Tag/Lead', [
+                        'token' => $this->token,
+                        'leadCode' => $leadCode,
+                    ])
+            );
 
             $this->throwIfRateLimited($response);
 
@@ -623,15 +693,18 @@ class LeadLoversService
         }
 
         try {
-            $response = Http::acceptJson()
-                ->connectTimeout(10)
-                ->timeout(30)
-                ->withQueryParameters([
-                    'token' => $this->token,
-                    'email' => $email,
-                    'tag' => $tagId,
-                ])
-                ->delete($this->baseUrl.'Tag');
+            $response = $this->sendRateLimitedRequest(
+                fn(): Response => 
+                    Http::acceptJson()
+                    ->connectTimeout(10)
+                    ->timeout(30)
+                    ->withQueryParameters([
+                        'token' => $this->token,
+                        'email' => $email,
+                        'tag' => $tagId,
+                    ])
+                    ->delete($this->baseUrl.'Tag')
+            );
 
             $this->throwIfRateLimited($response);
 
@@ -764,13 +837,17 @@ class LeadLoversService
         $data = $response->json();
         $data = is_array($data) ? $data : [];
 
+        $bodyStatus = $data['StatusCode'] ?? $data['statusCode']
+        ?? $data['status'] ?? null;
+
         if (! $response->successful()) {
             $data['StatusCode'] = $response->status();
-        } elseif (! array_key_exists('StatusCode', $data)
-            && ! array_key_exists('statusCode', $data)
-            && ! array_key_exists('status', $data)) {
+        } elseif (is_numeric($bodyStatus)) {
+            $data['StatusCode'] = (int) $bodyStatus;
+        } else {
             $data['StatusCode'] = $response->status();
         }
+
 
         if (! $response->successful()
             && ! isset($data['Message'])

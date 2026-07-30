@@ -7,6 +7,33 @@ use RuntimeException;
 
 final class LeadLoversRateLimitedException extends RuntimeException
 {
+    public static function fromLocalLimiter(int $retryAfter): self
+    {
+        $defaultDelay = max(
+            1,
+            (int) config(
+                'services.leadlovers.rate_limit_retry_seconds',
+                60
+            )
+        );
+
+        $maximumDelay = max(
+            $defaultDelay,
+            (int) config(
+                'services.leadlovers.rate_limit_max_retry_seconds',
+                900
+            )
+        );
+
+        return new self(
+            retryAfter: min(
+                max(1, $retryAfter),
+                $maximumDelay
+            ),
+            cloudflareBlocked: false,
+        );
+    }
+
     public static function fromResponse(Response $response): self
     {
         $retryAfter = trim((string) $response->header('Retry-After'));
@@ -17,7 +44,9 @@ final class LeadLoversRateLimitedException extends RuntimeException
         $maximumDelay = max(
             $defaultDelay,
             (int) config('services.leadlovers.rate_limit_max_retry_seconds', 900)
-        );
+
+
+            );
 
         if ($retryAfter !== '' && ctype_digit($retryAfter)) {
             $delay = (int) $retryAfter;

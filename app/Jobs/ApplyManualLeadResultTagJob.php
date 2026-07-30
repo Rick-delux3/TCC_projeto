@@ -17,21 +17,26 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Log;
-use RuntimeException;
+use App\Exceptions\LeadLoversHttpException;
+use App\Exceptions\PermanentLeadTagException;
+use App\Exceptions\LeadLoversStateNotConfirmedException;
 use Throwable;
+use DateTimeInterface;
 
 class ApplyManualLeadResultTagJob implements ShouldQueue, ShouldBeUnique
 {
     use Queueable;
 
     
-    public int $tries = 3;
+    public int $tries = 10;
+
+    public int $maxExceptions = 3;
    
     public int $timeout = 300;
 
     public bool $failOnTimeout = true;
 
-    public int $uniqueFor = 900;
+    public int $uniqueFor = 10800;
 
     public function __construct(
         public int $leadId,
@@ -46,6 +51,11 @@ class ApplyManualLeadResultTagJob implements ShouldQueue, ShouldBeUnique
      */
     public function uniqueId(): string
     {
+        return 'manual-lead-result-tag:'.$this->leadId. ':' . $this->result;
+    }
+
+    public function overlapKey(): string
+    {
         return 'manual-lead-result-tag:'.$this->leadId;
     }
 
@@ -55,11 +65,16 @@ class ApplyManualLeadResultTagJob implements ShouldQueue, ShouldBeUnique
     public function middleware(): array
     {
         return [
-            (new WithoutOverlapping($this->uniqueId()))
+            (new WithoutOverlapping($this->overlapKey()))
                 ->shared()
                 ->releaseAfter(15)
                 ->expireAfter(360),
         ];
+    }
+
+    public function retryUntil(): DateTimeInterface
+    {
+        return now()->addHours(3);
     }
 
     /**
@@ -67,7 +82,7 @@ class ApplyManualLeadResultTagJob implements ShouldQueue, ShouldBeUnique
      */
     public function backoff(): array
     {
-        return [10, 30, 60];
+        return [10, 30, 60, 120, 180];
     }
 
     public function handle(LeadLoversService $leadLovers): void
@@ -104,6 +119,40 @@ class ApplyManualLeadResultTagJob implements ShouldQueue, ShouldBeUnique
             );
 
             $this->release($retryAfter);
+        } catch (PermanentLeadTagException $exception) {
+            Log::warning(
+                'Tentativa de alteração manual da tag do lead falhou.',
+                [
+                    'lead_id' => $this->leadId,
+                    'corretor_id' => $this->corretorId,
+                    'result' => $this->result,
+                    'attempt' => $this->attempts(),
+                    'exception' => $exception::class,
+                ]
+            );
+
+            $this->fail($exception);
+
+           return;
+
+        } catch (LeadLoversHttpException $exception) {
+            if (! $exception->isRetryable()) {
+                Log::error(
+                    'LeadLovers recusou permanentemente a alteração.',
+                    [
+                        'lead_id' => $this->leadId,
+                        'corretor_id' => $this->corretorId,
+                        'status' => $exception->statusCode,
+                    ]
+                );
+
+                $this->fail($exception);
+
+                return;
+            }
+
+            throw $exception;
+
         } catch (Throwable $exception) {
             Log::warning(
                 'Tentativa de alteração manual da tag do lead falhou.',
@@ -116,12 +165,88 @@ class ApplyManualLeadResultTagJob implements ShouldQueue, ShouldBeUnique
                 ]
             );
 
-            /*
-             * Relançar permite que o Laravel realize as tentativas
-             * definidas em $tries e backoff().
-             */
             throw $exception;
         }
+    }
+
+    private function confirmRemoteState(
+        LeadLoversService $leadLovers,
+        int|string $leadCode,
+        LeadLoversTag $selectedTag,
+        Collection $otherFinalTags
+    ): Collection {
+        /*
+        * Primeira consulta imediata.
+        * Se necessário, repete após 2 e 5 segundos.
+        */
+        $delays = [0, 2, 5];
+
+        foreach ($delays as $index => $delay) {
+            if ($delay > 0) {
+                sleep($delay);
+            }
+
+            $response = $leadLovers->getLeadTagsByCode(
+                $leadCode
+            );
+
+            $this->assertSuccessfulResponse(
+                $response,
+                'A confirmação final das tags falhou.'
+            );
+
+            $confirmedTags = $this->extractRemoteTags(
+                $response
+            );
+
+            $selectedTagExists = $this->remoteTagsContain(
+                $confirmedTags,
+                $selectedTag
+            );
+
+            $remainingFinalTags = $otherFinalTags
+                ->filter(
+                    fn (LeadLoversTag $tag): bool =>
+                        $this->remoteTagsContain(
+                            $confirmedTags,
+                            $tag
+                        )
+                );
+
+            if (
+                $selectedTagExists
+                && $remainingFinalTags->isEmpty()
+            ) {
+                return $confirmedTags;
+            }
+
+            Log::notice(
+                'Estado remoto das tags ainda não foi confirmado.',
+                [
+                    'lead_id' => $this->leadId,
+                    'confirmation_attempt' => $index + 1,
+                    'selected_tag_id' =>
+                        (int) $selectedTag->leadlovers_tag_id,
+                    'selected_tag_found' => $selectedTagExists,
+                    'remaining_tag_ids' =>
+                        $remainingFinalTags
+                            ->pluck('leadlovers_tag_id')
+                            ->map(fn ($id): int => (int) $id)
+                            ->values()
+                            ->all(),
+                    'confirmed_remote_tag_ids' => $confirmedTags
+                        ->pluck('id')
+                        ->filter()
+                        ->map(fn ($id): int => (int) $id)
+                        ->values()
+                        ->all(),
+                ]
+            );
+        }
+
+        throw new LeadLoversStateNotConfirmedException(
+            'O estado final das tags não foi confirmado após as consultas controladas.'
+        );
     }
 
     /**
@@ -146,13 +271,13 @@ class ApplyManualLeadResultTagJob implements ShouldQueue, ShouldBeUnique
             ! Gate::forUser($corretor)
                 ->allows('manage-lead-tags')
         ) {
-            throw new RuntimeException(
+            throw new PermanentLeadTagException(
                 'O corretor não possui permissão para gerenciar tags.'
             );
         }
 
         if (! config('services.leadlovers.enabled', false)) {
-            throw new RuntimeException(
+            throw new PermanentLeadTagException(
                 'A integração com a LeadLovers está desativada.'
             );
         }
@@ -167,7 +292,7 @@ class ApplyManualLeadResultTagJob implements ShouldQueue, ShouldBeUnique
             $lead->leadlovers_status !== 'sent'
             || $lead->sent_to_leadlovers_at === null
         ) {
-            throw new RuntimeException(
+            throw new PermanentLeadTagException(
                 'O lead ainda não foi enviado para a LeadLovers.'
             );
         }
@@ -179,7 +304,7 @@ class ApplyManualLeadResultTagJob implements ShouldQueue, ShouldBeUnique
                 FILTER_VALIDATE_EMAIL
             ) === false
         ) {
-            throw new RuntimeException(
+            throw new PermanentLeadTagException(
                 'O lead não possui um e-mail válido.'
             );
         }
@@ -195,7 +320,7 @@ class ApplyManualLeadResultTagJob implements ShouldQueue, ShouldBeUnique
                 true
             )
         ) {
-            throw new RuntimeException(
+            throw new PermanentLeadTagException(
                 'O resultado solicitado não é permitido.'
             );
         }
@@ -205,7 +330,7 @@ class ApplyManualLeadResultTagJob implements ShouldQueue, ShouldBeUnique
         );
 
         if ($selectedTagKey === null) {
-            throw new RuntimeException(
+            throw new PermanentLeadTagException(
                 'Não foi possível mapear o resultado para uma tag.'
             );
         }
@@ -220,13 +345,13 @@ class ApplyManualLeadResultTagJob implements ShouldQueue, ShouldBeUnique
         );
 
         if (! $selectedTag instanceof LeadLoversTag) {
-            throw new RuntimeException(
+            throw new PermanentLeadTagException(
                 'A tag selecionada não foi encontrada no catálogo local.'
             );
         }
 
         if (! $selectedTag->active) {
-            throw new RuntimeException(
+            throw new PermanentLeadTagException(
                 'A tag selecionada está desativada no catálogo local.'
             );
         }
@@ -235,24 +360,13 @@ class ApplyManualLeadResultTagJob implements ShouldQueue, ShouldBeUnique
          * Primeiro localizamos o lead pelo e-mail para obter
          * seu Code externo.
          */
-        $leadResponse = $leadLovers->getLeadByEmail(
-            $lead->email
+
+        $leadCode = $this->resolveLeadCode(
+            $lead,
+            $leadLovers
         );
 
-        $this->assertSuccessfulResponse(
-            $leadResponse,
-            'A consulta do lead falhou.'
-        );
 
-        $leadCode = $this->extractLeadCode(
-            $leadResponse
-        );
-
-        if ($leadCode === null) {
-            throw new RuntimeException(
-                'O código externo do lead não foi localizado.'
-            );
-        }
 
         /*
          * Consulta o estado remoto antes de qualquer alteração.
@@ -327,92 +441,16 @@ class ApplyManualLeadResultTagJob implements ShouldQueue, ShouldBeUnique
             );
         }
 
-        /*
-         * Consulta novamente para confirmar o resultado real.
-         */
-        $confirmationResponse = $leadLovers->getLeadTagsByCode(
-            $leadCode
+    
+        $this->confirmRemoteState(
+            leadLovers: $leadLovers,
+            leadCode: $leadCode,
+            selectedTag: $selectedTag,
+            otherFinalTags: $otherFinalTags,
         );
 
-        $this->assertSuccessfulResponse(
-            $confirmationResponse,
-            'A confirmação final das tags falhou.'
-        );
-
-        $confirmedTags = $this->extractRemoteTags(
-            $confirmationResponse
-        );
-
-        /*
-         * A tag escolhida precisa existir remotamente.
-         */
-        if (
-            ! $this->remoteTagsContain(
-                $confirmedTags,
-                $selectedTag
-            )
-        ) {
-            throw new RuntimeException(
-                'A nova tag não foi confirmada na LeadLovers.'
-            );
-        }
-
-        /*
-         * Nenhuma das outras três tags finais pode permanecer.
-         */
-        $remainingFinalTags = $otherFinalTags
-            ->filter(
-                fn (LeadLoversTag $tag): bool =>
-                    $this->remoteTagsContain(
-                        $confirmedTags,
-                        $tag
-                    )
-            );
-
-        if ($remainingFinalTags->isNotEmpty()) {
-            Log::warning(
-                'Foram identificadas tags finais conflitantes após a alteração.',
-                [
-                    'lead_id' => $this->leadId,
-                    'attempt' => $this->attempts(),
-
-                    'selected_tag' => [
-                        'key' => $selectedTagKey,
-                        'id' => (int) $selectedTag->leadlovers_tag_id,
-                    ],
-
-                    'remaining_final_tags' => $remainingFinalTags
-                        ->map(
-                            fn (
-                                LeadLoversTag $tag,
-                                string $key
-                            ): array => [
-                                'key' => $key,
-                                'id' => (int) $tag->leadlovers_tag_id,
-                            ]
-                        )
-                        ->values()
-                        ->all(),
-
-                    'confirmed_remote_tag_ids' => $confirmedTags
-                        ->pluck('id')
-                        ->filter()
-                        ->map(fn ($id): int => (int) $id)
-                        ->values()
-                        ->all(),
-                ]
-            );
-
-            throw new RuntimeException(
-                'A LeadLovers ainda possui outra tag final no lead.'
-            );
-        }
-
-        /*
-         * Somente depois da confirmação remota atualizamos o banco.
-         */
+      
         $this->persistConfirmedTags(
-            confirmedTags: $confirmedTags,
             resultTagCatalog: $resultTagCatalog,
             selectedTag: $selectedTag,
         );
@@ -437,7 +475,7 @@ class ApplyManualLeadResultTagJob implements ShouldQueue, ShouldBeUnique
         );
 
         if ($missingKeys->isNotEmpty()) {
-            throw new RuntimeException(
+            throw new PermanentLeadTagException(
                 'Existem tags finais ausentes no catálogo local: '
                 .$missingKeys->implode(', ')
             );
@@ -449,24 +487,57 @@ class ApplyManualLeadResultTagJob implements ShouldQueue, ShouldBeUnique
         );
 
         if ($invalidTag instanceof LeadLoversTag) {
-            throw new RuntimeException(
+            throw new PermanentLeadTagException(
                 'Uma tag final possui ID LeadLovers inválido.'
             );
         }
 
+        $invalidTitleTag = $catalog->first(
+            fn (LeadLoversTag $tag): bool =>
+                trim((string) $tag->title) === ''
+        );
+
+        if($invalidTitleTag instanceof LeadLoversTag) {
+            throw new PermanentLeadTagException(
+                'Uma tag final possui título vazio no catálogo local.'
+            );
+        }
+
+
+
         $duplicateIds = $catalog
             ->groupBy(
                 fn (LeadLoversTag $tag): string =>
-                    (string) ((int) $tag->leadlovers_tag_id)
+                        (string) ((int) $tag->leadlovers_tag_id)
             )
             ->filter(
                 fn (Collection $tags): bool =>
                     $tags->count() > 1
             );
+        
 
         if ($duplicateIds->isNotEmpty()) {
-            throw new RuntimeException(
+            throw new PermanentLeadTagException(
                 'Existem tags finais diferentes utilizando o mesmo ID da LeadLovers.'
+            );
+        }
+
+        $duplicateTitles = $catalog
+            ->groupBy(
+                fn (LeadLoversTag $tag): string =>
+                    $this->normalizeTagTitle(
+                        (string) $tag->title
+                    )
+            )
+            ->filter(
+                fn (Collection $tags): bool =>
+                    $tags->count() > 1
+            );
+        
+
+        if ($duplicateTitles->isNotEmpty()) {
+            throw new PermanentLeadTagException(
+                'Existem tags finais diferentes utilizando o mesmo título.'
             );
         }
 
@@ -478,20 +549,81 @@ class ApplyManualLeadResultTagJob implements ShouldQueue, ShouldBeUnique
      */
     private function assertSuccessfulResponse(
         array $response,
-        string $message
+        string $operation
     ): void {
-        $statusCode = $response['StatusCode']
+        $rawStatus = $response['StatusCode']
             ?? $response['statusCode']
             ?? $response['status']
             ?? null;
 
-        if (
-            ! is_numeric($statusCode)
-            || (int) $statusCode < 200
-            || (int) $statusCode >= 300
+        $statusCode = is_numeric($rawStatus)
+            ? (int) $rawStatus
+            : null;
+        
+         if (
+            $statusCode !== null
+            && $statusCode >= 200
+            && $statusCode < 300
         ) {
-            throw new RuntimeException($message);
+            return;
         }
+
+        throw new LeadLoversHttpException(
+            statusCode: $statusCode,
+            operation: $operation,
+            safeApiMessage: $this->extractSafeApiMessage(
+                $response
+            ),
+        );    
+       
+    }
+
+    private function replaceLocalFinalTag(
+        ?string $currentTagString,
+        Collection $resultTagCatalog,
+        LeadLoversTag $selectedTag
+    ): string {
+        $finalTitles = $resultTagCatalog
+            ->pluck('title')
+            ->filter(fn ($title): bool => filled($title))
+            ->map(
+                fn ($title): string =>
+                    $this->normalizeTagTitle(
+                        (string) $title
+                    )
+            )
+            ->values();
+
+        $currentTags = collect(
+            preg_split(
+                '/\s*,\s*/',
+                (string) $currentTagString
+            )
+        )
+            ->filter(fn ($tag): bool => filled($tag))
+            ->map(
+                fn ($tag): string =>
+                    trim((string) $tag)
+            )
+            ->reject(
+                fn (string $tag): bool =>
+                    $finalTitles->contains(
+                        $this->normalizeTagTitle($tag)
+                    )
+            )
+            ->values();
+
+        $currentTags->push(
+            trim((string) $selectedTag->title)
+        );
+
+        return $currentTags
+            ->unique(
+                fn (string $tag): string =>
+                    $this->normalizeTagTitle($tag)
+            )
+            ->values()
+            ->implode(', ');
     }
 
     /**
@@ -589,6 +721,42 @@ class ApplyManualLeadResultTagJob implements ShouldQueue, ShouldBeUnique
             )
             ->filter()
             ->values();
+    }
+
+    private function extractSafeApiMessage(
+        array $response
+    ): ?string {
+        $value = $response['Message']
+            ?? $response['message']
+            ?? $response['Error']
+            ?? $response['error']
+            ?? null;
+
+        if (! is_string($value)) {
+            return null;
+        }
+
+        $message = trim($value);
+
+        if ($message === '') {
+            return null;
+        }
+
+        /*
+        * Evita guardar e-mail completo caso a API o devolva
+        * dentro da mensagem.
+        */
+        $message = preg_replace(
+            '/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/iu',
+            '[e-mail oculto]',
+            $message
+        );
+
+        return mb_substr(
+            (string) $message,
+            0,
+            300
+        );
     }
 
     /**
@@ -764,21 +932,60 @@ class ApplyManualLeadResultTagJob implements ShouldQueue, ShouldBeUnique
         );
     }
 
+    private function resolveLeadCode(
+        Lead $lead,
+        LeadLoversService $leadLovers
+    ): string {
+        $response = $leadLovers->getLeadByEmail(
+            $lead->email
+        );
+
+        $this->assertSuccessfulResponse(
+            $response,
+            'A consulta do lead falhou.'
+        );
+
+        $remoteCode = $this->extractLeadCode(
+            $response
+        );
+
+        if ($remoteCode === null) {
+            throw new PermanentLeadTagException(
+                'O código externo do lead não foi localizado.'
+            );
+        }
+
+        $remoteCode = trim((string) $remoteCode);
+        $storedCode = trim(
+            (string) $lead->leadlovers_lead_code
+        );
+
+        if (
+            $storedCode !== ''
+            && $storedCode !== $remoteCode
+        ) {
+            throw new PermanentLeadTagException(
+                'O e-mail do lead foi associado a um Code diferente do armazenado.'
+            );
+        }
+
+        if ($storedCode === '') {
+            $lead->forceFill([
+                'leadlovers_lead_code' => $remoteCode,
+            ])->saveQuietly();
+        }
+
+        return $remoteCode;
+    }
+
     /**
      * Atualiza o banco e registra auditoria em uma transação.
      */
     private function persistConfirmedTags(
-        Collection $confirmedTags,
         Collection $resultTagCatalog,
         LeadLoversTag $selectedTag
     ): void {
-        $titles = $this->resolveConfirmedTagTitles(
-            $confirmedTags,
-            $resultTagCatalog
-        );
-
-        $newTags = $titles->implode(', ');
-
+        
         $resultLabel = ManualLeadResultTags::label(
             $this->result
         ) ?? $this->result;
@@ -788,10 +995,10 @@ class ApplyManualLeadResultTagJob implements ShouldQueue, ShouldBeUnique
         );
 
         DB::transaction(function () use (
-            $newTags,
             $resultLabel,
             $selectedTagKey,
-            $selectedTag
+            $selectedTag,
+            $resultTagCatalog
         ): void {
             /*
              * lockForUpdate protege a atualização local contra
@@ -803,6 +1010,12 @@ class ApplyManualLeadResultTagJob implements ShouldQueue, ShouldBeUnique
 
             $oldTags = $lead->tags_originais;
             $oldCorretorId = $lead->updated_by_corretor_id;
+
+            $newTags = $this->replaceLocalFinalTag(
+                currentTagString: $oldTags,
+                resultTagCatalog: $resultTagCatalog,
+                selectedTag: $selectedTag,
+            );
 
             $lead->forceFill([
                 'tags_originais' => $newTags,
@@ -840,66 +1053,8 @@ class ApplyManualLeadResultTagJob implements ShouldQueue, ShouldBeUnique
         });
     }
 
-    /**
-     * Resolve os títulos que serão gravados em tags_originais.
-     */
-    private function resolveConfirmedTagTitles(
-        Collection $confirmedTags,
-        Collection $resultTagCatalog
-    ): Collection {
-        $titles = $confirmedTags->map(
-            function (array $remoteTag) use (
-                $resultTagCatalog
-            ): ?string {
-                if (
-                    is_string($remoteTag['title'])
-                    && trim($remoteTag['title']) !== ''
-                ) {
-                    return trim($remoteTag['title']);
-                }
-
-                if ($remoteTag['id'] === null) {
-                    return null;
-                }
-
-                $catalogTag = $resultTagCatalog->first(
-                    fn (LeadLoversTag $tag): bool =>
-                        (int) $tag->leadlovers_tag_id
-                            === (int) $remoteTag['id']
-                );
-
-                return $catalogTag instanceof LeadLoversTag
-                    ? trim((string) $catalogTag->title)
-                    : null;
-            }
-        );
-
-        /*
-         * Se a API retornar uma tag sem título e ela não existir
-         * no catálogo, não podemos montar um espelho local seguro.
-         */
-        if (
-            $titles->contains(
-                fn (?string $title): bool =>
-                    $title === null
-            )
-        ) {
-            throw new RuntimeException(
-                'A confirmação remota retornou uma tag sem título identificável.'
-            );
-        }
-
-        return $titles
-            ->filter(
-                fn (?string $title): bool =>
-                    filled($title)
-            )
-            ->unique(
-                fn (string $title): string =>
-                    $this->normalizeTagTitle($title)
-            )
-            ->values();
-    }
+   
+    
 
     /**
      * Chamado quando o Job falhar definitivamente,
