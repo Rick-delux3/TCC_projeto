@@ -2,6 +2,7 @@
 
 @section('content_a')
 @php
+    use App\Support\ManualLeadResultTags;
     use Illuminate\Support\Facades\Gate;
     use Illuminate\Support\Facades\Route;
     use Illuminate\Support\Str;
@@ -46,6 +47,40 @@
 
     $leads = $leads ?? collect();
     $imobiliarias = $imobiliarias ?? collect();
+
+    $manualResultOptions = collect(ManualLeadResultTags::keys())
+        ->mapWithKeys(
+            fn (string $result): array => [
+                $result => ManualLeadResultTags::label($result),
+            ]
+        )
+        ->filter(fn (?string $label): bool => filled($label));
+
+    $manualResultRouteExists = Route::has('admin.leads.result-tag.update');
+    $leadLoversIntegrationEnabled = (bool) config(
+        'services.leadlovers.enabled',
+        false
+    );
+
+    $resultValidationTargets = null;
+    $resultContextLeadId = (string) old('result_context_lead_id', '');
+    $visibleLeads = method_exists($leads, 'getCollection')
+        ? $leads->getCollection()
+        : collect($leads);
+
+    if ($errors->has('result') && filled($resultContextLeadId)) {
+        $resultContextLead = $visibleLeads->first(
+            fn ($lead) => (string) $lead->id === $resultContextLeadId
+        );
+
+        if ($resultContextLead) {
+            $resultValidationTargets = [
+                'modal' => 'adminLeadModal'.$resultContextLead->id,
+                'tab' => 'admin-lead-result-tab-'.$resultContextLead->id,
+                'select' => 'adminLeadResultSelect'.$resultContextLead->id,
+            ];
+        }
+    }
 
     $canAccessSimulationForms = $canAccessSimulationForms
         ?? (
@@ -184,34 +219,85 @@
         return Str::of((string) $value)
             ->ascii()
             ->lower()
+            ->replace(['_', '-'], ' ')
             ->squish()
             ->toString();
     };
 
     $getLeadResultTone = function ($tags) use ($normalizeTag) {
         $normalizedTags = collect($tags)
-            ->map(fn ($tag) => $normalizeTag($tag));
+            ->map(fn ($tag) => $normalizeTag($tag))
+            ->filter();
 
-        if ($normalizedTags->contains(fn ($tag) =>
-            str_contains($tag, 'recusad')
-            || str_contains($tag, 'reprovad')
-            || str_contains($tag, 'ruim')
-        )) {
-            return [
-                'label' => 'Recusado',
-                'badge' => 'text-bg-danger',
-                'card' => 'lead-card--bad',
-                'icon' => 'bi-x-circle',
-            ];
-        }
+        $matchesRentClosed = $normalizedTags->contains(
+            fn (string $tag): bool =>
+                str_contains($tag, 'fechado aluguel')
+                || str_contains($tag, 'aluguel fechado')
+                || str_contains($tag, 'fechado alguel')
+        );
 
-        if ($normalizedTags->contains(fn ($tag) => str_contains($tag, 'aprovad'))) {
-            return [
-                'label' => 'Aprovado',
-                'badge' => 'text-bg-success',
-                'card' => 'lead-card--approved',
-                'icon' => 'bi-check-circle',
-            ];
+        $matchesNegotiation = $normalizedTags->contains(
+            fn (string $tag): bool => str_contains($tag, 'negociacao')
+        );
+
+        $matchesRejected = $normalizedTags->contains(
+            fn (string $tag): bool =>
+                str_contains($tag, 'recusad')
+                || str_contains($tag, 'reprovad')
+                || $tag === 'ruim'
+        );
+
+        $matchesApproved = $normalizedTags->contains(
+            fn (string $tag): bool => str_contains($tag, 'aprovad')
+        );
+
+        /*
+         * Prioridade visual determinística para dados legados inconsistentes:
+         * aluguel fechado, negociação, recusado e aprovado.
+         */
+        $tones = [
+            [
+                'matches' => $matchesRentClosed,
+                'tone' => [
+                    'label' => 'Aluguel fechado',
+                    'badge' => 'text-bg-primary',
+                    'card' => 'lead-card--approved',
+                    'icon' => 'bi-house-check',
+                ],
+            ],
+            [
+                'matches' => $matchesNegotiation,
+                'tone' => [
+                    'label' => 'Em negociação',
+                    'badge' => 'text-bg-warning',
+                    'card' => 'lead-card--neutral',
+                    'icon' => 'bi-hourglass-split',
+                ],
+            ],
+            [
+                'matches' => $matchesRejected,
+                'tone' => [
+                    'label' => 'Recusado',
+                    'badge' => 'text-bg-danger',
+                    'card' => 'lead-card--bad',
+                    'icon' => 'bi-x-circle',
+                ],
+            ],
+            [
+                'matches' => $matchesApproved,
+                'tone' => [
+                    'label' => 'Aprovado',
+                    'badge' => 'text-bg-success',
+                    'card' => 'lead-card--approved',
+                    'icon' => 'bi-check-circle',
+                ],
+            ],
+        ];
+
+        foreach ($tones as $toneConfig) {
+            if ($toneConfig['matches']) {
+                return $toneConfig['tone'];
+            }
         }
 
         return [
@@ -263,6 +349,12 @@
         @if (session('error'))
             <div class="alert alert-warning rounded-4 border-0 shadow-sm">
                 {{ session('error') }}
+            </div>
+        @endif
+
+        @if ($errors->has('result') && $resultValidationTargets === null)
+            <div class="alert alert-danger rounded-4 border-0 shadow-sm" role="alert">
+                {{ $errors->first('result') }}
             </div>
         @endif
 
@@ -1163,6 +1255,35 @@
                 && (! $lastAnalysis
                     || $lead->reanalysis_unlocked_at->gt($lastAnalysis->created_at));
 
+            $leadHasValidEmail = filled($lead->email)
+                && filter_var($lead->email, FILTER_VALIDATE_EMAIL) !== false;
+
+            $leadWasConfirmedByLeadLovers = $lead->leadlovers_status === 'sent'
+                && filled($lead->sent_to_leadlovers_at);
+
+            $leadResultIsEligible = $manualResultRouteExists
+                && $leadLoversIntegrationEnabled
+                && $leadWasConfirmedByLeadLovers
+                && $leadHasValidEmail;
+
+            $leadResultUnavailableMessage = match (true) {
+                ! $manualResultRouteExists =>
+                    'A alteração de resultado está temporariamente indisponível.',
+                ! $leadLoversIntegrationEnabled =>
+                    'A integração com a LeadLovers está desativada.',
+                ! $leadWasConfirmedByLeadLovers =>
+                    'Este lead ainda não foi confirmado na LeadLovers.',
+                ! $leadHasValidEmail =>
+                    'O lead não possui um e-mail válido para localização na LeadLovers.',
+                default => null,
+            };
+
+            $isResultContextLead = $errors->has('result')
+                && $resultContextLeadId === (string) $lead->id;
+
+            $resultErrorMessage = $isResultContextLead
+                ? $errors->first('result')
+                : null;
         @endphp
 
         <div
@@ -1179,6 +1300,7 @@
                         <div>
                             <div class="d-flex flex-wrap gap-2 mb-2">
                                 <span class="badge {{ $resultTone['badge'] }}">
+                                    <i class="bi {{ $resultTone['icon'] }} me-1" aria-hidden="true"></i>
                                     {{ $resultTone['label'] }}
                                 </span>
 
@@ -1204,11 +1326,14 @@
                         <ul class="nav nav-pills mb-4" role="tablist">
                             <li class="nav-item" role="presentation">
                                 <button
+                                    id="admin-lead-data-tab-{{ $lead->id }}"
                                     class="nav-link active"
                                     data-bs-toggle="pill"
                                     data-bs-target="#admin-lead-data-pane-{{ $lead->id }}"
                                     type="button"
                                     role="tab"
+                                    aria-controls="admin-lead-data-pane-{{ $lead->id }}"
+                                    aria-selected="true"
                                 >
                                     Dados para reanálise
                                 </button>
@@ -1217,13 +1342,33 @@
                             @can('view-tags')
                                 <li class="nav-item" role="presentation">
                                     <button
+                                        id="admin-lead-tags-tab-{{ $lead->id }}"
                                         class="nav-link"
                                         data-bs-toggle="pill"
                                         data-bs-target="#admin-lead-tags-pane-{{ $lead->id }}"
                                         type="button"
                                         role="tab"
+                                        aria-controls="admin-lead-tags-pane-{{ $lead->id }}"
+                                        aria-selected="false"
                                     >
                                         Tags
+                                    </button>
+                                </li>
+                            @endcan
+
+                            @can('manage-lead-tags')
+                                <li class="nav-item" role="presentation">
+                                    <button
+                                        id="admin-lead-result-tab-{{ $lead->id }}"
+                                        class="nav-link"
+                                        data-bs-toggle="pill"
+                                        data-bs-target="#admin-lead-result-pane-{{ $lead->id }}"
+                                        type="button"
+                                        role="tab"
+                                        aria-controls="admin-lead-result-pane-{{ $lead->id }}"
+                                        aria-selected="false"
+                                    >
+                                        Resultado
                                     </button>
                                 </li>
                             @endcan
@@ -1231,11 +1376,14 @@
                             @can('create-analysis')
                                 <li class="nav-item" role="presentation">
                                     <button
+                                        id="admin-lead-reanalysis-tab-{{ $lead->id }}"
                                         class="nav-link"
                                         data-bs-toggle="pill"
                                         data-bs-target="#admin-lead-reanalysis-pane-{{ $lead->id }}"
                                         type="button"
                                         role="tab"
+                                        aria-controls="admin-lead-reanalysis-pane-{{ $lead->id }}"
+                                        aria-selected="false"
                                     >
                                         Reanálise
                                     </button>
@@ -1250,6 +1398,7 @@
                                 class="tab-pane fade show active"
                                 id="admin-lead-data-pane-{{ $lead->id }}"
                                 role="tabpanel"
+                                aria-labelledby="admin-lead-data-tab-{{ $lead->id }}"
                             >
                             {{-- Dados do cliente --}}
                                 @can('edit-leads')
@@ -1260,7 +1409,6 @@
                                         class="lead-update-form"
                                     >
                                         @csrf
-                                        @method('PUT')
                                 @else
                                     <div class="alert alert-info rounded-4 d-flex align-items-start gap-2" role="status">
                                         <i class="bi bi-eye mt-1" aria-hidden="true"></i>
@@ -1529,6 +1677,7 @@
                                     class="tab-pane fade"
                                     id="admin-lead-tags-pane-{{ $lead->id }}"
                                     role="tabpanel"
+                                    aria-labelledby="admin-lead-tags-tab-{{ $lead->id }}"
                                 >
                                     <div class="card border rounded-4">
                                         <div class="card-body">
@@ -1556,12 +1705,163 @@
                                 </div>
                             @endcan
 
+                            @can('manage-lead-tags')
+                                <div
+                                    class="tab-pane fade"
+                                    id="admin-lead-result-pane-{{ $lead->id }}"
+                                    role="tabpanel"
+                                    aria-labelledby="admin-lead-result-tab-{{ $lead->id }}"
+                                >
+                                    <div class="card border rounded-4">
+                                        <div class="card-body">
+                                            <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-start gap-3 mb-3">
+                                                <div>
+                                                    <h6 class="fw-bold mb-1">
+                                                        Resultado comercial
+                                                    </h6>
+                                                    <p class="text-muted small mb-0">
+                                                        A alteração será enviada para a fila e somente será refletida no sistema depois da confirmação da LeadLovers.
+                                                    </p>
+                                                </div>
+
+                                                <span class="badge {{ $resultTone['badge'] }} align-self-start">
+                                                    <i class="bi {{ $resultTone['icon'] }} me-1" aria-hidden="true"></i>
+                                                    Atual: {{ $resultTone['label'] }}
+                                                </span>
+                                            </div>
+
+                                            @if ($leadResultUnavailableMessage)
+                                                <div class="alert alert-warning rounded-4" role="alert">
+                                                    <i class="bi bi-exclamation-triangle me-1" aria-hidden="true"></i>
+                                                    {{ $leadResultUnavailableMessage }}
+                                                </div>
+                                            @endif
+
+                                            @if ($manualResultRouteExists)
+                                                <form
+                                                    method="POST"
+                                                    action="{{ route('admin.leads.result-tag.update', $lead) }}"
+                                                    id="adminLeadResultForm{{ $lead->id }}"
+                                                    class="manual-lead-result-form"
+                                                    data-result-eligible="{{ $leadResultIsEligible ? 'true' : 'false' }}"
+                                                >
+                                                    @csrf
+                                                    @method('PATCH')
+
+                                                    <input
+                                                        type="hidden"
+                                                        name="result_context_lead_id"
+                                                        value="{{ $lead->id }}"
+                                                    >
+
+                                                    <div class="row g-3 align-items-end">
+                                                        <div class="col-12 col-lg">
+                                                            <label
+                                                                for="adminLeadResultSelect{{ $lead->id }}"
+                                                                class="form-label fw-semibold"
+                                                            >
+                                                                Novo resultado
+                                                            </label>
+
+                                                            <select
+                                                                name="result"
+                                                                id="adminLeadResultSelect{{ $lead->id }}"
+                                                                class="form-select {{ $resultErrorMessage ? 'is-invalid' : '' }}"
+                                                                required
+                                                                aria-invalid="{{ $resultErrorMessage ? 'true' : 'false' }}"
+                                                                @if ($resultErrorMessage)
+                                                                    aria-describedby="adminLeadResultError{{ $lead->id }}"
+                                                                @endif
+                                                                @disabled(! $leadResultIsEligible && ! $resultErrorMessage)
+                                                            >
+                                                                <option value="">
+                                                                    Selecione o novo resultado
+                                                                </option>
+
+                                                                @foreach ($manualResultOptions as $result => $label)
+                                                                    <option
+                                                                        value="{{ $result }}"
+                                                                        @selected($isResultContextLead && old('result') === $result)
+                                                                    >
+                                                                        {{ $label }}
+                                                                    </option>
+                                                                @endforeach
+                                                            </select>
+
+                                                            @if ($resultErrorMessage)
+                                                                <div
+                                                                    id="adminLeadResultError{{ $lead->id }}"
+                                                                    class="invalid-feedback d-block"
+                                                                    role="alert"
+                                                                >
+                                                                    {{ $resultErrorMessage }}
+                                                                </div>
+                                                            @endif
+                                                        </div>
+
+                                                        <div class="col-12 col-lg-auto d-grid">
+                                                            <button
+                                                                type="submit"
+                                                                class="btn btn-primary text-nowrap"
+                                                                data-result-submit
+                                                                @disabled(! $leadResultIsEligible)
+                                                            >
+                                                                <span
+                                                                    class="spinner-border spinner-border-sm me-2 d-none"
+                                                                    aria-hidden="true"
+                                                                    data-result-spinner
+                                                                ></span>
+                                                                <span data-result-button-label>
+                                                                    Solicitar alteração
+                                                                </span>
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                </form>
+                                            @else
+                                                <div class="row g-3 align-items-end">
+                                                    <div class="col-12 col-lg">
+                                                        <label
+                                                            for="adminLeadResultSelect{{ $lead->id }}"
+                                                            class="form-label fw-semibold"
+                                                        >
+                                                            Novo resultado
+                                                        </label>
+                                                        <select
+                                                            id="adminLeadResultSelect{{ $lead->id }}"
+                                                            class="form-select"
+                                                            disabled
+                                                        >
+                                                            <option>Selecione o novo resultado</option>
+                                                            @foreach ($manualResultOptions as $label)
+                                                                <option>{{ $label }}</option>
+                                                            @endforeach
+                                                        </select>
+                                                    </div>
+                                                    <div class="col-12 col-lg-auto d-grid">
+                                                        <button type="button" class="btn btn-primary text-nowrap" disabled>
+                                                            Solicitar alteração
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            @endif
+
+                                            <div class="alert alert-info rounded-4 mt-3 mb-0" role="note">
+                                                <i class="bi bi-shield-check me-1" aria-hidden="true"></i>
+                                                Tags de origem, imobiliária, campanha e segmentação serão preservadas.
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            @endcan
+
 
                             @can('create-analysis')
                                 <div
                                     class="tab-pane fade"
                                     id="admin-lead-reanalysis-pane-{{ $lead->id }}"
                                     role="tabpanel"
+                                    aria-labelledby="admin-lead-reanalysis-tab-{{ $lead->id }}"
                                 >
                                     @if ($canReanalyze)
                                         <div class="alert alert-success rounded-4">
@@ -1626,6 +1926,115 @@
             </div>
         </div>
     @endforeach
+@endcan
+
+@can('manage-lead-tags')
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const resultForms = document.querySelectorAll('.manual-lead-result-form');
+
+            const resetResultFormButton = function (form) {
+                const submitButton = form.querySelector('[data-result-submit]');
+                const spinner = form.querySelector('[data-result-spinner]');
+                const buttonLabel = form.querySelector('[data-result-button-label]');
+
+                delete form.dataset.submitting;
+
+                if (submitButton) {
+                    submitButton.disabled = form.dataset.resultEligible !== 'true';
+                }
+
+                spinner?.classList.add('d-none');
+
+                if (buttonLabel) {
+                    buttonLabel.textContent = 'Solicitar alteração';
+                }
+            };
+
+            resultForms.forEach(function (form) {
+                form.addEventListener('submit', function (event) {
+                    if (form.dataset.resultEligible !== 'true') {
+                        event.preventDefault();
+                        return;
+                    }
+
+                    if (!form.checkValidity()) {
+                        return;
+                    }
+
+                    if (form.dataset.submitting === 'true') {
+                        event.preventDefault();
+                        return;
+                    }
+
+                    const submitButton = form.querySelector('[data-result-submit]');
+                    const spinner = form.querySelector('[data-result-spinner]');
+                    const buttonLabel = form.querySelector('[data-result-button-label]');
+
+                    form.dataset.submitting = 'true';
+
+                    if (submitButton) {
+                        submitButton.disabled = true;
+                    }
+
+                    spinner?.classList.remove('d-none');
+
+                    if (buttonLabel) {
+                        buttonLabel.textContent = 'Solicitando...';
+                    }
+
+                    window.setTimeout(function () {
+                        if (event.defaultPrevented) {
+                            resetResultFormButton(form);
+                        }
+                    }, 0);
+                });
+            });
+
+            window.addEventListener('pageshow', function () {
+                resultForms.forEach(resetResultFormButton);
+            });
+
+            const validationTargets = @json($resultValidationTargets);
+
+            if (
+                !validationTargets
+                || !window.bootstrap?.Modal
+                || !window.bootstrap?.Tab
+            ) {
+                return;
+            }
+
+            const modalElement = document.getElementById(validationTargets.modal);
+            const tabElement = document.getElementById(validationTargets.tab);
+            const selectElement = document.getElementById(validationTargets.select);
+
+            if (!modalElement || !tabElement || !selectElement) {
+                return;
+            }
+
+            const revealResultError = function () {
+                window.bootstrap.Tab.getOrCreateInstance(tabElement).show();
+
+                window.setTimeout(function () {
+                    selectElement.focus();
+                }, 0);
+            };
+
+            if (modalElement.classList.contains('show')) {
+                revealResultError();
+                return;
+            }
+
+            modalElement.addEventListener(
+                'shown.bs.modal',
+                revealResultError,
+                { once: true }
+            );
+
+            window.bootstrap.Modal.getOrCreateInstance(modalElement).show();
+        });
+    </script>
 @endcan
 
 @endsection

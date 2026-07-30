@@ -37,6 +37,7 @@ class Lead extends Model
         'user_agent',
         'aceite_termos',
         'observacoes',
+        'leadlovers_lead_code',
         'leadlovers_status',
         'leadlovers_response',
         'sent_to_leadlovers_at',

@@ -60,6 +60,8 @@ return [
         'step' => env('LEADLOVERS_STEP'),
         'rate_limit_retry_seconds' => env('LEADLOVERS_RATE_LIMIT_RETRY_SECONDS', 60),
         'rate_limit_max_retry_seconds' => env('LEADLOVERS_RATE_LIMIT_MAX_RETRY_SECONDS', 900),
+        'requests_per_minute' => (int) env('LEADLOVERS_REQUESTS_PER_MINUTE', 90),
+        'rate_limit_window_seconds' => (int) env('LEADLOVERS_RATE_LIMIT_WINDOW_SECONDS',60),
         'dynamic_fields' => [
             env('DYNAMIC_FIELD_CPF_LEAD'),
         ],
