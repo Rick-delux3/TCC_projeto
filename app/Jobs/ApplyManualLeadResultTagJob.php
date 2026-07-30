@@ -38,20 +38,29 @@ class ApplyManualLeadResultTagJob implements ShouldQueue, ShouldBeUnique
 
     public int $uniqueFor = 10800;
 
+    public ?int $requestLogId = null;
+
     public function __construct(
         public int $leadId,
         public string $result,
         public int $corretorId,
         public ?string $ip = null,
         public ?string $userAgent = null,
-    ) {}
+        ?int $requestLogId = null,
+    ) {
+        $this->requestLogId = $requestLogId;
+    }
 
     /**
      * Impede dois Jobs de alteração de tag para o mesmo lead.
      */
     public function uniqueId(): string
     {
-        return 'manual-lead-result-tag:'.$this->leadId. ':' . $this->result;
+        $requestVersion = $this->requestLogId !== null
+            ? 'request:'.$this->requestLogId
+            : 'legacy:'.$this->result;
+
+        return 'manual-lead-result-tag:'.$this->leadId.':'.$requestVersion;
     }
 
     public function overlapKey(): string
@@ -254,11 +263,23 @@ class ApplyManualLeadResultTagJob implements ShouldQueue, ShouldBeUnique
      */
     private function process(LeadLoversService $leadLovers): void
     {
-        $lead = Lead::query()->findOrFail($this->leadId);
+        $lead = Lead::query()->find($this->leadId);
 
-        $corretor = Corretor::query()->findOrFail(
+        if (! $lead instanceof Lead) {
+            throw new PermanentLeadTagException(
+                'O lead solicitado não existe mais.'
+            );
+        }
+
+        $corretor = Corretor::query()->find(
             $this->corretorId
         );
+
+        if (! $corretor instanceof Corretor) {
+            throw new PermanentLeadTagException(
+                'O corretor solicitante não existe mais.'
+            );
+        }
 
         /*
          * A autorização é conferida novamente no processamento.
@@ -325,6 +346,12 @@ class ApplyManualLeadResultTagJob implements ShouldQueue, ShouldBeUnique
             );
         }
 
+        if ($this->requestWasSuperseded()) {
+            $this->logSupersededRequest();
+
+            return;
+        }
+
         $selectedTagKey = ManualLeadResultTags::leadLoversKey(
             $this->result
         );
@@ -384,6 +411,12 @@ class ApplyManualLeadResultTagJob implements ShouldQueue, ShouldBeUnique
             $currentTagsResponse
         );
 
+        if ($this->requestWasSuperseded()) {
+            $this->logSupersededRequest();
+
+            return;
+        }
+
         $otherFinalTags = $resultTagCatalog
             ->filter(
                 fn (LeadLoversTag $tag): bool =>
@@ -430,6 +463,12 @@ class ApplyManualLeadResultTagJob implements ShouldQueue, ShouldBeUnique
          * não fazem parte do catálogo abaixo e são preservadas.
          */
         foreach ($oldFinalTags as $tag) {
+            if ($this->requestWasSuperseded()) {
+                $this->logSupersededRequest();
+
+                return;
+            }
+
             $removeResponse = $leadLovers->removeTagFromLead(
                 $lead->email,
                 $tag->leadlovers_tag_id
@@ -439,6 +478,12 @@ class ApplyManualLeadResultTagJob implements ShouldQueue, ShouldBeUnique
                 $removeResponse,
                 'A remoção de uma tag final anterior falhou.'
             );
+        }
+
+        if ($this->requestWasSuperseded()) {
+            $this->logSupersededRequest();
+
+            return;
         }
 
     
@@ -571,10 +616,7 @@ class ApplyManualLeadResultTagJob implements ShouldQueue, ShouldBeUnique
         throw new LeadLoversHttpException(
             statusCode: $statusCode,
             operation: $operation,
-            safeApiMessage: $this->extractSafeApiMessage(
-                $response
-            ),
-        );    
+        );
        
     }
 
@@ -632,6 +674,41 @@ class ApplyManualLeadResultTagJob implements ShouldQueue, ShouldBeUnique
     private function extractLeadCode(
         array $response
     ): int|string|null {
+        $listedCodes = collect([
+            $response['Data'] ?? null,
+            $response['Result'] ?? null,
+            $response['Lead'] ?? null,
+        ])
+            ->filter(
+                fn (mixed $candidate): bool =>
+                    is_array($candidate)
+                    && array_is_list($candidate)
+            )
+            ->flatMap(fn (array $items): array => $items)
+            ->map(
+                fn (mixed $item): ?string =>
+                    is_array($item)
+                        ? $this->normalizedLeadCode(
+                            $item['Code']
+                                ?? $item['code']
+                                ?? null
+                        )
+                        : null
+            )
+            ->filter()
+            ->unique()
+            ->values();
+
+        if ($listedCodes->count() > 1) {
+            throw new PermanentLeadTagException(
+                'A consulta por e-mail retornou mais de um código de lead.'
+            );
+        }
+
+        if ($listedCodes->count() === 1) {
+            return $listedCodes->first();
+        }
+
         $candidates = [
             $response['Code'] ?? null,
             $response['code'] ?? null,
@@ -648,22 +725,32 @@ class ApplyManualLeadResultTagJob implements ShouldQueue, ShouldBeUnique
         ];
 
         foreach ($candidates as $candidate) {
-            if (
-                is_int($candidate)
-                && $candidate > 0
-            ) {
-                return $candidate;
-            }
+            $leadCode = $this->normalizedLeadCode($candidate);
 
-            if (
-                is_string($candidate)
-                && trim($candidate) !== ''
-            ) {
-                return trim($candidate);
+            if ($leadCode !== null) {
+                return $leadCode;
             }
         }
 
         return null;
+    }
+
+    private function normalizedLeadCode(mixed $candidate): ?string
+    {
+        if (! is_int($candidate) && ! is_string($candidate)) {
+            return null;
+        }
+
+        $leadCode = trim((string) $candidate);
+
+        if (
+            $leadCode === ''
+            || (is_numeric($leadCode) && (int) $leadCode <= 0)
+        ) {
+            return null;
+        }
+
+        return $leadCode;
     }
 
     /**
@@ -721,42 +808,6 @@ class ApplyManualLeadResultTagJob implements ShouldQueue, ShouldBeUnique
             )
             ->filter()
             ->values();
-    }
-
-    private function extractSafeApiMessage(
-        array $response
-    ): ?string {
-        $value = $response['Message']
-            ?? $response['message']
-            ?? $response['Error']
-            ?? $response['error']
-            ?? null;
-
-        if (! is_string($value)) {
-            return null;
-        }
-
-        $message = trim($value);
-
-        if ($message === '') {
-            return null;
-        }
-
-        /*
-        * Evita guardar e-mail completo caso a API o devolva
-        * dentro da mensagem.
-        */
-        $message = preg_replace(
-            '/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/iu',
-            '[e-mail oculto]',
-            $message
-        );
-
-        return mb_substr(
-            (string) $message,
-            0,
-            300
-        );
     }
 
     /**
@@ -1008,6 +1059,12 @@ class ApplyManualLeadResultTagJob implements ShouldQueue, ShouldBeUnique
                 ->lockForUpdate()
                 ->findOrFail($this->leadId);
 
+            if ($this->requestWasSuperseded()) {
+                $this->logSupersededRequest();
+
+                return;
+            }
+
             $oldTags = $lead->tags_originais;
             $oldCorretorId = $lead->updated_by_corretor_id;
 
@@ -1102,12 +1159,14 @@ class ApplyManualLeadResultTagJob implements ShouldQueue, ShouldBeUnique
                         ManualLeadResultTags::leadLoversKey(
                             $this->result
                         ),
-                    'error' => mb_substr(
-                        $exception?->getMessage()
-                            ?? 'Falha desconhecida.',
-                        0,
-                        1000
-                    ),
+                    'error' =>
+                        'Falha ao concluir a alteração manual solicitada.',
+                    'exception' => $exception
+                        ? $exception::class
+                        : null,
+                    'status' => $exception instanceof LeadLoversHttpException
+                        ? $exception->statusCode
+                        : null,
                 ],
 
                 'description' =>
@@ -1167,6 +1226,47 @@ class ApplyManualLeadResultTagJob implements ShouldQueue, ShouldBeUnique
             trim((string) $this->userAgent),
             0,
             2000
+        );
+    }
+
+    private function requestWasSuperseded(): bool
+    {
+        $latestRequest = CorretorActivityLog::query()
+            ->where('action', 'lead_tag_update_requested')
+            ->where('model_type', Lead::class)
+            ->where('model_id', $this->leadId)
+            ->latest('id')
+            ->first([
+                'id',
+                'new_values',
+            ]);
+
+        if (! $latestRequest instanceof CorretorActivityLog) {
+            return $this->requestLogId !== null;
+        }
+
+        if ($this->requestLogId !== null) {
+            return (int) $latestRequest->id !== $this->requestLogId;
+        }
+
+        $latestResult = data_get(
+            $latestRequest->new_values,
+            'requested_result'
+        );
+
+        return is_string($latestResult)
+            && $latestResult !== $this->result;
+    }
+
+    private function logSupersededRequest(): void
+    {
+        Log::notice(
+            'Alteração manual de tag ignorada por existir uma decisão mais recente.',
+            [
+                'lead_id' => $this->leadId,
+                'corretor_id' => $this->corretorId,
+                'request_log_id' => $this->requestLogId,
+            ]
         );
     }
 }

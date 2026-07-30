@@ -21,7 +21,7 @@ class CorretorPermissions
                 'tags.visualizar',
                 'tags.gerenciar',
             ],
-            'manege-lead-tags' => [
+            'manage-lead-tags' => [
                 'tags.gerenciar',
             ],
         ];

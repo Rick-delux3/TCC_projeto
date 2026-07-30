@@ -146,18 +146,22 @@ class AdminLeadTagController extends Controller
             $selectedTagKey,
             $selectedTag
         ): void {
-            CorretorActivityLog::create([
+            $lockedLead = Lead::query()
+                ->lockForUpdate()
+                ->findOrFail($lead->id);
+
+            $requestLog = CorretorActivityLog::create([
                 'corretor_id' => $corretor->id,
                 'action' => 'lead_tag_update_requested',
                 'model_type' => Lead::class,
-                'model_id' => $lead->id,
+                'model_id' => $lockedLead->id,
 
                 'old_values' => [
                     'tags_originais' =>
-                        $lead->tags_originais,
+                        $lockedLead->tags_originais,
 
                     'updated_by_corretor_id' =>
-                        $lead->updated_by_corretor_id,
+                        $lockedLead->updated_by_corretor_id,
                 ],
 
                 'new_values' => [
@@ -183,11 +187,12 @@ class AdminLeadTagController extends Controller
             ]);
 
             ApplyManualLeadResultTagJob::dispatch(
-                $lead->id,
+                $lockedLead->id,
                 $result,
                 $corretor->id,
                 $request->ip(),
                 $request->userAgent(),
+                $requestLog->id,
             )->afterCommit();
         });
 

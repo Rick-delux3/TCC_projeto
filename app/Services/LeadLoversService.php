@@ -380,7 +380,8 @@ class LeadLoversService
         } catch (\Throwable $e) {
             Log::error('Erro ao criar lead na LeadLovers', [
                 'lead_ref' => $this->emailReference($data['Email'] ?? null),
-                'message' => $e->getMessage(),
+                'exception' => $e::class,
+                'code' => $e->getCode(),
             ]);
 
             return [
@@ -459,7 +460,8 @@ class LeadLoversService
             throw $e;
         } catch (\Throwable $e) {
             Log::warning('Falha ao tentar atualizar lead na LeadLovers.', [
-                'message' => $e->getMessage(),
+                'exception' => $e::class,
+                'code' => $e->getCode(),
             ]);
 
             return [
@@ -468,7 +470,7 @@ class LeadLoversService
                 'response' => [],
                 'raw_body' => null,
                 'payload' => [],
-                'error' => $e->getMessage(),
+                'error' => 'Falha ao conectar com a LeadLovers.',
             ];
         }
     }
@@ -478,11 +480,24 @@ class LeadLoversService
      */
     public function addTagToLeadById(string $email, int|string $tagId, int $score = 0): array
     {
-
         if (! $this->isEnabled()) {
             return [
                 'StatusCode' => 503,
                 'Message' => 'Integração com a LeadLovers desativada.',
+            ];
+        }
+
+        $email = trim($email);
+        $tagId = (int) $tagId;
+
+        if (
+            $email === ''
+            || filter_var($email, FILTER_VALIDATE_EMAIL) === false
+            || $tagId <= 0
+        ) {
+            return [
+                'StatusCode' => 422,
+                'Message' => 'E-mail ou tag inválidos.',
             ];
         }
 
@@ -526,7 +541,8 @@ class LeadLoversService
                     mb_strtolower(trim($email))
                 ),
                 'tag_id' => $tagId,
-                'message' => $e->getMessage(),
+                'exception' => $e::class,
+                'code' => $e->getCode(),
             ]);
 
             return [
@@ -577,20 +593,6 @@ class LeadLoversService
                 Log::warning('LeadLovers respondeu erro ao consultar lead por e-mail', [
                     'status' => $response->status(),
                     'lead_ref' => $this->emailReference($email),
-                    'api_code' => data_get(
-                        $result,
-                        'Code',
-                        data_get($result, 'code')
-                    ),
-                    'api_message' => data_get(
-                        $result,
-                        'Message',
-                        data_get(
-                            $result,
-                            'Message',
-                            data_get($result, 'message')
-                        ),
-                    )
                 ]);
             }
 
@@ -622,7 +624,10 @@ class LeadLoversService
 
         $leadCode = trim((string) $leadCode);
 
-        if ($leadCode === '') {
+        if (
+            $leadCode === ''
+            || (is_numeric($leadCode) && (int) $leadCode <= 0)
+        ) {
             return [
                 'StatusCode' => 422,
                 'Message' => 'Código externo do lead inválido.',
@@ -714,20 +719,7 @@ class LeadLoversService
                 Log::warning('LeadLovers respondeu erro ao consultar lead por e-mail', [
                     'status' => $response->status(),
                     'lead_ref' => $this->emailReference($email),
-                    'api_code' => data_get(
-                        $result,
-                        'Code',
-                        data_get($result, 'code')
-                    ),
-                    'api_message' => data_get(
-                        $result,
-                        'Message',
-                        data_get(
-                            $result,
-                            'Message',
-                            data_get($result, 'message')
-                        ),
-                    )
+                    'tag_id' => $tagId,
                 ]);
             }
 
