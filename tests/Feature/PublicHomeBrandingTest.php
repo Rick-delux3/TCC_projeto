@@ -82,11 +82,7 @@ it('uses the fictitious logo as the safe component fallback', function () {
         ->toContain('data-brand-logo="tcc"');
 });
 
-it('renders the selected logo in the administrative header and sidebar', function (
-    string $profile,
-    string $expectedLogo,
-    string $unexpectedLogo,
-) {
+it('uses the framed client logo only in both dashboard headers', function (string $profile) {
     $corretor = Corretor::query()->create([
         'name' => 'Corretor de Teste',
         'email' => 'branding-admin@example.test',
@@ -100,16 +96,29 @@ it('renders the selected logo in the administrative header and sidebar', functio
     $this->actingAs($corretor, 'admin');
     config(['branding.active' => $profile]);
 
-    $html = view('layout-inicial.partials.header_admin', [
+    $adminHeader = view('layout-inicial.partials.header_admin', [
         'dashboardStats' => [],
     ])->render();
 
-    expect(substr_count($html, $expectedLogo))->toBe(2)
-        ->and($html)->not->toContain($unexpectedLogo);
-})->with([
-    'tcc profile' => ['tcc', 'imgs/Logo_NVS.png', 'imgs/logo-principal-real.jpg'],
-    'client profile' => ['client', 'imgs/logo-principal-real.jpg', 'imgs/Logo_NVS.png'],
-]);
+    $this->actingAs(User::factory()->create());
+
+    $companyHeader = view('layout-inicial.partials.header_imob', [
+        'dashboardStats' => [],
+    ])->render();
+
+    foreach ([$adminHeader, $companyHeader] as $html) {
+
+        if ($profile === 'client') {
+            expect(substr_count($html, 'imgs/logo-header.jpg'))->toBe(1)
+                ->and(substr_count($html, 'imgs/logo-principal-real.jpg'))->toBe(1)
+                ->and($html)->not->toContain('imgs/Logo_NVS.png');
+        } else {
+            expect(substr_count($html, 'imgs/Logo_NVS.png'))->toBe(2)
+                ->and($html)->not->toContain('imgs/logo-header.jpg')
+                ->and($html)->not->toContain('imgs/logo-principal-real.jpg');
+        }
+    }
+})->with(['tcc', 'client']);
 
 it('keeps read-only analysis pages and simulation links available when analyses are disabled', function () {
     $this->actingAs(User::factory()->create());

@@ -88,7 +88,14 @@
             {{-- Logo / marca --}}
             <a class="navbar-brand dashboard-client-brand ms-2" href="{{ $dashboardRoute }}">
                 <span class="dashboard-client-brand__logo">
-                    <x-brand-logo />
+                    @if (config('branding.active', 'tcc') === 'client')
+                        <img
+                            src="{{ asset('imgs/logo-header.jpg') }}"
+                            alt="{{ config('branding.profiles.client.name', 'Aki Aluga') }}"
+                        >
+                    @else
+                        <x-brand-logo />
+                    @endif
                 </span>
 
                 <span class="dashboard-client-brand__text d-none d-md-flex">
