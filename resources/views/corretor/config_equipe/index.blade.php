@@ -18,7 +18,7 @@
 
     $nomeOrganizacao = $adminLogado?->nome_empresa
         ?? $adminLogado?->empresa
-        ?? 'NVS Seguros';
+        ?? config('branding.profiles.'.config('branding.active', 'tcc').'.name', 'NVS Seguros');
 
     $totalCorretores = $corretores->count();
 

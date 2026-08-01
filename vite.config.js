@@ -11,6 +11,7 @@ export default defineConfig({
                 'resources/css/dashboard-user.css',
                 'resources/css/dashboard-admin.css',
                 'resources/js/dashboard-user.js', 'resources/css/simulation.css',
+                'resources/css/branding.css',
                 'resources/js/simulation.js',
 
             ],

@@ -9,11 +9,7 @@
                 alt="Cadastro inicial do CEO"
             >
 
-            <img
-                src="{{ asset('imgs/Logo_NVS.png') }}"
-                alt="Logo NVS"
-                class="auth-media-logo"
-            >
+            <x-brand-logo class="auth-media-logo" />
 
             <div class="admin-register-overlay">
                 <span class="admin-badge">Configuração inicial</span>

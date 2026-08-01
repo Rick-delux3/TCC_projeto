@@ -61,11 +61,11 @@
             {{-- Marca / logo --}}
             <a class="navbar-brand dashboard-client-brand ms-2" href="{{ route('company.dashboard') }}">
                 <span class="dashboard-client-brand__logo">
-                    <img src="{{ asset('imgs/Logo_NVS.png') }}" alt="NVS Seguros">
+                    <x-brand-logo />
                 </span>
 
                 <span class="dashboard-client-brand__text d-none d-md-flex">
-                    <strong>NVS Seguros</strong>
+                    <strong>{{ config('branding.profiles.'.config('branding.active', 'tcc').'.name', 'NVS Seguros') }}</strong>
                     <small>Painel da imobiliária</small>
                 </span>
             </a>
@@ -207,12 +207,12 @@
     <div class="offcanvas-header border-bottom">
         <div class="d-flex align-items-center gap-3">
             <span class="dashboard-sidebar-logo">
-                <img src="{{ asset('imgs/Logo_NVS.png') }}" alt="NVS Seguros">
+                <x-brand-logo />
             </span>
 
             <div>
                 <h5 class="offcanvas-title fw-bold mb-0" id="dashboardClientSidebarLabel">
-                    NVS Seguros
+                    {{ config('branding.profiles.'.config('branding.active', 'tcc').'.name', 'NVS Seguros') }}
                 </h5>
                 <small class="text-muted">Menu da imobiliária</small>
             </div>
@@ -249,17 +249,15 @@
                 <span>Leads</span>
             </a>
 
-            @if (config('features.insurance_analysis.enabled', false))
-                <a href="{{ route('insurance-analyses.index') }}" class="dashboard-sidebar-link">
-                    <i class="bi bi-clipboard2-data"></i>
-                    <span>Análises</span>
-                </a>
+            <a href="{{ route('insurance-analyses.index') }}" class="dashboard-sidebar-link">
+                <i class="bi bi-clipboard2-data"></i>
+                <span>Análises</span>
+            </a>
 
-                <a href="{{ route('simulation.registered-company.access') }}" class="dashboard-sidebar-link">
-                    <i class="bi bi-link-45deg"></i>
-                    <span>Página de simulação</span>
-                </a>
-            @endif
+            <a href="{{ route('simulation.registered-company.access') }}" class="dashboard-sidebar-link">
+                <i class="bi bi-link-45deg"></i>
+                <span>Página de simulação</span>
+            </a>
 
             <a href="{{ route('profile.edit') }}" class="dashboard-sidebar-link">
                 <i class="bi bi-person-gear"></i>

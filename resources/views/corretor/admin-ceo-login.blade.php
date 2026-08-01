@@ -9,11 +9,7 @@
                 alt="Acesso restrito do CEO"
             >
 
-            <img
-                src="{{ asset('imgs/Logo_NVS.png') }}"
-                alt="Logo NVS"
-                class="auth-media-logo"
-            >
+            <x-brand-logo class="auth-media-logo" />
 
             <div class="admin-auth-overlay">
                 <span class="admin-badge">Acesso Sigiloso</span>

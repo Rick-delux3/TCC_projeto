@@ -18,12 +18,10 @@
                 style="background: linear-gradient(180deg, rgba(19, 37, 66, 0.16), rgba(16, 27, 55, 0.88));"
             ></div>
 
-            <img
-                src="{{ asset('imgs/Logo_NVS.png') }}"
-                alt="Logo NVS"
+            <x-brand-logo
                 class="position-absolute top-0 start-0 m-3"
                 style="width: 46px; height: 46px; object-fit: contain; filter: drop-shadow(0 8px 16px rgba(7, 15, 35, 0.3));"
-            >
+            />
 
             <div class="position-relative d-flex h-100 flex-column justify-content-end p-4 p-md-5" style="min-height: 420px;">
                 <span class="badge rounded-pill text-bg-danger align-self-start mb-3 px-3 py-2 text-uppercase">
@@ -57,7 +55,7 @@
             </header>
 
             <div class="alert alert-light border d-flex align-items-start gap-2 py-3" role="alert">
-                <span class="badge text-bg-danger flex-shrink-0">NVS</span>
+                <span class="badge text-bg-danger flex-shrink-0">{{ config('branding.profiles.'.config('branding.active', 'tcc').'.short_name', 'NVS') }}</span>
                 <small class="text-secondary">
                     Se você acredita que deveria ter acesso, entre em contato com o responsável pela plataforma.
                 </small>
