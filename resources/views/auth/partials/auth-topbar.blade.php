@@ -260,47 +260,84 @@
     </style>
 @endonce
 
-<header class="auth-topbar" aria-label="Navegação de acesso">
+<header class="auth-topbar" aria-label="Identificação e acessos">
     <div class="auth-topbar__inner">
         <div class="auth-topbar__surface">
-            <a
-                href="{{ route('index') }}"
-                class="auth-topbar__brand"
-                aria-label="NVS Seguros — ir para a página inicial"
-            >
+            <div class="auth-topbar__brand">
                 <span class="auth-topbar__brand-mark" aria-hidden="true">
-                    <img src="{{ asset('imgs/Logo_NVS.png') }}" alt="">
+                    <x-brand-logo alt="" />
                 </span>
 
                 <span class="auth-topbar__brand-copy">
-                    <strong>NVS Seguros</strong>
+                    <strong>{{ config('branding.profiles.'.config('branding.active', 'tcc').'.name', 'NVS Seguros') }}</strong>
                     <small>Portal imobiliário</small>
                 </span>
-            </a>
+            </div>
 
             <span class="auth-topbar__divider" aria-hidden="true"></span>
 
-            <nav class="auth-topbar__nav" aria-label="Links de acesso">
-                <a href="{{ route('index') }}" class="auth-topbar__link">
-                    Início
-                </a>
-
-                <a
-                    href="{{ route('empresa.login') }}"
+            <nav class="auth-topbar__nav" aria-label="Opções de acesso">
+                <button
+                    type="button"
                     class="auth-topbar__link"
-                    @if (request()->routeIs('empresa.login')) aria-current="page" @endif
+                    data-bs-toggle="modal"
+                    data-bs-target="#companyAccessUnavailableModal"
                 >
                     Entrar
-                </a>
+                </button>
 
-                <a
-                    href="{{ route('empresa.register.form') }}"
+                <button
+                    type="button"
                     class="auth-topbar__link auth-topbar__link--register"
-                    @if (request()->routeIs('empresa.register.form')) aria-current="page" @endif
+                    data-bs-toggle="modal"
+                    data-bs-target="#companyAccessUnavailableModal"
                 >
                     Cadastrar
-                </a>
+                </button>
             </nav>
         </div>
     </div>
 </header>
+
+<div
+    class="modal fade"
+    id="companyAccessUnavailableModal"
+    tabindex="-1"
+    aria-labelledby="companyAccessUnavailableModalLabel"
+    aria-hidden="true"
+>
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2
+                    class="modal-title fs-5"
+                    id="companyAccessUnavailableModalLabel"
+                >
+                    Acesso indisponível
+                </h2>
+
+                <button
+                    type="button"
+                    class="btn-close"
+                    data-bs-dismiss="modal"
+                    aria-label="Fechar"
+                ></button>
+            </div>
+
+            <div class="modal-body">
+                O acesso ao portal das imobiliárias está indisponível nesta versão.
+                Os formulários de simulação continuam disponíveis normalmente.
+            </div>
+
+            <div class="modal-footer">
+                <button
+                    type="button"
+                    class="btn btn-primary"
+                    data-bs-dismiss="modal"
+                >
+                    Entendi
+                </button>
+            </div>
+        </div>
+    </div>
+</div>

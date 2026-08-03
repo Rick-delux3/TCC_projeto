@@ -285,12 +285,12 @@
                 <div class="card-body p-4 p-lg-5">
                     <div class="d-flex align-items-center gap-3 mb-4 pe-5">
                         <span class="team-create-brand">
-                            <img src="{{ asset('imgs/Logo_NVS.png') }}" alt="NVS Seguros">
+                            <x-brand-logo />
                         </span>
 
                         <div>
                             <span class="badge text-bg-primary-subtle text-primary border border-primary-subtle">
-                                Equipe NVS Seguros
+                                Equipe {{ config('branding.profiles.'.config('branding.active', 'tcc').'.name', 'NVS Seguros') }}
                             </span>
                         </div>
                     </div>
@@ -550,7 +550,7 @@
                         </div>
 
                         <div class="team-actions d-flex flex-column flex-sm-row-reverse gap-2 pt-4 mt-4">
-                            <button type="submit" class="btn btn-primary px-4">
+                            <button type="submit" class="btn btn-outline-primary px-4">
                                 <i class="bi bi-person-plus me-1"></i>
                                 Cadastrar e enviar convite
                             </button>

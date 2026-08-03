@@ -1,0 +1,626 @@
+/*
+ * Perfis visuais compartilhados.
+ *
+ * O perfil TCC apenas documenta os tokens existentes. As regras visuais novas
+ * ficam integralmente sob [data-brand="client"], mantendo o tema original sem
+ * qualquer sobrescrita quando BRAND_PROFILE=tcc.
+ */
+[data-brand="tcc"] {
+    --brand-primary: #030133;
+    --brand-primary-hover: #146fb6;
+    --brand-primary-dark: #030133;
+    --brand-primary-soft: #eef6ff;
+    --brand-accent: #fd1e6e;
+    --brand-accent-hover: #d9185d;
+    --brand-accent-dark: #a80f45;
+    --brand-accent-soft: #fff0f6;
+    --brand-background: #f0f5fb;
+    --brand-surface: #ffffff;
+    --brand-text: #1f2937;
+    --brand-text-muted: #55658c;
+    --brand-border: #d8e1ec;
+    --brand-focus-ring: rgba(20, 111, 182, 0.28);
+}
+
+[data-brand="client"] {
+    --brand-primary: #0000ff;
+    --brand-primary-hover: #0000cc;
+    --brand-primary-dark: #000099;
+    --brand-primary-soft: #eeeeff;
+    --brand-accent: #ff0000;
+    --brand-accent-hover: #cc0000;
+    --brand-accent-dark: #990000;
+    --brand-accent-soft: #fff0f0;
+    --brand-background: #f7f8fc;
+    --brand-surface: #ffffff;
+    --brand-text: #17172b;
+    --brand-text-muted: #667085;
+    --brand-border: #d9d9ee;
+    --brand-focus-ring: rgba(0, 0, 255, 0.24);
+
+    /* Compatibilidade com os tokens já consumidos pelo frontend atual. */
+    --primary-color: var(--brand-primary-dark);
+    --secundary-color: var(--brand-primary);
+    --terciary-color: var(--brand-accent);
+    --quartenary-color: var(--brand-surface);
+    --descr-color: var(--brand-text-muted);
+}
+
+[data-brand-logo="client"] {
+    display: block;
+    max-width: 100%;
+    height: auto;
+    object-fit: contain;
+    object-position: center;
+    filter: none;
+}
+
+/* Estados e elementos Bootstrap que representam a identidade principal. */
+[data-brand="client"] .btn-primary {
+    --bs-btn-color: #ffffff;
+    --bs-btn-bg: var(--brand-primary);
+    --bs-btn-border-color: var(--brand-primary);
+    --bs-btn-hover-color: #ffffff;
+    --bs-btn-hover-bg: var(--brand-primary-hover);
+    --bs-btn-hover-border-color: var(--brand-primary-hover);
+    --bs-btn-focus-shadow-rgb: 0, 0, 255;
+    --bs-btn-active-color: #ffffff;
+    --bs-btn-active-bg: var(--brand-primary-dark);
+    --bs-btn-active-border-color: var(--brand-primary-dark);
+    --bs-btn-disabled-color: #ffffff;
+    --bs-btn-disabled-bg: #7777d6;
+    --bs-btn-disabled-border-color: #7777d6;
+}
+
+[data-brand="client"] .btn-outline-primary {
+    --bs-btn-color: var(--brand-primary);
+    --bs-btn-border-color: var(--brand-primary);
+    --bs-btn-hover-color: #ffffff;
+    --bs-btn-hover-bg: var(--brand-primary);
+    --bs-btn-hover-border-color: var(--brand-primary);
+    --bs-btn-focus-shadow-rgb: 0, 0, 255;
+    --bs-btn-active-color: #ffffff;
+    --bs-btn-active-bg: var(--brand-primary-dark);
+    --bs-btn-active-border-color: var(--brand-primary-dark);
+    --bs-btn-disabled-color: #7777d6;
+    --bs-btn-disabled-bg: transparent;
+    --bs-btn-disabled-border-color: #7777d6;
+}
+
+[data-brand="client"] .btn-link,
+[data-brand="client"] a:not([class*="text-"]) {
+    color: var(--brand-primary);
+}
+
+[data-brand="client"] a:not([class*="text-"]):hover {
+    color: var(--brand-primary-hover);
+}
+
+[data-brand="client"] .text-primary {
+    color: var(--brand-primary) !important;
+}
+
+[data-brand="client"] .bg-primary,
+[data-brand="client"] .text-bg-primary {
+    color: #ffffff !important;
+    background-color: var(--brand-primary) !important;
+}
+
+[data-brand="client"] .text-bg-primary-subtle,
+[data-brand="client"] .bg-primary-subtle {
+    color: var(--brand-primary-dark) !important;
+    background-color: var(--brand-primary-soft) !important;
+}
+
+[data-brand="client"] .border-primary,
+[data-brand="client"] .border-primary-subtle {
+    border-color: #b8b8ff !important;
+}
+
+[data-brand="client"] .form-control:focus,
+[data-brand="client"] .form-select:focus,
+[data-brand="client"] .form-check-input:focus {
+    border-color: var(--brand-primary);
+    box-shadow: 0 0 0 0.25rem var(--brand-focus-ring);
+}
+
+[data-brand="client"] .form-check-input:checked {
+    background-color: var(--brand-primary);
+    border-color: var(--brand-primary);
+}
+
+[data-brand="client"] :is(a, button, input, select, textarea):focus-visible {
+    outline: 3px solid var(--brand-focus-ring);
+    outline-offset: 2px;
+}
+
+[data-brand="client"] :is(.btn, .form-control, .form-select):disabled,
+[data-brand="client"] :is(.btn, .form-control, .form-select).disabled {
+    cursor: not-allowed;
+    opacity: 0.58;
+}
+
+/* Layouts administrativos e dashboards. */
+[data-brand="client"].dashboard-admin-body,
+[data-brand="client"].dashboard-user-body {
+    color: var(--brand-text);
+    background:
+        radial-gradient(circle at 82% 8%, rgba(255, 0, 0, 0.12), transparent 24%),
+        linear-gradient(145deg, var(--brand-primary-dark) 0%, #0000b8 48%, var(--brand-primary) 100%),
+        var(--brand-primary-dark);
+}
+
+[data-brand="client"] .dashboard-client-navbar {
+    border-color: rgba(255, 255, 255, 0.24);
+    background:
+        linear-gradient(120deg, rgba(0, 0, 153, 0.94), rgba(0, 0, 255, 0.82));
+    box-shadow: 0 20px 44px rgba(0, 0, 102, 0.28);
+}
+
+[data-brand="client"] .dashboard-client-brand__logo {
+    width: 148px;
+    height: 70px;
+    box-sizing: border-box;
+    flex: 0 0 auto;
+    padding: 0;
+    overflow: hidden;
+    border-radius: 15px;
+    border-color: rgba(255, 255, 255, 0.68);
+    background: #ffffff;
+}
+
+[data-brand="client"] .dashboard-client-brand__logo img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    max-width: 100%;
+    object-fit: contain;
+    object-position: center;
+}
+
+[data-brand="client"] .dashboard-client-brand__text small,
+[data-brand="client"] .dashboard-profile-copy small {
+    color: rgba(255, 255, 255, 0.82);
+}
+
+[data-brand="client"] .dashboard-profile-avatar {
+    background: linear-gradient(145deg, var(--brand-primary) 0 72%, var(--brand-accent) 72% 100%);
+}
+
+[data-brand="client"] .dashboard-client-sidebar {
+    color: var(--brand-text);
+    background: var(--brand-surface);
+}
+
+[data-brand="client"] .dashboard-sidebar-logo {
+    width: 132px;
+    height: 64px;
+    box-sizing: border-box;
+    flex: 0 0 auto;
+    padding: 0;
+    overflow: hidden;
+    border: 1px solid var(--brand-border);
+    border-radius: 16px;
+    background: var(--brand-surface);
+}
+
+[data-brand="client"] .dashboard-sidebar-logo img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    max-width: 100%;
+    object-fit: contain;
+    object-position: center;
+}
+
+[data-brand="client"] .dashboard-sidebar-profile {
+    border-color: var(--brand-border);
+    background: var(--brand-primary-soft);
+}
+
+[data-brand="client"] .dashboard-sidebar-link {
+    color: var(--brand-text);
+}
+
+[data-brand="client"] .dashboard-sidebar-link:hover {
+    color: var(--brand-primary);
+    background: var(--brand-primary-soft);
+}
+
+[data-brand="client"] .dashboard-sidebar-link.active {
+    color: #ffffff;
+    background: linear-gradient(135deg, var(--brand-primary-dark), var(--brand-primary));
+    box-shadow: 0 10px 22px rgba(0, 0, 255, 0.18);
+}
+
+[data-brand="client"] .dashboard-shell {
+    --dash-bg: var(--brand-background);
+    --dash-surface: var(--brand-surface);
+    --dash-surface-soft: var(--brand-primary-soft);
+    --dash-text: var(--brand-text);
+    --dash-muted: var(--brand-text-muted);
+    --dash-border: var(--brand-border);
+    --dash-card-shadow: 0 14px 34px rgba(23, 23, 43, 0.08);
+    --dash-input-bg: var(--brand-surface);
+    --dash-toast-bg: rgba(255, 255, 255, 0.97);
+    --dash-progress-bg: rgba(0, 0, 153, 0.10);
+    background: linear-gradient(180deg, #f7f8fc 0%, #ffffff 100%);
+}
+
+[data-brand="client"] .dashboard-shell[data-dashboard-theme="dark"] {
+    --dash-bg: #090925;
+    --dash-surface: #11113a;
+    --dash-surface-soft: #1b1b52;
+    --dash-text: #f8f8ff;
+    --dash-muted: #c7c7e8;
+    --dash-border: rgba(217, 217, 238, 0.20);
+    --dash-input-bg: #0d0d32;
+    background: linear-gradient(180deg, #11113a 0%, #07071f 100%);
+}
+
+[data-brand="client"] .dashboard-hero-card {
+    background:
+        radial-gradient(circle at 88% 18%, rgba(255, 0, 0, 0.32), transparent 24%),
+        linear-gradient(135deg, var(--brand-primary-dark) 0%, var(--brand-primary) 100%);
+    box-shadow: 0 18px 42px rgba(0, 0, 153, 0.24) !important;
+}
+
+[data-brand="client"] .dashboard-stat-card:hover,
+[data-brand="client"] .lead-card:hover {
+    border-color: rgba(0, 0, 255, 0.18) !important;
+    box-shadow: 0 18px 40px rgba(0, 0, 153, 0.12) !important;
+}
+
+[data-brand="client"] .lead-card--neutral::before {
+    background: linear-gradient(180deg, var(--brand-primary), #8a8aff);
+}
+
+[data-brand="client"] .dashboard-shell .input-group-text {
+    color: var(--brand-primary);
+}
+
+[data-brand="client"] .dashboard-shell .form-control:focus,
+[data-brand="client"] .dashboard-shell .form-select:focus {
+    border-color: var(--brand-primary);
+    box-shadow: 0 0 0 0.25rem var(--brand-focus-ring);
+}
+
+[data-brand="client"] .dashboard-shell .pagination {
+    --bs-pagination-focus-box-shadow: 0 0 0 0.25rem var(--brand-focus-ring);
+    --bs-pagination-active-bg: var(--brand-primary);
+    --bs-pagination-active-border-color: var(--brand-primary);
+}
+
+[data-brand="client"] .dashboard-shell .table {
+    --bs-table-color: var(--dash-text);
+    --bs-table-bg: transparent;
+    --bs-table-border-color: var(--dash-border);
+    vertical-align: middle;
+}
+
+[data-brand="client"] .dashboard-shell .modal-content,
+[data-brand="client"] .lead-details-modal .modal-content {
+    border-color: var(--brand-border) !important;
+    border-radius: 1.25rem;
+}
+
+[data-brand="client"] .nav-pills .nav-link.active {
+    color: #ffffff;
+    background-color: var(--brand-primary);
+}
+
+/* Equipe: converte apenas os tokens visuais definidos inline nessas views. */
+[data-brand="client"] .team-create-page {
+    --nvs-navy: var(--brand-primary-dark);
+    --nvs-blue: var(--brand-primary);
+    --nvs-pink: var(--brand-accent);
+    --nvs-soft: var(--brand-primary-soft);
+    background:
+        linear-gradient(135deg, rgba(0, 0, 153, 0.88), rgba(0, 0, 255, 0.68)),
+        linear-gradient(180deg, var(--brand-background), var(--brand-primary-soft));
+}
+
+[data-brand="client"] .team-create-brand {
+    width: 142px;
+    height: 60px;
+    padding: 4px 8px;
+    border-color: var(--brand-border);
+    border-radius: 16px;
+    background: var(--brand-surface);
+}
+
+[data-brand="client"] .team-create-brand img {
+    width: 100%;
+    height: 100%;
+    max-width: 100%;
+    object-fit: contain;
+}
+
+[data-brand="client"] .team-create-page .btn-primary {
+    --bs-btn-bg: var(--brand-primary-soft);
+    --bs-btn-border-color: var(--brand-primary);
+    --bs-btn-hover-bg: var(--brand-primary-hover);
+    --bs-btn-hover-border-color: var(--brand-primary-hover);
+    --bs-btn-active-bg: var(--brand-primary-dark);
+    --bs-btn-active-border-color: var(--brand-primary-dark);
+    box-shadow: 0 14px 26px rgba(0, 0, 255, 0.20);
+}
+
+/* Páginas públicas, simulação e autenticação. */
+[data-brand="client"].auth-layout-body {
+    color: var(--brand-text);
+    background: linear-gradient(180deg, var(--brand-primary-dark), var(--brand-primary));
+}
+
+[data-brand="client"] .auth-layout-main,
+[data-brand="client"] .standalone-auth-main {
+    color: var(--brand-text);
+    background:
+        radial-gradient(circle at 14% 10%, rgba(255, 0, 0, 0.09), transparent 23%),
+        radial-gradient(circle at 86% 18%, rgba(0, 0, 255, 0.14), transparent 30%),
+        linear-gradient(180deg, #ffffff 0%, var(--brand-background) 58%, var(--brand-primary-soft) 100%);
+}
+
+[data-brand="client"] .auth-topbar__surface {
+    border-color: rgba(0, 0, 255, 0.16);
+    background: rgba(255, 255, 255, 0.94);
+    box-shadow: 0 16px 36px rgba(0, 0, 153, 0.13);
+}
+
+[data-brand="client"] .auth-topbar__brand {
+    color: var(--brand-primary-dark);
+}
+
+[data-brand="client"] .auth-topbar__brand-mark {
+    position: relative;
+    width: 132px;
+    height: 46px;
+    flex: 0 0 132px;
+    padding: 2px 7px;
+    border: 1px solid var(--brand-border);
+    border-radius: 13px;
+    background: #ffffff;
+    box-shadow: 0 7px 16px rgba(0, 0, 153, 0.14);
+}
+
+[data-brand="client"] .auth-topbar__brand-mark img {
+    position: static;
+    width: 100%;
+    max-width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
+[data-brand="client"] .auth-topbar__brand-copy strong {
+    color: var(--brand-primary-dark);
+}
+
+[data-brand="client"] .auth-topbar__brand-copy small,
+[data-brand="client"] .auth-topbar__link {
+    color: var(--brand-text-muted);
+}
+
+[data-brand="client"] .auth-topbar__link:hover {
+    color: var(--brand-primary-dark);
+    background: var(--brand-primary-soft);
+}
+
+[data-brand="client"] .auth-topbar__link--register:not([aria-current="page"]) {
+    color: var(--brand-accent-dark);
+    border-color: rgba(255, 0, 0, 0.22);
+    background: var(--brand-accent-soft);
+}
+
+[data-brand="client"] .auth-topbar__link--register:not([aria-current="page"]):hover {
+    color: #ffffff;
+    border-color: var(--brand-accent);
+    background: var(--brand-accent);
+    box-shadow: 0 8px 18px rgba(255, 0, 0, 0.20);
+}
+
+[data-brand="client"] #companyAccessUnavailableModal .modal-content {
+    color: var(--brand-text);
+    overflow: hidden;
+    border: 1px solid var(--brand-border);
+    border-radius: 1.25rem;
+    box-shadow: 0 24px 64px rgba(23, 23, 43, 0.18);
+}
+
+[data-brand="client"] #companyAccessUnavailableModal .modal-header {
+    color: var(--brand-primary-dark);
+    border-bottom-color: var(--brand-border);
+    background: var(--brand-primary-soft);
+}
+
+[data-brand="client"] #companyAccessUnavailableModal .modal-footer {
+    border-top-color: var(--brand-border);
+}
+
+[data-brand="client"] .auth-layout-main > .container .card,
+[data-brand="client"] .standalone-auth-main .card {
+    color: var(--brand-text);
+    border: 1px solid var(--brand-border) !important;
+    background: var(--brand-surface);
+    box-shadow: 0 18px 44px rgba(23, 23, 43, 0.10) !important;
+}
+
+[data-brand="client"] .auth-layout-main form > .btn-danger,
+[data-brand="client"] .auth-layout-main form > .d-grid .btn-danger {
+    --bs-btn-bg: var(--brand-accent);
+    --bs-btn-border-color: var(--brand-accent);
+    --bs-btn-hover-bg: var(--brand-accent-hover);
+    --bs-btn-hover-border-color: var(--brand-accent-hover);
+    --bs-btn-active-bg: var(--brand-accent-dark);
+    --bs-btn-active-border-color: var(--brand-accent-dark);
+}
+
+[data-brand="client"] :is(
+    .client-auth-page,
+    .client-register-page,
+    .admin-auth-page,
+    .admin-register-page,
+    .password-reset-page
+) {
+    background:
+        radial-gradient(circle at 84% 10%, rgba(255, 0, 0, 0.08), transparent 22%),
+        linear-gradient(180deg, #ffffff 0%, var(--brand-background) 100%);
+}
+
+[data-brand="client"] :is(
+    .client-auth-overlay,
+    .client-register-overlay,
+    .admin-auth-overlay,
+    .admin-register-overlay,
+    .password-reset-overlay
+) {
+    background: linear-gradient(180deg, rgba(0, 0, 153, 0.20), rgba(0, 0, 153, 0.92));
+}
+
+[data-brand="client"] .auth-media-logo {
+    width: clamp(132px, 18vw, 190px);
+    max-width: calc(100% - 40px);
+    height: auto;
+    padding: 5px 10px;
+    border: 1px solid rgba(0, 0, 255, 0.16);
+    border-radius: 14px;
+    background: #ffffff;
+    object-fit: contain;
+    filter: none;
+}
+
+[data-brand="client"] :is(.client-submit, .admin-submit) {
+    border-color: var(--brand-primary);
+    background: linear-gradient(125deg, var(--brand-primary-dark), var(--brand-primary));
+    box-shadow: 0 14px 26px rgba(0, 0, 255, 0.20);
+}
+
+[data-brand="client"] :is(.client-submit, .admin-submit):hover {
+    background: linear-gradient(125deg, var(--brand-primary-dark), var(--brand-primary-hover));
+}
+
+[data-brand="client"] :is(.client-input, .admin-input):focus {
+    border-color: var(--brand-primary);
+    box-shadow: 0 0 0 4px var(--brand-focus-ring);
+}
+
+[data-brand="client"] :is(
+    .client-auth-kicker,
+    .client-register-kicker,
+    .admin-auth-badge,
+    .admin-register-kicker,
+    .password-reset-kicker
+) {
+    color: var(--brand-primary-dark);
+    border-color: rgba(0, 0, 255, 0.18);
+    background: var(--brand-primary-soft);
+}
+
+[data-brand="client"] :is(.client-outline-link, .admin-outline-link):hover {
+    color: var(--brand-primary);
+    border-color: var(--brand-primary);
+    background: var(--brand-primary-soft);
+}
+
+/* Página autônoma de 2FA. */
+[data-brand="client"] .verify-aside {
+    background:
+        radial-gradient(circle at 82% 15%, rgba(255, 0, 0, 0.26), transparent 32%),
+        linear-gradient(150deg, var(--brand-primary-dark), var(--brand-primary));
+}
+
+[data-brand="client"] .verify-overlay {
+    background: linear-gradient(180deg, rgba(0, 0, 153, 0.16), rgba(0, 0, 153, 0.90));
+}
+
+[data-brand="client"] .verify-badge {
+    background: var(--brand-accent);
+}
+
+[data-brand="client"] .verify-brand {
+    width: min(210px, 70%);
+    height: auto;
+    object-fit: contain;
+}
+
+[data-brand="client"] .verify-header h1,
+[data-brand="client"] .code-input {
+    color: var(--brand-primary-dark);
+}
+
+[data-brand="client"] .code-input:focus {
+    border-color: var(--brand-primary);
+    box-shadow: 0 0 0 4px var(--brand-focus-ring);
+}
+
+[data-brand="client"] .verify-submit {
+    background: linear-gradient(125deg, var(--brand-primary-dark), var(--brand-primary));
+}
+
+[data-brand="client"] .verify-resend:hover {
+    color: var(--brand-accent-dark);
+    border-color: var(--brand-accent);
+    background: var(--brand-accent-soft);
+}
+
+/* Logos e identidade nas páginas de erro que reutilizam o layout de acesso. */
+[data-brand="client"] .auth-layout-main [data-brand-logo="client"].position-absolute {
+    width: 136px !important;
+    height: auto !important;
+    padding: 3px 7px;
+    border: 1px solid rgba(0, 0, 255, 0.16);
+    border-radius: 12px;
+    background: #ffffff;
+    filter: none !important;
+}
+
+[data-brand="client"] .auth-layout-main h1[style] {
+    color: var(--brand-primary-dark) !important;
+}
+
+@media (max-width: 768px) {
+    [data-brand="client"] .dashboard-client-brand__logo {
+        width: 112px;
+        height: 54px;
+        border-radius: 13px;
+    }
+
+    [data-brand="client"] .dashboard-sidebar-logo {
+        width: 118px;
+        height: 58px;
+    }
+
+    [data-brand="client"] .auth-topbar__brand-mark {
+        width: 104px;
+        height: 40px;
+        flex-basis: 104px;
+    }
+
+    [data-brand="client"] .auth-topbar__brand-copy {
+        display: none;
+    }
+
+    [data-brand="client"] .team-create-brand {
+        width: 118px;
+        height: 54px;
+    }
+}
+
+@media (max-width: 420px) {
+    [data-brand="client"] .auth-topbar__brand-mark {
+        width: 86px;
+        height: 38px;
+        flex-basis: 86px;
+    }
+
+    [data-brand="client"] .auth-topbar__link {
+        padding-inline: 7px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    [data-brand="client"] *,
+    [data-brand="client"] *::before,
+    [data-brand="client"] *::after {
+        scroll-behavior: auto !important;
+    }
+}

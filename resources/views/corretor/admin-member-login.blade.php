@@ -5,7 +5,7 @@
     <section class="client-auth-shell">
         <aside class="client-auth-aside">
             <img src="{{ asset('imgs/segure-chave-a-mao-ao-ar-livre.jpg') }}" alt="Acesso do corretor integrante">
-            <img src="{{ asset('imgs/Logo_NVS.png') }}" alt="Logo NVS" class="auth-media-logo">
+            <x-brand-logo class="auth-media-logo" />
 
             <div class="client-auth-overlay">
                 <span class="client-badge">Portal dos corretores</span>

@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AdminLeadTagController;
 use App\Http\Controllers\Auth\CompanyNewPasswordController;
 use App\Http\Controllers\Auth\CompanyPasswordResetLinkController;
 use App\Http\Controllers\CepController;
@@ -13,13 +14,12 @@ use App\Http\Controllers\ImobiliariaAuthController;
 use App\Http\Controllers\ImobiliariaRegistrationController;
 use App\Http\Controllers\InsuranceAnalysisController;
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\PublicHomeController;
 use App\Http\Controllers\SimulationController;
 use App\Http\Controllers\TwoFactorController;
 use App\Services\PottencialService;
 use App\Services\TooService;
-use App\Http\Controllers\AdminLeadTagController;
 use Illuminate\Support\Facades\Route;
-
 
 Route::get('/debug/too/auth', function (TooService $tooService) {
     return response()->json($tooService->testAuthentication());
@@ -28,14 +28,14 @@ Route::get('/debug/too/auth', function (TooService $tooService) {
 Route::get('/teste/token_acesso', [PottencialService::class, 'testAuthentication'])
     ->middleware('analysis.enabled');
 
-Route::view('/', 'index')->name('index');
+Route::get('/', PublicHomeController::class)->name('index');
 
 Route::get('/dashboard', fn () => redirect()->route('company.dashboard'))
     ->middleware(['auth', '2fa'])
     ->name('dashboard');
 
 Route::get('/analise', fn () => redirect()->route('company.dashboard'))
-    ->middleware(['auth', '2fa', 'analysis.enabled'])
+    ->middleware(['auth', '2fa'])
     ->name('analise');
 
 Route::prefix('/Dashboard')->group(function () {
@@ -122,11 +122,11 @@ Route::prefix('/Dashboard')->group(function () {
             ->name('admin.leads.reanalyze');
 
         Route::get('/analises', [InsuranceAnalysisController::class, 'adminIndex'])
-            ->middleware(['can:view-analyses', 'analysis.enabled'])
+            ->middleware('can:view-analyses')
             ->name('admin.insurance-analyses.index');
 
         Route::get('/analises/{batch}', [InsuranceAnalysisController::class, 'adminShow'])
-            ->middleware(['can:view-analyses', 'analysis.enabled'])
+            ->middleware('can:view-analyses')
             ->name('admin.insurance-analyses.show');
 
         Route::post('/analises/provider/{analysis}/retry', [InsuranceAnalysisController::class, 'adminRetry'])
@@ -160,7 +160,7 @@ Route::prefix('/Dashboard')->group(function () {
                     ->name('resend-invitation');
 
             });
-            
+
         Route::patch(
             '/admin/leads/{lead}/result-tag',
             [AdminLeadTagController::class, 'update']

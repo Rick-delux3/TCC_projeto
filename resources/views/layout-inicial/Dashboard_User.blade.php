@@ -5,17 +5,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <meta http-equiv="X-UA-Compatible" content="ie=edge">
-    <link rel="icon" type="image/jpeg" href="{{ asset('imgs/Logo_NVS.png') }}">
+    <link rel="icon" type="image/jpeg" href="{{ asset(config('branding.profiles.'.config('branding.active', 'tcc').'.logo', 'imgs/Logo_NVS.png')) }}">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
     @vite(['resources/css/header-dashboard-user.css', 'resources/js/app.js'])
     @vite(['resources/css/dashboard-user.css', 'resources/js/dashboard-user.js'])
+    @vite(['resources/css/branding.css'])
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400..900&family=Press+Start+2P&family=Roboto+Condensed:ital,wght@0,100..900;1,100..900&family=Sansation:ital,wght@0,300;0,400;0,700;1,300;1,400;1,700&family=TASA+Explorer:wght@400..800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
-    <title>NVS</title>
+    <title>{{ config('branding.profiles.'.config('branding.active', 'tcc').'.name', 'NVS Seguros') }}</title>
 </head>
-<body class="dashboard-user-body">
+<body class="dashboard-user-body" data-brand="{{ config('branding.active', 'tcc') }}">
     @include('layout-inicial.partials.header_imob')
     
     <main>
