@@ -158,8 +158,8 @@
 }
 
 [data-brand="client"] .dashboard-client-brand__logo {
-    width: 170px;
-    height: 82px;
+    width: 148px;
+    height: 70px;
     box-sizing: border-box;
     flex: 0 0 auto;
     padding: 0;
@@ -193,19 +193,24 @@
 }
 
 [data-brand="client"] .dashboard-sidebar-logo {
-    width: 138px;
+    width: 132px;
     height: 64px;
-    padding: 4px 8px;
+    box-sizing: border-box;
+    flex: 0 0 auto;
+    padding: 0;
+    overflow: hidden;
     border: 1px solid var(--brand-border);
     border-radius: 16px;
     background: var(--brand-surface);
 }
 
 [data-brand="client"] .dashboard-sidebar-logo img {
+    display: block;
     width: 100%;
     height: 100%;
     max-width: 100%;
     object-fit: contain;
+    object-position: center;
 }
 
 [data-brand="client"] .dashboard-sidebar-profile {
@@ -332,7 +337,7 @@
 }
 
 [data-brand="client"] .team-create-page .btn-primary {
-    --bs-btn-bg: var(--brand-primary);
+    --bs-btn-bg: var(--brand-primary-soft);
     --bs-btn-border-color: var(--brand-primary);
     --bs-btn-hover-bg: var(--brand-primary-hover);
     --bs-btn-hover-border-color: var(--brand-primary-hover);
@@ -574,8 +579,8 @@
 
 @media (max-width: 768px) {
     [data-brand="client"] .dashboard-client-brand__logo {
-        width: 122px;
-        height: 59px;
+        width: 112px;
+        height: 54px;
         border-radius: 13px;
     }
 

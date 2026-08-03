@@ -214,7 +214,14 @@
     <div class="offcanvas-header border-bottom">
         <div class="d-flex align-items-center gap-3">
             <span class="dashboard-sidebar-logo">
-                <x-brand-logo />
+                @if (config('branding.active', 'tcc') === 'client')
+                    <img
+                        src="{{ asset('imgs/logo-header.jpg') }}"
+                        alt="{{ config('branding.profiles.client.name', 'Aki Aluga') }}"
+                    >
+                @else
+                    <x-brand-logo />
+                @endif
             </span>
 
             <div>

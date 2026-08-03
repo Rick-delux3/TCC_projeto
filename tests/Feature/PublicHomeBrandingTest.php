@@ -82,7 +82,7 @@ it('uses the fictitious logo as the safe component fallback', function () {
         ->toContain('data-brand-logo="tcc"');
 });
 
-it('uses the framed client logo only in both dashboard headers', function (string $profile) {
+it('uses the framed client logo in both dashboard headers and sidebars', function (string $profile) {
     $corretor = Corretor::query()->create([
         'name' => 'Corretor de Teste',
         'email' => 'branding-admin@example.test',
@@ -109,8 +109,8 @@ it('uses the framed client logo only in both dashboard headers', function (strin
     foreach ([$adminHeader, $companyHeader] as $html) {
 
         if ($profile === 'client') {
-            expect(substr_count($html, 'imgs/logo-header.jpg'))->toBe(1)
-                ->and(substr_count($html, 'imgs/logo-principal-real.jpg'))->toBe(1)
+            expect(substr_count($html, 'imgs/logo-header.jpg'))->toBe(2)
+                ->and($html)->not->toContain('imgs/logo-principal-real.jpg')
                 ->and($html)->not->toContain('imgs/Logo_NVS.png');
         } else {
             expect(substr_count($html, 'imgs/Logo_NVS.png'))->toBe(2)
