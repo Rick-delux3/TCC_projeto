@@ -1351,7 +1351,7 @@
                                         aria-controls="admin-lead-tags-pane-{{ $lead->id }}"
                                         aria-selected="false"
                                     >
-                                        Tags
+                                        Status
                                     </button>
                                 </li>
                             @endcan
@@ -1368,7 +1368,7 @@
                                         aria-controls="admin-lead-result-pane-{{ $lead->id }}"
                                         aria-selected="false"
                                     >
-                                        Resultado
+                                        Alterar status
                                     </button>
                                 </li>
                             @endcan
@@ -1422,6 +1422,12 @@
                                 @endcan
 
                                         <div class="row g-4">
+                                            <div class="alert alert-warning rounded-4" role="alert">
+                                                <i class="bi bi-exclamation-triangle me-1" aria-hidden="true"></i>
+                                                    A reanálise pode retornar RECUSADO!
+                                                </div>
+                                            
+                                             
                                             <div class="col-12">
                                                 <div class="card border rounded-4">
                                                     <div class="card-body">
@@ -1717,7 +1723,7 @@
                                             <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-start gap-3 mb-3">
                                                 <div>
                                                     <h6 class="fw-bold mb-1">
-                                                        Resultado comercial
+                                                        Status comercial
                                                     </h6>
                                                     <p class="text-muted small mb-0">
                                                         A alteração será enviada para a fila e somente será refletida no sistema depois da confirmação da LeadLovers.
@@ -1760,7 +1766,7 @@
                                                                 for="adminLeadResultSelect{{ $lead->id }}"
                                                                 class="form-label fw-semibold"
                                                             >
-                                                                Novo resultado
+                                                                Novo status
                                                             </label>
 
                                                             <select
@@ -1775,7 +1781,7 @@
                                                                 @disabled(! $leadResultIsEligible && ! $resultErrorMessage)
                                                             >
                                                                 <option value="">
-                                                                    Selecione o novo resultado
+                                                                    Selecione o novo status
                                                                 </option>
 
                                                                 @foreach ($manualResultOptions as $result => $label)
@@ -1825,14 +1831,14 @@
                                                             for="adminLeadResultSelect{{ $lead->id }}"
                                                             class="form-label fw-semibold"
                                                         >
-                                                            Novo resultado
+                                                            Novo status
                                                         </label>
                                                         <select
                                                             id="adminLeadResultSelect{{ $lead->id }}"
                                                             class="form-select"
                                                             disabled
                                                         >
-                                                            <option>Selecione o novo resultado</option>
+                                                            <option>Selecione o novo status</option>
                                                             @foreach ($manualResultOptions as $label)
                                                                 <option>{{ $label }}</option>
                                                             @endforeach
