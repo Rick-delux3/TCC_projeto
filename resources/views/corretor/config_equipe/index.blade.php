@@ -168,7 +168,7 @@
                     Voltar ao dashboard
                 </a>
 
-                <a href="{{ $createRoute }}" class="btn btn-primary {{ $createRoute === '#' ? 'disabled' : '' }}">
+                <a href="{{ $createRoute }}" class="btn btn-outline-primary {{ $createRoute === '#' ? 'disabled' : '' }}">
                     <i class="bi bi-person-plus me-1"></i>
                     Convidar novo integrante
                 </a>

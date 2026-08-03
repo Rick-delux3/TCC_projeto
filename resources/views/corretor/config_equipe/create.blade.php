@@ -550,7 +550,7 @@
                         </div>
 
                         <div class="team-actions d-flex flex-column flex-sm-row-reverse gap-2 pt-4 mt-4">
-                            <button type="submit" class="btn btn-primary px-4">
+                            <button type="submit" class="btn btn-outline-primary px-4">
                                 <i class="bi bi-person-plus me-1"></i>
                                 Cadastrar e enviar convite
                             </button>
