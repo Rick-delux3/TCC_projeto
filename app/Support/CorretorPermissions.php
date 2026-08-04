@@ -16,7 +16,8 @@ class CorretorPermissions
             'edit-leads' => ['leads.editar'],
             'view-analyses' => ['analises.visualizar', 'analises.criar'],
             'create-analysis' => ['analises.criar'],
-            'view-real-estate-companies' => ['imobiliarias.visualizar'],
+            'view-real-estate-companies' => ['imobiliarias.visualizar', 'imobiliarias.cadastrar'],
+            'create-real-estate-company' => ['imobiliarias.cadastrar'],
             'view-tags' => [
                 'tags.visualizar',
                 'tags.gerenciar',
@@ -35,6 +36,7 @@ class CorretorPermissions
             'analises.visualizar' => 'Visualizar análises',
             'analises.criar' => 'Solicitar análises',
             'imobiliarias.visualizar' => 'Visualizar imobiliárias',
+            'imobiliarias.cadastrar' => 'Cadastrar imobiliárias',
             'tags.visualizar' => 'Visualizar tags',
             'tags.gerenciar' => 'Gerenciar tags dos leads',
         ];
