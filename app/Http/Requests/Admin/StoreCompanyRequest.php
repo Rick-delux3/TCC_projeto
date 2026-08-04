@@ -18,16 +18,4 @@ class StoreCompanyRequest extends PublicStoreCompanyRequest
         return $corretor instanceof Corretor
             && Gate::forUser($corretor)->allows('create-real-estate-company');
     }
-
-    /**
-     * Get the validation rules that apply to the request.
-     *
-     * @return array<string, \Illuminate\Contracts\Validation\ValidationRule|array<mixed>|string>
-     */
-    public function rules(): array
-    {
-        return [
-            //
-        ];
-    }
 }

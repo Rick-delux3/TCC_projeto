@@ -10,6 +10,7 @@
     @vite(['resources/css/header-dashboard-admin.css', 'resources/js/app.js'])
     @vite(['resources/css/dashboard-admin.css', 'resources/js/dashboard-user.js'])
     @vite(['resources/css/branding.css'])
+    @stack('styles')
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400..900&family=Press+Start+2P&family=Roboto+Condensed:ital,wght@0,100..900;1,100..900&family=Sansation:ital,wght@0,300;0,400;0,700;1,300;1,400;1,700&family=TASA+Explorer:wght@400..800&display=swap" rel="stylesheet">
@@ -50,6 +51,7 @@
             @endif
         });
     </script>
+    @stack('scripts')
 
 </body>
 </html>

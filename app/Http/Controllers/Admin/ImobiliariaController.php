@@ -1,7 +1,6 @@
 <?php
 
-namespace App\Http\Controllers;
-
+namespace App\Http\Controllers\Admin;
 
 use App\Actions\Companies\RegisterCompany;
 use App\Http\Controllers\Controller;
@@ -15,18 +14,17 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
-
 class ImobiliariaController extends Controller
 {
     public function index(Request $request): View
     {
-        $filter = $request->validate([
+        $filters = $request->validate([
             'search' => ['nullable', 'string', 'max:100'],
             'status' => ['nullable', Rule::in(['active', 'inactive'])],
         ]);
 
-        $search = trim($filter['search'] ?? '');
-        $status = $filter['status'] ?? null;
+        $search = trim($filters['search'] ?? '');
+        $status = $filters['status'] ?? null;
         $cnpjSearch = preg_replace('/\D+/', '', $search) ?? '';
 
         $companies = Imobiliaria::query()
@@ -41,7 +39,7 @@ class ImobiliariaController extends Controller
                 'state',
                 'lead_access_code',
                 'lead_form_active',
-                'creayted_at',
+                'created_at',
             ])
             ->when($search !== '', function (Builder $query) use ($search, $cnpjSearch): void {
                 $query->where(function (Builder $query) use ($search, $cnpjSearch): void {
@@ -66,20 +64,20 @@ class ImobiliariaController extends Controller
             ->paginate(15)
             ->withQueryString();
 
-            return view('corretor.imobiliarias-aba.index', [
-                'companies' => $companies,
-                'filter' => $filter,
-                'summary' => [
-                    'total' => Imobiliaria::query()->count(),
-                    'active' => Imobiliaria::query()->where('lead_form_active', true)->count(),
-                    'inactive' => Imobiliaria::query()->where('lead_form_active', false)->count(),
-                ],
-            ]);
+        return view('corretor.imobiliarias.index', [
+            'companies' => $companies,
+            'filters' => $filters,
+            'summary' => [
+                'total' => Imobiliaria::query()->count(),
+                'active' => Imobiliaria::query()->where('lead_form_active', true)->count(),
+                'inactive' => Imobiliaria::query()->where('lead_form_active', false)->count(),
+            ],
+        ]);
     }
 
     public function create(CompanyTagService $companyTags): View
     {
-        return view('corretor.imobiliarias-aba.create', [
+        return view('corretor.imobiliarias.create', [
             'tagsOficiais' => $companyTags->availableTags(),
         ]);
     }
@@ -107,4 +105,3 @@ class ImobiliariaController extends Controller
             );
     }
 }
-
