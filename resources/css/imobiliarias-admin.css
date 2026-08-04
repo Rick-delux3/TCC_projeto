@@ -17,6 +17,20 @@
     min-width: 0;
 }
 
+.company-motion-enabled .real-estate-admin [data-reveal] {
+    opacity: 0;
+    transform: translate3d(0, 1.15rem, 0) scale(0.992);
+    transition:
+        opacity 0.58s cubic-bezier(0.22, 1, 0.36, 1),
+        transform 0.72s cubic-bezier(0.22, 1, 0.36, 1);
+    transition-delay: var(--reveal-delay, 0ms);
+}
+
+.company-motion-enabled .real-estate-admin [data-reveal].is-revealed {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+}
+
 .real-estate-admin a:focus-visible,
 .real-estate-admin button:focus-visible,
 .real-estate-admin input:focus-visible,
@@ -36,6 +50,13 @@
         radial-gradient(circle at 88% 12%, rgba(var(--company-accent-rgb), 0.34), transparent 24%),
         linear-gradient(135deg, var(--company-navy) 0%, var(--company-hero-mid) 58%, var(--company-blue) 100%);
     box-shadow: 0 22px 48px rgba(var(--company-navy-rgb), 0.2);
+    transition: box-shadow 0.35s ease, border-color 0.35s ease;
+}
+
+.company-page-hero:hover,
+.company-form-header:hover {
+    border-color: rgba(255, 255, 255, 0.24);
+    box-shadow: 0 28px 62px rgba(var(--company-navy-rgb), 0.26);
 }
 
 .company-page-hero::before,
@@ -48,6 +69,9 @@
     content: "";
     border: 1px solid rgba(255, 255, 255, 0.14);
     border-radius: 50%;
+    transform: translate3d(var(--hero-shift-x, 0), var(--hero-shift-y, 0), 0);
+    transition: transform 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+    animation: company-ambient-pulse 5.5s ease-in-out infinite alternate;
 }
 
 .company-page-hero::after,
@@ -60,6 +84,9 @@
     content: "";
     border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 50%;
+    transform: translate3d(var(--hero-shift-x-reverse, 0), var(--hero-shift-y-reverse, 0), 0);
+    transition: transform 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+    animation: company-ambient-pulse 7s 0.7s ease-in-out infinite alternate-reverse;
 }
 
 .company-page-hero__content,
@@ -130,13 +157,24 @@
     border-radius: 0.9rem;
     background: #fff;
     box-shadow: 0 12px 28px rgba(var(--company-navy-rgb), 0.2);
+    transition:
+        color 0.25s ease,
+        background-color 0.25s ease,
+        border-color 0.25s ease,
+        box-shadow 0.25s ease,
+        transform 0.25s ease;
 }
 
 .company-primary-action:hover {
     color: var(--company-navy);
     border-color: #fff;
     background: #f4f8ff;
-    transform: translateY(-1px);
+    box-shadow: 0 16px 34px rgba(var(--company-navy-rgb), 0.26);
+    transform: translateY(-2px);
+}
+
+.company-primary-action:active {
+    transform: translateY(0) scale(0.98);
 }
 
 .company-summary-card,
@@ -147,6 +185,23 @@
     overflow: hidden;
     border: 1px solid var(--dash-border) !important;
     border-radius: var(--company-radius-lg) !important;
+}
+
+.company-summary-card,
+.company-filter-card,
+.company-list-card,
+.company-empty-state,
+.company-form-section {
+    transition:
+        border-color 0.3s ease,
+        box-shadow 0.3s ease,
+        transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.company-summary-card:hover {
+    border-color: rgba(var(--company-primary-rgb), 0.2) !important;
+    box-shadow: 0 20px 42px rgba(var(--company-navy-rgb), 0.12) !important;
+    transform: translateY(-0.3rem);
 }
 
 .company-summary-card .card-body {
@@ -165,6 +220,12 @@
     height: 3rem;
     font-size: 1.3rem;
     border-radius: 1rem;
+    transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.35s ease;
+}
+
+.company-summary-card:hover .company-summary-card__icon {
+    box-shadow: 0 10px 22px rgba(var(--company-primary-rgb), 0.14);
+    transform: rotate(-6deg) scale(1.08);
 }
 
 .company-summary-card--total .company-summary-card__icon {
@@ -199,6 +260,7 @@
     font-size: clamp(1.65rem, 3vw, 2.2rem);
     font-weight: 800;
     line-height: 1.05;
+    font-variant-numeric: tabular-nums;
 }
 
 .company-summary-card__hint {
@@ -219,6 +281,24 @@
 .company-filter-card .btn {
     min-height: 2.85rem;
     white-space: nowrap;
+}
+
+.company-filter-card:focus-within {
+    border-color: rgba(var(--company-primary-rgb), 0.25) !important;
+    box-shadow: 0 18px 38px rgba(var(--company-navy-rgb), 0.1) !important;
+}
+
+.company-filter-card .input-group,
+.company-registration-form .input-group,
+.company-registration-form .form-select,
+.company-registration-form > .form-control {
+    transition: transform 0.25s ease, filter 0.25s ease;
+}
+
+.company-filter-card .input-group:focus-within,
+.company-registration-form .input-group:focus-within {
+    filter: drop-shadow(0 7px 12px rgba(var(--company-primary-rgb), 0.09));
+    transform: translateY(-1px);
 }
 
 .company-input-group .input-group-text,
@@ -272,6 +352,14 @@
     background: rgba(var(--company-primary-rgb), 0.035);
 }
 
+.company-table tbody tr {
+    transition: background-color 0.22s ease, box-shadow 0.22s ease;
+}
+
+.company-table tbody tr:hover {
+    box-shadow: inset 4px 0 0 rgba(var(--company-primary-rgb), 0.72);
+}
+
 .company-avatar {
     display: inline-flex;
     flex: 0 0 2.65rem;
@@ -284,6 +372,13 @@
     border-radius: 0.9rem;
     background: linear-gradient(135deg, var(--company-navy), var(--company-blue));
     box-shadow: 0 7px 18px rgba(var(--company-primary-rgb), 0.17);
+    transition: transform 0.32s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.32s ease;
+}
+
+.company-table tbody tr:hover .company-avatar,
+.company-mobile-card:hover .company-avatar {
+    box-shadow: 0 11px 24px rgba(var(--company-primary-rgb), 0.23);
+    transform: rotate(-4deg) scale(1.06);
 }
 
 .company-name,
@@ -347,6 +442,21 @@
     background: var(--company-blue);
 }
 
+.company-copy-button {
+    transition:
+        color 0.2s ease,
+        background-color 0.2s ease,
+        transform 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.company-copy-button:hover {
+    transform: translateY(-1px) scale(1.05);
+}
+
+.company-copy-button.is-copied {
+    animation: company-copy-pop 0.38s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
 .company-status {
     display: inline-flex;
     gap: 0.4rem;
@@ -363,6 +473,7 @@
     height: 0.45rem;
     border-radius: 50%;
     background: currentColor;
+    animation: company-status-pulse 2.4s ease-in-out infinite;
 }
 
 .company-status--active {
@@ -384,6 +495,11 @@
 .company-mobile-card {
     padding: 1rem 0;
     border-bottom: 1px solid var(--dash-border);
+    transition: padding 0.25s ease, transform 0.25s ease;
+}
+
+.company-mobile-card:hover {
+    transform: translateX(0.2rem);
 }
 
 .company-mobile-card:last-child {
@@ -461,6 +577,7 @@
     font-size: 2rem;
     border-radius: 1.5rem;
     background: rgba(var(--company-primary-rgb), 0.1);
+    animation: company-empty-float 3.2s ease-in-out infinite;
 }
 
 .company-form-container {
@@ -517,6 +634,17 @@
     gap: 1.3rem;
 }
 
+.company-form-section:hover,
+.company-form-section.is-active {
+    border-color: rgba(var(--company-primary-rgb), 0.24) !important;
+    box-shadow: 0 20px 42px rgba(var(--company-navy-rgb), 0.1) !important;
+    transform: translateY(-0.18rem);
+}
+
+.company-form-section.is-active {
+    border-left: 4px solid var(--company-blue) !important;
+}
+
 .company-form-section__heading {
     display: flex;
     gap: 0.85rem;
@@ -537,6 +665,13 @@
     font-weight: 800;
     border-radius: 0.75rem;
     background: linear-gradient(135deg, var(--company-navy), var(--company-blue));
+    transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.3s ease;
+}
+
+.company-form-section:hover .company-form-section__number,
+.company-form-section.is-active .company-form-section__number {
+    box-shadow: 0 9px 18px rgba(var(--company-primary-rgb), 0.22);
+    transform: rotate(-7deg) scale(1.08);
 }
 
 .company-registration-form .form-label {
@@ -561,6 +696,7 @@
     color: var(--company-blue);
     border: 1px solid var(--dash-border);
     background: var(--dash-surface);
+    transition: color 0.22s ease, border-color 0.22s ease, background-color 0.22s ease;
 }
 
 .company-password-toggle:hover {
@@ -599,6 +735,34 @@
     border: 1px solid var(--dash-border);
     border-radius: var(--company-radius-md);
     background: var(--dash-surface-soft);
+    transition: border-color 0.25s ease, background-color 0.25s ease, transform 0.25s ease;
+}
+
+.company-status-control:focus-within,
+.company-status-control:hover {
+    border-color: rgba(var(--company-primary-rgb), 0.24);
+    transform: translateY(-1px);
+}
+
+.company-live-status {
+    display: inline-flex;
+    align-items: center;
+    min-height: 1.4rem;
+    padding: 0.2rem 0.48rem;
+    font-size: 0.68rem;
+    font-weight: 800;
+    border-radius: 999px;
+    transition: color 0.25s ease, background-color 0.25s ease, transform 0.25s ease;
+}
+
+.company-live-status.is-active {
+    color: #0d704b;
+    background: rgba(23, 132, 91, 0.12);
+}
+
+.company-live-status.is-inactive {
+    color: #915100;
+    background: rgba(255, 159, 10, 0.14);
 }
 
 .company-status-control .form-switch .form-check-input {
@@ -606,6 +770,7 @@
     height: 1.65rem;
     margin: 0;
     cursor: pointer;
+    transition: background-position 0.25s ease-in-out, background-color 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
 }
 
 .company-form-actions {
@@ -620,6 +785,21 @@
     min-width: 11rem;
     border-radius: 0.9rem;
     font-weight: 700;
+    transition:
+        color 0.22s ease,
+        background-color 0.22s ease,
+        border-color 0.22s ease,
+        box-shadow 0.22s ease,
+        transform 0.22s ease;
+}
+
+.company-form-actions .btn:hover:not(:disabled) {
+    box-shadow: 0 12px 24px rgba(var(--company-navy-rgb), 0.13);
+    transform: translateY(-2px);
+}
+
+.company-form-actions .btn:active:not(:disabled) {
+    transform: translateY(0) scale(0.985);
 }
 
 .company-honeypot {
@@ -628,6 +808,50 @@
     width: 1px !important;
     height: 1px !important;
     overflow: hidden !important;
+}
+
+@keyframes company-ambient-pulse {
+    from {
+        opacity: 0.62;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes company-copy-pop {
+    0% {
+        transform: scale(0.9);
+    }
+
+    65% {
+        transform: scale(1.12);
+    }
+
+    100% {
+        transform: scale(1);
+    }
+}
+
+@keyframes company-status-pulse {
+    0%, 100% {
+        box-shadow: 0 0 0 0 currentColor;
+    }
+
+    50% {
+        box-shadow: 0 0 0 0.22rem transparent;
+    }
+}
+
+@keyframes company-empty-float {
+    0%, 100% {
+        transform: translateY(0) rotate(0deg);
+    }
+
+    50% {
+        transform: translateY(-0.35rem) rotate(-2deg);
+    }
 }
 
 [data-brand="client"] .real-estate-admin {
@@ -679,6 +903,14 @@
 }
 
 .dashboard-shell[data-dashboard-theme="dark"] .company-status--inactive {
+    color: #ffc66d;
+}
+
+.dashboard-shell[data-dashboard-theme="dark"] .company-live-status.is-active {
+    color: #75e0b9;
+}
+
+.dashboard-shell[data-dashboard-theme="dark"] .company-live-status.is-inactive {
     color: #ffc66d;
 }
 

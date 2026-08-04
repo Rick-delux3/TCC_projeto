@@ -2,6 +2,90 @@ const onlyNumbers = (value, limit) => String(value ?? '')
     .replace(/\D/g, '')
     .slice(0, limit);
 
+const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+const animateCounter = (counter) => {
+    if (counter.dataset.counted === 'true') {
+        return;
+    }
+
+    counter.dataset.counted = 'true';
+    const target = Number.parseInt(counter.dataset.countUp ?? '0', 10);
+
+    if (prefersReducedMotion || !Number.isFinite(target) || target <= 0) {
+        counter.textContent = new Intl.NumberFormat('pt-BR').format(Math.max(target, 0));
+        return;
+    }
+
+    const duration = Math.min(1100, 620 + (target * 12));
+    const startedAt = performance.now();
+    counter.textContent = '0';
+
+    const update = (now) => {
+        const progress = Math.min((now - startedAt) / duration, 1);
+        const easedProgress = 1 - ((1 - progress) ** 3);
+        const currentValue = Math.round(target * easedProgress);
+        counter.textContent = new Intl.NumberFormat('pt-BR').format(currentValue);
+
+        if (progress < 1) {
+            window.requestAnimationFrame(update);
+        }
+    };
+
+    window.requestAnimationFrame(update);
+};
+
+const revealElement = (element) => {
+    element.classList.add('is-revealed');
+    element.querySelectorAll('[data-count-up]').forEach(animateCounter);
+};
+
+const revealElements = document.querySelectorAll('.real-estate-admin [data-reveal]');
+
+if (revealElements.length > 0 && !prefersReducedMotion && 'IntersectionObserver' in window) {
+    document.documentElement.classList.add('company-motion-enabled');
+
+    const revealObserver = new IntersectionObserver((entries, observer) => {
+        entries.forEach((entry) => {
+            if (!entry.isIntersecting) {
+                return;
+            }
+
+            revealElement(entry.target);
+            observer.unobserve(entry.target);
+        });
+    }, {
+        threshold: 0.12,
+        rootMargin: '0px 0px -6% 0px',
+    });
+
+    revealElements.forEach((element) => revealObserver.observe(element));
+} else {
+    revealElements.forEach(revealElement);
+}
+
+if (!prefersReducedMotion) {
+    document.querySelectorAll('.company-page-hero, .company-form-header').forEach((hero) => {
+        hero.addEventListener('pointermove', (event) => {
+            const bounds = hero.getBoundingClientRect();
+            const relativeX = ((event.clientX - bounds.left) / bounds.width) - 0.5;
+            const relativeY = ((event.clientY - bounds.top) / bounds.height) - 0.5;
+
+            hero.style.setProperty('--hero-shift-x', `${relativeX * 14}px`);
+            hero.style.setProperty('--hero-shift-y', `${relativeY * 10}px`);
+            hero.style.setProperty('--hero-shift-x-reverse', `${relativeX * -9}px`);
+            hero.style.setProperty('--hero-shift-y-reverse', `${relativeY * -6}px`);
+        });
+
+        hero.addEventListener('pointerleave', () => {
+            hero.style.setProperty('--hero-shift-x', '0px');
+            hero.style.setProperty('--hero-shift-y', '0px');
+            hero.style.setProperty('--hero-shift-x-reverse', '0px');
+            hero.style.setProperty('--hero-shift-y-reverse', '0px');
+        });
+    });
+}
+
 const formatCnpj = (value) => {
     const numbers = onlyNumbers(value, 14);
 
@@ -102,8 +186,35 @@ if (registrationForm) {
     const submitButton = registrationForm.querySelector('[data-company-submit]');
     const submitLabel = submitButton?.querySelector('[data-submit-label]');
     const submitSpinner = submitButton?.querySelector('[data-submit-spinner]');
+    const statusInput = registrationForm.querySelector('#lead_form_active');
+    const statusState = registrationForm.querySelector('[data-status-state]');
     let lastResolvedCep = null;
     let lookupSequence = 0;
+
+    const updateStatusState = () => {
+        if (!statusInput || !statusState) {
+            return;
+        }
+
+        const isActive = statusInput.checked;
+        statusState.textContent = isActive ? 'Ativo' : 'Inativo';
+        statusState.classList.toggle('is-active', isActive);
+        statusState.classList.toggle('is-inactive', !isActive);
+    };
+
+    statusInput?.addEventListener('change', updateStatusState);
+    updateStatusState();
+
+    registrationForm.querySelectorAll('.company-form-section').forEach((section) => {
+        section.addEventListener('focusin', () => section.classList.add('is-active'));
+        section.addEventListener('focusout', () => {
+            window.setTimeout(() => {
+                if (!section.contains(document.activeElement)) {
+                    section.classList.remove('is-active');
+                }
+            }, 0);
+        });
+    });
 
     if (cnpjInput) {
         cnpjInput.value = formatCnpj(cnpjInput.value);

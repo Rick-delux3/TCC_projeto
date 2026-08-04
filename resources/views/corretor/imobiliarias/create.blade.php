@@ -25,7 +25,7 @@
                 </ol>
             </nav>
 
-            <header class="company-form-header mb-4">
+            <header class="company-form-header mb-4" data-reveal>
                 <a href="{{ $indexRoute }}" class="company-back-link">
                     <i class="bi bi-arrow-left" aria-hidden="true"></i>
                     Voltar para a listagem
@@ -46,7 +46,7 @@
             </header>
 
             @if ($errors->any())
-                <div class="alert alert-danger company-validation-summary mb-4" role="alert" aria-labelledby="validation-summary-title">
+                <div class="alert alert-danger company-validation-summary mb-4" role="alert" aria-labelledby="validation-summary-title" data-reveal>
                     <div class="d-flex gap-3 align-items-start">
                         <i class="bi bi-exclamation-triangle-fill" aria-hidden="true"></i>
                         <div>
@@ -78,7 +78,7 @@
                     >
                 </div>
 
-                <section class="card company-form-section" aria-labelledby="company-identification-title">
+                <section class="card company-form-section" aria-labelledby="company-identification-title" data-reveal style="--reveal-delay: 70ms">
                     <div class="card-body p-3 p-md-4">
                         <div class="company-form-section__heading">
                             <span class="company-form-section__number">1</span>
@@ -145,7 +145,7 @@
                     </div>
                 </section>
 
-                <section class="card company-form-section" aria-labelledby="company-contact-title">
+                <section class="card company-form-section" aria-labelledby="company-contact-title" data-reveal style="--reveal-delay: 110ms">
                     <div class="card-body p-3 p-md-4">
                         <div class="company-form-section__heading">
                             <span class="company-form-section__number">2</span>
@@ -232,7 +232,7 @@
                     </div>
                 </section>
 
-                <section class="card company-form-section" aria-labelledby="company-address-title">
+                <section class="card company-form-section" aria-labelledby="company-address-title" data-reveal style="--reveal-delay: 150ms">
                     <div class="card-body p-3 p-md-4">
                         <div class="company-form-section__heading">
                             <span class="company-form-section__number">3</span>
@@ -318,7 +318,7 @@
                     </div>
                 </section>
 
-                <section class="card company-form-section" aria-labelledby="company-access-title">
+                <section class="card company-form-section" aria-labelledby="company-access-title" data-reveal style="--reveal-delay: 190ms">
                     <div class="card-body p-3 p-md-4">
                         <div class="company-form-section__heading">
                             <span class="company-form-section__number">4</span>
@@ -410,7 +410,16 @@
 
                         <div class="company-status-control mt-4">
                             <div>
-                                <label for="lead_form_active" class="fw-bold mb-1">Formulário ativo</label>
+                                <div class="d-flex align-items-center gap-2 mb-1">
+                                    <label for="lead_form_active" class="fw-bold">Formulário ativo</label>
+                                    <span
+                                        class="company-live-status {{ (bool) old('lead_form_active', true) ? 'is-active' : 'is-inactive' }}"
+                                        data-status-state
+                                        aria-live="polite"
+                                    >
+                                        {{ (bool) old('lead_form_active', true) ? 'Ativo' : 'Inativo' }}
+                                    </span>
+                                </div>
                                 <p id="lead-form-status-help" class="text-muted small mb-0">
                                     Quando ativo, o código de acesso gerado poderá receber novos cadastros de leads.
                                 </p>
@@ -432,7 +441,7 @@
                     </div>
                 </section>
 
-                <div class="company-form-actions">
+                <div class="company-form-actions" data-reveal style="--reveal-delay: 120ms">
                     <a href="{{ $indexRoute }}" class="btn btn-outline-secondary btn-lg">Cancelar</a>
                     <button type="submit" class="btn btn-primary btn-lg" data-company-submit>
                         <span class="spinner-border spinner-border-sm me-2" data-submit-spinner aria-hidden="true" hidden></span>

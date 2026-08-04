@@ -61,7 +61,7 @@
             </div>
         @endif
 
-        <section class="company-page-hero mb-4" aria-labelledby="companies-page-title">
+        <section class="company-page-hero mb-4" aria-labelledby="companies-page-title" data-reveal>
             <div class="company-page-hero__content">
                 <nav aria-label="Navegação estrutural" class="mb-3">
                     <ol class="breadcrumb company-breadcrumb mb-0">
@@ -96,7 +96,7 @@
         </section>
 
         <section class="row g-3 mb-4" aria-label="Resumo das imobiliárias">
-            <div class="col-12 col-sm-4">
+            <div class="col-12 col-sm-4" data-reveal style="--reveal-delay: 80ms">
                 <article class="card company-summary-card company-summary-card--total h-100">
                     <div class="card-body">
                         <div class="company-summary-card__icon" aria-hidden="true">
@@ -104,14 +104,14 @@
                         </div>
                         <div>
                             <p class="company-summary-card__label">Total de imobiliárias</p>
-                            <p class="company-summary-card__value">{{ number_format($summary['total'] ?? 0, 0, ',', '.') }}</p>
+                            <p class="company-summary-card__value" data-count-up="{{ $summary['total'] ?? 0 }}">{{ number_format($summary['total'] ?? 0, 0, ',', '.') }}</p>
                             <p class="company-summary-card__hint mb-0">parceiros cadastrados</p>
                         </div>
                     </div>
                 </article>
             </div>
 
-            <div class="col-6 col-sm-4">
+            <div class="col-6 col-sm-4" data-reveal style="--reveal-delay: 150ms">
                 <article class="card company-summary-card company-summary-card--active h-100">
                     <div class="card-body">
                         <div class="company-summary-card__icon" aria-hidden="true">
@@ -119,14 +119,14 @@
                         </div>
                         <div>
                             <p class="company-summary-card__label">Formulários ativos</p>
-                            <p class="company-summary-card__value">{{ number_format($summary['active'] ?? 0, 0, ',', '.') }}</p>
+                            <p class="company-summary-card__value" data-count-up="{{ $summary['active'] ?? 0 }}">{{ number_format($summary['active'] ?? 0, 0, ',', '.') }}</p>
                             <p class="company-summary-card__hint mb-0">prontos para receber leads</p>
                         </div>
                     </div>
                 </article>
             </div>
 
-            <div class="col-6 col-sm-4">
+            <div class="col-6 col-sm-4" data-reveal style="--reveal-delay: 220ms">
                 <article class="card company-summary-card company-summary-card--inactive h-100">
                     <div class="card-body">
                         <div class="company-summary-card__icon" aria-hidden="true">
@@ -134,7 +134,7 @@
                         </div>
                         <div>
                             <p class="company-summary-card__label">Formulários inativos</p>
-                            <p class="company-summary-card__value">{{ number_format($summary['inactive'] ?? 0, 0, ',', '.') }}</p>
+                            <p class="company-summary-card__value" data-count-up="{{ $summary['inactive'] ?? 0 }}">{{ number_format($summary['inactive'] ?? 0, 0, ',', '.') }}</p>
                             <p class="company-summary-card__hint mb-0">temporariamente pausados</p>
                         </div>
                     </div>
@@ -142,7 +142,7 @@
             </div>
         </section>
 
-        <section class="card company-filter-card mb-4" aria-labelledby="company-filter-title">
+        <section class="card company-filter-card mb-4" aria-labelledby="company-filter-title" data-reveal style="--reveal-delay: 120ms">
             <div class="card-body p-3 p-lg-4">
                 <div class="d-flex align-items-center justify-content-between gap-3 mb-3">
                     <div>
@@ -197,7 +197,7 @@
         </section>
 
         @if ($companies->isEmpty())
-            <section class="card company-empty-state" aria-live="polite">
+            <section class="card company-empty-state" aria-live="polite" data-reveal style="--reveal-delay: 180ms">
                 <div class="card-body text-center px-3 py-5">
                     <span class="company-empty-state__icon" aria-hidden="true">
                         <i class="bi {{ $hasFilters ? 'bi-search' : 'bi-buildings' }}"></i>
@@ -227,7 +227,7 @@
                 </div>
             </section>
         @else
-            <section class="card company-list-card" aria-labelledby="company-list-title">
+            <section class="card company-list-card" aria-labelledby="company-list-title" data-reveal style="--reveal-delay: 180ms">
                 <div class="card-body p-0">
                     <div class="company-list-card__header">
                         <div>

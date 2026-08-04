@@ -99,6 +99,8 @@ it('renders the company index with its exact view contract and without internal 
         ->assertSeeText('Imobiliária Horizonte')
         ->assertSeeText('11.222.333/0001-81')
         ->assertSee('data-copy-code="'.$activeCompany->lead_access_code.'"', false)
+        ->assertSee('data-reveal', false)
+        ->assertSee('data-count-up', false)
         ->assertSee('d-none d-lg-block', false)
         ->assertSee('company-mobile-list', false)
         ->assertDontSee($activeCompany->lead_form_token)
@@ -219,6 +221,7 @@ it('allows creators and the CEO to open the registration form', function () {
         ->assertSeeText('Cadastrar imobiliária')
         ->assertSee('name="leadlovers_tag_id"', false)
         ->assertSee('name="website"', false)
+        ->assertSee('data-status-state', false)
         ->assertDontSee('lead_form_token');
 
     $this
