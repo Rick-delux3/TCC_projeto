@@ -208,7 +208,7 @@
                         @can('manage-organization')
                             <li>
                                 <a class="dropdown-item py-2" href="{{ $equipeRoute }}">
-                                    <i class="bi bi-people-gear me-2"></i>
+                                    <i class="bi bi-person-gear me-2"></i>
                                     Gerenciar equipe
                                 </a>
                             </li>
@@ -352,7 +352,7 @@
                     href="{{ $equipeRoute }}"
                     class="dashboard-sidebar-link {{ request()->routeIs('admin.config-equipe.*') ? 'active' : '' }}"
                 >
-                    <i class="bi bi-people-gear"></i>
+                    <i class="bi bi-person-gear"></i>
                     <span>Equipe</span>
                 </a>
             @endcan
