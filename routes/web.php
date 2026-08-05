@@ -176,6 +176,16 @@ Route::prefix('/Dashboard')->group(function () {
                 Route::post('/', [ImobiliariaController::class, 'store'])
                     ->middleware(['can:create-real-estate-company', 'throttle:5,1'])
                     ->name('store');
+
+                Route::patch('/{company}', [ImobiliariaController::class, 'update'])
+                    ->middleware(['can:update-real-estate-company', 'throttle:5,1'])
+                    ->whereNumber('company')
+                    ->name('update');
+
+                Route::delete('/{company}', [ImobiliariaController::class, 'destroy'])
+                    ->middleware(['can:delete-real-estate-company', 'throttle:5,1'])
+                    ->whereNumber('company')
+                    ->name('destroy');
             });
 
         Route::patch(

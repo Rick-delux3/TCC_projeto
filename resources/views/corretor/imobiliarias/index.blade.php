@@ -13,6 +13,11 @@
     $search = (string) ($filters['search'] ?? '');
     $status = $filters['status'] ?? null;
     $hasFilters = filled($search) || in_array($status, ['active', 'inactive'], true);
+    $editingCompanyId = (int) old('_editing_company_id', 0);
+    $editingCompany = $editingCompanyId > 0
+        ? $companies->firstWhere('id', $editingCompanyId)
+        : null;
+    $hasEditErrors = $editingCompanyId > 0 && $errors->any();
 
     $formatCnpj = static function (?string $value): string {
         $numbers = preg_replace('/\D+/', '', (string) $value) ?? '';
@@ -49,7 +54,25 @@
 
 <div class="dashboard-shell real-estate-admin real-estate-index-page">
     <div class="container-fluid px-3 px-lg-4 py-4 py-lg-5">
-        @if ($errors->any())
+        @if (session('error'))
+            <div class="alert alert-danger border-0 rounded-4 shadow-sm mb-4" role="alert" aria-live="assertive">
+                <div class="d-flex gap-3 align-items-start">
+                    <i class="bi bi-exclamation-circle-fill" aria-hidden="true"></i>
+                    <div>{{ session('error') }}</div>
+                </div>
+            </div>
+        @endif
+
+        @if (session('info'))
+            <div class="alert alert-info border-0 rounded-4 shadow-sm mb-4" role="status" aria-live="polite">
+                <div class="d-flex gap-3 align-items-start">
+                    <i class="bi bi-info-circle-fill" aria-hidden="true"></i>
+                    <div>{{ session('info') }}</div>
+                </div>
+            </div>
+        @endif
+
+        @if ($errors->any() && ! $hasEditErrors)
             <div class="alert alert-danger border-0 rounded-4 shadow-sm mb-4" role="alert">
                 <div class="d-flex gap-3 align-items-start">
                     <i class="bi bi-exclamation-circle-fill" aria-hidden="true"></i>
@@ -246,11 +269,14 @@
                                     <th scope="col">Imobiliária</th>
                                     <th scope="col">Documentos e contato</th>
                                     <th scope="col">Localização</th>
-                                    <th scope="col">Código de acesso</th>
-                                    <th scope="col">Status</th>
-                                    <th scope="col">Cadastro</th>
-                                </tr>
-                            </thead>
+                                     <th scope="col">Código de acesso</th>
+                                     <th scope="col">Status</th>
+                                     <th scope="col">Cadastro</th>
+                                    @canany(['update-real-estate-company', 'delete-real-estate-company'])
+                                        <th scope="col" class="text-end">Ações</th>
+                                    @endcanany
+                                 </tr>
+                             </thead>
                             <tbody>
                                 @foreach ($companies as $company)
                                     <tr>
@@ -258,23 +284,30 @@
                                             <div class="d-flex align-items-center gap-3">
                                                 <span class="company-avatar" aria-hidden="true">
                                                     {{ mb_strtoupper(mb_substr((string) $company->name, 0, 1)) }}
-                                                </span>
-                                                <div class="min-w-0">
-                                                    <div class="fw-bold company-name">{{ $company->name }}</div>
-                                                    <div class="text-muted small company-email">{{ $company->email }}</div>
-                                                </div>
-                                            </div>
-                                        </td>
+                                                 </span>
+                                                 <div class="min-w-0">
+                                                     <div class="fw-bold company-name">{{ $company->name }}</div>
+                                                 </div>
+                                             </div>
+                                         </td>
                                         <td>
                                             <div class="company-detail-line">
                                                 <i class="bi bi-file-earmark-text" aria-hidden="true"></i>
                                                 <span>{{ $formatCnpj($company->cnpj) }}</span>
                                             </div>
                                             <div class="company-detail-line text-muted">
-                                                <i class="bi bi-telephone" aria-hidden="true"></i>
-                                                <span>{{ $formatPhone($company->phone) }}</span>
+                                                 <i class="bi bi-telephone" aria-hidden="true"></i>
+                                                 <span>{{ $formatPhone($company->phone) }}</span>
+                                             </div>
+                                            <div class="company-detail-line text-muted">
+                                                <i class="bi bi-envelope" aria-hidden="true"></i>
+                                                <a
+                                                    href="mailto:{{ $company->email }}"
+                                                    class="company-email-link"
+                                                    title="{{ $company->email }}"
+                                                >{{ $company->email }}</a>
                                             </div>
-                                        </td>
+                                         </td>
                                         <td>
                                             <div class="company-detail-line">
                                                 <i class="bi bi-geo-alt" aria-hidden="true"></i>
@@ -309,11 +342,56 @@
                                         </td>
                                         <td>
                                             <time datetime="{{ $company->created_at?->toDateString() }}">
-                                                {{ $company->created_at?->format('d/m/Y') ?? 'Não informado' }}
-                                            </time>
-                                        </td>
-                                    </tr>
-                                @endforeach
+                                                 {{ $company->created_at?->format('d/m/Y') ?? 'Não informado' }}
+                                             </time>
+                                         </td>
+                                        @canany(['update-real-estate-company', 'delete-real-estate-company'])
+                                            <td class="text-end">
+                                                <div class="company-actions justify-content-end">
+                                                    @can('update-real-estate-company')
+                                                        <button
+                                                            type="button"
+                                                            class="btn company-action-button company-action-button--edit"
+                                                            data-company-edit
+                                                            data-company-id="{{ $company->id }}"
+                                                            data-company-update-url="{{ route('admin.imobiliarias.update', ['company' => $company]) }}"
+                                                            data-company-name="{{ $company->name }}"
+                                                            data-company-email="{{ $company->email }}"
+                                                            data-company-phone="{{ $company->phone }}"
+                                                            data-company-cnpj="{{ $company->cnpj }}"
+                                                            data-company-cep="{{ $company->cep }}"
+                                                            data-company-city="{{ $company->city }}"
+                                                            data-company-state="{{ $company->state }}"
+                                                            data-company-status="{{ $company->lead_form_active ? '1' : '0' }}"
+                                                            data-bs-toggle="modal"
+                                                            data-bs-target="#companyEditModal"
+                                                            aria-label="Editar a imobiliária {{ $company->name }}"
+                                                            title="Editar"
+                                                        >
+                                                            <i class="bi bi-pencil-square" aria-hidden="true"></i>
+                                                        </button>
+                                                    @endcan
+
+                                                    @can('delete-real-estate-company')
+                                                        <button
+                                                            type="button"
+                                                            class="btn company-action-button company-action-button--delete"
+                                                            data-company-delete
+                                                            data-company-delete-url="{{ route('admin.imobiliarias.destroy', ['company' => $company]) }}"
+                                                            data-company-name="{{ $company->name }}"
+                                                            data-bs-toggle="modal"
+                                                            data-bs-target="#companyDeleteModal"
+                                                            aria-label="Remover a imobiliária {{ $company->name }}"
+                                                            title="Remover"
+                                                        >
+                                                            <i class="bi bi-trash3" aria-hidden="true"></i>
+                                                        </button>
+                                                    @endcan
+                                                </div>
+                                            </td>
+                                        @endcanany
+                                     </tr>
+                                 @endforeach
                             </tbody>
                         </table>
                     </div>
@@ -326,11 +404,10 @@
                                         <span class="company-avatar" aria-hidden="true">
                                             {{ mb_strtoupper(mb_substr((string) $company->name, 0, 1)) }}
                                         </span>
-                                        <div class="min-w-0">
-                                            <h3 class="h6 fw-bold text-break mb-1">{{ $company->name }}</h3>
-                                            <p class="text-muted small text-break mb-0">{{ $company->email }}</p>
-                                        </div>
-                                    </div>
+                                         <div class="min-w-0">
+                                             <h3 class="h6 fw-bold text-break mb-1">{{ $company->name }}</h3>
+                                         </div>
+                                     </div>
                                     <span class="company-status company-status--{{ $company->lead_form_active ? 'active' : 'inactive' }}">
                                         <span aria-hidden="true"></span>
                                         {{ $company->lead_form_active ? 'Ativo' : 'Inativo' }}
@@ -342,12 +419,18 @@
                                         <dt>CNPJ</dt>
                                         <dd>{{ $formatCnpj($company->cnpj) }}</dd>
                                     </div>
+                                     <div>
+                                         <dt>Telefone</dt>
+                                         <dd>{{ $formatPhone($company->phone) }}</dd>
+                                     </div>
                                     <div>
-                                        <dt>Telefone</dt>
-                                        <dd>{{ $formatPhone($company->phone) }}</dd>
+                                        <dt>E-mail</dt>
+                                        <dd>
+                                            <a href="mailto:{{ $company->email }}" class="company-email-link">{{ $company->email }}</a>
+                                        </dd>
                                     </div>
-                                    <div>
-                                        <dt>Localização</dt>
+                                     <div>
+                                         <dt>Localização</dt>
                                         <dd>{{ $location($company) }}</dd>
                                     </div>
                                     <div>
@@ -378,9 +461,51 @@
                                             <span data-copy-label>Copiar</span>
                                         </button>
                                         <span id="copy-mobile-feedback-{{ $company->id }}" class="visually-hidden" aria-live="polite"></span>
-                                    @endif
-                                </div>
-                            </article>
+                                     @endif
+                                 </div>
+
+                                @canany(['update-real-estate-company', 'delete-real-estate-company'])
+                                    <div class="company-mobile-actions mt-3">
+                                        @can('update-real-estate-company')
+                                            <button
+                                                type="button"
+                                                class="btn btn-outline-primary"
+                                                data-company-edit
+                                                data-company-id="{{ $company->id }}"
+                                                data-company-update-url="{{ route('admin.imobiliarias.update', ['company' => $company]) }}"
+                                                data-company-name="{{ $company->name }}"
+                                                data-company-email="{{ $company->email }}"
+                                                data-company-phone="{{ $company->phone }}"
+                                                data-company-cnpj="{{ $company->cnpj }}"
+                                                data-company-cep="{{ $company->cep }}"
+                                                data-company-city="{{ $company->city }}"
+                                                data-company-state="{{ $company->state }}"
+                                                data-company-status="{{ $company->lead_form_active ? '1' : '0' }}"
+                                                data-bs-toggle="modal"
+                                                data-bs-target="#companyEditModal"
+                                            >
+                                                <i class="bi bi-pencil-square" aria-hidden="true"></i>
+                                                Editar
+                                            </button>
+                                        @endcan
+
+                                        @can('delete-real-estate-company')
+                                            <button
+                                                type="button"
+                                                class="btn btn-outline-danger"
+                                                data-company-delete
+                                                data-company-delete-url="{{ route('admin.imobiliarias.destroy', ['company' => $company]) }}"
+                                                data-company-name="{{ $company->name }}"
+                                                data-bs-toggle="modal"
+                                                data-bs-target="#companyDeleteModal"
+                                            >
+                                                <i class="bi bi-trash3" aria-hidden="true"></i>
+                                                Remover
+                                            </button>
+                                        @endcan
+                                    </div>
+                                @endcanany
+                             </article>
                         @endforeach
                     </div>
 
@@ -393,5 +518,276 @@
             </section>
         @endif
     </div>
+
+    @can('update-real-estate-company')
+        <div
+            class="modal fade company-edit-modal"
+            id="companyEditModal"
+            tabindex="-1"
+            aria-labelledby="company-edit-modal-title"
+            aria-hidden="true"
+            data-company-edit-modal
+            data-reopen-company-id="{{ $editingCompany?->id }}"
+            data-preserve-input="{{ $hasEditErrors && $editingCompany ? 'true' : 'false' }}"
+        >
+            <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-lg">
+                <div class="modal-content">
+                    <form
+                        method="POST"
+                        action="{{ $editingCompany ? route('admin.imobiliarias.update', ['company' => $editingCompany]) : '#' }}"
+                        data-company-edit-form
+                    >
+                        @csrf
+                        @method('PATCH')
+                        <input type="hidden" name="_editing_company_id" value="{{ $editingCompany?->id }}" data-edit-company-id>
+
+                        <div class="modal-header">
+                            <div>
+                                <span class="company-modal-eyebrow">Editar imobiliária</span>
+                                <h2 class="modal-title fs-5" id="company-edit-modal-title">
+                                    <span data-edit-company-title>{{ $editingCompany?->name }}</span>
+                                </h2>
+                            </div>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+                        </div>
+
+                        <div class="modal-body">
+                            @if ($hasEditErrors)
+                                <div class="alert alert-danger company-modal-validation" role="alert">
+                                    <i class="bi bi-exclamation-triangle-fill" aria-hidden="true"></i>
+                                    <div>
+                                        <strong>Revise os campos destacados.</strong>
+                                        <div>As informações enviadas foram preservadas.</div>
+                                    </div>
+                                </div>
+                            @endif
+
+                            <div class="row g-3">
+                                <div class="col-12">
+                                    <label for="edit-company-name" class="form-label fw-semibold">
+                                        Nome da imobiliária <span class="text-danger" aria-hidden="true">*</span>
+                                    </label>
+                                    <input
+                                        type="text"
+                                        id="edit-company-name"
+                                        name="name"
+                                        value="{{ $hasEditErrors ? old('name') : '' }}"
+                                        class="form-control @error('name') is-invalid @enderror"
+                                        maxlength="255"
+                                        autocomplete="organization"
+                                        @error('name') aria-describedby="edit-company-name-error" @enderror
+                                        required
+                                        autofocus
+                                    >
+                                    @error('name')
+                                        <div id="edit-company-name-error" class="invalid-feedback">{{ $message }}</div>
+                                    @enderror
+                                </div>
+
+                                <div class="col-12 col-md-7">
+                                    <label for="edit-company-email" class="form-label fw-semibold">
+                                        E-mail <span class="text-danger" aria-hidden="true">*</span>
+                                    </label>
+                                    <input
+                                        type="email"
+                                        id="edit-company-email"
+                                        name="email"
+                                        value="{{ $hasEditErrors ? old('email') : '' }}"
+                                        class="form-control @error('email') is-invalid @enderror"
+                                        maxlength="255"
+                                        autocomplete="email"
+                                        @error('email') aria-describedby="edit-company-email-error" @enderror
+                                        required
+                                    >
+                                    @error('email')
+                                        <div id="edit-company-email-error" class="invalid-feedback">{{ $message }}</div>
+                                    @enderror
+                                </div>
+
+                                <div class="col-12 col-md-5">
+                                    <label for="edit-company-phone" class="form-label fw-semibold">
+                                        Telefone <span class="text-danger" aria-hidden="true">*</span>
+                                    </label>
+                                    <input
+                                        type="tel"
+                                        id="edit-company-phone"
+                                        name="phone"
+                                        value="{{ $hasEditErrors ? old('phone') : '' }}"
+                                        class="form-control @error('phone') is-invalid @enderror"
+                                        inputmode="numeric"
+                                        maxlength="15"
+                                        autocomplete="tel"
+                                        placeholder="(00) 00000-0000"
+                                        data-company-phone-input
+                                        @error('phone') aria-describedby="edit-company-phone-error" @enderror
+                                        required
+                                    >
+                                    @error('phone')
+                                        <div id="edit-company-phone-error" class="invalid-feedback">{{ $message }}</div>
+                                    @enderror
+                                </div>
+
+                                <div class="col-12 col-md-6">
+                                    <label for="edit-company-cnpj" class="form-label fw-semibold">
+                                        CNPJ <span class="text-danger" aria-hidden="true">*</span>
+                                    </label>
+                                    <input
+                                        type="text"
+                                        id="edit-company-cnpj"
+                                        name="cnpj"
+                                        value="{{ $hasEditErrors ? old('cnpj') : '' }}"
+                                        class="form-control @error('cnpj') is-invalid @enderror"
+                                        inputmode="numeric"
+                                        maxlength="18"
+                                        placeholder="00.000.000/0000-00"
+                                        data-company-cnpj-input
+                                        @error('cnpj') aria-describedby="edit-company-cnpj-error" @enderror
+                                        required
+                                    >
+                                    @error('cnpj')
+                                        <div id="edit-company-cnpj-error" class="invalid-feedback">{{ $message }}</div>
+                                    @enderror
+                                </div>
+
+                                <div class="col-12 col-md-6">
+                                    <label for="edit-company-cep" class="form-label fw-semibold">
+                                        CEP <span class="text-danger" aria-hidden="true">*</span>
+                                    </label>
+                                    <input
+                                        type="text"
+                                        id="edit-company-cep"
+                                        name="cep"
+                                        value="{{ $hasEditErrors ? old('cep') : '' }}"
+                                        class="form-control @error('cep') is-invalid @enderror"
+                                        inputmode="numeric"
+                                        maxlength="9"
+                                        autocomplete="postal-code"
+                                        placeholder="00000-000"
+                                        data-company-cep-input
+                                        @error('cep') aria-describedby="edit-company-cep-error" @enderror
+                                        required
+                                    >
+                                    @error('cep')
+                                        <div id="edit-company-cep-error" class="invalid-feedback">{{ $message }}</div>
+                                    @enderror
+                                </div>
+
+                                <div class="col-12 col-md-8">
+                                    <label for="edit-company-city" class="form-label fw-semibold">
+                                        Cidade <span class="text-danger" aria-hidden="true">*</span>
+                                    </label>
+                                    <input
+                                        type="text"
+                                        id="edit-company-city"
+                                        name="city"
+                                        value="{{ $hasEditErrors ? old('city') : '' }}"
+                                        class="form-control @error('city') is-invalid @enderror"
+                                        maxlength="100"
+                                        autocomplete="address-level2"
+                                        @error('city') aria-describedby="edit-company-city-error" @enderror
+                                        required
+                                    >
+                                    @error('city')
+                                        <div id="edit-company-city-error" class="invalid-feedback">{{ $message }}</div>
+                                    @enderror
+                                </div>
+
+                                <div class="col-12 col-md-4">
+                                    <label for="edit-company-state" class="form-label fw-semibold">
+                                        UF <span class="text-danger" aria-hidden="true">*</span>
+                                    </label>
+                                    <input
+                                        type="text"
+                                        id="edit-company-state"
+                                        name="state"
+                                        value="{{ $hasEditErrors ? old('state') : '' }}"
+                                        class="form-control text-uppercase @error('state') is-invalid @enderror"
+                                        maxlength="2"
+                                        autocomplete="address-level1"
+                                        @error('state') aria-describedby="edit-company-state-error" @enderror
+                                        required
+                                    >
+                                    @error('state')
+                                        <div id="edit-company-state-error" class="invalid-feedback">{{ $message }}</div>
+                                    @enderror
+                                </div>
+
+                                <div class="col-12">
+                                    <label for="edit-company-status" class="form-label fw-semibold">
+                                        Status do formulário <span class="text-danger" aria-hidden="true">*</span>
+                                    </label>
+                                    <select
+                                        id="edit-company-status"
+                                        name="lead_form_active"
+                                        class="form-select @error('lead_form_active') is-invalid @enderror"
+                                        @error('lead_form_active') aria-describedby="edit-company-status-error" @enderror
+                                        required
+                                    >
+                                        <option value="1" @selected($hasEditErrors && (string) old('lead_form_active') === '1')>Ativo</option>
+                                        <option value="0" @selected($hasEditErrors && (string) old('lead_form_active') === '0')>Inativo</option>
+                                    </select>
+                                    @error('lead_form_active')
+                                        <div id="edit-company-status-error" class="invalid-feedback">{{ $message }}</div>
+                                    @enderror
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                            <button type="submit" class="btn btn-primary" data-company-edit-submit>
+                                <span class="spinner-border spinner-border-sm me-2" data-submit-spinner aria-hidden="true" hidden></span>
+                                <span data-submit-label>Salvar alterações</span>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    @endcan
+
+    @can('delete-real-estate-company')
+        <div
+            class="modal fade company-delete-modal"
+            id="companyDeleteModal"
+            tabindex="-1"
+            aria-labelledby="company-delete-modal-title"
+            aria-describedby="company-delete-modal-description"
+            aria-hidden="true"
+            data-company-delete-modal
+        >
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content">
+                    <form method="POST" action="#" data-company-delete-form>
+                        @csrf
+                        @method('DELETE')
+
+                        <div class="modal-header">
+                            <h2 class="modal-title fs-5" id="company-delete-modal-title">Remover imobiliária</h2>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+                        </div>
+
+                        <div class="modal-body">
+                            <div class="company-delete-warning" aria-hidden="true">
+                                <i class="bi bi-exclamation-triangle-fill"></i>
+                            </div>
+                            <p id="company-delete-modal-description" class="mb-2">
+                                Confirma a remoção da imobiliária <strong data-delete-company-name></strong>?
+                            </p>
+                            <p class="text-danger fw-semibold mb-0">Esta ação é irreversível.</p>
+                        </div>
+
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                            <button type="submit" class="btn btn-danger" data-company-delete-submit>
+                                <span class="spinner-border spinner-border-sm me-2" data-submit-spinner aria-hidden="true" hidden></span>
+                                <span data-submit-label>Sim, remover</span>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    @endcan
 </div>
 @endsection

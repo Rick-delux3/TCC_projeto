@@ -104,6 +104,21 @@ const formatCep = (value) => {
         : numbers;
 };
 
+const formatPhone = (value) => {
+    const numbers = onlyNumbers(value, 11);
+
+    if (numbers.length <= 2) {
+        return numbers.length > 0 ? `(${numbers}` : '';
+    }
+
+    const localNumber = numbers.slice(2);
+    const prefixLength = numbers.length === 11 ? 5 : 4;
+    const prefix = localNumber.slice(0, prefixLength);
+    const suffix = localNumber.slice(prefixLength);
+
+    return `(${numbers.slice(0, 2)}) ${prefix}${suffix ? `-${suffix}` : ''}`;
+};
+
 async function copyToClipboard(value) {
     if (navigator.clipboard && window.isSecureContext) {
         await navigator.clipboard.writeText(value);
@@ -174,10 +189,210 @@ document.querySelectorAll('[data-copy-code]').forEach((button) => {
     });
 });
 
+const setFormSubmitting = (form, button, submitting, submittingLabel, idleLabel) => {
+    if (submitting) {
+        form.setAttribute('aria-busy', 'true');
+    } else {
+        form.removeAttribute('aria-busy');
+    }
+
+    if (!button) {
+        return;
+    }
+
+    button.disabled = submitting;
+
+    const spinner = button.querySelector('[data-submit-spinner]');
+    const label = button.querySelector('[data-submit-label]');
+
+    if (spinner) {
+        spinner.hidden = !submitting;
+    }
+
+    if (label) {
+        label.textContent = submitting ? submittingLabel : idleLabel;
+    }
+};
+
+const editModalElement = document.querySelector('[data-company-edit-modal]');
+
+if (editModalElement) {
+    const editForm = editModalElement.querySelector('[data-company-edit-form]');
+    const editSubmitButton = editModalElement.querySelector('[data-company-edit-submit]');
+    const editCompanyId = editModalElement.querySelector('[data-edit-company-id]');
+    const editTitle = editModalElement.querySelector('[data-edit-company-title]');
+    const editName = editModalElement.querySelector('#edit-company-name');
+    const editEmail = editModalElement.querySelector('#edit-company-email');
+    const editPhone = editModalElement.querySelector('[data-company-phone-input]');
+    const editCnpj = editModalElement.querySelector('[data-company-cnpj-input]');
+    const editCep = editModalElement.querySelector('[data-company-cep-input]');
+    const editCity = editModalElement.querySelector('#edit-company-city');
+    const editState = editModalElement.querySelector('#edit-company-state');
+    const editStatus = editModalElement.querySelector('#edit-company-status');
+    const validationSummary = editModalElement.querySelector('.company-modal-validation');
+
+    const clearServerValidation = () => {
+        validationSummary?.setAttribute('hidden', '');
+        editForm?.querySelectorAll('.is-invalid').forEach((field) => field.classList.remove('is-invalid'));
+    };
+
+    const populateEditForm = (button, preserveSubmittedValues = false) => {
+        if (!editForm || !button.dataset.companyId || !button.dataset.companyUpdateUrl) {
+            return;
+        }
+
+        editForm.action = button.dataset.companyUpdateUrl;
+
+        if (editCompanyId) {
+            editCompanyId.value = button.dataset.companyId;
+        }
+
+        if (editTitle) {
+            editTitle.textContent = button.dataset.companyName ?? '';
+        }
+
+        if (preserveSubmittedValues) {
+            return;
+        }
+
+        clearServerValidation();
+
+        if (editName) {
+            editName.value = button.dataset.companyName ?? '';
+        }
+
+        if (editEmail) {
+            editEmail.value = button.dataset.companyEmail ?? '';
+        }
+
+        if (editPhone) {
+            editPhone.value = formatPhone(button.dataset.companyPhone);
+        }
+
+        if (editCnpj) {
+            editCnpj.value = formatCnpj(button.dataset.companyCnpj);
+        }
+
+        if (editCep) {
+            editCep.value = formatCep(button.dataset.companyCep);
+        }
+
+        if (editCity) {
+            editCity.value = button.dataset.companyCity ?? '';
+        }
+
+        if (editState) {
+            editState.value = button.dataset.companyState ?? '';
+        }
+
+        if (editStatus) {
+            editStatus.value = button.dataset.companyStatus === '0' ? '0' : '1';
+        }
+    };
+
+    const editButtons = [...document.querySelectorAll('[data-company-edit]')];
+
+    editButtons.forEach((button) => {
+        button.addEventListener('click', () => populateEditForm(button));
+    });
+
+    if (editPhone) {
+        editPhone.value = formatPhone(editPhone.value);
+        editPhone.addEventListener('input', () => {
+            editPhone.value = formatPhone(editPhone.value);
+        });
+    }
+
+    if (editCnpj) {
+        editCnpj.value = formatCnpj(editCnpj.value);
+        editCnpj.addEventListener('input', () => {
+            editCnpj.value = formatCnpj(editCnpj.value);
+        });
+    }
+
+    if (editCep) {
+        editCep.value = formatCep(editCep.value);
+        editCep.addEventListener('input', () => {
+            editCep.value = formatCep(editCep.value);
+        });
+    }
+
+    editState?.addEventListener('input', () => {
+        editState.value = editState.value.replace(/[^a-z]/gi, '').slice(0, 2).toUpperCase();
+    });
+
+    editForm?.addEventListener('submit', (event) => {
+        if (editForm.getAttribute('aria-busy') === 'true') {
+            event.preventDefault();
+            return;
+        }
+
+        setFormSubmitting(editForm, editSubmitButton, true, 'Salvando...', 'Salvar alterações');
+    });
+
+    editModalElement.addEventListener('shown.bs.modal', () => {
+        const firstInvalidField = editModalElement.querySelector('.is-invalid');
+        (firstInvalidField ?? editName)?.focus();
+    });
+
+    const reopenCompanyId = editModalElement.dataset.reopenCompanyId;
+    const shouldPreserveInput = editModalElement.dataset.preserveInput === 'true';
+    const reopenButton = editButtons.find((button) => button.dataset.companyId === reopenCompanyId);
+
+    if (reopenButton && shouldPreserveInput && window.bootstrap?.Modal) {
+        populateEditForm(reopenButton, true);
+        window.bootstrap.Modal.getOrCreateInstance(editModalElement).show();
+    }
+
+    window.addEventListener('pageshow', () => {
+        if (editForm) {
+            setFormSubmitting(editForm, editSubmitButton, false, 'Salvando...', 'Salvar alterações');
+        }
+    });
+}
+
+const deleteModalElement = document.querySelector('[data-company-delete-modal]');
+
+if (deleteModalElement) {
+    const deleteForm = deleteModalElement.querySelector('[data-company-delete-form]');
+    const deleteSubmitButton = deleteModalElement.querySelector('[data-company-delete-submit]');
+    const deleteCompanyName = deleteModalElement.querySelector('[data-delete-company-name]');
+
+    document.querySelectorAll('[data-company-delete]').forEach((button) => {
+        button.addEventListener('click', () => {
+            if (deleteForm && button.dataset.companyDeleteUrl) {
+                deleteForm.action = button.dataset.companyDeleteUrl;
+            }
+
+            if (deleteCompanyName) {
+                deleteCompanyName.textContent = button.dataset.companyName ?? '';
+            }
+        });
+    });
+
+    deleteForm?.addEventListener('submit', (event) => {
+        if (deleteForm.getAttribute('aria-busy') === 'true') {
+            event.preventDefault();
+            return;
+        }
+
+        setFormSubmitting(deleteForm, deleteSubmitButton, true, 'Removendo...', 'Sim, remover');
+    });
+
+    deleteModalElement.addEventListener('shown.bs.modal', () => deleteSubmitButton?.focus());
+
+    window.addEventListener('pageshow', () => {
+        if (deleteForm) {
+            setFormSubmitting(deleteForm, deleteSubmitButton, false, 'Removendo...', 'Sim, remover');
+        }
+    });
+}
+
 const registrationForm = document.querySelector('[data-company-registration-form]');
 
 if (registrationForm) {
     const cnpjInput = registrationForm.querySelector('#cnpj');
+    const phoneInput = registrationForm.querySelector('#phone');
     const cepInput = registrationForm.querySelector('#cep');
     const cityInput = registrationForm.querySelector('#city');
     const stateInput = registrationForm.querySelector('#state');
@@ -220,6 +435,13 @@ if (registrationForm) {
         cnpjInput.value = formatCnpj(cnpjInput.value);
         cnpjInput.addEventListener('input', () => {
             cnpjInput.value = formatCnpj(cnpjInput.value);
+        });
+    }
+
+    if (phoneInput) {
+        phoneInput.value = formatPhone(phoneInput.value);
+        phoneInput.addEventListener('input', () => {
+            phoneInput.value = formatPhone(phoneInput.value);
         });
     }
 

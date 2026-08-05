@@ -405,6 +405,63 @@
     color: var(--company-blue);
 }
 
+.real-estate-admin .company-email-link {
+    display: inline-block;
+    max-width: 15rem;
+    overflow: hidden;
+    color: inherit;
+    text-overflow: ellipsis;
+    vertical-align: bottom;
+    white-space: nowrap;
+}
+
+.real-estate-admin .company-email-link:hover {
+    color: var(--company-blue);
+}
+
+.real-estate-admin .company-actions,
+.real-estate-admin .company-mobile-actions {
+    display: flex;
+    gap: 0.45rem;
+    align-items: center;
+}
+
+.real-estate-admin .company-action-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.25rem;
+    height: 2.25rem;
+    padding: 0;
+    border: 1px solid var(--dash-border);
+    border-radius: 0.7rem;
+    background: var(--dash-surface);
+    transition: color 0.2s ease, border-color 0.2s ease, background-color 0.2s ease, transform 0.2s ease;
+}
+
+.real-estate-admin .company-action-button:hover {
+    color: #fff;
+    transform: translateY(-1px);
+}
+
+.real-estate-admin .company-action-button--edit {
+    color: var(--company-blue);
+}
+
+.real-estate-admin .company-action-button--edit:hover {
+    border-color: var(--company-blue);
+    background: var(--company-blue);
+}
+
+.real-estate-admin .company-action-button--delete {
+    color: #b4232f;
+}
+
+.real-estate-admin .company-action-button--delete:hover {
+    border-color: #b4232f;
+    background: #b4232f;
+}
+
 .company-access-code-wrap {
     display: inline-flex;
     gap: 0.3rem;
@@ -554,6 +611,82 @@
     color: var(--company-blue);
     border: 1px solid rgba(var(--company-primary-rgb), 0.22);
     background: var(--dash-surface);
+}
+
+.real-estate-admin .company-mobile-actions {
+    justify-content: flex-end;
+    padding-top: 0.9rem;
+    border-top: 1px solid var(--dash-border);
+}
+
+.real-estate-admin .company-mobile-actions .btn {
+    display: inline-flex;
+    gap: 0.4rem;
+    align-items: center;
+    justify-content: center;
+}
+
+.real-estate-admin .company-edit-modal .modal-content,
+.real-estate-admin .company-delete-modal .modal-content {
+    overflow: hidden;
+    color: var(--dash-text);
+    border: 1px solid var(--dash-border);
+    border-radius: 1.25rem;
+    background: var(--dash-surface);
+    box-shadow: 0 28px 70px rgba(var(--company-navy-rgb), 0.24);
+}
+
+.real-estate-admin .company-edit-modal .modal-header,
+.real-estate-admin .company-delete-modal .modal-header {
+    color: var(--dash-text);
+    border-bottom-color: var(--dash-border);
+    background: var(--dash-surface-soft);
+}
+
+.real-estate-admin .company-edit-modal .modal-footer,
+.real-estate-admin .company-delete-modal .modal-footer {
+    border-top-color: var(--dash-border);
+    background: var(--dash-surface-soft);
+}
+
+.real-estate-admin .company-modal-eyebrow {
+    display: block;
+    margin-bottom: 0.18rem;
+    color: var(--company-blue);
+    font-size: 0.68rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.real-estate-admin .company-modal-validation {
+    display: flex;
+    gap: 0.75rem;
+    align-items: flex-start;
+}
+
+.real-estate-admin .company-edit-modal .form-control,
+.real-estate-admin .company-edit-modal .form-select {
+    color: var(--dash-text);
+    border-color: var(--dash-border);
+    background-color: var(--dash-surface);
+}
+
+.real-estate-admin .company-delete-modal .modal-body {
+    text-align: center;
+}
+
+.real-estate-admin .company-delete-warning {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 3.5rem;
+    height: 3.5rem;
+    margin-bottom: 1rem;
+    color: #b4232f;
+    font-size: 1.5rem;
+    border-radius: 1rem;
+    background: rgba(220, 53, 69, 0.1);
 }
 
 .company-pagination {
@@ -1000,6 +1133,27 @@
 
     .company-mobile-code {
         align-items: flex-end;
+    }
+
+    .real-estate-admin .company-email-link {
+        max-width: 100%;
+        overflow-wrap: anywhere;
+        white-space: normal;
+    }
+
+    .real-estate-admin .company-mobile-actions {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .real-estate-admin .company-mobile-actions .btn:only-child {
+        grid-column: 1 / -1;
+    }
+
+    .real-estate-admin .company-edit-modal .modal-footer,
+    .real-estate-admin .company-delete-modal .modal-footer {
+        display: grid;
+        grid-template-columns: 1fr;
     }
 
     .company-status-control {

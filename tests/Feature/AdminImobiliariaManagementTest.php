@@ -2,10 +2,13 @@
 
 use App\Models\Corretor;
 use App\Models\Imobiliaria;
+use App\Models\Lead;
 use App\Models\LeadLoversTag;
 use App\Models\User;
 use App\Services\CepService;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Route;
 use Mockery\MockInterface;
 
 function createImobiliariaAdmin(array $overrides = []): Corretor
@@ -59,6 +62,21 @@ function validAdminCompanyPayload(int $tagId, array $overrides = []): array
         'password' => 'senha1234',
         'password_confirmation' => 'senha1234',
         'lead_form_active' => '1',
+    ], $overrides);
+}
+
+function validCompanyUpdatePayload(Imobiliaria $company, array $overrides = []): array
+{
+    return array_merge([
+        '_editing_company_id' => $company->id,
+        'name' => $company->name,
+        'email' => $company->email,
+        'phone' => $company->phone,
+        'cnpj' => $company->cnpj,
+        'cep' => $company->cep,
+        'city' => $company->city,
+        'state' => $company->state,
+        'lead_form_active' => $company->lead_form_active ? '1' : '0',
     ], $overrides);
 }
 
@@ -343,4 +361,300 @@ it('registers the company and its user in the administrative flow', function () 
         'action' => 'imobiliaria_created',
         'model_id' => $company->id,
     ]);
+});
+
+it('shows edit and delete controls only for their respective permissions', function () {
+    $company = createManagedImobiliaria([
+        'cnpj' => '11222333000181',
+    ]);
+    $viewer = createImobiliariaAdmin([
+        'permissions' => ['imobiliarias.visualizar'],
+    ]);
+    $editor = createImobiliariaAdmin([
+        'permissions' => ['imobiliarias.editar'],
+    ]);
+    $remover = createImobiliariaAdmin([
+        'permissions' => ['imobiliarias.remover'],
+    ]);
+
+    $this
+        ->actingAs($viewer, 'admin')
+        ->get(route('admin.imobiliarias.index'))
+        ->assertOk()
+        ->assertDontSee('data-company-edit', false)
+        ->assertDontSee('data-company-delete', false);
+
+    $this
+        ->actingAs($editor, 'admin')
+        ->get(route('admin.imobiliarias.index'))
+        ->assertOk()
+        ->assertSee('data-company-edit', false)
+        ->assertSee('data-company-update-url="'.route('admin.imobiliarias.update', $company).'"', false)
+        ->assertSee('name="_method" value="PATCH"', false)
+        ->assertDontSee('data-company-delete', false)
+        ->assertDontSee($company->lead_form_token)
+        ->assertDontSee('name="password"', false);
+
+    $this
+        ->actingAs($remover, 'admin')
+        ->get(route('admin.imobiliarias.index'))
+        ->assertOk()
+        ->assertSee('data-company-delete', false)
+        ->assertSee('data-company-delete-url="'.route('admin.imobiliarias.destroy', $company).'"', false)
+        ->assertSee('name="_method" value="DELETE"', false)
+        ->assertSeeText('Esta ação é irreversível')
+        ->assertDontSee('data-company-edit', false);
+});
+
+it('allows an authorized admin to update a company without external requests', function () {
+    Http::fake();
+
+    $editor = createImobiliariaAdmin([
+        'permissions' => ['imobiliarias.editar'],
+    ]);
+    $company = createManagedImobiliaria([
+        'name' => 'Imobiliária Horizonte',
+        'email' => 'horizonte@example.test',
+        'phone' => '11988887777',
+        'cnpj' => '11222333000181',
+        'cep' => '01001000',
+        'city' => 'São Paulo',
+        'state' => 'SP',
+        'lead_form_active' => true,
+    ]);
+    $primaryUser = User::query()->create([
+        'company_id' => $company->id,
+        'name' => $company->name,
+        'email' => $company->email,
+        'password' => 'senha1234',
+    ]);
+
+    $response = $this
+        ->actingAs($editor, 'admin')
+        ->patch(route('admin.imobiliarias.update', $company), validCompanyUpdatePayload($company, [
+            'name' => '  Imobiliária Horizonte Sul  ',
+            'email' => '  CONTATO.HORIZONTE@EXAMPLE.TEST ',
+            'phone' => '(11) 97777-6666',
+            'cnpj' => '11.222.333/0001-81',
+            'cep' => '20040-020',
+            'city' => '  Rio   de Janeiro ',
+            'state' => 'rj',
+            'lead_form_active' => '0',
+        ]));
+
+    $response
+        ->assertRedirect(route('admin.imobiliarias.index'))
+        ->assertSessionHasNoErrors()
+        ->assertSessionHas('success', 'A imobiliária Imobiliária Horizonte Sul foi atualizada com sucesso.');
+
+    $company->refresh();
+    $primaryUser->refresh();
+
+    expect($company)
+        ->name->toBe('Imobiliária Horizonte Sul')
+        ->email->toBe('contato.horizonte@example.test')
+        ->phone->toBe('11977776666')
+        ->cnpj->toBe('11222333000181')
+        ->cep->toBe('20040020')
+        ->city->toBe('Rio de Janeiro')
+        ->state->toBe('RJ')
+        ->lead_form_active->toBeFalse()
+        ->and($primaryUser->name)->toBe('Imobiliária Horizonte Sul')
+        ->and($primaryUser->email)->toBe('contato.horizonte@example.test');
+
+    $this->assertDatabaseHas('logs_atividades_corretores', [
+        'corretor_id' => $editor->id,
+        'action' => 'imobiliaria_updated',
+        'model_id' => $company->id,
+    ]);
+
+    Http::assertNothingSent();
+});
+
+it('denies company updates without permission', function () {
+    $unauthorized = createImobiliariaAdmin([
+        'permissions' => ['imobiliarias.visualizar'],
+    ]);
+    $company = createManagedImobiliaria([
+        'name' => 'Imobiliária Protegida',
+        'cnpj' => '11222333000181',
+    ]);
+
+    $this
+        ->actingAs($unauthorized, 'admin')
+        ->patch(route('admin.imobiliarias.update', $company), validCompanyUpdatePayload($company, [
+            'name' => 'Alteração indevida',
+        ]))
+        ->assertForbidden();
+
+    expect($company->fresh()->name)->toBe('Imobiliária Protegida');
+});
+
+it('rejects invalid update data and reopens the correct modal with submitted values', function () {
+    $editor = createImobiliariaAdmin([
+        'permissions' => ['imobiliarias.editar'],
+    ]);
+    $company = createManagedImobiliaria([
+        'name' => 'Imobiliária Válida',
+        'email' => 'valida@example.test',
+        'cnpj' => '11222333000181',
+    ]);
+
+    $response = $this
+        ->actingAs($editor, 'admin')
+        ->from(route('admin.imobiliarias.index'))
+        ->followingRedirects()
+        ->patch(route('admin.imobiliarias.update', $company), validCompanyUpdatePayload($company, [
+            'name' => '',
+            'email' => 'email-invalido',
+            'phone' => '123',
+            'cnpj' => '00.000.000/0000-00',
+            'cep' => '123',
+            'state' => 'XX',
+        ]));
+
+    $response
+        ->assertOk()
+        ->assertSee('data-reopen-company-id="'.$company->id.'"', false)
+        ->assertSee('value="email-invalido"', false)
+        ->assertSeeText('As informações enviadas foram preservadas')
+        ->assertSeeText('Informe um e-mail válido');
+
+    expect($company->fresh())
+        ->name->toBe('Imobiliária Válida')
+        ->email->toBe('valida@example.test')
+        ->phone->toBe($company->phone)
+        ->cnpj->toBe('11222333000181');
+});
+
+it('ignores the company and its primary user in unique rules during update', function () {
+    $editor = createImobiliariaAdmin([
+        'permissions' => ['imobiliarias.editar'],
+    ]);
+    $company = createManagedImobiliaria([
+        'name' => 'Imobiliária Sem Alterações',
+        'email' => 'sem.alteracoes@example.test',
+        'phone' => '11988887777',
+        'cnpj' => '11222333000181',
+    ]);
+    User::query()->create([
+        'company_id' => $company->id,
+        'name' => $company->name,
+        'email' => $company->email,
+        'password' => 'senha1234',
+    ]);
+
+    $this
+        ->actingAs($editor, 'admin')
+        ->patch(route('admin.imobiliarias.update', $company), validCompanyUpdatePayload($company))
+        ->assertRedirect(route('admin.imobiliarias.index'))
+        ->assertSessionHasNoErrors()
+        ->assertSessionHas('info', 'Nenhuma alteração foi realizada na imobiliária Imobiliária Sem Alterações.');
+});
+
+it('does not accept sensitive or internal fields during update', function () {
+    Http::fake();
+
+    $editor = createImobiliariaAdmin([
+        'permissions' => ['imobiliarias.editar'],
+    ]);
+    $company = createManagedImobiliaria([
+        'name' => 'Imobiliária Segura',
+        'cnpj' => '11222333000181',
+        'lead_form_token' => 'internal-form-token',
+        'lead_access_code' => 'SAFE01',
+        'leadlovers_tag_id' => null,
+        'leadlovers_tag_name' => null,
+    ]);
+    $originalPassword = $company->password;
+
+    $this
+        ->actingAs($editor, 'admin')
+        ->patch(route('admin.imobiliarias.update', $company), validCompanyUpdatePayload($company, [
+            'city' => 'Campinas',
+            'password' => 'senha-injetada',
+            'lead_form_token' => 'token-injetado',
+            'lead_access_code' => 'HACKED',
+            'leadlovers_tag_id' => 999,
+            'leadlovers_tag_name' => 'Tag injetada',
+        ]))
+        ->assertRedirect(route('admin.imobiliarias.index'))
+        ->assertSessionHasNoErrors();
+
+    $company->refresh();
+
+    expect($company)
+        ->city->toBe('Campinas')
+        ->password->toBe($originalPassword)
+        ->lead_form_token->toBe('internal-form-token')
+        ->lead_access_code->toBe('SAFE01')
+        ->leadlovers_tag_id->toBeNull()
+        ->leadlovers_tag_name->toBeNull();
+
+    Http::assertNothingSent();
+});
+
+it('allows an authorized admin to delete a company while preserving related business records', function () {
+    $remover = createImobiliariaAdmin([
+        'permissions' => ['imobiliarias.remover'],
+    ]);
+    $company = createManagedImobiliaria([
+        'name' => 'Imobiliária Removível',
+        'cnpj' => '11222333000181',
+    ]);
+    $companyUser = User::query()->create([
+        'company_id' => $company->id,
+        'name' => $company->name,
+        'email' => $company->email,
+        'password' => 'senha1234',
+    ]);
+    $lead = Lead::query()->create([
+        'company_id' => $company->id,
+        'tipo_solicitante' => 'imobiliaria_cadastrada',
+        'nome' => 'Cliente preservado',
+        'email' => 'cliente@example.test',
+        'status' => 'novo',
+        'origem' => 'imobiliaria_cadastrada',
+    ]);
+
+    $this
+        ->actingAs($remover, 'admin')
+        ->delete(route('admin.imobiliarias.destroy', $company))
+        ->assertRedirect(route('admin.imobiliarias.index'))
+        ->assertSessionHas('success', 'A imobiliária Imobiliária Removível foi removida com sucesso.');
+
+    $this->assertDatabaseMissing('imobiliarias', ['id' => $company->id]);
+    $this->assertDatabaseMissing('users', ['id' => $companyUser->id]);
+    $this->assertDatabaseHas('leads', [
+        'id' => $lead->id,
+        'company_id' => null,
+    ]);
+    $this->assertDatabaseHas('logs_atividades_corretores', [
+        'corretor_id' => $remover->id,
+        'action' => 'imobiliaria_deleted',
+        'model_id' => $company->id,
+    ]);
+});
+
+it('denies company deletion without permission', function () {
+    $unauthorized = createImobiliariaAdmin([
+        'permissions' => ['imobiliarias.visualizar'],
+    ]);
+    $company = createManagedImobiliaria([
+        'cnpj' => '11222333000181',
+    ]);
+
+    $this
+        ->actingAs($unauthorized, 'admin')
+        ->delete(route('admin.imobiliarias.destroy', $company))
+        ->assertForbidden();
+
+    $this->assertDatabaseHas('imobiliarias', ['id' => $company->id]);
+});
+
+it('registers the management routes with the expected HTTP methods', function () {
+    expect(Route::getRoutes()->getByName('admin.imobiliarias.update')?->methods())
+        ->toBe(['PATCH'])
+        ->and(Route::getRoutes()->getByName('admin.imobiliarias.destroy')?->methods())
+        ->toBe(['DELETE']);
 });
