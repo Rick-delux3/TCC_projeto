@@ -1,5 +1,13 @@
 @extends('layout-inicial.dashboard_Admin')
 
+@push('styles')
+    @vite('resources/css/config-equipe.css')
+@endpush
+
+@push('scripts')
+    @vite('resources/js/config-equipe.js')
+@endpush
+
 @section('content_a')
 @once
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
@@ -274,16 +282,16 @@
     }
 </style>
 
-<div class="dashboard-shell team-create-page">
+<div class="dashboard-shell team-create-page team-motion-page">
     <div class="container-fluid px-0">
         <div class="team-create-backdrop">
-            <div class="card border-0 shadow-sm rounded-5 team-create-modal">
+            <div class="card border-0 shadow-sm rounded-5 team-create-modal" data-team-reveal>
                 <a href="{{ $indexRoute }}" class="btn team-modal-close" aria-label="Voltar para a listagem da equipe">
                     <i class="bi bi-x-lg"></i>
                 </a>
 
                 <div class="card-body p-4 p-lg-5">
-                    <div class="d-flex align-items-center gap-3 mb-4 pe-5">
+                    <div class="team-form-brand-row d-flex align-items-center gap-3 mb-4 pe-5">
                         <span class="team-create-brand">
                             <x-brand-logo />
                         </span>
@@ -295,7 +303,7 @@
                         </div>
                     </div>
 
-                    <div class="text-center mb-4">
+                    <div class="team-form-heading text-center mb-4">
                         <span class="team-create-icon mb-3">
                             <i class="bi bi-person-plus"></i>
                         </span>
@@ -318,7 +326,7 @@
                         </div>
                     @endif
 
-                    <div class="alert alert-info rounded-4 border-0 mb-4 d-flex align-items-start gap-3">
+                    <div class="team-invite-notice alert alert-info rounded-4 border-0 mb-4 d-flex align-items-start gap-3">
                         <i class="bi bi-envelope-check fs-4" aria-hidden="true"></i>
                         <div>
                             Após o cadastro, o sistema enviará ao integrante um link de convite com prazo de validade.
@@ -326,10 +334,10 @@
                         </div>
                     </div>
 
-                    <form method="POST" action="{{ $storeRoute }}" class="team-create-form" novalidate>
+                    <form method="POST" action="{{ $storeRoute }}" class="team-create-form" data-team-form novalidate>
                         @csrf
 
-                        <div class="row g-3">
+                        <div class="row g-3 team-primary-fields">
                             <div class="col-12 col-md-6">
                                 <label for="nome" class="form-label">
                                     Nome do integrante
@@ -445,7 +453,7 @@
                             </div>
                         </div>
 
-                        <div class="team-status-panel p-3 p-md-4 mt-4">
+                        <div class="team-status-panel p-3 p-md-4 mt-4" data-team-panel>
                             <input type="hidden" name="active" value="0">
 
                             <div class="d-flex flex-column flex-sm-row justify-content-between align-items-sm-center gap-3">
@@ -476,8 +484,8 @@
                                         @checked(old('active', '1') === '1')
                                     >
 
-                                    <label class="form-check-label fw-semibold ms-2" for="active">
-                                        Ativo
+                                    <label class="form-check-label fw-semibold ms-2 {{ old('active', '1') === '1' ? 'is-active' : 'is-inactive' }}" for="active" data-team-status-label>
+                                        {{ old('active', '1') === '1' ? 'Ativo' : 'Inativo' }}
                                     </label>
                                 </div>
                             </div>
@@ -489,16 +497,19 @@
                             @enderror
                         </div>
 
-                        <div class="team-permissions-panel p-3 p-md-4 mt-4">
+                        <div class="team-permissions-panel p-3 p-md-4 mt-4" data-team-panel>
                             <div class="d-flex align-items-start gap-3 mb-3">
                                 <span class="team-permission-icon">
                                     <i class="bi bi-shield-lock"></i>
                                 </span>
 
                                 <div>
-                                    <h2 class="h6 fw-bold mb-1">
-                                        Permissões operacionais
-                                    </h2>
+                                    <div class="d-flex flex-wrap align-items-center gap-2 mb-1">
+                                        <h2 class="h6 fw-bold mb-0">
+                                            Permissões operacionais
+                                        </h2>
+                                        <span class="team-permission-count" data-team-permission-count hidden></span>
+                                    </div>
 
                                     <p class="text-muted small mb-0">
                                         Defina quais áreas o integrante poderá visualizar ou operar.
@@ -550,7 +561,7 @@
                         </div>
 
                         <div class="team-actions d-flex flex-column flex-sm-row-reverse gap-2 pt-4 mt-4">
-                            <button type="submit" class="btn btn-outline-primary px-4">
+                            <button type="submit" class="btn btn-outline-primary px-4" data-team-submit>
                                 <i class="bi bi-person-plus me-1"></i>
                                 Cadastrar e enviar convite
                             </button>

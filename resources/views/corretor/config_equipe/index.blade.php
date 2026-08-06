@@ -1,5 +1,13 @@
 @extends('layout-inicial.dashboard_Admin')
 
+@push('styles')
+    @vite('resources/css/config-equipe.css')
+@endpush
+
+@push('scripts')
+    @vite('resources/js/config-equipe.js')
+@endpush
+
 @section('content_a')
 @php
     use Illuminate\Support\Facades\Route;
@@ -93,7 +101,7 @@
     };
 @endphp
 
-<div class="dashboard-shell">
+<div class="dashboard-shell team-motion-page team-management-page">
     <div class="container-fluid px-3 px-lg-4 py-4">
 
         {{-- Alertas --}}
@@ -133,7 +141,7 @@
         @endif
 
         {{-- Cabeçalho da página --}}
-        <div class="d-flex flex-column flex-xl-row justify-content-between align-items-xl-center gap-3 mb-4">
+        <div class="team-page-header d-flex flex-column flex-xl-row justify-content-between align-items-xl-center gap-3 mb-4" data-team-reveal>
             <div>
                 <nav aria-label="breadcrumb" class="mb-2">
                     <ol class="breadcrumb mb-0">
@@ -177,8 +185,8 @@
 
         {{-- Resumo superior --}}
         <div class="row g-3 mb-4">
-            <div class="col-6 col-xl-3">
-                <div class="card border-0 shadow-sm rounded-4 h-100">
+            <div class="col-6 col-xl-3" data-team-reveal style="--team-reveal-delay: 70ms">
+                <div class="card team-stat-card border-0 shadow-sm rounded-4 h-100">
                     <div class="card-body">
                         <div class="d-flex justify-content-between align-items-start mb-3">
                             <span class="badge text-bg-primary-subtle text-primary">
@@ -188,7 +196,7 @@
                             <i class="bi bi-people text-primary"></i>
                         </div>
 
-                        <div class="h2 fw-bold mb-0">
+                        <div class="h2 fw-bold mb-0" data-team-count="{{ $totalCorretores }}">
                             {{ $totalCorretores }}
                         </div>
 
@@ -199,8 +207,8 @@
                 </div>
             </div>
 
-            <div class="col-6 col-xl-3">
-                <div class="card border-0 shadow-sm rounded-4 h-100">
+            <div class="col-6 col-xl-3" data-team-reveal style="--team-reveal-delay: 120ms">
+                <div class="card team-stat-card border-0 shadow-sm rounded-4 h-100">
                     <div class="card-body">
                         <div class="d-flex justify-content-between align-items-start mb-3">
                             <span class="badge text-bg-secondary">
@@ -210,7 +218,7 @@
                             <i class="bi bi-person-badge text-secondary"></i>
                         </div>
 
-                        <div class="h2 fw-bold mb-0">
+                        <div class="h2 fw-bold mb-0" data-team-count="{{ $totalIntegrantes }}">
                             {{ $totalIntegrantes }}
                         </div>
 
@@ -221,8 +229,8 @@
                 </div>
             </div>
 
-            <div class="col-6 col-xl-3">
-                <div class="card border-0 shadow-sm rounded-4 h-100">
+            <div class="col-6 col-xl-3" data-team-reveal style="--team-reveal-delay: 170ms">
+                <div class="card team-stat-card border-0 shadow-sm rounded-4 h-100">
                     <div class="card-body">
                         <div class="d-flex justify-content-between align-items-start mb-3">
                             <span class="badge text-bg-success-subtle text-success">
@@ -232,7 +240,7 @@
                             <i class="bi bi-check-circle text-success"></i>
                         </div>
 
-                        <div class="h2 fw-bold mb-0">
+                        <div class="h2 fw-bold mb-0" data-team-count="{{ $totalAtivos }}">
                             {{ $totalAtivos }}
                         </div>
 
@@ -243,8 +251,8 @@
                 </div>
             </div>
 
-            <div class="col-6 col-xl-3">
-                <div class="card border-0 shadow-sm rounded-4 h-100">
+            <div class="col-6 col-xl-3" data-team-reveal style="--team-reveal-delay: 220ms">
+                <div class="card team-stat-card border-0 shadow-sm rounded-4 h-100">
                     <div class="card-body">
                         <div class="d-flex justify-content-between align-items-start mb-3">
                             <span class="badge text-bg-warning-subtle text-warning">
@@ -254,7 +262,7 @@
                             <i class="bi bi-envelope text-warning"></i>
                         </div>
 
-                        <div class="h2 fw-bold mb-0">
+                        <div class="h2 fw-bold mb-0" data-team-count="{{ $convitesPendentes }}">
                             {{ $convitesPendentes }}
                         </div>
 
@@ -273,7 +281,7 @@
         </div>
 
         {{-- Bloco principal --}}
-        <div class="card border-0 shadow-sm rounded-5 mb-4">
+        <div class="card team-list-card border-0 shadow-sm rounded-5 mb-4" data-team-reveal style="--team-reveal-delay: 140ms">
             <div class="card-body p-4">
 
                 <div class="d-flex flex-column flex-xl-row justify-content-between align-items-xl-center gap-3 mb-4">
@@ -291,7 +299,7 @@
                         </p>
                     </div>
 
-                    <form method="GET" action="{{ $indexRoute }}" class="d-flex flex-column flex-sm-row gap-2">
+                    <form method="GET" action="{{ $indexRoute }}" class="team-search-form d-flex flex-column flex-sm-row gap-2">
                         <div class="input-group">
                             <span class="input-group-text bg-white">
                                 <i class="bi bi-search"></i>
@@ -382,11 +390,11 @@
                                         : 'Não informado';
                                 @endphp
 
-                                <tr>
+                                <tr class="team-member-row">
                                     {{-- Membro --}}
                                     <td>
                                         <div class="d-flex align-items-center gap-3">
-                                            <span class="rounded-4 bg-primary-subtle text-primary d-flex align-items-center justify-content-center fw-bold" style="width: 42px; height: 42px;">
+                                            <span class="team-member-avatar rounded-4 bg-primary-subtle text-primary d-flex align-items-center justify-content-center fw-bold" style="width: 42px; height: 42px;">
                                                 {{ $corretorInitials ?: 'CO' }}
                                             </span>
 
@@ -466,7 +474,7 @@
                                                 Sempre ativo
                                             </span>
                                         @else
-                                            <form method="POST" action="{{ $updateRoute }}" class="d-inline">
+                                            <form method="POST" action="{{ $updateRoute }}" class="team-quick-status-form d-inline">
                                                 @csrf
                                                 @method('PUT')
 
@@ -488,11 +496,12 @@
                                                         value="1"
                                                         id="activeSwitch{{ $corretor->id }}"
                                                         @checked($isActive)
-                                                        onchange="this.form.submit()"
+                                                        data-team-auto-submit
+                                                        onchange="this.form.classList.add('is-submitting'); this.form.querySelector('[data-team-status-label]').textContent = 'Salvando…'; this.form.submit()"
                                                         @disabled($updateRoute === '#')
                                                     >
 
-                                                    <label class="form-check-label small" for="activeSwitch{{ $corretor->id }}">
+                                                    <label class="form-check-label small" for="activeSwitch{{ $corretor->id }}" data-team-status-label>
                                                         {{ $isActive ? 'Ativo' : 'Desabilitado' }}
                                                     </label>
                                                 </div>
@@ -543,7 +552,7 @@
                                 <tr>
                                     <td colspan="7" class="text-center py-5">
                                         <div class="mb-3">
-                                            <i class="bi bi-people text-muted fs-1"></i>
+                                            <i class="bi bi-people text-muted fs-1 team-empty-icon"></i>
                                         </div>
 
                                         <h3 class="h5 fw-bold">
@@ -568,7 +577,7 @@
         </div>
 
         {{-- Observações --}}
-        <div class="card border-0 shadow-sm rounded-5">
+        <div class="card team-rules-card border-0 shadow-sm rounded-5" data-team-reveal style="--team-reveal-delay: 180ms">
             <div class="card-body p-4">
                 <div class="d-flex gap-3 align-items-start">
                     <span class="badge rounded-circle text-bg-primary d-flex align-items-center justify-content-center" style="width: 32px; height: 32px;">

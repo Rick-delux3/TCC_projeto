@@ -13,6 +13,10 @@ export default defineConfig({
                 'resources/js/dashboard-user.js', 'resources/css/simulation.css',
                 'resources/css/branding.css',
                 'resources/js/simulation.js',
+                'resources/css/imobiliarias-admin.css',
+                'resources/js/imobiliarias-admin.js',
+                'resources/css/config-equipe.css',
+                'resources/js/config-equipe.js',
 
             ],
             refresh: true,

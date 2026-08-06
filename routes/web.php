@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Admin\ImobiliariaController;
 use App\Http\Controllers\AdminLeadTagController;
 use App\Http\Controllers\Auth\CompanyNewPasswordController;
 use App\Http\Controllers\Auth\CompanyPasswordResetLinkController;
@@ -159,6 +160,32 @@ Route::prefix('/Dashboard')->group(function () {
                     ->middleware('throttle:3,10')
                     ->name('resend-invitation');
 
+            });
+
+        Route::prefix('imobiliarias')
+            ->name('admin.imobiliarias.')
+            ->group(function () {
+                Route::get('/', [ImobiliariaController::class, 'index'])
+                    ->middleware('can:view-real-estate-companies')
+                    ->name('index');
+
+                Route::get('/criar', [ImobiliariaController::class, 'create'])
+                    ->middleware('can:create-real-estate-company')
+                    ->name('create');
+
+                Route::post('/', [ImobiliariaController::class, 'store'])
+                    ->middleware(['can:create-real-estate-company', 'throttle:5,1'])
+                    ->name('store');
+
+                Route::patch('/{company}', [ImobiliariaController::class, 'update'])
+                    ->middleware(['can:update-real-estate-company', 'throttle:5,1'])
+                    ->whereNumber('company')
+                    ->name('update');
+
+                Route::delete('/{company}', [ImobiliariaController::class, 'destroy'])
+                    ->middleware(['can:delete-real-estate-company', 'throttle:5,1'])
+                    ->whereNumber('company')
+                    ->name('destroy');
             });
 
         Route::patch(

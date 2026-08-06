@@ -1,0 +1,585 @@
+.team-motion-page {
+    --team-primary: var(--brand-primary, #146fb6);
+    --team-primary-dark: var(--brand-primary-dark, #030133);
+    --team-primary-soft: var(--brand-primary-soft, #eef6ff);
+    --team-accent: var(--brand-accent, #fd1e6e);
+    --team-surface: var(--brand-surface, #ffffff);
+    --team-border: var(--brand-border, #d8e1ec);
+    --team-primary-rgb: 20, 111, 182;
+    --team-dark-rgb: 3, 1, 51;
+    --team-accent-rgb: 253, 30, 110;
+}
+
+[data-brand="client"] .team-motion-page {
+    --team-primary-rgb: 0, 0, 255;
+    --team-dark-rgb: 0, 0, 153;
+    --team-accent-rgb: 255, 0, 0;
+}
+
+.team-motion-enabled .team-motion-page [data-team-reveal] {
+    opacity: 0;
+    transform: translate3d(0, 1.1rem, 0) scale(0.992);
+    transition:
+        opacity 0.58s cubic-bezier(0.22, 1, 0.36, 1),
+        transform 0.72s cubic-bezier(0.22, 1, 0.36, 1);
+    transition-delay: var(--team-reveal-delay, 0ms);
+}
+
+.team-motion-enabled .team-motion-page [data-team-reveal].is-team-revealed {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+}
+
+.team-motion-page :is(a, button, input, select):focus-visible {
+    outline: 3px solid var(--brand-focus-ring, rgba(var(--team-primary-rgb), 0.26));
+    outline-offset: 3px;
+}
+
+/* Listagem */
+.team-management-page .team-page-header {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+    padding: clamp(1.35rem, 3vw, 2.25rem);
+    color: #ffffff;
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    border-radius: 1.5rem;
+    background:
+        radial-gradient(circle at 89% 14%, rgba(var(--team-accent-rgb), 0.3), transparent 23%),
+        linear-gradient(135deg, var(--team-primary-dark) 0%, var(--team-primary) 100%);
+    box-shadow: 0 22px 48px rgba(var(--team-dark-rgb), 0.2);
+    transition: box-shadow 0.35s ease, border-color 0.35s ease;
+}
+
+.team-management-page .team-page-header::before,
+.team-management-page .team-page-header::after {
+    position: absolute;
+    z-index: -1;
+    content: "";
+    pointer-events: none;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 50%;
+    animation: team-orbit-pulse 6s ease-in-out infinite alternate;
+}
+
+.team-management-page .team-page-header::before {
+    right: -5rem;
+    bottom: -7rem;
+    width: 18rem;
+    height: 18rem;
+}
+
+.team-management-page .team-page-header::after {
+    top: -5rem;
+    right: 18%;
+    width: 11rem;
+    height: 11rem;
+    animation-delay: 0.7s;
+    animation-direction: alternate-reverse;
+}
+
+.team-management-page .team-page-header:hover {
+    border-color: rgba(255, 255, 255, 0.26);
+    box-shadow: 0 28px 62px rgba(var(--team-dark-rgb), 0.27);
+}
+
+.team-management-page .team-page-header :is(h1, p, .breadcrumb-item, .breadcrumb-item::before) {
+    color: #ffffff !important;
+}
+
+.team-management-page .team-page-header .breadcrumb a {
+    color: rgba(255, 255, 255, 0.76);
+}
+
+.team-management-page .team-page-header .badge {
+    color: var(--team-primary-dark) !important;
+    border-color: rgba(255, 255, 255, 0.35) !important;
+    background: rgba(255, 255, 255, 0.9) !important;
+}
+
+.team-management-page .team-page-header .btn {
+    min-height: 2.8rem;
+    font-weight: 700;
+    border-radius: 0.85rem;
+    transition:
+        color 0.22s ease,
+        background-color 0.22s ease,
+        border-color 0.22s ease,
+        box-shadow 0.22s ease,
+        transform 0.22s ease;
+}
+
+.team-management-page .team-page-header .btn-outline-primary {
+    color: var(--team-primary-dark);
+    border-color: #ffffff;
+    background: #ffffff;
+}
+
+.team-management-page .team-page-header .btn-outline-secondary {
+    color: #ffffff;
+    border-color: rgba(255, 255, 255, 0.42);
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.team-management-page .team-page-header .btn:hover {
+    box-shadow: 0 12px 26px rgba(var(--team-dark-rgb), 0.2);
+    transform: translateY(-2px);
+}
+
+.team-management-page .team-stat-card {
+    overflow: hidden;
+    border: 1px solid var(--dash-border) !important;
+    transition:
+        border-color 0.3s ease,
+        box-shadow 0.3s ease,
+        transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.team-management-page .team-stat-card::after {
+    position: absolute;
+    right: -1.7rem;
+    bottom: -2.4rem;
+    width: 6rem;
+    height: 6rem;
+    content: "";
+    border-radius: 50%;
+    background: rgba(var(--team-primary-rgb), 0.06);
+    transition: transform 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.team-management-page .team-stat-card:hover {
+    border-color: rgba(var(--team-primary-rgb), 0.22) !important;
+    box-shadow: 0 20px 42px rgba(var(--team-dark-rgb), 0.12) !important;
+    transform: translateY(-0.3rem);
+}
+
+.team-management-page .team-stat-card:hover::after {
+    transform: scale(1.35);
+}
+
+.team-management-page .team-stat-card .card-body > .d-flex i {
+    position: relative;
+    z-index: 1;
+    font-size: 1.25rem;
+    transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.team-management-page .team-stat-card:hover .card-body > .d-flex i {
+    transform: rotate(-8deg) scale(1.15);
+}
+
+.team-management-page [data-team-count] {
+    font-variant-numeric: tabular-nums;
+}
+
+.team-management-page :is(.team-list-card, .team-rules-card) {
+    overflow: hidden;
+    border: 1px solid var(--dash-border) !important;
+    transition:
+        border-color 0.3s ease,
+        box-shadow 0.3s ease,
+        transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.team-management-page .team-list-card:focus-within,
+.team-management-page .team-rules-card:hover {
+    border-color: rgba(var(--team-primary-rgb), 0.2) !important;
+    box-shadow: 0 20px 42px rgba(var(--team-dark-rgb), 0.1) !important;
+    transform: translateY(-0.15rem);
+}
+
+.team-management-page .team-search-form .input-group {
+    transition: filter 0.25s ease, transform 0.25s ease;
+}
+
+.team-management-page .team-search-form .input-group:focus-within {
+    filter: drop-shadow(0 7px 12px rgba(var(--team-primary-rgb), 0.12));
+    transform: translateY(-1px);
+}
+
+.team-management-page .team-search-form .btn {
+    transition: box-shadow 0.22s ease, transform 0.22s ease;
+}
+
+.team-management-page .team-search-form .btn:hover {
+    box-shadow: 0 8px 18px rgba(var(--team-dark-rgb), 0.1);
+    transform: translateY(-1px);
+}
+
+.team-management-page .table {
+    --bs-table-color: var(--dash-text);
+    --bs-table-bg: transparent;
+    --bs-table-border-color: var(--dash-border);
+}
+
+.team-management-page .table thead th {
+    color: var(--dash-muted);
+    font-size: 0.72rem;
+    letter-spacing: 0.045em;
+    text-transform: uppercase;
+}
+
+.team-management-page .team-member-row {
+    transition: background-color 0.22s ease, box-shadow 0.22s ease;
+}
+
+.team-management-page .team-member-row:hover {
+    background: rgba(var(--team-primary-rgb), 0.04);
+    box-shadow: inset 4px 0 0 rgba(var(--team-primary-rgb), 0.72);
+}
+
+.team-management-page .team-member-avatar {
+    flex: 0 0 42px;
+    transition:
+        color 0.3s ease,
+        background-color 0.3s ease,
+        box-shadow 0.3s ease,
+        transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.team-management-page .team-member-row:hover .team-member-avatar {
+    color: #ffffff !important;
+    background: linear-gradient(135deg, var(--team-primary-dark), var(--team-primary)) !important;
+    box-shadow: 0 9px 20px rgba(var(--team-primary-rgb), 0.2);
+    transform: rotate(-5deg) scale(1.06);
+}
+
+.team-management-page .team-member-row .btn {
+    transition: box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.team-management-page .team-member-row .btn:hover:not(:disabled) {
+    box-shadow: 0 8px 16px rgba(var(--team-dark-rgb), 0.1);
+    transform: translateY(-1px);
+}
+
+.team-management-page .team-quick-status-form.is-submitting {
+    opacity: 0.68;
+    pointer-events: none;
+}
+
+.team-management-page .team-quick-status-form.is-submitting .form-check-label {
+    color: var(--team-primary);
+    animation: team-label-pulse 0.8s ease-in-out infinite alternate;
+}
+
+.team-management-page .team-empty-icon {
+    display: inline-block;
+    animation: team-empty-float 3.2s ease-in-out infinite;
+}
+
+.team-management-page .team-rules-card .rounded-circle {
+    transition: box-shadow 0.3s ease, transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.team-management-page .team-rules-card:hover .rounded-circle {
+    box-shadow: 0 8px 18px rgba(var(--team-primary-rgb), 0.2);
+    transform: rotate(-8deg) scale(1.08);
+}
+
+/* Cadastro e edição */
+.team-create-page.team-motion-page .team-create-backdrop::before {
+    animation: team-grid-drift 18s linear infinite;
+}
+
+.team-create-page.team-motion-page .team-create-backdrop::after {
+    border-color: rgba(255, 255, 255, 0.18);
+    animation: team-backdrop-breathe 6s ease-in-out infinite alternate;
+}
+
+.team-create-page.team-motion-page .team-create-modal {
+    border: 1px solid rgba(255, 255, 255, 0.2) !important;
+    box-shadow: 0 30px 70px rgba(var(--team-dark-rgb), 0.24) !important;
+    transition: border-color 0.35s ease, box-shadow 0.35s ease;
+}
+
+.team-create-page.team-motion-page .team-create-modal:hover {
+    border-color: rgba(255, 255, 255, 0.34) !important;
+    box-shadow: 0 38px 86px rgba(var(--team-dark-rgb), 0.3) !important;
+}
+
+.team-create-page.team-motion-page .team-create-modal::before {
+    background: linear-gradient(90deg, var(--team-primary-dark), var(--team-primary), var(--team-accent));
+    background-size: 180% 100%;
+    animation: team-accent-flow 5s ease-in-out infinite alternate;
+}
+
+.team-create-page.team-motion-page .team-modal-close {
+    transition:
+        color 0.22s ease,
+        border-color 0.22s ease,
+        background-color 0.22s ease,
+        box-shadow 0.22s ease,
+        transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.team-create-page.team-motion-page .team-modal-close:hover {
+    box-shadow: 0 14px 28px rgba(var(--team-dark-rgb), 0.16);
+    transform: rotate(90deg) scale(1.06);
+}
+
+.team-create-page .team-form-brand-row,
+.team-create-page .team-form-heading,
+.team-create-page .team-invite-notice,
+.team-create-page .team-primary-fields,
+.team-create-page [data-team-panel],
+.team-create-page .team-actions {
+    animation: team-content-enter 0.58s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.team-create-page .team-form-heading {
+    animation-delay: 70ms;
+}
+
+.team-create-page .team-invite-notice,
+.team-create-page .team-primary-fields {
+    animation-delay: 120ms;
+}
+
+.team-create-page [data-team-panel] {
+    animation-delay: 170ms;
+}
+
+.team-create-page .team-actions {
+    animation-delay: 220ms;
+}
+
+.team-create-page.team-motion-page .team-create-brand {
+    transition: box-shadow 0.32s ease, transform 0.32s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.team-create-page.team-motion-page .team-form-brand-row:hover .team-create-brand {
+    box-shadow: 0 12px 26px rgba(var(--team-primary-rgb), 0.16);
+    transform: rotate(-3deg) scale(1.04);
+}
+
+.team-create-page.team-motion-page .team-create-icon {
+    animation: team-icon-float 3.4s ease-in-out infinite;
+    transition: box-shadow 0.3s ease, transform 0.3s ease;
+}
+
+.team-create-page.team-motion-page .team-form-heading:hover .team-create-icon {
+    box-shadow: 0 24px 46px rgba(var(--team-primary-rgb), 0.3);
+}
+
+.team-create-page.team-motion-page .team-create-form .input-group {
+    transition: filter 0.25s ease, transform 0.25s ease;
+}
+
+.team-create-page.team-motion-page .team-create-form .input-group:focus-within {
+    filter: drop-shadow(0 8px 13px rgba(var(--team-primary-rgb), 0.11));
+    transform: translateY(-1px);
+}
+
+.team-create-page.team-motion-page [data-team-panel] {
+    transition:
+        border-color 0.28s ease,
+        background-color 0.28s ease,
+        box-shadow 0.28s ease,
+        transform 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.team-create-page.team-motion-page [data-team-panel]:hover,
+.team-create-page.team-motion-page [data-team-panel].is-team-active {
+    border-color: rgba(var(--team-primary-rgb), 0.24);
+    box-shadow: 0 16px 34px rgba(var(--team-dark-rgb), 0.1);
+    transform: translateY(-0.18rem);
+}
+
+.team-create-page.team-motion-page [data-team-panel].is-team-active {
+    border-left: 4px solid var(--team-primary);
+}
+
+.team-create-page.team-motion-page .team-permission-icon {
+    transition:
+        color 0.25s ease,
+        background-color 0.25s ease,
+        box-shadow 0.25s ease,
+        transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.team-create-page.team-motion-page [data-team-panel]:hover > .d-flex .team-permission-icon,
+.team-create-page.team-motion-page [data-team-panel].is-team-active > .d-flex .team-permission-icon {
+    box-shadow: 0 9px 18px rgba(var(--team-primary-rgb), 0.15);
+    transform: rotate(-6deg) scale(1.06);
+}
+
+.team-create-page.team-motion-page .team-permission-option {
+    transition:
+        color 0.25s ease,
+        border-color 0.25s ease,
+        background-color 0.25s ease,
+        box-shadow 0.25s ease,
+        transform 0.25s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.team-create-page.team-motion-page .team-permission-option:hover {
+    border-color: rgba(var(--team-primary-rgb), 0.28);
+    box-shadow: 0 12px 24px rgba(var(--team-dark-rgb), 0.09);
+    transform: translateY(-2px);
+}
+
+.team-create-page.team-motion-page .team-permission-option.is-selected,
+.team-create-page.team-motion-page .team-permission-option:has(.form-check-input:checked) {
+    color: var(--team-primary-dark);
+    border-color: rgba(var(--team-primary-rgb), 0.36);
+    background: rgba(var(--team-primary-rgb), 0.09);
+}
+
+.team-create-page.team-motion-page .team-permission-option.is-selected .team-permission-icon,
+.team-create-page.team-motion-page .team-permission-option:has(.form-check-input:checked) .team-permission-icon {
+    color: #ffffff;
+    background: linear-gradient(135deg, var(--team-primary-dark), var(--team-primary));
+    box-shadow: 0 8px 18px rgba(var(--team-primary-rgb), 0.2);
+    transform: rotate(-5deg) scale(1.05);
+}
+
+.team-permission-count {
+    display: inline-flex;
+    align-items: center;
+    min-height: 1.45rem;
+    padding: 0.2rem 0.55rem;
+    color: var(--team-primary-dark);
+    font-size: 0.68rem;
+    font-weight: 800;
+    border: 1px solid rgba(var(--team-primary-rgb), 0.18);
+    border-radius: 999px;
+    background: rgba(var(--team-primary-rgb), 0.09);
+    transition: transform 0.22s ease;
+}
+
+.team-permission-count.is-updating {
+    transform: scale(1.08);
+}
+
+.team-create-page.team-motion-page [data-team-status-label] {
+    transition: color 0.22s ease, transform 0.22s ease;
+}
+
+.team-create-page.team-motion-page [data-team-status-label].is-active {
+    color: #17845b;
+}
+
+.team-create-page.team-motion-page [data-team-status-label].is-inactive {
+    color: #a35b00;
+}
+
+.team-create-page.team-motion-page .team-active-switch .form-check-input {
+    transition:
+        background-position 0.25s ease-in-out,
+        background-color 0.25s ease,
+        border-color 0.25s ease,
+        box-shadow 0.25s ease;
+}
+
+.team-create-page.team-motion-page .team-actions .btn {
+    transition:
+        color 0.22s ease,
+        background-color 0.22s ease,
+        border-color 0.22s ease,
+        box-shadow 0.22s ease,
+        transform 0.22s ease;
+}
+
+.team-create-page.team-motion-page .team-actions .btn:hover:not(:disabled) {
+    box-shadow: 0 12px 25px rgba(var(--team-dark-rgb), 0.14);
+    transform: translateY(-2px);
+}
+
+.team-create-page.team-motion-page .team-actions .btn:active:not(:disabled) {
+    transform: translateY(0) scale(0.985);
+}
+
+.team-create-form[aria-busy="true"] {
+    cursor: wait;
+}
+
+.team-create-form[aria-busy="true"] [data-team-submit] {
+    opacity: 0.82;
+    cursor: wait;
+}
+
+.dashboard-shell[data-dashboard-theme="dark"].team-motion-page .team-permission-option.is-selected,
+.dashboard-shell[data-dashboard-theme="dark"].team-motion-page .team-permission-option:has(.form-check-input:checked) {
+    color: #dcecff;
+}
+
+@keyframes team-orbit-pulse {
+    from {
+        opacity: 0.55;
+        transform: scale(0.96);
+    }
+
+    to {
+        opacity: 1;
+        transform: scale(1.05);
+    }
+}
+
+@keyframes team-label-pulse {
+    from { opacity: 0.55; }
+    to { opacity: 1; }
+}
+
+@keyframes team-empty-float {
+    0%, 100% { transform: translateY(0) rotate(0deg); }
+    50% { transform: translateY(-0.4rem) rotate(-3deg); }
+}
+
+@keyframes team-grid-drift {
+    from { background-position: 0 0, 0 0; }
+    to { background-position: 48px 48px, -48px 48px; }
+}
+
+@keyframes team-backdrop-breathe {
+    from { box-shadow: inset 0 0 0 rgba(255, 255, 255, 0); }
+    to { box-shadow: inset 0 0 70px rgba(255, 255, 255, 0.08); }
+}
+
+@keyframes team-accent-flow {
+    from { background-position: 0 50%; }
+    to { background-position: 100% 50%; }
+}
+
+@keyframes team-content-enter {
+    from {
+        opacity: 0;
+        transform: translateY(0.75rem);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes team-icon-float {
+    0%, 100% { transform: translateY(0) rotate(0deg); }
+    50% { transform: translateY(-0.32rem) rotate(-2deg); }
+}
+
+@media (max-width: 767.98px) {
+    .team-management-page .team-page-header {
+        border-radius: 1.15rem;
+    }
+
+    .team-management-page .team-page-header .btn {
+        width: 100%;
+    }
+
+    .team-management-page .team-stat-card:hover,
+    .team-create-page.team-motion-page [data-team-panel]:hover {
+        transform: none;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .team-motion-page *,
+    .team-motion-page *::before,
+    .team-motion-page *::after {
+        scroll-behavior: auto !important;
+        transition-duration: 0.01ms !important;
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+    }
+}
