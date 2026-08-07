@@ -1,4 +1,4 @@
-@extends('layout-inicial.dashboard_Admin')
+@extends('layout-inicial.Dashboard_Admin')
 
 @section('content_a')
 @php
@@ -48,13 +48,20 @@
     $leads = $leads ?? collect();
     $imobiliarias = $imobiliarias ?? collect();
 
-    $manualResultOptions = collect(ManualLeadResultTags::keys())
-        ->mapWithKeys(
-            fn (string $result): array => [
-                $result => ManualLeadResultTags::label($result),
-            ]
+    $resultadoOptions = collect(
+        $resultadoOptions ?? []
+    );
+
+    $manualResultOptions = $resultadoOptions
+        ->map(
+            fn (array $definition): ?string =>
+                filled($definition['label'] ?? null)
+                    ? (string) $definition['label']
+                    : null
         )
-        ->filter(fn (?string $label): bool => filled($label));
+        ->filter();
+
+    $resultadoLabels = $manualResultOptions->all();
 
     $manualResultRouteExists = Route::has('admin.leads.result-tag.update');
     $leadLoversIntegrationEnabled = (bool) config(
@@ -197,10 +204,6 @@
     |--------------------------------------------------------------------------
     */
 
-    $resultadoLabels = [
-        'aprovado' => 'Aprovados',
-        'recusado' => 'Recusados/Reprovados',
-    ];
 
     if ($selectedImobiliaria === 'sem_vinculo') {
         $selectedImobiliariaModel = null;
@@ -235,6 +238,13 @@
                 || str_contains($tag, 'aluguel fechado')
                 || str_contains($tag, 'fechado alguel')
         );
+        $matchesRentWithoutInsurance = $normalizedTags->contains(
+            fn (string $tag): bool =>
+                str_contains($tag, 'aluguel sem seguro')
+                || str_contains($tag, 'nao aluguel nem seguro')
+                
+        );
+
 
         $matchesNegotiation = $normalizedTags->contains(
             fn (string $tag): bool => str_contains($tag, 'negociacao')
@@ -259,12 +269,23 @@
             [
                 'matches' => $matchesRentClosed,
                 'tone' => [
-                    'label' => 'Aluguel fechado',
+                    'label' => 'Fechado Aluguel',
                     'badge' => 'text-bg-primary',
                     'card' => 'lead-card--approved',
                     'icon' => 'bi-house-check',
                 ],
             ],
+
+            [
+                'matches' => $matchesRentWithoutInsurance,
+                'tone' => [
+                    'label' => 'Sem aluguel nem seguro',
+                    'badge' => 'text-bg-secondary',
+                    'card' => 'lead-card--neutral',
+                    'icon' => 'bi-house-x',
+                ],
+            ],
+            
             [
                 'matches' => $matchesNegotiation,
                 'tone' => [

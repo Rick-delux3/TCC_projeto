@@ -7,6 +7,8 @@ use App\Models\Lead;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Gate;
+use App\Models\LeadLoversTag;
+use App\Support\ManualLeadResultTags;
 
 class CorretorDashboardController extends Controller
 {
@@ -30,7 +32,36 @@ class CorretorDashboardController extends Controller
 
         $selectedImobiliaria = $request->input('imobiliaria', '');
 
-        $selectedResultado = $request->input('resultado', '');
+        $requestResultado = mb_strtolower(trim((string) $request->input('resultado', '')));
+
+        $legacyResultadoAliases = [
+            'aprovado' => ManualLeadResultTags::APPROVED,
+            'recusado' => ManualLeadResultTags::REJECTED,
+        ];
+
+        $selectedResultado = $legacyResultadoAliases[$requestResultado] ?? $requestResultado;
+
+        $resultadoOptions = collect(
+            ManualLeadResultTags::all()
+        );
+
+        if(
+            $selectedResultado !== ''
+            && ! $resultadoOptions->has($selectedResultado)
+        ) {
+            $selectedResultado = '';
+        }
+
+        $resultTagsTitles = $canViewLeads
+            ? LeadLoversTag::query()
+                ->whereIn(
+                    'key',
+                    ManualLeadResultTags::leadloversKeys()
+                )->pluck('title', 'key') 
+            : collect();
+
+
+
 
         $leadsQuery = Lead::query()
             ->createdThroughSystem()
@@ -94,19 +125,25 @@ class CorretorDashboardController extends Controller
             }
         );
 
-        $leadsQuery->when($selectedResultado, function ($query) use ($selectedResultado) {
-            $query->where(function ($subQuery) use ($selectedResultado) {
-                if ($selectedResultado === 'aprovado') {
-                    $subQuery->where('tags_originais', 'like', '%aprovad%');
-                }
+        if($selectedResultado !== '') {
+            $definition = $resultadoOptions->get($selectedResultado);
+        }
 
-                if ($selectedResultado === 'recusado') {
-                    $subQuery->where('tags_originais', 'like', '%recusad%')
-                        ->orWhere('tags_originais', 'like', '%reprovad%')
-                        ->orWhere('tags_originais', 'like', '%ruim%');
-                }
-            });
-        });
+        $selectTagKey = $definition['leadlovers_key'] ?? null;
+
+        $selectedTagTitle = $resultTagsTitles->get($selectTagKey);
+
+        if(filled($selectTagKey)) {
+            $escapedTagTitle = addcslashes($selectedTagTitle, '%_\\');
+
+            $leadsQuery->where(
+                'tags_originais',
+                'like',
+                "%{$escapedTagTitle}%"
+            );
+        } else {
+            $leadsQuery->whereRaw('1 = 0');
+        }
 
         $leads = $canViewLeads
             ? $leadsQuery->paginate(6)->withQueryString()
@@ -170,6 +207,7 @@ class CorretorDashboardController extends Controller
             'leadSearch',
             'selectedImobiliaria',
             'selectedResultado',
+            'resultadoOptions',
             'selectedTipoSolicitante',
             'tipoSolicitantesOptions',
             'simulationCompanies',
