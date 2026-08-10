@@ -306,7 +306,7 @@
                 'tone' => [
                     'label' => 'Fechado aluguel',
                     'badge' => 'text-bg-primary',
-                    'card' => 'lead-card--approved',
+                    'card' => 'lead-card--rent-closed',
                     'icon' => 'bi-house-check',
                 ],
             ],
@@ -316,7 +316,7 @@
                 'tone' => [
                     'label' => 'Não aluguei nem seguro',
                     'badge' => 'text-bg-secondary',
-                    'card' => 'lead-card--neutral',
+                    'card' => 'lead-card--no-rent-or-insurance',
                     'icon' => 'bi-house-x',
                 ],
             ],
@@ -326,7 +326,7 @@
                 'tone' => [
                     'label' => 'Em negociação',
                     'badge' => 'text-bg-warning',
-                    'card' => 'lead-card--neutral',
+                    'card' => 'lead-card--negotiation',
                     'icon' => 'bi-hourglass-split',
                 ],
             ],

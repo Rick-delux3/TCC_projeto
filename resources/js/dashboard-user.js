@@ -28,18 +28,18 @@ document.addEventListener('DOMContentLoaded', function () {
     |--------------------------------------------------------------------------
     */
     function applyDashboardTheme(theme) {
-        if (!dashboardThemeRoot || !dashboardThemeToggle) {
+        if(!dashboardThemeRoot || !dashboardThemeToggle) {
             return;
         }
 
-        const normalizedTheme = theme === 'dark' ? 'dark' : 'light';
 
-        dashboardThemeRoot.setAttribute('data-dashboard-theme', normalizedTheme);
-        dashboardThemeToggle.textContent = normalizedTheme === 'dark' ? 'Modo claro' : 'Modo escuro';
+        const normalizeTheme = (theme === 'dark' ? 'dark' : 'light');
+        dashboardThemeRoot.setAttribute('data-dashboard-theme', normalizeTheme);
 
-        dashboardThemeToggle.classList.toggle('btn-outline-light', normalizedTheme === 'dark');
-        dashboardThemeToggle.classList.toggle('btn-outline-secondary', normalizedTheme !== 'dark');
-    }
+        dashboardThemeToggle.textContent = normalizeTheme === 'dark' ? 'Modo claro' : 'Modo escuro';
+        dashboardThemeToggle.classList.toggle('btn-outline-light', normalizeTheme === 'dark');
+        dashboardThemeToggle.classList.toggle('btn-outline-secondary', normalizeTheme !== 'dark');
+    } 
 
     if (dashboardThemeRoot && dashboardThemeToggle) {
         let savedTheme = 'light';
