@@ -87,7 +87,7 @@ function manualLeadTagRequestLog(
     ]);
 }
 
-it('allows an active member with the tag management permission to request a result', function () {
+it('allows an active member with the tag management permission to request each commercial result', function (string $result) {
     Queue::fake();
     manualLeadTagCatalog();
 
@@ -98,7 +98,7 @@ it('allows an active member with the tag management permission to request a resu
         ->actingAs($corretor, 'admin')
         ->from('/Dashboard/Admin')
         ->patch(route('admin.leads.result-tag.update', $lead), [
-            'result' => ManualLeadResultTags::APPROVED,
+            'result' => $result,
             'result_context_lead_id' => $lead->id,
             'corretor_id' => 999999,
         ])
@@ -109,14 +109,20 @@ it('allows an active member with the tag management permission to request a resu
         ApplyManualLeadResultTagJob::class,
         fn (ApplyManualLeadResultTagJob $job): bool => $job->leadId === $lead->id
             && $job->corretorId === $corretor->id
-            && $job->result === ManualLeadResultTags::APPROVED
+            && $job->result === $result
             && $job->requestLogId === CorretorActivityLog::query()
                 ->where('action', 'lead_tag_update_requested')
                 ->where('model_type', Lead::class)
                 ->where('model_id', $lead->id)
                 ->value('id')
     );
-});
+})->with([
+    'Aprovado' => [ManualLeadResultTags::APPROVED],
+    'Recusado' => [ManualLeadResultTags::REJECTED],
+    'Em negociação' => [ManualLeadResultTags::IN_NEGOTIATION],
+    'Fechado aluguel' => [ManualLeadResultTags::RENTAL_CONFIRMED],
+    'Não aluguei nem seguro' => [ManualLeadResultTags::NO_RENT_OR_INSURANCE],
+]);
 
 it('rejects unauthenticated, inactive, unverified, and unauthorized members', function (string $state) {
     Queue::fake();

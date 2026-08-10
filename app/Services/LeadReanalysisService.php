@@ -2,116 +2,165 @@
 
 namespace App\Services;
 
+use App\Jobs\CompleteInsuranceAnalysesBatchJob;
 use App\Jobs\RunProviderAnalysisJob;
+use App\Jobs\SendLeadToLeadLoversJob;
 use App\Jobs\UpdateLeadOnLeadLoversJob;
 use App\Models\InsuranceAnalysis;
 use App\Models\InsuranceAnalysisBatch;
 use App\Models\Lead;
 use DomainException;
+use Illuminate\Bus\Batch;
+use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
-use App\Jobs\CompleteInsuranceAnalysesBatchJob;
-use Illuminate\Bus\Batch;
-use Illuminate\Support\Facades\Bus;
+use Throwable;
 
 class LeadReanalysisService
 {
+    private const LEADLOVERS_UPDATE_FIELDS = [
+        'name',
+        'phone',
+        'city',
+        'state',
+        'company',
+        'cpf',
+        'estado_civil',
+        'conjuge_cpf',
+        'valor_aluguel',
+        'valor_agua',
+        'valor_luz',
+        'valor_gas',
+        'valor_condominio',
+        'valor_iptu',
+        'outras_despesas',
+    ];
+
     public function updateLeadDataAndMaybeUnlock(Lead $lead, array $data): array
     {
-        $lead->loadMissing([
-            'endereco',
-            'despesas',
-            'conjuge',
-        ]);
-
-        $originalEmail = $lead->email;
-
-        $lead->fill([
-            'nome' => $data['nome'] ?? $lead->nome,
-            'email' => $data['email'] ?? $lead->email,
-            'tel' => $data['tel'] ?? $lead->tel,
-            'cpf' => $data['cpf'] ?? $lead->cpf,
-            'tipo_solicitante' => $data['tipo_solicitante'] ?? $lead->tipo_solicitante,
-            'estado_civil' => $data['estado_civil'] ?? $lead->estado_civil,
-        ]);
-
-        $endereco = $lead->endereco ?: $lead->endereco()->make();
-
-        $endereco->fill([
-            'cep' => $data['cep'] ?? $endereco->cep,
-            'estado' => $data['estado'] ?? $endereco->estado,
-            'cidade_imovel' => $data['cidade_imovel'] ?? $endereco->cidade_imovel,
-            'bairro' => $data['bairro'] ?? $endereco->bairro,
-            'logradouro' => $data['logradouro'] ?? $endereco->logradouro,
-            'numero' => $data['numero'] ?? $endereco->numero,
-            'complemento' => $data['complemento'] ?? $endereco->complemento,
-        ]);
-
-        $despesas = $lead->despesas ?: $lead->despesas()->make();
-
-        $valorAluguel = (float) ($data['valor_aluguel'] ?? $despesas->valor_aluguel ?? 0);
-        $valorAgua = (float) ($data['valor_agua'] ?? $despesas->valor_agua ?? 0);
-        $valorLuz = (float) ($data['valor_luz'] ?? $despesas->valor_luz ?? 0);
-        $valorGas = (float) ($data['valor_gas'] ?? $despesas->valor_gas ?? 0);
-        $valorCondominio = (float) ($data['valor_condominio'] ?? $despesas->valor_condominio ?? 0);
-        $valorIptu = (float) ($data['valor_iptu'] ?? $despesas->valor_iptu ?? 0);
-        $outrasDespesas = (float) ($data['outras_despesas'] ?? $despesas->outras_despesas ?? 0);
-
-        $valorTotalEncargos =
-            $valorAluguel
-            + $valorAgua
-            + $valorLuz
-            + $valorGas
-            + $valorCondominio
-            + $valorIptu
-            + $outrasDespesas;
-
-        $despesas->fill([
-            'valor_aluguel' => $valorAluguel,
-            'valor_agua' => $valorAgua,
-            'valor_luz' => $valorLuz,
-            'valor_gas' => $valorGas,
-            'valor_condominio' => $valorCondominio,
-            'valor_iptu' => $valorIptu,
-            'outras_despesas' => $outrasDespesas,
-            'valor_total_encargos' => $valorTotalEncargos,
-        ]);
-
-        $conjuge = $lead->conjuge ?: $lead->conjuge()->make();
-
-        $conjuge->fill([
-            'nome' => $data['conjuge_nome'] ?? $conjuge->nome,
-            'cpf' => $data['conjuge_cpf'] ?? $conjuge->cpf,
-        ]);
-
-        $leadChanged = $lead->isDirty();
-        $enderecoChanged = $endereco->isDirty();
-        $despesasChanged = $despesas->isDirty();
-        $conjugeChanged = $conjuge->isDirty();
-
-        if (! $leadChanged && ! $enderecoChanged && ! $despesasChanged && ! $conjugeChanged) {
-            return [
-                'changed' => false,
-                'unlocked' => false,
-                'message' => 'Altere pelo menos um dado do lead antes de salvar.',
-            ];
-        }
-
-        $unlocked = false;
-
-        DB::transaction(function () use (
-            $originalEmail,
+        $analysisEnabled = (bool) config(
+            'features.insurance_analysis.enabled',
+            false
+        );
+        $result = DB::transaction(function () use (
             $lead,
-            $endereco,
-            $despesas,
-            $conjuge,
-            $leadChanged,
-            $enderecoChanged,
-            $despesasChanged,
-            $conjugeChanged,
-            &$unlocked
-        ) {
+            $data,
+            $analysisEnabled,
+        ): array {
+            $lead = Lead::query()
+                ->with(['endereco', 'despesas', 'conjuge'])
+                ->whereKey($lead->getKey())
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            $originalEmail = is_string($lead->email)
+                ? trim($lead->email)
+                : '';
+            $submittedValue = static fn (string $field, mixed $current): mixed => array_key_exists($field, $data) ? $data[$field] : $current;
+
+            $lead->fill([
+                'nome' => $data['nome'] ?? $lead->nome,
+                'tel' => $submittedValue('tel', $lead->tel),
+                'cpf' => $submittedValue('cpf', $lead->cpf),
+                'tipo_solicitante' => $submittedValue('tipo_solicitante', $lead->tipo_solicitante),
+                'estado_civil' => $submittedValue('estado_civil', $lead->estado_civil),
+            ]);
+
+            $endereco = $lead->endereco ?: $lead->endereco()->make();
+            $endereco->fill([
+                'cep' => $submittedValue('cep', $endereco->cep),
+                'estado' => $submittedValue('estado', $endereco->estado),
+                'cidade_imovel' => $submittedValue('cidade_imovel', $endereco->cidade_imovel),
+                'bairro' => $submittedValue('bairro', $endereco->bairro),
+                'logradouro' => $submittedValue('logradouro', $endereco->logradouro),
+                'numero' => $submittedValue('numero', $endereco->numero),
+                'complemento' => $submittedValue('complemento', $endereco->complemento),
+            ]);
+
+            $despesas = $lead->despesas ?: $lead->despesas()->make();
+            $numericValue = static function (string $field, mixed $current) use ($submittedValue): ?float {
+                $value = $submittedValue($field, $current);
+
+                return $value === null || $value === ''
+                    ? null
+                    : (float) $value;
+            };
+            $valorAluguel = $numericValue('valor_aluguel', $despesas->valor_aluguel);
+            $valorAgua = $numericValue('valor_agua', $despesas->valor_agua);
+            $valorLuz = $numericValue('valor_luz', $despesas->valor_luz);
+            $valorGas = $numericValue('valor_gas', $despesas->valor_gas);
+            $valorCondominio = $numericValue('valor_condominio', $despesas->valor_condominio);
+            $valorIptu = $numericValue('valor_iptu', $despesas->valor_iptu);
+            $outrasDespesas = $numericValue('outras_despesas', $despesas->outras_despesas);
+
+            $despesas->fill([
+                'valor_aluguel' => $valorAluguel,
+                'valor_agua' => $valorAgua,
+                'valor_luz' => $valorLuz,
+                'valor_gas' => $valorGas,
+                'valor_condominio' => $valorCondominio,
+                'valor_iptu' => $valorIptu,
+                'outras_despesas' => $outrasDespesas,
+                'valor_total_encargos' => (float) ($valorAluguel ?? 0)
+                    + (float) ($valorAgua ?? 0)
+                    + (float) ($valorLuz ?? 0)
+                    + (float) ($valorGas ?? 0)
+                    + (float) ($valorCondominio ?? 0)
+                    + (float) ($valorIptu ?? 0)
+                    + (float) ($outrasDespesas ?? 0),
+            ]);
+
+            $conjuge = $lead->conjuge ?: $lead->conjuge()->make();
+            $conjuge->fill([
+                'nome' => $submittedValue('conjuge_nome', $conjuge->nome),
+                'cpf' => $submittedValue('conjuge_cpf', $conjuge->cpf),
+            ]);
+
+            $leadChanged = $lead->isDirty();
+            $enderecoChanged = $endereco->isDirty();
+            $despesasChanged = $despesas->isDirty();
+            $conjugeChanged = $conjuge->isDirty();
+            $requestedLeadLoversFields = $this->normalizeLeadLoversUpdateFields([
+                array_key_exists('nome', $data) && $lead->isDirty('nome')
+                    ? 'name' : null,
+                array_key_exists('tel', $data) && $lead->isDirty('tel')
+                    ? 'phone' : null,
+                array_key_exists('cpf', $data) && $lead->isDirty('cpf')
+                    ? 'cpf' : null,
+                array_key_exists('estado_civil', $data) && $lead->isDirty('estado_civil')
+                    ? 'estado_civil' : null,
+                array_key_exists('cidade_imovel', $data) && $endereco->isDirty('cidade_imovel')
+                    ? 'city' : null,
+                array_key_exists('estado', $data) && $endereco->isDirty('estado')
+                    ? 'state' : null,
+                array_key_exists('valor_aluguel', $data) && $despesas->isDirty('valor_aluguel')
+                    ? 'valor_aluguel' : null,
+                array_key_exists('valor_agua', $data) && $despesas->isDirty('valor_agua')
+                    ? 'valor_agua' : null,
+                array_key_exists('valor_luz', $data) && $despesas->isDirty('valor_luz')
+                    ? 'valor_luz' : null,
+                array_key_exists('valor_gas', $data) && $despesas->isDirty('valor_gas')
+                    ? 'valor_gas' : null,
+                array_key_exists('valor_condominio', $data) && $despesas->isDirty('valor_condominio')
+                    ? 'valor_condominio' : null,
+                array_key_exists('valor_iptu', $data) && $despesas->isDirty('valor_iptu')
+                    ? 'valor_iptu' : null,
+                array_key_exists('outras_despesas', $data) && $despesas->isDirty('outras_despesas')
+                    ? 'outras_despesas' : null,
+                array_key_exists('conjuge_cpf', $data) && $conjuge->isDirty('cpf')
+                    ? 'conjuge_cpf' : null,
+            ]);
+
+            if (! $leadChanged && ! $enderecoChanged && ! $despesasChanged && ! $conjugeChanged) {
+                return [
+                    'changed' => false,
+                    'unlocked' => false,
+                    'sync_status' => 'idle',
+                    'dispatch' => null,
+                ];
+            }
+
             if ($leadChanged) {
                 $lead->save();
             }
@@ -130,65 +179,286 @@ class LeadReanalysisService
 
             $lead->refresh();
 
-            $integrationEnable = config('services.leadlovers.enabled', false);
-
-            $wasSentToLeadLovers = $lead->leadlovers_status === 'sent'
+            $integrationEnabled = (bool) config(
+                'services.leadlovers.enabled',
+                false
+            );
+            $wasSentToLeadLovers = in_array(
+                $lead->leadlovers_status,
+                ['sent', 'send'],
+                true
+            )
                 && filled($lead->sent_to_leadlovers_at);
-            
 
-            if(! $integrationEnable) {
+            if ($wasSentToLeadLovers && $lead->leadlovers_status === 'send') {
                 $lead->forceFill([
-                    'leadlovers_update_status' => 'disabled',
-                    'leadlovers_update_error' => 
-                        'Integração com a LeadLovers desativada.',
+                    'leadlovers_status' => 'sent',
+                ])->saveQuietly();
+            }
+            $initialSendCanRetry = in_array($lead->leadlovers_status, [
+                'tag_failed',
+                'sequence_failed',
+                'disabled',
+            ], true);
+            $initialSendNeedsReconciliation = $lead->leadlovers_status
+                === 'failed';
+            $hasValidOriginalEmail = $originalEmail !== ''
+                && filter_var($originalEmail, FILTER_VALIDATE_EMAIL) !== false;
+            $syncStatus = 'idle';
+            $dispatch = null;
+
+            if ($requestedLeadLoversFields === []) {
+                // A alteracao foi apenas local; nao existe dado remoto a enviar.
+                $syncStatus = 'idle';
+            } elseif (! $integrationEnabled) {
+                $syncStatus = 'disabled';
+                $requestedLeadLoversFields = $this->normalizeLeadLoversUpdateFields([
+                    ...$this->pendingLeadLoversUpdateFields($lead),
+                    ...$requestedLeadLoversFields,
+                ]);
+
+                $lead->forceFill([
+                    'leadlovers_update_status' => $syncStatus,
+                    'leadlovers_update_error' => 'Integração com a LeadLovers desativada.',
+                    'leadlovers_update_response' => [
+                        'requested_fields' => $requestedLeadLoversFields,
+                    ],
+                ])->saveQuietly();
+            } elseif ($initialSendNeedsReconciliation) {
+                $syncStatus = 'failed';
+                $requestedLeadLoversFields = $this->normalizeLeadLoversUpdateFields([
+                    ...$this->pendingLeadLoversUpdateFields($lead),
+                    ...$requestedLeadLoversFields,
+                ]);
+
+                $lead->forceFill([
+                    'leadlovers_update_status' => $syncStatus,
+                    'leadlovers_update_error' => 'O envio inicial falhou e precisa ser conciliado antes de uma nova tentativa.',
+                    'leadlovers_update_response' => [
+                        'requested_fields' => $requestedLeadLoversFields,
+                    ],
                 ])->saveQuietly();
             } elseif (! $wasSentToLeadLovers) {
+                $syncStatus = 'waiting_initial_send';
+                $requestedLeadLoversFields = $this->normalizeLeadLoversUpdateFields([
+                    ...$this->pendingLeadLoversUpdateFields($lead),
+                    ...$requestedLeadLoversFields,
+                ]);
 
                 $lead->forceFill([
-                    'leadlovers_update_status' =>
-                        'waiting_initial_send',
+                    'leadlovers_update_status' => $syncStatus,
                     'leadlovers_update_error' => null,
+                    'leadlovers_update_response' => [
+                        'requested_fields' => $requestedLeadLoversFields,
+                    ],
                 ])->saveQuietly();
 
-            } else {
-                $syncVersion =
-                    (int) $lead->leadlovers_update_version + 1;
+                if ($initialSendCanRetry) {
+                    $lead->forceFill([
+                        'leadlovers_status' => 'pending',
+                    ])->saveQuietly();
+
+                    $dispatch = [
+                        'job_type' => 'initial',
+                        'lead_id' => (int) $lead->id,
+                    ];
+                }
+            } elseif (! $hasValidOriginalEmail) {
+                $syncStatus = 'failed';
 
                 $lead->forceFill([
-                    'leadlovers_update_status' => 'pending',
+                    'leadlovers_update_status' => $syncStatus,
+                    'leadlovers_update_error' => 'O e-mail original não permite localizar o lead na LeadLovers.',
+                ])->saveQuietly();
+            } else {
+                $syncStatus = 'pending';
+                $syncVersion = (int) $lead->leadlovers_update_version + 1;
+                $requestedLeadLoversFields = $this->normalizeLeadLoversUpdateFields([
+                    ...$this->pendingLeadLoversUpdateFields($lead),
+                    ...$requestedLeadLoversFields,
+                ]);
+
+                $lead->forceFill([
+                    'leadlovers_update_status' => $syncStatus,
                     'leadlovers_update_version' => $syncVersion,
                     'leadlovers_update_error' => null,
-                    'leadlovers_update_response' => null,
+                    'leadlovers_update_response' => [
+                        'requested_fields' => $requestedLeadLoversFields,
+                    ],
                     'leadlovers_update_requested_at' => now(),
                 ])->saveQuietly();
 
-                UpdateLeadOnLeadLoversJob::dispatch(
-                    leadId: $lead->id,
-                    originalEmail: $originalEmail,
-                    syncVersion: $syncVersion,
-                )
-                    ->onQueue('leadlovers')
-                    ->afterCommit();
+                $dispatch = [
+                    'job_type' => 'update',
+                    'lead_id' => (int) $lead->id,
+                    'original_email' => $originalEmail,
+                    'sync_version' => $syncVersion,
+                    'requested_fields' => $requestedLeadLoversFields,
+                    'not_before' => $this->leadLoversUpdateNotBefore($lead),
+                ];
             }
 
-           
-            if ($lead->hasFinalInsuranceResultForReanalysis()) {
+            $unlocked = false;
+
+            if (
+                $analysisEnabled
+                && $lead->hasFinalInsuranceResultForReanalysis()
+            ) {
                 $lead->forceFill([
                     'reanalysis_unlocked_at' => now(),
                 ])->saveQuietly();
 
                 $unlocked = true;
             }
+
+            return [
+                'changed' => true,
+                'unlocked' => $unlocked,
+                'sync_status' => $syncStatus,
+                'dispatch' => $dispatch,
+            ];
         });
 
+        if (! $result['changed']) {
+            return [
+                'changed' => false,
+                'unlocked' => false,
+                'message' => 'Altere pelo menos um dado do lead antes de salvar.',
+            ];
+        }
+
+        if ($result['dispatch'] !== null) {
+            $dispatch = $result['dispatch'];
+
+            try {
+                if ($dispatch['job_type'] === 'initial') {
+                    $job = new SendLeadToLeadLoversJob(
+                        leadId: $dispatch['lead_id']
+                    );
+                    $job->onQueue('leadlovers')->afterCommit();
+                } else {
+                    $job = new UpdateLeadOnLeadLoversJob(
+                        leadId: $dispatch['lead_id'],
+                        originalEmail: $dispatch['original_email'],
+                        syncVersion: $dispatch['sync_version'],
+                        requestedFields: $dispatch['requested_fields'],
+                    );
+                    $job->onQueue('leadlovers')->afterCommit();
+
+                    if ($dispatch['not_before'] !== null) {
+                        $job->delay($dispatch['not_before']);
+                    }
+                }
+
+                Bus::dispatch($job);
+            } catch (Throwable $exception) {
+                $query = Lead::query()->whereKey($dispatch['lead_id']);
+
+                if ($dispatch['job_type'] === 'initial') {
+                    $query->where('leadlovers_status', 'pending');
+                } else {
+                    $query
+                        ->where(
+                            'leadlovers_update_version',
+                            $dispatch['sync_version']
+                        )
+                        ->where('leadlovers_update_status', 'pending');
+                }
+
+                $attributes = [
+                    'leadlovers_update_status' => 'failed',
+                    'leadlovers_update_error' => 'A sincronização não pôde ser colocada na fila.',
+                ];
+
+                if ($dispatch['job_type'] === 'initial') {
+                    $attributes['leadlovers_status'] = 'failed';
+                }
+
+                $updated = $query->update($attributes);
+
+                if ($updated === 1) {
+                    $result['sync_status'] = 'failed';
+                }
+
+                Log::warning('Falha ao enfileirar atualização do lead na LeadLovers.', [
+                    'lead_id' => $dispatch['lead_id'],
+                    'job_type' => $dispatch['job_type'],
+                    'sync_version' => $dispatch['sync_version'] ?? null,
+                    'exception' => $exception::class,
+                ]);
+            }
+        }
+
+        $message = match ($result['sync_status']) {
+            'pending' => 'Dados salvos no sistema. A sincronização com a LeadLovers foi colocada na fila.',
+            'waiting_initial_send' => 'Dados salvos no sistema. A atualização na LeadLovers aguarda o envio inicial do lead.',
+            'disabled' => 'Dados salvos no sistema. A integração com a LeadLovers está desativada.',
+            'failed' => 'Dados salvos no sistema, mas a sincronização com a LeadLovers não pôde ser enfileirada.',
+            default => 'Dados salvos no sistema.',
+        };
 
         return [
             'changed' => true,
-            'unlocked' => $unlocked,
-            'message' => $unlocked
-                ? 'Dados do lead atualizados com sucesso. Agora você pode solicitar uma reanálise.'
-                : 'Dados do lead atualizados com sucesso. A reanálise só ficará disponível quando o lead tiver resultado final aprovado ou recusado.',
+            'unlocked' => $result['unlocked'],
+            'message' => $message,
         ];
+    }
+
+    private function normalizeLeadLoversUpdateFields(array $fields): array
+    {
+        $requested = array_fill_keys(
+            array_values(array_filter($fields, 'is_string')),
+            true
+        );
+
+        return array_values(array_filter(
+            self::LEADLOVERS_UPDATE_FIELDS,
+            static fn (string $field): bool => isset($requested[$field])
+        ));
+    }
+
+    private function pendingLeadLoversUpdateFields(Lead $lead): array
+    {
+        if (! in_array($lead->leadlovers_update_status, [
+            'pending',
+            'processing',
+            'failed',
+            'waiting_initial_send',
+            'disabled',
+        ], true)) {
+            return [];
+        }
+
+        $response = $lead->leadlovers_update_response;
+
+        if (! is_array($response)) {
+            return [];
+        }
+
+        return $this->normalizeLeadLoversUpdateFields(
+            is_array($response['requested_fields'] ?? null)
+                ? $response['requested_fields']
+                : []
+        );
+    }
+
+    private function leadLoversUpdateNotBefore(Lead $lead): ?\DateTimeInterface
+    {
+        if (! $lead->sent_to_leadlovers_at) {
+            return null;
+        }
+
+        $notBefore = $lead->sent_to_leadlovers_at
+            ->copy()
+            ->addSeconds(max(
+                0,
+                (int) config(
+                    'services.leadlovers.initial_update_delay_seconds',
+                    60
+                )
+            ));
+
+        return $notBefore->isFuture() ? $notBefore : null;
     }
 
     public function startGeneralReanalysis(
@@ -207,9 +477,9 @@ class LeadReanalysisService
         if (! $lead->canRequestGeneralReanalysis()) {
             throw new DomainException(
                 'Para solicitar reanálise geral, o lead precisa estar aprovado ou recusado e ter alterações salvas.'
-                );
+            );
         }
-                
+
         $attemptId = (string) Str::uuid();
 
         $preparedAnalyses = DB::transaction(function () use (
@@ -219,12 +489,12 @@ class LeadReanalysisService
             $attemptId
         ) {
             $batch = InsuranceAnalysisBatch::query()
-            ->where('lead_id', $lead->id)
-            ->latest('id')
-            ->lockForUpdate()
-            ->first();
+                ->where('lead_id', $lead->id)
+                ->latest('id')
+                ->lockForUpdate()
+                ->first();
 
-            if(! $batch) {
+            if (! $batch) {
                 throw new DomainException(
                     'Nenhum lote de análise encontrado para este lead.'
                 );
@@ -242,7 +512,7 @@ class LeadReanalysisService
                     fn (InsuranceAnalysis $analysis) => $analysis->canRequestProviderReanalysis()
                 )->values();
 
-            if($eligibleAnalyses->isEmpty()){
+            if ($eligibleAnalyses->isEmpty()) {
                 throw new DomainException(
                     'Nenhuma companhia deste lead está em status permitido para reanálise.'
                 );
@@ -296,7 +566,7 @@ class LeadReanalysisService
         Bus::batch($jobs)
             ->name("Reanálise do lead {$leadId}")
             ->allowFailures()
-            ->finally(static function (Batch $batch) use ($batchId, $attemptId){
+            ->finally(static function (Batch $batch) use ($batchId, $attemptId) {
                 CompleteInsuranceAnalysesBatchJob::dispatch(
                     batchId: $batchId,
                     attemptId: $attemptId,
@@ -328,7 +598,7 @@ class LeadReanalysisService
         }
 
         $providerOptions = $this->optionsForProvider($analysis, $options);
-        
+
         $attemptId = (string) Str::uuid();
 
         $this->restartAnalysisAsReanalysis(
@@ -376,7 +646,7 @@ class LeadReanalysisService
                 ->whereKey($analysis->id)
                 ->lockForUpdate()
                 ->firstOrFail();
-               
+
             $analysis->loadMissing([
                 'batch.analyses',
                 'lead.despesas',
@@ -384,9 +654,9 @@ class LeadReanalysisService
             ]);
 
             if (! $analysis->canRequestProviderReanalysis()) {
-            throw new DomainException(
-                'Esta análise já está sendo processada ou não permite reanálise.'
-            );
+                throw new DomainException(
+                    'Esta análise já está sendo processada ou não permite reanálise.'
+                );
             }
 
             $isToo = $analysis->isTooProvider();
@@ -580,8 +850,8 @@ class LeadReanalysisService
     }
 
     public function startTechnicalRetry(
-    InsuranceAnalysis $analysis,
-    string $requestedBy = 'imobiliaria'
+        InsuranceAnalysis $analysis,
+        string $requestedBy = 'imobiliaria'
     ): string {
         $normalizedStatus = mb_strtolower((string) $analysis->status);
 
@@ -711,17 +981,17 @@ class LeadReanalysisService
         }
 
         $defaultReason = (int) config(
-           'services.too.default_reanalysis_reason',
-           10 
+            'services.too.default_reanalysis_reason',
+            10
         );
 
         $motivos = collect(
             $options['motivosReanalise'] ?? [$defaultReason]
         )->map(fn ($motivo) => (int) $motivo)
-        ->filter(fn ($motivo) => $motivo > 0)
-        ->unique()
-        ->values()
-        ->all();
+            ->filter(fn ($motivo) => $motivo > 0)
+            ->unique()
+            ->values()
+            ->all();
 
         $observacoes = trim((string) (
             $options['observacoes']
@@ -739,7 +1009,5 @@ class LeadReanalysisService
             'observacoes' => $observacoes,
         ];
 
-
-        
     }
 }

@@ -61,7 +61,8 @@ return [
         'rate_limit_retry_seconds' => env('LEADLOVERS_RATE_LIMIT_RETRY_SECONDS', 60),
         'rate_limit_max_retry_seconds' => env('LEADLOVERS_RATE_LIMIT_MAX_RETRY_SECONDS', 900),
         'requests_per_minute' => (int) env('LEADLOVERS_REQUESTS_PER_MINUTE', 90),
-        'rate_limit_window_seconds' => (int) env('LEADLOVERS_RATE_LIMIT_WINDOW_SECONDS',60),
+        'rate_limit_window_seconds' => (int) env('LEADLOVERS_RATE_LIMIT_WINDOW_SECONDS', 60),
+        'initial_update_delay_seconds' => (int) env('LEADLOVERS_INITIAL_UPDATE_DELAY_SECONDS', 60),
         'dynamic_fields' => [
             'cpf' => env('LEADLOVERS_FIELD_CPF'),
             'estado_civil' => env('LEADLOVERS_FIELD_ESTADO_CIVIL'),

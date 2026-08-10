@@ -3,11 +3,11 @@
 namespace App\Services;
 
 use App\Exceptions\LeadLoversRateLimitedException;
+use Closure;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\RateLimiter;
-use Closure;
 
 class LeadLoversService
 {
@@ -95,11 +95,11 @@ class LeadLoversService
         }
         try {
             $response = $this->sendRateLimitedRequest(
-                fn(): Response => Http::connectTimeout(10)
-                ->timeout(30)
-                ->get($this->baseUrl.'Tags', [
-                    'token' => $this->token,
-                ])
+                fn (): Response => Http::connectTimeout(10)
+                    ->timeout(30)
+                    ->get($this->baseUrl.'Tags', [
+                        'token' => $this->token,
+                    ])
             );
 
             $this->throwIfRateLimited($response);
@@ -116,7 +116,6 @@ class LeadLoversService
 
         } catch (LeadLoversRateLimitedException $exception) {
             throw $exception;
-
         } catch (\Throwable $e) {
             Log::error('Falha ao buscar tags na LeadLovers', [
                 'exception' => $e::class,
@@ -141,16 +140,15 @@ class LeadLoversService
 
         try {
             $response = $this->sendRateLimitedRequest(
-                fn(): Response => 
-                Http::asJson()->acceptJson()
-                ->connectTimeout(10)
-                ->timeout(30)
-                ->withQueryParameters([
-                    'token' => $this->token,
-                ])
-                ->post($this->baseUrl.'Tags', [
-                    'Title' => $title,
-                ])
+                fn (): Response => Http::asJson()->acceptJson()
+                    ->connectTimeout(10)
+                    ->timeout(30)
+                    ->withQueryParameters([
+                        'token' => $this->token,
+                    ])
+                    ->post($this->baseUrl.'Tags', [
+                        'Title' => $title,
+                    ])
             );
 
             $this->throwIfRateLimited($response);
@@ -264,65 +262,41 @@ class LeadLoversService
                 ];
             }
 
+            $dynamicFieldValues = [
+                'cpf' => $data['CPF'] ?? null,
+                'estado_civil' => $data['CIVIL'] ?? null,
+                'conjuge_cpf' => $data['conjuge'] ?? null,
+                'valor_aluguel' => $data['VALOR'] ?? null,
+                'valor_agua' => $data['Agua'] ?? null,
+                'valor_luz' => $data['Luz'] ?? null,
+                'valor_gas' => $data['Gas'] ?? null,
+                'valor_condominio' => $data['Condominio'] ?? null,
+                'valor_iptu' => $data['IPTU'] ?? null,
+                'outras_despesas' => $data['OUTRO'] ?? null,
+            ];
+
             $dynamicFields = collect(
-                [
-                    [
-                        'Id' => 52672,
-                        'Value' => $data['CPF'] ?? null,
-                    ],
+                config('services.leadlovers.dynamic_fields', [])
+            )
+                ->map(function ($fieldId, string $field) use (
+                    $dynamicFieldValues
+                ): ?array {
+                    $value = $dynamicFieldValues[$field] ?? null;
 
-                    [
-                        'Id' => 52668,
-                        'Value' => $data['CIVIL'] ?? null,
-                    ],
+                    if (
+                        ! is_numeric($fieldId)
+                        || (int) $fieldId <= 0
+                        || ! filled($value)
+                    ) {
+                        return null;
+                    }
 
-                    [
-                        'Id' => 52671,
-                        'Value' => $data['conjuge'] ?? null,
-                    ],
-
-                    [
-                        'Id' => 52664,
-                        'Value' => $data['VALOR'] ?? null,
-                    ],
-
-                    [
-                        'Id' => 121473,
-                        'Value' => $data['Agua'] ?? null,
-                    ],
-
-                    [
-                        'Id' => 121474,
-                        'Value' => $data['Luz'] ?? null,
-                    ],
-
-                    [
-                        'Id' => 121475,
-                        'Value' => $data['Gas'] ?? null,
-                    ],
-
-                    [
-                        'Id' => 121472,
-                        'Value' => $data['Condominio'] ?? null,
-
-                    ],
-
-                    [
-                        'Id' => 121471,
-                        'Value' => $data['IPTU'] ?? null,
-                    ],
-
-                    [
-                        'Id' => 52666,
-                        'Value' => $data['OUTRO'] ?? null,
-                    ],
-
-                ])
-                ->filter(fn (array $field) => filled($field['Value']))
-                ->map(fn (array $field) => [
-                    'Id' => (int) $field['Id'],
-                    'Value' => trim((string) $field['Value']),
-                ])
+                    return [
+                        'Id' => (int) $fieldId,
+                        'Value' => trim((string) $value),
+                    ];
+                })
+                ->filter()
                 ->values()
                 ->all();
 
@@ -354,17 +328,20 @@ class LeadLoversService
             ]);
 
             $response = $this->sendRateLimitedRequest(
-                fn(): Response => Http::asJson()
-                ->connectTimeout(10)
-                ->timeout(30)
-                ->withQueryParameters([
-                    'token' => $this->token,
-                ])
-                ->post($this->baseUrl.'Lead', $payload)
+                fn (): Response => Http::asJson()
+                    ->connectTimeout(10)
+                    ->timeout(30)
+                    ->withQueryParameters([
+                        'token' => $this->token,
+                    ])
+                    ->post($this->baseUrl.'Lead', $payload)
             );
 
             $this->throwIfRateLimited($response);
             $result = $this->responseData($response);
+            $result['_response_confirmed'] = $this->responseConfirmsLeadCreation(
+                $response
+            );
 
             if (! $response->successful()) {
                 Log::warning('LeadLovers respondeu erro ao criar lead', [
@@ -393,18 +370,17 @@ class LeadLoversService
 
     public function updateLead(array $payload): array
     {
-
         if (! $this->isEnabled()) {
             return [
                 'success' => false,
                 'status' => 503,
+                'http_status' => null,
                 'response' => [],
                 'raw_body' => null,
                 'payload' => [],
                 'error' => 'Integração com a LeadLovers desativada',
             ];
         }
-        
 
         $baseUrl = $this->baseUrl;
         $token = $this->token;
@@ -413,6 +389,7 @@ class LeadLoversService
             return [
                 'success' => false,
                 'status' => null,
+                'http_status' => null,
                 'response' => [],
                 'raw_body' => null,
                 'payload' => [],
@@ -424,12 +401,30 @@ class LeadLoversService
             return filled($value);
         });
 
+        $email = trim((string) ($payload['Email'] ?? ''));
+
+        if (
+            $email === ''
+            || filter_var($email, FILTER_VALIDATE_EMAIL) === false
+        ) {
+            return [
+                'success' => false,
+                'status' => 422,
+                'http_status' => null,
+                'response' => [],
+                'raw_body' => null,
+                'payload' => [],
+                'error' => 'O campo Email é obrigatório para atualizar o lead.',
+            ];
+        }
+
+        $payload['Email'] = $email;
+
         $endpoint = $this->baseUrl.'Lead';
 
         try {
             $response = $this->sendRateLimitedRequest(
-                fn(): Response => 
-                    Http::asJson()
+                fn (): Response => Http::asJson()
                     ->acceptJson()
                     ->connectTimeout(10)
                     ->timeout(30)
@@ -440,21 +435,83 @@ class LeadLoversService
             );
 
             $this->throwIfRateLimited($response);
-            $json = $response->json();
+            $decodedResponse = $response->json();
+            $httpStatus = $response->status();
+            $hasResponseBody = trim($response->body()) !== '';
 
-            if (! $response->successful()) {
+            if (
+                $response->successful()
+                && $hasResponseBody
+                && ! is_array($decodedResponse)
+            ) {
+                Log::warning('LeadLovers retornou corpo inválido ao atualizar o lead.', [
+                    'status' => 502,
+                    'http_status' => $httpStatus,
+                ]);
+
+                return [
+                    'success' => false,
+                    'status' => 502,
+                    'http_status' => $httpStatus,
+                    'response' => [],
+                    'raw_body' => null,
+                    'payload' => [],
+                    'error' => 'A LeadLovers não confirmou a atualização.',
+                ];
+            }
+
+            $json = is_array($decodedResponse) ? $decodedResponse : [];
+            $bodyStatus = $this->responseStatusCode($json);
+            $status = $response->successful() && $bodyStatus !== null
+                ? $bodyStatus
+                : $httpStatus;
+            $success = $response->successful()
+                && ! $this->responseBodyExplicitlyFailed($json);
+            $responseMessage = $this->sanitizedProviderMessage(
+                $json,
+                $success
+            );
+
+            if (! $success) {
                 Log::warning('LeadLovers recusou atualização do lead.', [
-                    'status' => $response->status(),
+                    'status' => $status,
+                    'http_status' => $httpStatus,
+                    'response_format' => is_array($decodedResponse)
+                        ? 'json'
+                        : 'non_json',
+                    'response_keys' => array_values(array_intersect(
+                        array_keys($json),
+                        [
+                            'StatusCode',
+                            'statusCode',
+                            'status',
+                            'Success',
+                            'success',
+                            'Message',
+                            'message',
+                            'Error',
+                            'error',
+                            'Exception',
+                            'exception',
+                        ]
+                    )),
+                    'response_keys_count' => count($json),
+                    'response_body_bytes' => strlen($response->body()),
+                    'response_message' => $responseMessage,
                 ]);
             }
 
             return [
-                'success' => $response->successful(),
-                'status' => $response->status(),
-                'response' => is_array($json) ? $json : [],
+                'success' => $success,
+                'status' => $status,
+                'http_status' => $httpStatus,
+                'response' => $json,
                 'raw_body' => null,
                 'payload' => [],
-                'error' => $response->successful() ? null : 'A LeadLovers recusou a atualização.',
+                'response_message' => $responseMessage,
+                'error' => $success
+                    ? null
+                    : 'A LeadLovers recusou a atualização.',
             ];
         } catch (LeadLoversRateLimitedException $e) {
             throw $e;
@@ -467,12 +524,105 @@ class LeadLoversService
             return [
                 'success' => false,
                 'status' => null,
+                'http_status' => null,
                 'response' => [],
                 'raw_body' => null,
                 'payload' => [],
                 'error' => 'Falha ao conectar com a LeadLovers.',
             ];
         }
+    }
+
+    private function responseStatusCode(array $response): ?int
+    {
+        $status = $response['StatusCode']
+            ?? $response['statusCode']
+            ?? $response['status']
+            ?? null;
+
+        return is_numeric($status) ? (int) $status : null;
+    }
+
+    private function sanitizedProviderMessage(
+        array $response,
+        bool $success
+    ): ?string {
+        $message = $response['Message']
+            ?? $response['message']
+            ?? $response['Error']
+            ?? $response['error']
+            ?? $response['Exception']
+            ?? $response['exception']
+            ?? null;
+
+        if ($success || ! is_scalar($message) || is_bool($message)) {
+            return null;
+        }
+
+        $message = html_entity_decode(
+            strip_tags((string) $message),
+            ENT_QUOTES | ENT_HTML5,
+            'UTF-8'
+        );
+        $message = preg_replace('/[\p{C}\s]+/u', ' ', $message);
+        $message = trim((string) $message);
+
+        if ($message === '') {
+            return null;
+        }
+
+        $normalized = mb_strtolower($message);
+
+        return match (true) {
+            str_contains($normalized, 'rate limit'),
+            str_contains($normalized, 'too many request'),
+            str_contains($normalized, 'limite de requisi') => 'A LeadLovers informou limite temporário de requisições.',
+            str_contains($normalized, 'unauthor'),
+            str_contains($normalized, 'não autoriz'),
+            str_contains($normalized, 'nao autoriz'),
+            str_contains($normalized, 'token'),
+            str_contains($normalized, 'credencial') => 'A LeadLovers informou falha de autenticação.',
+            str_contains($normalized, 'not found'),
+            str_contains($normalized, 'não encontr'),
+            str_contains($normalized, 'nao encontr'),
+            str_contains($normalized, 'inexistente') => 'A LeadLovers não localizou o recurso solicitado.',
+            str_contains($normalized, 'duplic'),
+            str_contains($normalized, 'already exist'),
+            str_contains($normalized, 'já existe'),
+            str_contains($normalized, 'ja existe') => 'A LeadLovers informou um registro duplicado.',
+            str_contains($normalized, 'invalid'),
+            str_contains($normalized, 'inválid'),
+            str_contains($normalized, 'invalido'),
+            str_contains($normalized, 'required'),
+            str_contains($normalized, 'obrigat'),
+            str_contains($normalized, 'validation') => 'A LeadLovers informou dados inválidos.',
+            default => 'A LeadLovers retornou uma mensagem de erro não classificada.',
+        };
+    }
+
+    private function responseBodyExplicitlyFailed(array $response): bool
+    {
+        $status = $this->responseStatusCode($response);
+
+        if ($status !== null && ($status < 200 || $status >= 300)) {
+            return true;
+        }
+
+        $success = $response['Success'] ?? $response['success'] ?? null;
+
+        if ($success === false || $success === 0) {
+            return true;
+        }
+
+        if (
+            is_string($success)
+            && in_array(mb_strtolower(trim($success)), ['0', 'false', 'no'], true)
+        ) {
+            return true;
+        }
+
+        return filled($response['Exception'] ?? $response['exception'] ?? null)
+            || filled($response['Error'] ?? $response['error'] ?? null);
     }
 
     /**
@@ -503,8 +653,7 @@ class LeadLoversService
 
         try {
             $response = $this->sendRateLimitedRequest(
-                fn(): Response => 
-                    Http::asJson()
+                fn (): Response => Http::asJson()
                     ->connectTimeout(10)
                     ->timeout(30)
                     ->withQueryParameters([
@@ -575,8 +724,7 @@ class LeadLoversService
 
         try {
             $response = $this->sendRateLimitedRequest(
-                fn(): Response => 
-                    Http::asJson()
+                fn (): Response => Http::asJson()
                     ->connectTimeout(10)
                     ->timeout(30)
                     ->get($this->baseUrl.'Lead', [
@@ -636,8 +784,7 @@ class LeadLoversService
 
         try {
             $response = $this->sendRateLimitedRequest(
-                fn(): Response => 
-                    Http::asJson()
+                fn (): Response => Http::asJson()
                     ->connectTimeout(10)
                     ->timeout(30)
                     ->get($this->baseUrl.'Tag/Lead', [
@@ -699,8 +846,7 @@ class LeadLoversService
 
         try {
             $response = $this->sendRateLimitedRequest(
-                fn(): Response => 
-                    Http::acceptJson()
+                fn (): Response => Http::acceptJson()
                     ->connectTimeout(10)
                     ->timeout(30)
                     ->withQueryParameters([
@@ -840,7 +986,6 @@ class LeadLoversService
             $data['StatusCode'] = $response->status();
         }
 
-
         if (! $response->successful()
             && ! isset($data['Message'])
             && ! isset($data['message'])) {
@@ -848,6 +993,52 @@ class LeadLoversService
         }
 
         return $data;
+    }
+
+    private function responseConfirmsLeadCreation(Response $response): bool
+    {
+        if (! $response->successful()) {
+            return false;
+        }
+
+        $data = $response->json();
+
+        if (! is_array($data) || $data === []) {
+            return false;
+        }
+
+        $status = $data['StatusCode']
+            ?? $data['statusCode']
+            ?? $data['status']
+            ?? null;
+
+        if (is_numeric($status)) {
+            return (int) $status >= 200 && (int) $status < 300;
+        }
+
+        $success = $data['Success'] ?? $data['success'] ?? null;
+
+        if (
+            $success === true
+            || $success === 1
+            || (
+                is_string($success)
+                && in_array(
+                    mb_strtolower(trim($success)),
+                    ['1', 'true', 'yes'],
+                    true
+                )
+            )
+        ) {
+            return true;
+        }
+
+        $message = (string) ($data['Message'] ?? $data['message'] ?? '');
+
+        return mb_stripos(
+            $message,
+            'Novo lead inserido na fila para processamento'
+        ) !== false;
     }
 
     private function emailReference(?string $email): ?string
