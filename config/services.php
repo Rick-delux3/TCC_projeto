@@ -63,7 +63,16 @@ return [
         'requests_per_minute' => (int) env('LEADLOVERS_REQUESTS_PER_MINUTE', 90),
         'rate_limit_window_seconds' => (int) env('LEADLOVERS_RATE_LIMIT_WINDOW_SECONDS',60),
         'dynamic_fields' => [
-            env('DYNAMIC_FIELD_CPF_LEAD'),
+            'cpf' => env('LEADLOVERS_FIELD_CPF'),
+            'estado_civil' => env('LEADLOVERS_FIELD_ESTADO_CIVIL'),
+            'conjuge_cpf' => env('LEADLOVERS_FIELD_CONJUGE_CPF'),
+            'valor_aluguel' => env('LEADLOVERS_FIELD_VALOR_ALUGUEL'),
+            'valor_agua' => env('LEADLOVERS_FIELD_VALOR_AGUA'),
+            'valor_luz' => env('LEADLOVERS_FIELD_VALOR_LUZ'),
+            'valor_gas' => env('LEADLOVERS_FIELD_VALOR_GAS'),
+            'valor_condominio' => env('LEADLOVERS_FIELD_VALOR_CONDOMINIO'),
+            'valor_iptu' => env('LEADLOVERS_FIELD_VALOR_IPTU'),
+            'outras_despesas' => env('LEADLOVERS_FIELD_OUTRAS_DESPESAS'),
         ],
 
     ],

@@ -101,6 +101,7 @@ class LeadReanalysisService
         $unlocked = false;
 
         DB::transaction(function () use (
+            $originalEmail,
             $lead,
             $endereco,
             $despesas,
@@ -129,13 +130,48 @@ class LeadReanalysisService
 
             $lead->refresh();
 
-            /*
-            |--------------------------------------------------------------------------
-            | Nova regra de desbloqueio
-            |--------------------------------------------------------------------------
-            | Só libera reanálise geral se o lead já teve resultado final aprovado
-            | ou recusado.
-            */
+            $integrationEnable = config('services.leadlovers.enabled', false);
+
+            $wasSentToLeadLovers = $lead->leadlovers_status === 'sent'
+                && filled($lead->sent_to_leadlovers_at);
+            
+
+            if(! $integrationEnable) {
+                $lead->forceFill([
+                    'leadlovers_update_status' => 'disabled',
+                    'leadlovers_update_error' => 
+                        'Integração com a LeadLovers desativada.',
+                ])->saveQuietly();
+            } elseif (! $wasSentToLeadLovers) {
+
+                $lead->forceFill([
+                    'leadlovers_update_status' =>
+                        'waiting_initial_send',
+                    'leadlovers_update_error' => null,
+                ])->saveQuietly();
+
+            } else {
+                $syncVersion =
+                    (int) $lead->leadlovers_update_version + 1;
+
+                $lead->forceFill([
+                    'leadlovers_update_status' => 'pending',
+                    'leadlovers_update_version' => $syncVersion,
+                    'leadlovers_update_error' => null,
+                    'leadlovers_update_response' => null,
+                    'leadlovers_update_requested_at' => now(),
+                ])->saveQuietly();
+
+                UpdateLeadOnLeadLoversJob::dispatch(
+                    leadId: $lead->id,
+                    originalEmail: $originalEmail,
+                    syncVersion: $syncVersion,
+                )
+                    ->onQueue('leadlovers')
+                    ->afterCommit();
+            }
+
+           
             if ($lead->hasFinalInsuranceResultForReanalysis()) {
                 $lead->forceFill([
                     'reanalysis_unlocked_at' => now(),
@@ -145,14 +181,6 @@ class LeadReanalysisService
             }
         });
 
-        try {
-            UpdateLeadOnLeadLoversJob::dispatchAfterResponse($lead->id, $originalEmail);
-        } catch (\Throwable $exception) {
-            Log::warning('Lead atualizado localmente, mas falhou ao enfileirar atualização na LeadLovers.', [
-                'lead_id' => $lead->id,
-                'message' => $exception->getMessage(),
-            ]);
-        }
 
         return [
             'changed' => true,

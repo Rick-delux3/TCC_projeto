@@ -44,6 +44,12 @@ class Lead extends Model
         'created_by_corretor_id',
         'updated_by_corretor_id',
         'reanalysis_unlocked_at',
+        'leadlovers_update_status',
+        'leadlovers_update_version',
+        'leadlovers_update_response',
+        'leadlovers_update_error',
+        'leadlovers_update_requested_at',
+        'leadlovers_update_at',
     ];
 
     protected $casts = [
@@ -51,6 +57,9 @@ class Lead extends Model
         'sent_to_leadlovers_at' => 'datetime',
         'aceite_termos' => 'boolean',
         'reanalysis_unlocked_at' => 'datetime',
+        'leadlovers_update_response' => 'array',
+        'leadlovers_update_requested_at' => 'datetime',
+        'leadlovers_update_at' => 'datetime',
     ];
 
     public function scopeCreatedThroughSystem(Builder $query): Builder

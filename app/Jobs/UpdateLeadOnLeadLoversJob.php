@@ -11,6 +11,9 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
+use RuntimeException;
+
+
 
 class UpdateLeadOnLeadLoversJob implements ShouldQueue
 {
@@ -19,15 +22,17 @@ class UpdateLeadOnLeadLoversJob implements ShouldQueue
     public int $tries = 3;
 
     public int $timeout = 120;
+    
+    public bool $failOnTimeout = true;
+
+    public function backoff(): array {
+        return [30, 60, 120, 300];
+    }
 
     public function __construct(
         public int $leadId,
-
-        /*
-         * Guardamos o e-mail original porque o endpoint da LeadLovers
-         * usa Email como identificador do lead.
-         */
-        public string $originalEmail
+        public string $originalEmail,
+        public int $syncVersion,
     ) {}
 
     public function handle(LeadLoversService $leadLoversService): void
@@ -36,9 +41,14 @@ class UpdateLeadOnLeadLoversJob implements ShouldQueue
             return;
         }
 
-        $lead = Lead::with(['endereco', 'company'])->find($this->leadId);
+        $lead = Lead::with(['endereco', 'company', 'despesas', 'conjuge', 'imobiliariaInformada',])->find($this->leadId);
 
-        if (! $lead) {
+        if (
+            ! $lead
+            || (int) $lead->leadlovers_update_version !== $this->syncVersion
+        
+        
+        ) {
             return;
         }
 
@@ -50,6 +60,10 @@ class UpdateLeadOnLeadLoversJob implements ShouldQueue
             return;
         }
 
+        $lead->forceFill([
+            'leadlovers_update_status' => 'processing',
+        ])->saveQuietly();
+
         /*
          * Monta payload apenas com campos aceitos pelo endpoint PATCH /Lead.
          * Não envie CPF, aluguel, despesas ou campos que a API não aceita,
@@ -57,11 +71,18 @@ class UpdateLeadOnLeadLoversJob implements ShouldQueue
          */
         $payload = [
             'Email' => $this->originalEmail,
-            'Name' => $lead->nome,
+            'Name' => (string) $lead->nome,
             'Phone' => $this->onlyNumbers($lead->tel),
-            'City' => $lead->endereco?->cidade_imovel,
-            'State' => $lead->endereco?->estado,
-            'Company' => $lead->company?->name ?? $lead->imobiliaria,
+            'City' => (string) $lead->endereco?->cidade_imovel,
+            'State' => (string) $lead->endereco?->estado,
+            'Company' => (string) (
+                $lead->company?->name ??
+                $lead->imobiliariaInformada?->nome_imobiliaria_informada
+                ?? $lead->imobiliaria
+                ?? ''
+            ),
+
+            'DynamicFields' => $this->dynamicFields($lead),
         ];
 
         /*
@@ -73,6 +94,52 @@ class UpdateLeadOnLeadLoversJob implements ShouldQueue
 
         try {
             $response = $leadLoversService->updateLead($payload);
+
+            if (! ($response['success'] ?? false)) {
+                $status = is_numeric($response['status'] ?? null)
+                    ? (int) $response['status']
+                    : null;
+
+                $retryable =
+                    $status === null
+                    || in_array($status, [408, 425, 429], true)
+                    || $status >= 500;
+
+                if ($retryable) {
+                    throw new RuntimeException(
+                        'Falha transitória ao atualizar o lead na LeadLovers.'
+                    );
+                }
+
+                Lead::query()
+                    ->whereKey($this->leadId)
+                    ->where(
+                        'leadlovers_update_version',
+                        $this->syncVersion
+                    )
+                    ->update([
+                        'leadlovers_update_status' => 'failed',
+                        'leadlovers_update_error' =>
+                            'A LeadLovers recusou a atualização.',
+                        'leadlovers_update_response' => $response,
+                    ]);
+
+                return;
+            }
+
+            Lead::query()
+                ->whereKey($this->leadId)
+                ->where(
+                    'leadlovers_update_version',
+                    $this->syncVersion
+                )
+                ->update([
+                    'leadlovers_update_status' => 'synced',
+                    'leadlovers_update_error' => null,
+                    'leadlovers_update_response' => $response,
+                    'leadlovers_updated_at' => now(),
+                ]);
+
         } catch (LeadLoversRateLimitedException $e) {
             if ($this->attempts() >= $this->tries) {
                 $lead->forceFill([
@@ -141,6 +208,44 @@ class UpdateLeadOnLeadLoversJob implements ShouldQueue
             'lead_id' => $lead->id,
             'lead_ref' => hash('sha256', mb_strtolower(trim($this->originalEmail))),
         ]);
+    }
+
+    private function dynamicFields(Lead $lead): array
+    {
+        $values = [
+            'cpf' => $lead->cpf,
+            'estado_civil' => $lead->estado_civil,
+            'conjuge_cpf' => $lead->conjuge?->cpf,
+            'valor_aluguel' => $lead->despesas?->valor_aluguel,
+            'valor_agua' => $lead->despesas?->valor_agua,
+            'valor_luz' => $lead->despesas?->valor_luz,
+            'valor_gas' => $lead->despesas?->valor_gas,
+            'valor_condominio' => $lead->despesas?->valor_condominio,
+            'valor_iptu' => $lead->despesas?->valor_iptu,
+            'outras_despesas' => $lead->despesas?->outras_despesas,
+        ];
+
+
+        return collect(
+            config('services.leadlovers.dynamic_fields', [])
+        )
+            ->map(function ($fieldId, string $field) use ($values){
+                if(
+                    !array_key_exists($field, $values)
+                    || ! is_numeric($fieldId)
+                    || (int) $fieldId <= 0
+                ) {
+                    return null;
+                }
+
+                return [
+                    'Id' => $fieldId,
+                    'Value' => (string) ($values[$field] ?? '')
+                ];
+            })
+            ->filter()
+            ->values()
+            ->all();
     }
 
     private function onlyNumbers(?string $value): string
