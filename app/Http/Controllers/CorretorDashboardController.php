@@ -4,11 +4,11 @@ namespace App\Http\Controllers;
 
 use App\Models\Imobiliaria;
 use App\Models\Lead;
+use App\Models\LeadLoversTag;
+use App\Support\ManualLeadResultTags;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Gate;
-use App\Models\LeadLoversTag;
-use App\Support\ManualLeadResultTags;
 
 class CorretorDashboardController extends Controller
 {
@@ -125,24 +125,25 @@ class CorretorDashboardController extends Controller
             }
         );
 
-        if($selectedResultado !== '') {
+        if ($selectedResultado !== '') {
             $definition = $resultadoOptions->get($selectedResultado);
-        }
+            $selectedTagKey = $definition['leadlovers_key'] ?? null;
+            $selectedTagTitle = $resultTagsTitles->get($selectedTagKey);
 
-        $selectTagKey = $definition['leadlovers_key'] ?? null;
+            if (filled($selectedTagTitle)) {
+                $escapedTagTitle = addcslashes(
+                    (string) $selectedTagTitle,
+                    '%_\\'
+                );
 
-        $selectedTagTitle = $resultTagsTitles->get($selectTagKey);
-
-        if(filled($selectTagKey)) {
-            $escapedTagTitle = addcslashes($selectedTagTitle, '%_\\');
-
-            $leadsQuery->where(
-                'tags_originais',
-                'like',
-                "%{$escapedTagTitle}%"
-            );
-        } else {
-            $leadsQuery->whereRaw('1 = 0');
+                $leadsQuery->where(
+                    'tags_originais',
+                    'like',
+                    "%{$escapedTagTitle}%"
+                );
+            } else {
+                $leadsQuery->whereRaw('1 = 0');
+            }
         }
 
         $leads = $canViewLeads

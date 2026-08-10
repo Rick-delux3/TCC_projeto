@@ -58,6 +58,7 @@ function manualLeadTagCatalog(): void
         'ruim' => [2, 'Ruim'],
         'em_negociacao' => [3, 'Em negociação'],
         'fechado_aluguel' => [4, 'Fechado Aluguel'],
+        'nao_aluguel_nem_seguro' => [5, 'nao aluguel nem seguro'],
     ];
 
     foreach ($definitions as $key => [$id, $title]) {

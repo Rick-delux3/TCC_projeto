@@ -29,12 +29,12 @@ final class ManualLeadResultTags
         ],
 
         self::RENTAL_CONFIRMED => [
-            'label' => 'Aluguel Fechado',
+            'label' => 'Fechado aluguel',
             'leadlovers_key' => 'fechado_aluguel'
         ],
 
         self::NO_RENT_OR_INSURANCE => [
-            'label' => 'Aluguel sem seguro',
+            'label' => 'Não aluguei nem seguro',
             'leadlovers_key' => 'nao_aluguel_nem_seguro'
         ]
     ];

@@ -2,7 +2,6 @@
 
 @section('content_a')
 @php
-    use App\Support\ManualLeadResultTags;
     use Illuminate\Support\Facades\Gate;
     use Illuminate\Support\Facades\Route;
     use Illuminate\Support\Str;
@@ -54,14 +53,47 @@
 
     $manualResultOptions = $resultadoOptions
         ->map(
-            fn (array $definition): ?string =>
-                filled($definition['label'] ?? null)
+            fn ($definition): ?string =>
+                is_array($definition)
+                && filled($definition['label'] ?? null)
                     ? (string) $definition['label']
                     : null
         )
-        ->filter();
+        ->filter(fn (?string $label): bool => filled($label));
 
-    $resultadoLabels = $manualResultOptions->all();
+    $manualResultVisuals = [
+        'approved' => [
+            'active' => 'text-bg-success',
+            'inactive' => 'text-bg-light border border-success text-success',
+            'icon' => 'bi-check-circle',
+        ],
+        'rejected' => [
+            'active' => 'text-bg-danger',
+            'inactive' => 'text-bg-light border border-danger text-danger',
+            'icon' => 'bi-x-circle',
+        ],
+        'in_negotiation' => [
+            'active' => 'text-bg-warning text-dark',
+            'inactive' => 'text-bg-light border border-warning text-dark',
+            'icon' => 'bi-hourglass-split',
+        ],
+        'rental_confirmed' => [
+            'active' => 'text-bg-primary',
+            'inactive' => 'text-bg-light border border-primary text-primary',
+            'icon' => 'bi-house-check',
+        ],
+        'no_rent_or_insurance' => [
+            'active' => 'text-bg-secondary',
+            'inactive' => 'text-bg-light border border-secondary text-secondary',
+            'icon' => 'bi-house-x',
+        ],
+    ];
+
+    $defaultResultVisual = [
+        'active' => 'text-bg-secondary',
+        'inactive' => 'text-bg-light border border-secondary text-secondary',
+        'icon' => 'bi-dash-circle',
+    ];
 
     $manualResultRouteExists = Route::has('admin.leads.result-tag.update');
     $leadLoversIntegrationEnabled = (bool) config(
@@ -232,22 +264,25 @@
             ->map(fn ($tag) => $normalizeTag($tag))
             ->filter();
 
-        $matchesRentClosed = $normalizedTags->contains(
+        $matchesRentalConfirmed = $normalizedTags->contains(
             fn (string $tag): bool =>
-                str_contains($tag, 'fechado aluguel')
-                || str_contains($tag, 'aluguel fechado')
-                || str_contains($tag, 'fechado alguel')
-        );
-        $matchesRentWithoutInsurance = $normalizedTags->contains(
-            fn (string $tag): bool =>
-                str_contains($tag, 'aluguel sem seguro')
-                || str_contains($tag, 'nao aluguel nem seguro')
-                
+                in_array($tag, [
+                    'fechado aluguel',
+                    'aluguel fechado',
+                    'fechado alguel',
+                ], true)
         );
 
+        $matchesNoRentOrInsurance = $normalizedTags->contains(
+            fn (string $tag): bool =>
+                in_array($tag, [
+                    'nao aluguei nem seguro',
+                    'nao aluguel nem seguro',
+                ], true)
+        );
 
         $matchesNegotiation = $normalizedTags->contains(
-            fn (string $tag): bool => str_contains($tag, 'negociacao')
+            fn (string $tag): bool => $tag === 'em negociacao'
         );
 
         $matchesRejected = $normalizedTags->contains(
@@ -263,13 +298,13 @@
 
         /*
          * Prioridade visual determinística para dados legados inconsistentes:
-         * aluguel fechado, negociação, recusado e aprovado.
+         * fechado aluguel, não aluguei nem seguro, negociação, recusado e aprovado.
          */
         $tones = [
             [
-                'matches' => $matchesRentClosed,
+                'matches' => $matchesRentalConfirmed,
                 'tone' => [
-                    'label' => 'Fechado Aluguel',
+                    'label' => 'Fechado aluguel',
                     'badge' => 'text-bg-primary',
                     'card' => 'lead-card--approved',
                     'icon' => 'bi-house-check',
@@ -277,15 +312,15 @@
             ],
 
             [
-                'matches' => $matchesRentWithoutInsurance,
+                'matches' => $matchesNoRentOrInsurance,
                 'tone' => [
-                    'label' => 'Sem aluguel nem seguro',
+                    'label' => 'Não aluguei nem seguro',
                     'badge' => 'text-bg-secondary',
                     'card' => 'lead-card--neutral',
                     'icon' => 'bi-house-x',
                 ],
             ],
-            
+
             [
                 'matches' => $matchesNegotiation,
                 'tone' => [
@@ -398,7 +433,7 @@
             <div class="d-flex flex-column flex-sm-row gap-2">
                 @can('view-analyses')
                     <a href="{{ $analisesRoute }}" class="btn btn-outline-primary">
-                        <i class="bi bi-clipboard2-data me-1"></i>
+                        <i class="bi bi-clipboard2-data me-1" aria-hidden="true"></i>
                         Visualizar análises
                     </a>
                 @endcan
@@ -425,7 +460,7 @@
                                 </h2>
 
                                 <p class="text-white-50 mb-4">
-                                    Acompanhe os clientes enviados pelas imobiliárias, filtre por origem e identifique rapidamente aprovados e recusados.
+                                    Acompanhe os diferentes status comerciais dos leads.
                                 </p>
 
                                 <div class="d-flex flex-wrap gap-2">
@@ -644,7 +679,7 @@
 
                                 <div class="input-group">
                                     <span class="input-group-text bg-white">
-                                        <i class="bi bi-search"></i>
+                                        <i class="bi bi-search" aria-hidden="true"></i>
                                     </span>
 
                                     <input
@@ -722,21 +757,29 @@
                                     Resultado/tag
                                 </label>
 
-                                <select id="admin-resultado-filter" name="resultado" class="form-select">
+                                <select
+                                    id="admin-resultado-filter"
+                                    name="resultado"
+                                    class="form-select"
+                                >
                                     <option value="">Todos</option>
-                                    <option value="aprovado" @selected($selectedResultado === 'aprovado')>
-                                        Aprovados
-                                    </option>
-                                    <option value="recusado" @selected($selectedResultado === 'recusado')>
-                                        Recusados/Reprovados
-                                    </option>
+
+                                    @foreach ($manualResultOptions as $result => $label)
+                                        <option
+                                            value="{{ $result }}"
+                                            @selected($selectedResultado === $result)
+                                        >
+                                            {{ $label }}
+                                        </option>
+                                    @endforeach
                                 </select>
                             </div>
 
                             {{-- Botão --}}
                             <div class="col-12 col-md-6 col-xl-1 d-grid">
                                 <button type="submit" class="btn btn-primary" title="Filtrar">
-                                    <i class="bi bi-funnel"></i>
+                                    <i class="bi bi-funnel" aria-hidden="true"></i>
+                                    <span class="visually-hidden">Aplicar filtros</span>
                                 </button>
                             </div>
                         </div>
@@ -755,7 +798,7 @@
                                     class="badge rounded-pill text-bg-primary text-decoration-none px-3 py-2"
                                 >
                                     Busca: {{ $leadSearch }}
-                                    <i class="bi bi-x ms-1"></i>
+                                    <i class="bi bi-x ms-1" aria-hidden="true"></i>
                                 </a>
                             @endif
 
@@ -765,7 +808,7 @@
                                     class="badge rounded-pill text-bg-success text-decoration-none px-3 py-2"
                                 >
                                     Vínculo: {{ $selectedImobiliariaName ?? 'Selecionado' }}
-                                    <i class="bi bi-x ms-1"></i>
+                                    <i class="bi bi-x ms-1" aria-hidden="true"></i>
                                 </a>
                             @endif
 
@@ -775,17 +818,24 @@
                                     class="badge rounded-pill text-bg-info text-decoration-none px-3 py-2"
                                 >
                                     Perfil: {{ $tipoSolicitantesOptions[$selectedTipoSolicitante] ?? $selectedTipoSolicitante }}
-                                    <i class="bi bi-x ms-1"></i>
+                                    <i class="bi bi-x ms-1" aria-hidden="true"></i>
                                 </a>
                             @endif
 
                             @if (filled($selectedResultado))
+                                @php
+                                    $selectedResultVisual = $manualResultVisuals[$selectedResultado]
+                                        ?? $defaultResultVisual;
+                                    $selectedResultLabel = $manualResultOptions->get($selectedResultado);
+                                @endphp
                                 <a
                                     href="{{ request()->fullUrlWithQuery(['resultado' => null, 'page' => 1]) }}#leads-section"
-                                    class="badge rounded-pill text-bg-warning text-dark text-decoration-none px-3 py-2"
+                                    class="badge rounded-pill {{ $selectedResultVisual['active'] }} text-decoration-none px-3 py-2"
+                                    aria-label="Remover filtro de resultado {{ $selectedResultLabel }}"
                                 >
-                                    Resultado: {{ $resultadoLabels[$selectedResultado] ?? $selectedResultado }}
-                                    <i class="bi bi-x ms-1"></i>
+                                    <i class="bi {{ $selectedResultVisual['icon'] }} me-1" aria-hidden="true"></i>
+                                    Resultado: {{ $selectedResultLabel }}
+                                    <i class="bi bi-x ms-1" aria-hidden="true"></i>
                                 </a>
                             @endif
                         </div>
@@ -806,23 +856,32 @@
                         <a
                             href="{{ request()->fullUrlWithQuery(['resultado' => null, 'page' => 1]) }}#leads-section"
                             class="badge rounded-pill text-decoration-none px-3 py-2 {{ blank($selectedResultado) ? 'text-bg-dark' : 'text-bg-light border text-muted' }}"
+                            @if (blank($selectedResultado)) aria-current="true" @endif
                         >
                             Todos
+                            @if (blank($selectedResultado))
+                                <span class="visually-hidden"> (selecionado)</span>
+                            @endif
                         </a>
 
-                        <a
-                            href="{{ request()->fullUrlWithQuery(['resultado' => 'aprovado', 'page' => 1]) }}#leads-section"
-                            class="badge rounded-pill text-decoration-none px-3 py-2 {{ $selectedResultado === 'aprovado' ? 'text-bg-success' : 'text-bg-light border text-success' }}"
-                        >
-                            Aprovados
-                        </a>
-
-                        <a
-                            href="{{ request()->fullUrlWithQuery(['resultado' => 'recusado', 'page' => 1]) }}#leads-section"
-                            class="badge rounded-pill text-decoration-none px-3 py-2 {{ $selectedResultado === 'recusado' ? 'text-bg-danger' : 'text-bg-light border text-danger' }}"
-                        >
-                            Recusados/Reprovados
-                        </a>
+                        @foreach ($manualResultOptions as $result => $label)
+                            @php
+                                $resultVisual = $manualResultVisuals[$result]
+                                    ?? $defaultResultVisual;
+                                $resultIsSelected = $selectedResultado === $result;
+                            @endphp
+                            <a
+                                href="{{ request()->fullUrlWithQuery(['resultado' => $result, 'page' => 1]) }}#leads-section"
+                                class="badge rounded-pill text-decoration-none px-3 py-2 d-inline-flex align-items-center gap-1 {{ $resultIsSelected ? $resultVisual['active'] : $resultVisual['inactive'] }}"
+                                @if ($resultIsSelected) aria-current="true" @endif
+                            >
+                                <i class="bi {{ $resultVisual['icon'] }}" aria-hidden="true"></i>
+                                <span>{{ $label }}</span>
+                                @if ($resultIsSelected)
+                                    <span class="visually-hidden"> (selecionado)</span>
+                                @endif
+                            </a>
+                        @endforeach
                     </div>
                 @else
                     <div class="alert alert-warning rounded-4 mb-0">
@@ -963,7 +1022,7 @@
                                         </div>
 
                                         <span class="badge {{ $resultTone['badge'] }}">
-                                            <i class="bi {{ $resultTone['icon'] }} me-1"></i>
+                                            <i class="bi {{ $resultTone['icon'] }} me-1" aria-hidden="true"></i>
                                             {{ $resultTone['label'] }}
                                         </span>
                                     </div>
@@ -1907,7 +1966,7 @@
                                                 class="btn btn-warning"
                                                 @disabled($solicitarAnaliseRoute($lead) === '#')
                                             >
-                                                <i class="bi bi-arrow-repeat me-1"></i>
+                                                <i class="bi bi-arrow-repeat me-1" aria-hidden="true"></i>
                                                 Solicitar reanálise
                                             </button>
                                         </form>
