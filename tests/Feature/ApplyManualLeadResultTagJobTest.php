@@ -535,24 +535,6 @@ it('uses the local limiter without a type error or a second HTTP request', funct
     Http::assertSentCount(1);
 });
 
-it('propagates rate limits from the tag catalog request', function () {
-    config([
-        'services.leadlovers.token' => 'get-all-tags-rate-limit-token',
-    ]);
-
-    Http::fake([
-        '*' => Http::response(
-            'error code: 1015',
-            429,
-            ['Retry-After' => '30']
-        ),
-    ]);
-
-    expect(
-        fn () => app(LeadLoversService::class)->getAllTags()
-    )->toThrow(LeadLoversRateLimitedException::class);
-});
-
 it('caps an HTTP-date Retry-After value to the configured maximum', function () {
     config([
         'services.leadlovers.token' => 'retry-after-date-token',

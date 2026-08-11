@@ -38,6 +38,7 @@ class Lead extends Model
         'aceite_termos',
         'observacoes',
         'leadlovers_lead_code',
+        'leadlovers_lead_id',
         'leadlovers_status',
         'leadlovers_response',
         'sent_to_leadlovers_at',
@@ -53,6 +54,7 @@ class Lead extends Model
     ];
 
     protected $casts = [
+        'leadlovers_lead_id' => 'integer',
         'leadlovers_response' => 'array',
         'sent_to_leadlovers_at' => 'datetime',
         'aceite_termos' => 'boolean',

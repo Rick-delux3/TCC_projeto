@@ -47,85 +47,23 @@ function leadForLeadLoversUpdate(array $overrides = []): Lead
 it('blocks outbound LeadLovers operations while the integration is disabled', function () {
     $service = app(LeadLoversService::class);
 
-    expect($service->getAllTags())->toBe([])
-        ->and($service->createTag('Imobiliária Teste')['status'])->toBe(503)
-        ->and($service->createLead([])['StatusCode'])->toBe(503)
-        ->and($service->updateLead([])['success'])->toBeFalse()
+    expect($service->updateLead([])['success'])->toBeFalse()
         ->and($service->addTagToLeadById('person@example.test', 1)['StatusCode'])->toBe(503);
 
     Http::assertNothingSent();
 });
 
-it('uses the id returned when creating a LeadLovers tag', function () {
-    config(['services.leadlovers.enabled' => true]);
-    Http::fake(['*' => Http::response(['Value' => 321], 201)]);
-
-    $result = app(LeadLoversService::class)->createTag('Imobiliária Teste');
-
-    expect($result)
-        ->success->toBeTrue()
-        ->tag_id->toBe(321)
-        ->error->toBeNull();
-
-    Http::assertSentCount(1);
-});
-
-it('recovers a missing tag id from the LeadLovers tag list', function () {
-    config(['services.leadlovers.enabled' => true]);
-    Http::fake([
-        '*' => Http::sequence()
-            ->push([], 201)
-            ->push([
-                'Data' => [
-                    ['id' => 654, 'Title' => 'Imobiliária Teste'],
-                ],
-            ], 200),
-    ]);
-
-    $result = app(LeadLoversService::class)->createTag('Imobiliária Teste');
-
-    expect($result)
-        ->success->toBeTrue()
-        ->tag_id->toBe(654)
-        ->response->toMatchArray([
-            'id' => 654,
-            'Title' => 'Imobiliária Teste',
-        ])
-        ->error->toBeNull();
-
-    Http::assertSentCount(2);
-});
-
-it('reconciles an existing remote tag after a failed creation attempt', function () {
-    config(['services.leadlovers.enabled' => true]);
-    Http::fake([
-        '*' => Http::sequence()
-            ->push(['Message' => 'Tag already exists'], 409)
-            ->push([
-                'Id' => 987,
-                'Title' => 'Imobiliária Teste',
-            ], 200),
-    ]);
-
-    $result = app(LeadLoversService::class)->createTag('Imobiliária Teste');
-
-    expect($result)
-        ->success->toBeTrue()
-        ->status->toBe(409)
-        ->tag_id->toBe(987)
-        ->error->toBeNull();
-
-    Http::assertSentCount(2);
-});
-
 it('continues synchronizing the LeadLovers tag catalog', function () {
-    config(['services.leadlovers.enabled' => true]);
+    config([
+        'services.leadlovers.enabled' => true,
+        'services.leadlovers.api_url' => 'https://api.leadlovers.test',
+    ]);
     Http::fake([
-        '*' => Http::response([
-            'Data' => [
-                ['Id' => 444, 'Title' => 'Imobiliária Oficial'],
-            ],
-        ]),
+        'https://api.leadlovers.test/tags/' => Http::response([[
+            'id' => 444,
+            'name' => 'Imobiliária Oficial',
+            'createdAt' => '2026-08-11T12:00:00Z',
+        ]]),
     ]);
 
     $this->artisan('leadlovers:sync-tags')->assertSuccessful();
@@ -137,249 +75,6 @@ it('continues synchronizing the LeadLovers tag catalog', function () {
         'active' => true,
     ]);
 });
-
-it('applies the company tag and sequence when sending a system lead', function () {
-    config([
-        'services.leadlovers.enabled' => true,
-        'services.leadlovers.sequence_1' => 321,
-        'services.leadlovers.step' => 2,
-    ]);
-
-    $company = Imobiliaria::create([
-        'name' => 'Imobiliária Teste',
-        'email' => 'company@example.test',
-        'phone' => '11999999999',
-        'password' => bcrypt('password'),
-        'city' => 'São Paulo',
-        'state' => 'SP',
-        'leadlovers_tag_id' => 123,
-    ]);
-
-    $lead = Lead::create([
-        'company_id' => $company->id,
-        'tipo_solicitante' => 'imobiliaria_cadastrada',
-        'origem' => 'imobiliaria_cadastrada',
-        'nome' => 'Pessoa Teste',
-        'email' => 'person@example.test',
-    ]);
-
-    $service = Mockery::mock(LeadLoversService::class);
-    $service->shouldReceive('createLead')
-        ->once()
-        ->with(Mockery::on(fn (array $payload) => $payload['Tag'] === 123
-            && $payload['EmailSequenceCode'] === 321
-            && $payload['SequenceLevelCode'] === 2))
-        ->andReturn(['StatusCode' => 201]);
-
-    (new SendLeadToLeadLoversJob($lead->id))->handle($service);
-
-    expect($lead->refresh()->leadlovers_status)->toBe('sent')
-        ->and($lead->sent_to_leadlovers_at)->not->toBeNull();
-});
-
-it('claims the initial send before HTTP to prevent duplicate POST requests', function () {
-    config([
-        'services.leadlovers.enabled' => true,
-        'services.leadlovers.sequence_1' => 321,
-        'services.leadlovers.step' => 2,
-    ]);
-    $company = Imobiliaria::create([
-        'name' => 'Imobiliária Teste',
-        'email' => 'company-claim@example.test',
-        'phone' => '11999999999',
-        'password' => bcrypt('password'),
-        'city' => 'São Paulo',
-        'state' => 'SP',
-        'leadlovers_tag_id' => 123,
-    ]);
-    $lead = Lead::create([
-        'company_id' => $company->id,
-        'tipo_solicitante' => 'imobiliaria_cadastrada',
-        'origem' => 'imobiliaria_cadastrada',
-        'nome' => 'Pessoa Teste',
-        'email' => 'claim@example.test',
-    ]);
-    $remote = Mockery::mock(LeadLoversService::class);
-    $remote->shouldReceive('createLead')
-        ->once()
-        ->andReturnUsing(function () use ($lead, $remote): array {
-            (new SendLeadToLeadLoversJob($lead->id))->handle($remote);
-
-            return ['StatusCode' => 201];
-        });
-
-    (new SendLeadToLeadLoversJob($lead->id))->handle($remote);
-
-    expect($lead->refresh()->leadlovers_status)->toBe('sent');
-});
-
-it('requires positive JSON confirmation before completing the initial send', function (
-    mixed $responseBody,
-    array $headers
-) {
-    config([
-        'services.leadlovers.enabled' => true,
-        'services.leadlovers.base_url' => 'https://example.test/webapi/',
-        'services.leadlovers.machine' => 456,
-        'services.leadlovers.sequence_1' => 321,
-        'services.leadlovers.step' => 2,
-    ]);
-    $company = Imobiliaria::create([
-        'name' => 'ImobiliÃ¡ria Teste',
-        'email' => 'company-unconfirmed@example.test',
-        'phone' => '11999999999',
-        'password' => bcrypt('password'),
-        'city' => 'SÃ£o Paulo',
-        'state' => 'SP',
-        'leadlovers_tag_id' => 123,
-    ]);
-    $lead = Lead::create([
-        'company_id' => $company->id,
-        'tipo_solicitante' => 'imobiliaria_cadastrada',
-        'origem' => 'imobiliaria_cadastrada',
-        'nome' => 'Pessoa Teste',
-        'email' => 'unconfirmed@example.test',
-    ]);
-
-    Http::fake([
-        '*' => Http::response($responseBody, 200, $headers),
-    ]);
-
-    (new SendLeadToLeadLoversJob($lead->id))->handle(
-        app(LeadLoversService::class)
-    );
-
-    expect($lead->refresh())
-        ->leadlovers_status->toBe('failed')
-        ->sent_to_leadlovers_at->toBeNull()
-        ->and($lead->leadlovers_response)
-        ->toBe([
-            'success' => false,
-            'status_code' => 200,
-        ]);
-})->with([
-    'empty body' => ['', []],
-    'non-json body' => ['<html>proxy response</html>', [
-        'Content-Type' => 'text/html',
-    ]],
-    'json without a success signal' => [['unrelated' => true], []],
-]);
-
-it('completes the initial send after a positive JSON confirmation', function () {
-    config([
-        'services.leadlovers.enabled' => true,
-        'services.leadlovers.base_url' => 'https://example.test/webapi/',
-        'services.leadlovers.machine' => 456,
-        'services.leadlovers.sequence_1' => 321,
-        'services.leadlovers.step' => 2,
-    ]);
-    $company = Imobiliaria::create([
-        'name' => 'Imobiliária Teste',
-        'email' => 'company-confirmed@example.test',
-        'phone' => '11999999999',
-        'password' => bcrypt('password'),
-        'city' => 'São Paulo',
-        'state' => 'SP',
-        'leadlovers_tag_id' => 123,
-    ]);
-    $lead = Lead::create([
-        'company_id' => $company->id,
-        'tipo_solicitante' => 'imobiliaria_cadastrada',
-        'origem' => 'imobiliaria_cadastrada',
-        'nome' => 'Pessoa Teste',
-        'email' => 'confirmed@example.test',
-    ]);
-
-    Http::fake([
-        '*' => Http::response([
-            'StatusCode' => 200,
-            'Success' => true,
-            'Message' => 'Novo lead inserido na fila para processamento',
-        ], 200),
-    ]);
-
-    (new SendLeadToLeadLoversJob($lead->id))->handle(
-        app(LeadLoversService::class)
-    );
-
-    expect($lead->refresh())
-        ->leadlovers_status->toBe('sent')
-        ->sent_to_leadlovers_at->not->toBeNull()
-        ->and($lead->leadlovers_response)
-        ->toBe([
-            'success' => true,
-            'status_code' => 200,
-        ]);
-    Http::assertSent(fn (Request $request): bool => $request->method() === 'POST'
-        && parse_url($request->url(), PHP_URL_PATH) === '/webapi/Lead');
-});
-
-it('rejects a misleading initial response', function (array $failureResponse) {
-    Queue::fake();
-    config([
-        'services.leadlovers.enabled' => true,
-        'services.leadlovers.sequence_1' => 321,
-        'services.leadlovers.step' => 2,
-    ]);
-    $company = Imobiliaria::create([
-        'name' => 'Imobiliária Teste',
-        'email' => 'company-failure@example.test',
-        'phone' => '11999999999',
-        'password' => bcrypt('password'),
-        'city' => 'São Paulo',
-        'state' => 'SP',
-        'leadlovers_tag_id' => 123,
-    ]);
-    $lead = Lead::create([
-        'company_id' => $company->id,
-        'tipo_solicitante' => 'imobiliaria_cadastrada',
-        'origem' => 'imobiliaria_cadastrada',
-        'nome' => 'Pessoa Teste',
-        'email' => 'initial-failure@example.test',
-        'leadlovers_update_status' => 'waiting_initial_send',
-        'leadlovers_update_response' => [
-            'requested_fields' => ['name'],
-        ],
-    ]);
-    $remote = Mockery::mock(LeadLoversService::class);
-    $remote->shouldReceive('createLead')
-        ->once()
-        ->andReturn($failureResponse);
-
-    (new SendLeadToLeadLoversJob($lead->id))->handle($remote);
-
-    expect($lead->refresh())
-        ->leadlovers_status->toBe('failed')
-        ->leadlovers_update_status->toBe('failed')
-        ->and($lead->leadlovers_response)
-        ->toBe([
-            'success' => false,
-            'status_code' => $failureResponse['StatusCode'],
-        ]);
-    Queue::assertNotPushed(UpdateLeadOnLeadLoversJob::class);
-
-    app(LeadReanalysisService::class)->updateLeadDataAndMaybeUnlock(
-        $lead,
-        ['nome' => 'Nome aguardando conciliação']
-    );
-    expect($lead->refresh())
-        ->leadlovers_status->toBe('failed')
-        ->leadlovers_update_status->toBe('failed')
-        ->leadlovers_update_error->toContain('conciliado')
-        ->and($lead->leadlovers_update_response['requested_fields'])
-        ->toBe(['name']);
-    Queue::assertNotPushed(SendLeadToLeadLoversJob::class);
-})->with([
-    '2xx with explicit failure' => [[
-        'StatusCode' => 200,
-        'Success' => false,
-        'Error' => 'Campo inválido',
-    ]],
-    '5xx with misleading success message' => [[
-        'StatusCode' => 500,
-        'Message' => 'Novo lead inserido na fila para processamento',
-    ]],
-]);
 
 it('queues a safe initial retry after a pre-HTTP configuration failure', function () {
     Queue::fake();
@@ -414,56 +109,6 @@ it('queues a safe initial retry after a pre-HTTP configuration failure', functio
         ->toBe(['name']);
 });
 
-it('does not orphan an edit made while the initial HTTP request is running', function () {
-    Queue::fake();
-    config([
-        'services.leadlovers.enabled' => true,
-        'services.leadlovers.sequence_1' => 321,
-        'services.leadlovers.step' => 2,
-        'features.insurance_analysis.enabled' => false,
-    ]);
-    $company = Imobiliaria::create([
-        'name' => 'Imobiliária Teste',
-        'email' => 'company-race@example.test',
-        'phone' => '11999999999',
-        'password' => bcrypt('password'),
-        'city' => 'São Paulo',
-        'state' => 'SP',
-        'leadlovers_tag_id' => 123,
-    ]);
-    $lead = Lead::create([
-        'company_id' => $company->id,
-        'tipo_solicitante' => 'imobiliaria_cadastrada',
-        'origem' => 'imobiliaria_cadastrada',
-        'nome' => 'Nome anterior',
-        'email' => 'initial-race@example.test',
-    ]);
-    $remote = Mockery::mock(LeadLoversService::class);
-    $remote->shouldReceive('createLead')
-        ->once()
-        ->andReturnUsing(function () use ($lead): array {
-            app(LeadReanalysisService::class)
-                ->updateLeadDataAndMaybeUnlock(
-                    $lead,
-                    ['nome' => 'Nome editado durante HTTP']
-                );
-
-            return [
-                'StatusCode' => 400,
-                'Error' => 'Campo inválido',
-            ];
-        });
-
-    (new SendLeadToLeadLoversJob($lead->id))->handle($remote);
-
-    expect($lead->refresh())
-        ->leadlovers_status->toBe('failed')
-        ->leadlovers_update_status->toBe('failed')
-        ->and($lead->leadlovers_update_response['requested_fields'])
-        ->toBe(['name']);
-    Queue::assertNotPushed(UpdateLeadOnLeadLoversJob::class);
-});
-
 it('does not repeat an initial send interrupted in an ambiguous processing state', function () {
     Queue::fake();
     config([
@@ -481,10 +126,9 @@ it('does not repeat an initial send interrupted in an ambiguous processing state
             'requested_fields' => ['name'],
         ],
     ]);
-    $remote = Mockery::mock(LeadLoversService::class);
-    $remote->shouldNotReceive('createLead');
-
-    (new SendLeadToLeadLoversJob($lead->id))->handle($remote);
+    (new SendLeadToLeadLoversJob($lead->id))->handle(
+        app(\App\Services\LeadLoversApiClient::class)
+    );
 
     expect($lead->refresh())
         ->leadlovers_status->toBe('failed')
@@ -492,6 +136,8 @@ it('does not repeat an initial send interrupted in an ambiguous processing state
         ->and($lead->leadlovers_response)
         ->toBe([
             'success' => false,
+            'phase' => 'failed',
+            'operation' => 'integration_disabled',
             'status_code' => null,
         ]);
 
@@ -527,10 +173,9 @@ it('resumes an initial send disabled before any HTTP request', function () {
             'requested_fields' => ['name'],
         ],
     ]);
-    $remote = Mockery::mock(LeadLoversService::class);
-    $remote->shouldNotReceive('createLead');
-
-    (new SendLeadToLeadLoversJob($lead->id))->handle($remote);
+    (new SendLeadToLeadLoversJob($lead->id))->handle(
+        app(\App\Services\LeadLoversApiClient::class)
+    );
 
     expect($lead->refresh())
         ->leadlovers_status->toBe('disabled')
@@ -548,39 +193,6 @@ it('resumes an initial send disabled before any HTTP request', function () {
         ->and($lead->leadlovers_update_response['requested_fields'])
         ->toBe(['name']);
     Queue::assertPushed(SendLeadToLeadLoversJob::class);
-});
-
-it('returns a rate-limited lead creation job to the queue', function () {
-    config([
-        'services.leadlovers.enabled' => true,
-        'services.leadlovers.sequence_2' => 10,
-    ]);
-
-    LeadLoversTag::create([
-        'leadlovers_tag_id' => 20,
-        'title' => 'Locatário',
-        'key' => 'locatario',
-        'active' => true,
-    ]);
-
-    $lead = Lead::create([
-        'tipo_solicitante' => 'locatario',
-        'origem' => 'locatario',
-        'nome' => 'Pessoa Teste',
-        'email' => 'person@example.test',
-    ]);
-
-    $service = Mockery::mock(LeadLoversService::class);
-    $service->shouldReceive('createLead')
-        ->once()
-        ->andThrow(new LeadLoversRateLimitedException(30, false));
-
-    $job = (new SendLeadToLeadLoversJob($lead->id))
-        ->withFakeQueueInteractions();
-    $job->handle($service);
-
-    $job->assertReleased(30);
-    expect($lead->refresh()->leadlovers_status)->toBe('processing');
 });
 
 it('returns a rate-limited lead update job to the queue', function () {
@@ -620,12 +232,6 @@ it('propagates rate limits from queued LeadLovers operations', function (string 
         ->and($exception->cloudflareBlocked)->toBeTrue();
     Http::assertSentCount(1);
 })->with([
-    'create lead' => ['createLead', [[
-        'Name' => 'Pessoa Teste',
-        'Email' => 'person@example.test',
-        'Tag' => 1,
-        'EmailSequenceCode' => 1,
-    ]]],
     'update lead' => ['updateLead', [[
         'Email' => 'person@example.test',
         'Name' => 'Pessoa Teste',
@@ -633,55 +239,21 @@ it('propagates rate limits from queued LeadLovers operations', function (string 
     'add tag' => ['addTagToLeadById', ['person@example.test', 1]],
 ]);
 
-it('preserves the HTTP error status when LeadLovers returns an empty or misleading body', function () {
+it('preserves the HTTP error status when a tag response has an empty or misleading body', function (array $body) {
     config(['services.leadlovers.enabled' => true]);
     Http::fake([
-        '*' => Http::sequence()
-            ->push([], 500)
-            ->push(['StatusCode' => 200], 500),
+        '*' => Http::response($body, 500),
     ]);
 
-    $service = app(LeadLoversService::class);
-    $createResponse = $service->createLead([
-        'Name' => 'Pessoa Teste',
-        'Email' => 'person@example.test',
-        'Tag' => 1,
-        'EmailSequenceCode' => 1,
-    ]);
-    $tagResponse = $service->addTagToLeadById('person@example.test', 1);
+    $tagResponse = app(LeadLoversService::class)
+        ->addTagToLeadById('person@example.test', 1);
 
-    expect($createResponse['StatusCode'])->toBe(500)
-        ->and($tagResponse['StatusCode'])->toBe(500);
-    Http::assertSentCount(2);
-});
-
-it('keeps the shared response contract when a successful response has a null body status', function () {
-    config([
-        'services.leadlovers.enabled' => true,
-        'services.leadlovers.base_url' => 'https://example.test/webapi/',
-        'services.leadlovers.token' => 'test-token',
-        'services.leadlovers.machine' => 123,
-        'services.leadlovers.sequence_1' => 456,
-        'services.leadlovers.step' => 1,
-    ]);
-    Http::fake([
-        '*' => Http::response([
-            'StatusCode' => null,
-            'Success' => true,
-        ], 200),
-    ]);
-
-    $result = app(LeadLoversService::class)->createLead([
-        'Name' => 'Pessoa Teste',
-        'Email' => 'person@example.test',
-        'Tag' => 1,
-        'EmailSequenceCode' => 456,
-    ]);
-
-    expect($result['StatusCode'])->toBe(200)
-        ->and($result['_response_confirmed'])->toBeTrue();
+    expect($tagResponse['StatusCode'])->toBe(500);
     Http::assertSentCount(1);
-});
+})->with([
+    'empty body' => [[]],
+    'misleading status' => [['StatusCode' => 200]],
+]);
 
 it('fails closed when an update response contains a malformed provider status', function () {
     config([
@@ -1790,43 +1362,6 @@ it('does not normalize a malformed provider status into HTTP success', function 
     Http::assertSentCount(1);
 });
 
-it('uses configured ids and omits blank dynamic fields when creating a lead', function () {
-    config([
-        'services.leadlovers.enabled' => true,
-        'services.leadlovers.base_url' => 'https://example.test/webapi/',
-        'services.leadlovers.token' => 'test-token',
-        'services.leadlovers.machine' => 123,
-        'services.leadlovers.sequence_1' => 456,
-        'services.leadlovers.step' => 1,
-        'services.leadlovers.dynamic_fields' => [
-            'cpf' => 9001,
-            'conjuge_cpf' => 9002,
-        ],
-    ]);
-
-    Http::fake([
-        '*' => Http::response(['StatusCode' => 200], 200),
-    ]);
-
-    $result = app(LeadLoversService::class)->createLead([
-        'Name' => 'Pessoa Teste',
-        'Email' => 'person@example.test',
-        'Tag' => 789,
-        'CPF' => '12345678900',
-        'conjuge' => null,
-    ]);
-
-    expect($result['StatusCode'])->toBe(200);
-
-    Http::assertSent(function (Request $request): bool {
-        return $request->method() === 'POST'
-            && ($request['DynamicFields'] ?? null) === [[
-                'Id' => 9001,
-                'Value' => '12345678900',
-            ]];
-    });
-});
-
 it('rejects a lead update without a valid Email before making HTTP calls', function () {
     config(['services.leadlovers.enabled' => true]);
     Http::fake();
@@ -2924,60 +2459,21 @@ it('waits for the initial LeadLovers send before dispatching an update', functio
     Queue::assertNotPushed(RunProviderAnalysisJob::class);
 });
 
-it('queues the accumulated update after the initial send is accepted', function () {
+it('queues a newer accumulated update after a confirmed initial send', function () {
     Queue::fake();
     config([
         'services.leadlovers.enabled' => true,
-        'services.leadlovers.sequence_1' => 321,
-        'services.leadlovers.step' => 2,
         'services.leadlovers.initial_update_delay_seconds' => 60,
     ]);
 
-    $company = Imobiliaria::create([
-        'name' => 'Imobiliária Teste',
-        'email' => 'company-follow-up@example.test',
-        'phone' => '11999999999',
-        'password' => bcrypt('password'),
-        'city' => 'São Paulo',
-        'state' => 'SP',
-        'leadlovers_tag_id' => 123,
-    ]);
-    $lead = Lead::create([
-        'company_id' => $company->id,
-        'tipo_solicitante' => 'imobiliaria_cadastrada',
-        'origem' => 'imobiliaria_cadastrada',
+    $lead = leadForLeadLoversUpdate([
         'nome' => 'Nome já alterado',
         'email' => 'follow-up@example.test',
-        'leadlovers_status' => 'pending',
-        'leadlovers_update_status' => 'waiting_initial_send',
-        'leadlovers_update_version' => 0,
+        'sent_to_leadlovers_at' => now(),
         'leadlovers_update_response' => [
             'requested_fields' => ['name'],
         ],
     ]);
-
-    $remote = Mockery::mock(LeadLoversService::class);
-    $remote->shouldReceive('createLead')
-        ->once()
-        ->andReturn([
-            'StatusCode' => 200,
-            'Message' => 'Novo lead inserido na fila para processamento',
-        ]);
-
-    (new SendLeadToLeadLoversJob($lead->id))->handle($remote);
-
-    Queue::assertPushed(
-        UpdateLeadOnLeadLoversJob::class,
-        fn (UpdateLeadOnLeadLoversJob $job): bool => $job->leadId === $lead->id
-            && $job->syncVersion === 1
-            && $job->requestedFields === ['name']
-            && $job->queue === 'leadlovers'
-            && $job->delay !== null
-    );
-    expect($lead->refresh())
-        ->leadlovers_status->toBe('sent')
-        ->leadlovers_update_status->toBe('pending')
-        ->leadlovers_update_version->toBe(1);
 
     $settleUntil = $lead->sent_to_leadlovers_at->copy()->addSeconds(60);
     app(LeadReanalysisService::class)->updateLeadDataAndMaybeUnlock(

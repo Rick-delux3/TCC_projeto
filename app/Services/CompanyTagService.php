@@ -3,8 +3,10 @@
 namespace App\Services;
 
 use App\Models\LeadLoversTag;
+use App\Support\ManualLeadResultTags;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Support\Str;
 
 class CompanyTagService
 {
@@ -74,10 +76,59 @@ class CompanyTagService
         return 'Imobiliária '.$name;
     }
 
+    public function keyFromTitle(string $title): string
+    {
+        $normalizedTitle = $this->normalizeTagNameForComparison($title);
+
+        foreach (ManualLeadResultTags::all() as $definition) {
+            if (
+                $this->normalizeTagNameForComparison($definition['label'])
+                === $normalizedTitle
+            ) {
+                return $definition['leadlovers_key'];
+            }
+        }
+
+        return Str::of($title)
+            ->ascii()
+            ->lower()
+            ->replaceMatches('/[^a-z0-9]+/', '_')
+            ->trim('_')
+            ->toString();
+    }
+
+    public function keyForRemoteTag(string $title, int $remoteTagId): ?string
+    {
+        $key = $this->keyFromTitle($title);
+
+        if ($key === '') {
+            return null;
+        }
+
+        $alreadyUsed = LeadLoversTag::query()
+            ->where('key', $key)
+            ->where('leadlovers_tag_id', '!=', $remoteTagId)
+            ->exists();
+
+        return $alreadyUsed ? null : $key;
+    }
+
+    public function normalizeTagNameForComparison(string $name): string
+    {
+        return Str::lower(Str::squish($name));
+    }
+
     private function availableQuery(): Builder
     {
         $query = LeadLoversTag::query()
             ->where('active', true)
+            ->where(function (Builder $query) {
+                $query->whereNull('key')
+                    ->orWhereNotIn(
+                        'key',
+                        ManualLeadResultTags::leadloversKeys()
+                    );
+            })
             ->where(function (Builder $query) {
                 $query->where('title', 'like', 'Imobiliária %')
                     ->orWhere('title', 'like', 'Imobiliaria %');

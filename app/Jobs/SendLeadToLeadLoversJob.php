@@ -2,22 +2,43 @@
 
 namespace App\Jobs;
 
-use App\Exceptions\LeadLoversRateLimitedException;
+use App\Exceptions\LeadLoversApiException;
 use App\Models\Lead;
 use App\Models\LeadLoversTag;
-use App\Services\LeadLoversService;
+use App\Services\LeadLoversApiClient;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Queue\Middleware\WithoutOverlapping;
 use Illuminate\Support\Facades\Bus;
+use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use RuntimeException;
 use Throwable;
 
 class SendLeadToLeadLoversJob implements ShouldQueue
 {
     use Queueable;
 
-    public int $tries = 3;
+    private const PHASE_READY_TO_CREATE = 'ready_to_create';
+
+    private const PHASE_CREATE_STARTED = 'lead_creation_started';
+
+    private const PHASE_RECONCILIATION_PENDING = 'lead_reconciliation_pending';
+
+    private const PHASE_LEAD_PERSISTED = 'lead_persisted';
+
+    private const PHASE_MACHINE_STARTED = 'machine_request_started';
+
+    private const PHASE_MACHINE_PENDING = 'machine_confirmation_pending';
+
+    private const PHASE_MACHINE_CONFLICT = 'machine_conflict_pending';
+
+    private const RECONCILIATION_EMAIL_EXISTS = 'email_exists';
+
+    private const RECONCILIATION_AMBIGUOUS_CREATE = 'ambiguous_create';
+
+    public int $tries = 12;
 
     public int $timeout = 120;
 
@@ -25,7 +46,16 @@ class SendLeadToLeadLoversJob implements ShouldQueue
         public int $leadId
     ) {}
 
-    public function handle(LeadLoversService $leadLovers): void
+    public function middleware(): array
+    {
+        return [
+            (new WithoutOverlapping('leadlovers:initial:'.$this->leadId))
+                ->releaseAfter($this->confirmationDelay())
+                ->expireAfter($this->timeout + 60),
+        ];
+    }
+
+    public function handle(LeadLoversApiClient $leadLovers): void
     {
         if (! config('services.leadlovers.enabled', false)) {
             $this->disableInitialSend();
@@ -37,42 +67,11 @@ class SendLeadToLeadLoversJob implements ShouldQueue
             return;
         }
 
-        $lead = Lead::with([
-            'company',
-            'endereco',
-            'imobiliariaInformada',
-        ])->findOrFail($this->leadId);
+        $lead = $this->loadLead();
+        $machine = $this->machineConfigurationForLead($lead);
 
-        /**
-         * Antes de criar o lead, o sistema precisa descobrir
-         * qual é a tag principal dele.
-         */
-        $mainTagId = $this->mainTagIdForLead($lead);
-
-        if (! $mainTagId) {
-            Log::warning('Tag principal não encontrada para o lead', [
-                'lead_id' => $lead->id,
-                'tipo_solicitante' => $lead->tipo_solicitante,
-                'company_id' => $lead->company_id,
-            ]);
-
-            $this->failInitialSend(
-                (int) $lead->id,
-                'tag_failed',
-                [
-                    'message' => 'Tag principal não encontrada.',
-                    'tipo_solicitante' => $lead->tipo_solicitante,
-                ],
-                'O envio inicial aguarda a correção da tag principal.'
-            );
-
-            return;
-        }
-
-        $sequenceCode = $this->sequenceCodeForLead($lead);
-
-        if (! $sequenceCode) {
-            Log::warning('Sequência LeadLovers não encontrada para o lead', [
+        if ($machine === null) {
+            Log::warning('Configuracao de maquina LeadLovers invalida para o envio inicial.', [
                 'lead_id' => $lead->id,
                 'tipo_solicitante' => $lead->tipo_solicitante,
             ]);
@@ -80,112 +79,482 @@ class SendLeadToLeadLoversJob implements ShouldQueue
             $this->failInitialSend(
                 (int) $lead->id,
                 'sequence_failed',
-                [
-                    'message' => 'Sequência da LeadLovers não encontrada.',
-                    'tipo_solicitante' => $lead->tipo_solicitante,
-                ],
-                'O envio inicial aguarda a correção da sequência.'
+                $this->failureSummary('machine_configuration', null),
+                'O envio inicial aguarda a correcao da configuracao de maquina e sequencia.'
             );
 
             return;
         }
 
-        /**
-         * Cria o lead na máquina da LeadLovers já com a tag principal.
-         */
-        try {
-            $response = $leadLovers->createLead([
-                'Name' => $lead->nome,
-                'Email' => $lead->email,
-                'Phone' => $lead->tel ?? '',
-                'City' => $lead->endereco?->cidade_imovel ?? '',
-                'State' => $lead->endereco?->estado ?? '',
-                'Company' => $lead->company?->name
-                    ?? $lead->imobiliariaInformada?->nome_imobiliaria_informada
-                    ?? $lead->imobiliaria
-                    ?? '',
+        $remoteLeadId = $this->positiveInteger($lead->leadlovers_lead_id);
+        $freshlyCreated = false;
 
-                'Tag' => $mainTagId,
-                'Score' => 0,
+        if ($remoteLeadId === null) {
+            $mainTagId = $this->mainTagIdForLead($lead);
 
-                'CPF' => $lead->cpf,
-                'telefone' => $lead->tel,
-                'CIVIL' => $lead->estado_civil,
-                'conjuge' => $lead->conjuge?->cpf,
-                'VALOR' => $lead->despesas?->valor_aluguel,
-                'Agua' => $lead->despesas?->valor_agua,
-                'Luz' => $lead->despesas?->valor_luz,
-                'Gas' => $lead->despesas?->valor_gas,
-                'IPTU' => $lead->despesas?->valor_iptu,
-                'Condominio' => $lead->despesas?->valor_condominio,
-                'OUTRO' => $lead->despesas?->outras_despesas,
+            if ($mainTagId === null) {
+                Log::warning('Tag principal nao encontrada para o lead.', [
+                    'lead_id' => $lead->id,
+                    'tipo_solicitante' => $lead->tipo_solicitante,
+                    'company_id' => $lead->company_id,
+                ]);
 
-                'EmailSequenceCode' => $sequenceCode,
-                'SequenceLevelCode' => (int) config('services.leadlovers.step', 1),
-
-                'tipo_solicitante' => $lead->tipo_solicitante,
-            ]);
-        } catch (LeadLoversRateLimitedException $e) {
-            if ($this->attempts() >= $this->tries) {
                 $this->failInitialSend(
                     (int) $lead->id,
-                    'failed',
-                    [
-                        'message' => 'Limite de requisições persistiu após várias tentativas.',
-                    ],
-                    'O envio inicial falhou após as tentativas configuradas.'
+                    'tag_failed',
+                    $this->failureSummary('main_tag', null),
+                    'O envio inicial aguarda a correcao da tag principal.'
                 );
 
-                throw $e;
+                return;
             }
 
-            $retryAfter = max(
-                1,
-                $e->retryAfter
-                    ?? (int) config('services.leadlovers.rate_limit_retry_seconds', 60)
+            $resolved = $this->resolveRemoteLead(
+                $leadLovers,
+                $lead,
+                $mainTagId
             );
 
-            Log::notice('Envio do lead devolvido à fila por rate limit.', [
-                'lead_id' => $lead->id,
-                'attempt' => $this->attempts(),
-                'retry_after' => $retryAfter,
-                'cloudflare_1015' => $e->cloudflareBlocked,
-            ]);
+            if ($resolved === null) {
+                return;
+            }
 
-            $this->release($retryAfter);
-
-            return;
+            $remoteLeadId = $resolved['lead_id'];
+            $freshlyCreated = $resolved['created'];
         }
 
-        if (! is_array($response) || ! $this->leadLoversResponseWasSuccessful($response)) {
-            Log::warning('Lead não enviado para LeadLovers', [
-                'lead_id' => $lead->id,
-                'lead_ref' => hash('sha256', mb_strtolower(trim($lead->email))),
-                'status_code' => $response['StatusCode'] ?? null,
-            ]);
+        $this->synchronizeMachine(
+            $leadLovers,
+            $remoteLeadId,
+            $machine,
+            $freshlyCreated
+        );
+    }
 
+    /**
+     * @return array{lead_id: int, created: bool}|null
+     */
+    private function resolveRemoteLead(
+        LeadLoversApiClient $leadLovers,
+        Lead $lead,
+        int $mainTagId
+    ): ?array {
+        $phase = $this->currentPhase($lead);
+
+        if (in_array($phase, [
+            self::PHASE_CREATE_STARTED,
+            self::PHASE_RECONCILIATION_PENDING,
+        ], true)) {
+            $email = $this->storedCreationEmail($lead);
+
+            if ($email === null) {
+                $this->permanentlyFail(
+                    'lead_search',
+                    null,
+                    'O e-mail original da criacao nao pode ser recuperado com seguranca.'
+                );
+
+                return null;
+            }
+
+            $reason = $this->currentReconciliationReason($lead)
+                ?? self::RECONCILIATION_AMBIGUOUS_CREATE;
+
+            return $this->reconcileRemoteLead(
+                $leadLovers,
+                $email,
+                $reason
+            );
+        }
+
+        $email = trim((string) $lead->email);
+
+        if ($email === '' || filter_var($email, FILTER_VALIDATE_EMAIL) === false) {
             $this->failInitialSend(
                 (int) $lead->id,
                 'failed',
-                is_array($response)
-                    ? $this->initialResponseSummary($response)
-                    : [
-                        'success' => false,
-                        'status_code' => null,
+                $this->failureSummary('lead_creation', null),
+                'O e-mail do lead nao permite concluir o envio inicial.'
+            );
+
+            return null;
+        }
+
+        $encryptedEmail = $this->encryptCreationEmail($email);
+
+        if ($encryptedEmail === null) {
+            $this->permanentlyFail(
+                'lead_creation',
+                null,
+                'O e-mail da criacao nao pode ser protegido para uma retomada segura.'
+            );
+
+            return null;
+        }
+
+        if (! $this->storeProgress(self::PHASE_CREATE_STARTED, [
+            'operation' => 'lead_creation',
+            'creation_email_encrypted' => $encryptedEmail,
+        ]) || ! $this->isStillProcessing()) {
+            return null;
+        }
+
+        try {
+            $response = $leadLovers->createLead(
+                $this->creationPayload($lead, $mainTagId)
+            );
+        } catch (LeadLoversApiException $exception) {
+            if ($this->isEmailExists($exception)) {
+                if (! $this->storeProgress(self::PHASE_RECONCILIATION_PENDING, [
+                    'operation' => 'lead_search',
+                    'reconciliation_reason' => self::RECONCILIATION_EMAIL_EXISTS,
+                    'creation_email_encrypted' => $encryptedEmail,
+                    'status_code' => $exception->statusCode,
+                    'error_code' => $exception->errorCode,
+                ])) {
+                    return null;
+                }
+
+                return $this->reconcileRemoteLead(
+                    $leadLovers,
+                    $email,
+                    self::RECONCILIATION_EMAIL_EXISTS
+                );
+            }
+
+            if ($exception->errorCode === 'LOCAL_RATE_LIMIT') {
+                if (! $this->storeProgress(self::PHASE_READY_TO_CREATE, [
+                    'operation' => 'lead_creation',
+                    'error_code' => $exception->errorCode,
+                ])) {
+                    return null;
+                }
+                $this->retryOrFail(
+                    'lead_creation',
+                    $exception,
+                    'O envio inicial excedeu as tentativas antes de criar o lead remoto.'
+                );
+
+                return null;
+            }
+
+            if ($exception->isTransient) {
+                if (! $this->storeProgress(self::PHASE_RECONCILIATION_PENDING, [
+                    'operation' => 'lead_search',
+                    'reconciliation_reason' => self::RECONCILIATION_AMBIGUOUS_CREATE,
+                    'creation_email_encrypted' => $encryptedEmail,
+                    'status_code' => $exception->statusCode,
+                    'error_code' => $exception->errorCode,
+                ])) {
+                    return null;
+                }
+                $this->retryOrFail(
+                    'lead_creation',
+                    $exception,
+                    'Nao foi possivel conciliar o resultado incerto da criacao do lead.'
+                );
+
+                return null;
+            }
+
+            $this->permanentlyFail(
+                'lead_creation',
+                $exception,
+                'A LeadLovers recusou a criacao do lead.'
+            );
+
+            return null;
+        }
+
+        $remoteLeadId = $this->positiveInteger($response['leadId'] ?? null);
+
+        if ($remoteLeadId === null) {
+            $this->retryOrFail(
+                'lead_creation',
+                null,
+                'A resposta de criacao nao permitiu identificar o lead remoto.'
+            );
+
+            return null;
+        }
+
+        if (! $this->persistRemoteLeadId($remoteLeadId, 'created')) {
+            return null;
+        }
+
+        return [
+            'lead_id' => $remoteLeadId,
+            'created' => true,
+        ];
+    }
+
+    /**
+     * @return array{lead_id: int, created: bool}|null
+     */
+    private function reconcileRemoteLead(
+        LeadLoversApiClient $leadLovers,
+        string $email,
+        string $reason
+    ): ?array {
+        try {
+            $result = $leadLovers->searchLeads([
+                'page' => 1,
+                'pageSize' => 10,
+                'filters' => [
+                    'staticFields' => [
+                        'email' => [$email],
                     ],
-                'A LeadLovers recusou o envio inicial.'
+                ],
+            ]);
+        } catch (LeadLoversApiException $exception) {
+            if ($exception->isTransient) {
+                $this->retryOrFail(
+                    'lead_search',
+                    $exception,
+                    'A conciliacao do lead remoto excedeu as tentativas configuradas.'
+                );
+
+                return null;
+            }
+
+            $this->permanentlyFail(
+                'lead_search',
+                $exception,
+                'Nao foi possivel conciliar o lead remoto por e-mail.'
+            );
+
+            return null;
+        }
+
+        $match = $this->uniqueExactSearchMatch($result, $email);
+
+        if ($match['outcome'] !== 'matched') {
+            if (
+                $match['outcome'] === 'missing'
+                && $reason === self::RECONCILIATION_AMBIGUOUS_CREATE
+            ) {
+                $this->retryOrFail(
+                    'lead_search',
+                    null,
+                    'O resultado incerto da criacao nao apareceu na busca remota.'
+                );
+
+                return null;
+            }
+
+            $this->permanentlyFail(
+                'lead_search',
+                null,
+                'A busca remota nao retornou uma correspondencia unica e exata.'
+            );
+
+            return null;
+        }
+
+        $remoteLeadId = $match['lead_id'];
+
+        if (! $this->persistRemoteLeadId($remoteLeadId, 'reconciled')) {
+            return null;
+        }
+
+        return [
+            'lead_id' => $remoteLeadId,
+            'created' => false,
+        ];
+    }
+
+    /**
+     * @param  array{machine_id: int, sequence_id: int, level: int}  $machine
+     */
+    private function synchronizeMachine(
+        LeadLoversApiClient $leadLovers,
+        int $remoteLeadId,
+        array $machine,
+        bool $freshlyCreated
+    ): void {
+        $lead = Lead::query()->findOrFail($this->leadId);
+        $phase = $this->currentPhase($lead);
+        $mustOnlyConfirm = in_array($phase, [
+            self::PHASE_MACHINE_STARTED,
+            self::PHASE_MACHINE_PENDING,
+            self::PHASE_MACHINE_CONFLICT,
+        ], true);
+
+        if (! $freshlyCreated || $mustOnlyConfirm) {
+            $machines = $this->remoteMachinesOrNull(
+                $leadLovers,
+                $remoteLeadId,
+                'machine_confirmation'
+            );
+
+            if ($machines === null) {
+                return;
+            }
+
+            if ($this->hasExpectedMachine($machines, $machine)) {
+                $this->finishInitialSend($remoteLeadId, $machine);
+
+                return;
+            }
+
+            if ($mustOnlyConfirm) {
+                if (! $this->storeProgress(
+                    $phase,
+                    $this->machineProgress($remoteLeadId, $machine)
+                )) {
+                    return;
+                }
+                $this->retryOrFail(
+                    'machine_confirmation',
+                    null,
+                    'A associacao do lead a maquina nao foi confirmada a tempo.'
+                );
+
+                return;
+            }
+        }
+
+        if ($this->attempts() >= $this->tries) {
+            $this->permanentlyFail(
+                'machine_request',
+                null,
+                'Nao restaram tentativas para solicitar e confirmar a maquina com seguranca.'
             );
 
             return;
         }
 
-        /**
-         * Opcional: adiciona tags extras além da tag principal.
-         */
-        /**
-         * Marca o envio como concluído.
-         */
-        $pendingUpdate = $this->completeInitialSend($response);
+        if (! $this->storeProgress(
+            self::PHASE_MACHINE_STARTED,
+            $this->machineProgress($remoteLeadId, $machine)
+        ) || ! $this->isStillProcessing($remoteLeadId)) {
+            return;
+        }
+
+        try {
+            $action = $leadLovers->addLeadToMachine([
+                'machineFrom' => 0,
+                'machineId' => $machine['machine_id'],
+                'sequenceId' => $machine['sequence_id'],
+                'level' => $machine['level'],
+                'leadIds' => [$remoteLeadId],
+            ]);
+        } catch (LeadLoversApiException $exception) {
+            if ($exception->errorCode === 'LOCAL_RATE_LIMIT') {
+                if (! $this->storeProgress(
+                    self::PHASE_LEAD_PERSISTED,
+                    array_merge(
+                        $this->machineProgress($remoteLeadId, $machine),
+                        ['source' => 'existing']
+                    )
+                )) {
+                    return;
+                }
+                $this->retryOrFail(
+                    'machine_request',
+                    $exception,
+                    'A solicitacao de maquina excedeu as tentativas configuradas.'
+                );
+
+                return;
+            }
+
+            if ($this->isActiveMachineCopy($exception)) {
+                if (! $this->storeProgress(
+                    self::PHASE_MACHINE_CONFLICT,
+                    array_merge(
+                        $this->machineProgress($remoteLeadId, $machine),
+                        [
+                            'status_code' => $exception->statusCode,
+                            'error_code' => $exception->errorCode,
+                        ]
+                    )
+                )) {
+                    return;
+                }
+                $machines = $this->remoteMachinesOrNull(
+                    $leadLovers,
+                    $remoteLeadId,
+                    'machine_conflict_confirmation'
+                );
+
+                if ($machines === null) {
+                    return;
+                }
+
+                if ($this->hasExpectedMachine($machines, $machine)) {
+                    $this->finishInitialSend($remoteLeadId, $machine);
+
+                    return;
+                }
+
+                $this->retryOrFail(
+                    'machine_conflict_confirmation',
+                    $exception,
+                    'O conflito de copia permaneceu sem confirmacao do estado remoto.'
+                );
+
+                return;
+            }
+
+            if ($exception->isTransient) {
+                $this->retryOrFail(
+                    'machine_request',
+                    $exception,
+                    'O resultado da solicitacao de maquina permaneceu incerto.'
+                );
+
+                return;
+            }
+
+            $this->permanentlyFail(
+                'machine_request',
+                $exception,
+                'A LeadLovers recusou a associacao do lead a maquina.'
+            );
+
+            return;
+        }
+
+        $actionSummary = [
+            'action_id' => $action['actionId'],
+            'status' => $action['status'],
+            'total' => $action['total'],
+        ];
+
+        if (! $this->storeProgress(
+            self::PHASE_MACHINE_PENDING,
+            array_merge(
+                $this->machineProgress($remoteLeadId, $machine),
+                ['action' => $actionSummary]
+            )
+        )) {
+            return;
+        }
+
+        if (in_array($action['status'], ['failed', 'cancelled'], true)) {
+            $this->permanentlyFail(
+                'machine_request',
+                null,
+                'A acao de maquina foi recusada antes da confirmacao.',
+                ['action' => $actionSummary]
+            );
+
+            return;
+        }
+
+        $this->retryOrFail(
+            'machine_confirmation',
+            null,
+            'A associacao do lead a maquina nao foi confirmada a tempo.'
+        );
+    }
+
+    private function finishInitialSend(
+        int $remoteLeadId,
+        array $machine
+    ): void {
+        $pendingUpdate = $this->completeInitialSend($remoteLeadId, $machine);
 
         if ($pendingUpdate === null) {
             return;
@@ -216,10 +585,10 @@ class SendLeadToLeadLoversJob implements ShouldQueue
                 ->where('leadlovers_update_status', 'pending')
                 ->update([
                     'leadlovers_update_status' => 'failed',
-                    'leadlovers_update_error' => 'A atualização após o envio inicial não pôde ser colocada na fila.',
+                    'leadlovers_update_error' => 'A atualizacao apos o envio inicial nao pode ser colocada na fila.',
                 ]);
 
-            Log::warning('Falha ao enfileirar atualização após o envio inicial.', [
+            Log::warning('Falha ao enfileirar atualizacao apos o envio inicial.', [
                 'lead_id' => $pendingUpdate['lead_id'],
                 'sync_version' => $pendingUpdate['sync_version'],
                 'exception' => $exception::class,
@@ -227,13 +596,26 @@ class SendLeadToLeadLoversJob implements ShouldQueue
         }
     }
 
-    private function completeInitialSend(array $response): ?array
-    {
-        return DB::transaction(function () use ($response): ?array {
+    /**
+     * @return array{lead_id: int, original_email: string, sync_version: int, requested_fields: array<int, string>}|null
+     */
+    private function completeInitialSend(
+        int $remoteLeadId,
+        array $machine
+    ): ?array {
+        return DB::transaction(function () use ($remoteLeadId, $machine): ?array {
             $lead = Lead::query()
                 ->whereKey($this->leadId)
                 ->lockForUpdate()
                 ->firstOrFail();
+
+            if (
+                $lead->leadlovers_status !== 'processing'
+                || (int) $lead->leadlovers_lead_id !== $remoteLeadId
+            ) {
+                return null;
+            }
+
             $requestedFields = in_array(
                 $lead->leadlovers_update_status,
                 ['waiting_initial_send', 'disabled'],
@@ -246,12 +628,32 @@ class SendLeadToLeadLoversJob implements ShouldQueue
                 )
                     ? $lead->leadlovers_update_response['requested_fields']
                     : [];
+            $previousAction = is_array($lead->leadlovers_response)
+                && is_array($lead->leadlovers_response['action'] ?? null)
+                    ? $lead->leadlovers_response['action']
+                    : null;
+            $hasStoredCreationEmail = $this->hasStoredCreationEmail($lead);
+            $originalEmail = $hasStoredCreationEmail
+                ? $this->storedCreationEmail($lead)
+                : trim((string) $lead->email);
+            $summary = [
+                'success' => true,
+                'phase' => 'machine_confirmed',
+                'lead_id' => $remoteLeadId,
+                'machine' => [
+                    'machine_id' => $machine['machine_id'],
+                    'sequence_id' => $machine['sequence_id'],
+                    'level' => $machine['level'],
+                ],
+            ];
+
+            if ($previousAction !== null) {
+                $summary['action'] = $previousAction;
+            }
 
             $lead->forceFill([
                 'leadlovers_status' => 'sent',
-                'leadlovers_response' => $this->initialResponseSummary(
-                    $response
-                ),
+                'leadlovers_response' => $summary,
                 'sent_to_leadlovers_at' => now(),
             ]);
 
@@ -261,15 +663,14 @@ class SendLeadToLeadLoversJob implements ShouldQueue
                 return null;
             }
 
-            $originalEmail = trim((string) $lead->email);
-
             if (
-                $originalEmail === ''
+                ! is_string($originalEmail)
+                || $originalEmail === ''
                 || filter_var($originalEmail, FILTER_VALIDATE_EMAIL) === false
             ) {
                 $lead->forceFill([
                     'leadlovers_update_status' => 'failed',
-                    'leadlovers_update_error' => 'O e-mail não permite concluir a atualização após o envio inicial.',
+                    'leadlovers_update_error' => 'O e-mail nao permite concluir a atualizacao apos o envio inicial.',
                 ])->save();
 
                 return null;
@@ -296,16 +697,380 @@ class SendLeadToLeadLoversJob implements ShouldQueue
         });
     }
 
+    /**
+     * @return array<string, mixed>
+     */
+    private function creationPayload(Lead $lead, int $mainTagId): array
+    {
+        return [
+            'staticFields' => [
+                'email' => $this->nullableString($lead->email),
+                'name' => $this->nullableString($lead->nome),
+                'phone' => $this->nullableString($lead->tel),
+                'city' => $this->nullableString($lead->endereco?->cidade_imovel),
+                'state' => $this->nullableString($lead->endereco?->estado),
+                'company' => $this->nullableString(
+                    $lead->company?->name
+                        ?? $lead->imobiliariaInformada?->nome_imobiliaria_informada
+                        ?? $lead->imobiliaria
+                ),
+            ],
+            'tags' => [$mainTagId],
+            'dynamicFields' => $this->dynamicFieldsForLead($lead),
+        ];
+    }
+
+    /**
+     * @return array<int, array{id: int, value: string}>
+     */
+    private function dynamicFieldsForLead(Lead $lead): array
+    {
+        $values = [
+            'cpf' => $lead->cpf,
+            'estado_civil' => $lead->estado_civil,
+            'conjuge_cpf' => $lead->conjuge?->cpf,
+            'valor_aluguel' => $lead->despesas?->valor_aluguel,
+            'valor_agua' => $lead->despesas?->valor_agua,
+            'valor_luz' => $lead->despesas?->valor_luz,
+            'valor_gas' => $lead->despesas?->valor_gas,
+            'valor_condominio' => $lead->despesas?->valor_condominio,
+            'valor_iptu' => $lead->despesas?->valor_iptu,
+            'outras_despesas' => $lead->despesas?->outras_despesas,
+        ];
+        $fields = [];
+
+        foreach (config('services.leadlovers.dynamic_fields', []) as $name => $fieldId) {
+            $normalizedId = $this->positiveInteger($fieldId);
+            $value = $values[$name] ?? null;
+
+            if ($normalizedId === null || $value === null) {
+                continue;
+            }
+
+            $fields[] = [
+                'id' => $normalizedId,
+                'value' => trim((string) $value),
+            ];
+        }
+
+        return $fields;
+    }
+
+    /**
+     * @return array{machine_id: int, sequence_id: int, level: int}|null
+     */
+    private function machineConfigurationForLead(Lead $lead): ?array
+    {
+        $machineId = $this->positiveInteger(
+            config('services.leadlovers.machine')
+        );
+        $sequenceId = $this->sequenceCodeForLead($lead);
+        $level = $this->configuredInteger(
+            config('services.leadlovers.step', 1)
+        );
+
+        if ($machineId === null || $sequenceId === null || $level === null) {
+            return null;
+        }
+
+        return [
+            'machine_id' => $machineId,
+            'sequence_id' => $sequenceId,
+            'level' => $level,
+        ];
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $machines
+     * @param  array{machine_id: int, sequence_id: int, level: int}  $expected
+     */
+    private function hasExpectedMachine(array $machines, array $expected): bool
+    {
+        foreach ($machines as $machine) {
+            if (
+                ($machine['id'] ?? null) === $expected['machine_id']
+                && ($machine['level'] ?? null) === $expected['level']
+                && is_array($machine['sequence'] ?? null)
+                && ($machine['sequence']['id'] ?? null) === $expected['sequence_id']
+            ) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>|null
+     */
+    private function remoteMachinesOrNull(
+        LeadLoversApiClient $leadLovers,
+        int $remoteLeadId,
+        string $operation
+    ): ?array {
+        try {
+            return $leadLovers->listLeadMachines($remoteLeadId);
+        } catch (LeadLoversApiException $exception) {
+            if ($exception->isTransient) {
+                $this->retryOrFail(
+                    $operation,
+                    $exception,
+                    'A consulta da maquina remota excedeu as tentativas configuradas.'
+                );
+
+                return null;
+            }
+
+            $this->permanentlyFail(
+                $operation,
+                $exception,
+                'Nao foi possivel consultar as maquinas do lead remoto.'
+            );
+
+            return null;
+        }
+    }
+
+    /**
+     * @return array{outcome: string, lead_id?: int}
+     */
+    private function uniqueExactSearchMatch(array $result, string $email): array
+    {
+        $records = $result['records'] ?? null;
+        $pagination = $result['pagination'] ?? null;
+
+        if (
+            ! is_array($records)
+            || ! is_array($pagination)
+            || ($result['total'] ?? null) !== count($records)
+            || ($result['total'] ?? null) !== 1
+            || count($records) !== 1
+            || ($pagination['current'] ?? null) !== 1
+            || ($pagination['next'] ?? null) !== null
+            || ($pagination['pages'] ?? null) !== 1
+        ) {
+            return [
+                'outcome' => ($result['total'] ?? null) === 0
+                    ? 'missing'
+                    : 'ambiguous',
+            ];
+        }
+
+        $record = $records[0];
+        $recordEmail = is_array($record) && is_string($record['email'] ?? null)
+            ? trim($record['email'])
+            : null;
+        $remoteLeadId = is_array($record)
+            ? $this->positiveInteger($record['leadId'] ?? null)
+            : null;
+
+        if ($recordEmail !== $email || $remoteLeadId === null) {
+            return ['outcome' => 'ambiguous'];
+        }
+
+        return [
+            'outcome' => 'matched',
+            'lead_id' => $remoteLeadId,
+        ];
+    }
+
+    private function persistRemoteLeadId(int $remoteLeadId, string $source): bool
+    {
+        return DB::transaction(function () use ($remoteLeadId, $source): bool {
+            $lead = Lead::query()
+                ->whereKey($this->leadId)
+                ->where('leadlovers_status', 'processing')
+                ->lockForUpdate()
+                ->first();
+
+            if (! $lead) {
+                return false;
+            }
+
+            $currentId = $this->positiveInteger($lead->leadlovers_lead_id);
+            $encryptedEmail = is_array($lead->leadlovers_response)
+                && is_string(
+                    $lead->leadlovers_response['creation_email_encrypted']
+                        ?? null
+                )
+                    ? $lead->leadlovers_response['creation_email_encrypted']
+                    : null;
+
+            if ($currentId !== null && $currentId !== $remoteLeadId) {
+                Log::warning('Envio inicial nao sobrescreveu um ID remoto mais novo.', [
+                    'lead_id' => $lead->id,
+                    'current_remote_id' => $currentId,
+                    'received_remote_id' => $remoteLeadId,
+                ]);
+
+                return false;
+            }
+
+            $progress = [
+                'success' => false,
+                'phase' => self::PHASE_LEAD_PERSISTED,
+                'lead_id' => $remoteLeadId,
+                'source' => $source,
+            ];
+
+            if ($encryptedEmail !== null) {
+                $progress['creation_email_encrypted'] = $encryptedEmail;
+            }
+
+            $lead->forceFill([
+                'leadlovers_lead_id' => $remoteLeadId,
+                'leadlovers_response' => $progress,
+            ])->save();
+
+            return true;
+        });
+    }
+
+    private function storeProgress(string $phase, array $details = []): bool
+    {
+        return DB::transaction(function () use ($phase, $details): bool {
+            $lead = Lead::query()
+                ->whereKey($this->leadId)
+                ->where('leadlovers_status', 'processing')
+                ->lockForUpdate()
+                ->first();
+
+            if (! $lead) {
+                return false;
+            }
+
+            $encryptedEmail = is_array($lead->leadlovers_response)
+                && is_string(
+                    $lead->leadlovers_response['creation_email_encrypted']
+                        ?? null
+                )
+                    ? $lead->leadlovers_response['creation_email_encrypted']
+                    : null;
+            $action = is_array($lead->leadlovers_response)
+                && is_array($lead->leadlovers_response['action'] ?? null)
+                    ? $lead->leadlovers_response['action']
+                    : null;
+            $progress = array_merge([
+                'success' => false,
+                'phase' => $phase,
+            ], $details);
+
+            if (
+                $encryptedEmail !== null
+                && ! array_key_exists('creation_email_encrypted', $progress)
+            ) {
+                $progress['creation_email_encrypted'] = $encryptedEmail;
+            }
+
+            if ($action !== null && ! array_key_exists('action', $progress)) {
+                $progress['action'] = $action;
+            }
+
+            $lead->forceFill([
+                'leadlovers_response' => $progress,
+            ])->save();
+
+            return true;
+        });
+    }
+
+    private function isStillProcessing(?int $remoteLeadId = null): bool
+    {
+        $query = Lead::query()
+            ->whereKey($this->leadId)
+            ->where('leadlovers_status', 'processing');
+
+        if ($remoteLeadId === null) {
+            $query->whereNull('leadlovers_lead_id');
+        } else {
+            $query->where('leadlovers_lead_id', $remoteLeadId);
+        }
+
+        return $query->exists();
+    }
+
+    private function retryOrFail(
+        string $operation,
+        ?LeadLoversApiException $exception,
+        string $exhaustedMessage
+    ): void {
+        if ($this->attempts() >= $this->tries) {
+            $this->permanentlyFail(
+                $operation,
+                $exception,
+                $exhaustedMessage
+            );
+
+            return;
+        }
+
+        $delay = $exception?->retryAfterSeconds
+            ?? $this->confirmationDelay();
+
+        Log::notice('Envio inicial devolvido a fila para conciliacao.', [
+            'lead_id' => $this->leadId,
+            'operation' => $operation,
+            'attempt' => $this->attempts(),
+            'retry_after' => $delay,
+            'status_code' => $exception?->statusCode,
+            'error_code' => $exception?->errorCode,
+        ]);
+
+        $this->release($delay);
+    }
+
+    private function permanentlyFail(
+        string $operation,
+        ?LeadLoversApiException $exception,
+        string $updateError,
+        array $extra = []
+    ): void {
+        $this->failInitialSend(
+            $this->leadId,
+            'failed',
+            array_merge(
+                $this->failureSummary($operation, $exception),
+                $extra
+            ),
+            $updateError
+        );
+
+        Log::warning('Envio inicial do lead falhou de forma segura.', [
+            'lead_id' => $this->leadId,
+            'operation' => $operation,
+            'attempt' => $this->attempts(),
+            'status_code' => $exception?->statusCode,
+            'error_code' => $exception?->errorCode,
+        ]);
+
+        $this->fail(new RuntimeException('Falha definitiva no envio inicial para a LeadLovers.'));
+    }
+
+    private function failureSummary(
+        string $operation,
+        ?LeadLoversApiException $exception
+    ): array {
+        $summary = [
+            'success' => false,
+            'phase' => 'failed',
+            'operation' => $operation,
+            'status_code' => $exception?->statusCode,
+        ];
+
+        if ($exception?->errorCode !== null) {
+            $summary['error_code'] = $exception->errorCode;
+        }
+
+        return $summary;
+    }
+
     public function failed(?Throwable $exception): void
     {
         $this->failInitialSend(
             $this->leadId,
             'failed',
-            [
-                'success' => false,
-                'status_code' => null,
-            ],
-            'O envio inicial falhou após as tentativas configuradas.'
+            $this->failureSummary('queue', null),
+            'O envio inicial falhou apos as tentativas configuradas.'
         );
 
         Log::warning('Envio inicial do lead esgotou as tentativas.', [
@@ -347,10 +1112,19 @@ class SendLeadToLeadLoversJob implements ShouldQueue
             ];
 
             if ($wasProcessing) {
-                $attributes['leadlovers_response'] = [
-                    'success' => false,
-                    'status_code' => null,
-                ];
+                $failure = $this->failureSummary(
+                    'integration_disabled',
+                    null
+                );
+
+                if (
+                    is_array($lead->leadlovers_response)
+                    && is_array($lead->leadlovers_response['action'] ?? null)
+                ) {
+                    $failure['action'] = $lead->leadlovers_response['action'];
+                }
+
+                $attributes['leadlovers_response'] = $failure;
             }
 
             if ($lead->leadlovers_update_status === 'waiting_initial_send') {
@@ -358,8 +1132,8 @@ class SendLeadToLeadLoversJob implements ShouldQueue
                     ? 'failed'
                     : 'disabled';
                 $attributes['leadlovers_update_error'] = $wasProcessing
-                    ? 'O envio inicial foi interrompido em estado ambíguo e precisa ser conciliado.'
-                    : 'A integração com a LeadLovers está desativada.';
+                    ? 'O envio inicial foi interrompido em estado ambiguo e precisa ser conciliado.'
+                    : 'A integracao com a LeadLovers esta desativada.';
             }
 
             $lead->forceFill($attributes)->save();
@@ -393,6 +1167,15 @@ class SendLeadToLeadLoversJob implements ShouldQueue
                 'leadlovers_response' => $response,
             ];
 
+            if (
+                is_array($lead->leadlovers_response)
+                && is_array($lead->leadlovers_response['action'] ?? null)
+                && ! array_key_exists('action', $response)
+            ) {
+                $attributes['leadlovers_response']['action'] =
+                    $lead->leadlovers_response['action'];
+            }
+
             if ($lead->leadlovers_update_status === 'waiting_initial_send') {
                 $attributes['leadlovers_update_status'] = 'failed';
                 $attributes['leadlovers_update_error'] = $updateError;
@@ -402,24 +1185,12 @@ class SendLeadToLeadLoversJob implements ShouldQueue
         });
     }
 
-    /**
-     * Descobre qual tag principal deve ser enviada no campo "Tag"
-     * do endpoint Insert New Lead.
-     */
     private function mainTagIdForLead(Lead $lead): ?int
     {
-        /**
-         * Caso seja imobiliária cadastrada:
-         * a tag principal é a própria tag da imobiliária.
-         */
         if ($lead->tipo_solicitante === 'imobiliaria_cadastrada') {
             return $this->companyTagId($lead);
         }
 
-        /**
-         * Para os demais perfis, convertemos o tipo interno
-         * para a key da tag local.
-         */
         $tagKey = match ($lead->tipo_solicitante) {
             'locatario' => 'locatario',
             'imobiliaria_nao_cadastrada' => 'imobiliaria_morna',
@@ -427,126 +1198,202 @@ class SendLeadToLeadLoversJob implements ShouldQueue
             default => null,
         };
 
-        if (! $tagKey) {
+        if ($tagKey === null) {
             return null;
         }
 
-        return LeadLoversTag::where('key', $tagKey)
-            ->where('active', true)
-            ->value('leadlovers_tag_id');
+        return $this->positiveInteger(
+            LeadLoversTag::query()
+                ->where('key', $tagKey)
+                ->where('active', true)
+                ->value('leadlovers_tag_id')
+        );
     }
 
-    /**
-     * Descobre o ID da tag da imobiliária cadastrada.
-     */
     private function companyTagId(Lead $lead): ?int
     {
         if (! $lead->company) {
             return null;
         }
 
-        /**
-         * Melhor opção:
-         * usar o ID salvo diretamente na tabela imobiliarias.
-         */
-        if ($lead->company->leadlovers_tag_id) {
-            return (int) $lead->company->leadlovers_tag_id;
+        $companyTagId = $this->positiveInteger(
+            $lead->company->leadlovers_tag_id
+        );
+
+        if ($companyTagId !== null) {
+            return $companyTagId;
         }
 
-        /**
-         * Fallback:
-         * buscar pelo título da tag igual ao nome da imobiliária.
-         */
-        return LeadLoversTag::where('title', $lead->company->name)
-            ->where('active', true)
-            ->value('leadlovers_tag_id');
-    }
-
-    private function leadLoversResponseWasSuccessful(array $response): bool
-    {
-        if (
-            array_key_exists('_response_confirmed', $response)
-            && $response['_response_confirmed'] !== true
-        ) {
-            return false;
-        }
-
-        $statusCode = $response['StatusCode']
-            ?? $response['statusCode']
-            ?? $response['status']
-            ?? null;
-        $success = $response['Success'] ?? $response['success'] ?? null;
-        $explicitlyFailed = $success === false
-            || $success === 0
-            || (
-                is_string($success)
-                && in_array(
-                    mb_strtolower(trim($success)),
-                    ['0', 'false', 'no'],
-                    true
-                )
-            )
-            || filled($response['Exception'] ?? $response['exception'] ?? null)
-            || filled($response['Error'] ?? $response['error'] ?? null);
-
-        if ($explicitlyFailed) {
-            return false;
-        }
-
-        if ($statusCode !== null) {
-            return is_numeric($statusCode)
-                && (int) $statusCode >= 200
-                && (int) $statusCode < 300;
-        }
-
-        $message = (string) ($response['Message'] ?? $response['message'] ?? '');
-
-        return mb_stripos(
-            $message,
-            'Novo lead inserido na fila para processamento'
-        ) !== false;
-    }
-
-    private function initialResponseSummary(array $response): array
-    {
-        $rawStatus = $response['StatusCode']
-            ?? $response['statusCode']
-            ?? $response['status']
-            ?? null;
-        $leadCode = $response['Code']
-            ?? $response['code']
-            ?? $response['Value']
-            ?? $response['value']
-            ?? null;
-        $summary = [
-            'success' => $this->leadLoversResponseWasSuccessful($response),
-            'status_code' => is_numeric($rawStatus)
-                ? (int) $rawStatus
-                : null,
-        ];
-
-        if (is_numeric($leadCode) && (int) $leadCode > 0) {
-            $summary['lead_code'] = (int) $leadCode;
-        }
-
-        return $summary;
+        return $this->positiveInteger(
+            LeadLoversTag::query()
+                ->where('title', $lead->company->name)
+                ->where('active', true)
+                ->value('leadlovers_tag_id')
+        );
     }
 
     private function sequenceCodeForLead(Lead $lead): ?int
     {
-        /*
-        |--------------------------------------------------------------------------
-        | Regra de negócio das sequências
-        |--------------------------------------------------------------------------
-        | Locatário vai para uma sequência própria.
-        | Todos os outros perfis vão para a sequência padrão.
-        */
+        return $this->positiveInteger(
+            $lead->tipo_solicitante === 'locatario'
+                ? config('services.leadlovers.sequence_2')
+                : config('services.leadlovers.sequence_1')
+        );
+    }
 
-        if ($lead->tipo_solicitante === 'locatario') {
-            return (int) config('services.leadlovers.sequence_2');
+    private function loadLead(): Lead
+    {
+        return Lead::query()
+            ->with([
+                'company',
+                'endereco',
+                'imobiliariaInformada',
+                'conjuge',
+                'despesas',
+            ])
+            ->findOrFail($this->leadId);
+    }
 
+    private function currentPhase(Lead $lead): ?string
+    {
+        $phase = is_array($lead->leadlovers_response)
+            ? $lead->leadlovers_response['phase'] ?? null
+            : null;
+
+        return is_string($phase) ? $phase : null;
+    }
+
+    private function currentReconciliationReason(Lead $lead): ?string
+    {
+        $reason = is_array($lead->leadlovers_response)
+            ? $lead->leadlovers_response['reconciliation_reason'] ?? null
+            : null;
+
+        return is_string($reason) ? $reason : null;
+    }
+
+    private function encryptCreationEmail(string $email): ?string
+    {
+        try {
+            return Crypt::encryptString($email);
+        } catch (Throwable) {
+            return null;
+        }
+    }
+
+    private function storedCreationEmail(Lead $lead): ?string
+    {
+        $encrypted = is_array($lead->leadlovers_response)
+            ? $lead->leadlovers_response['creation_email_encrypted'] ?? null
+            : null;
+
+        if (! is_string($encrypted) || $encrypted === '') {
+            return null;
         }
 
-        return (int) config('services.leadlovers.sequence_1');
+        try {
+            $email = trim(Crypt::decryptString($encrypted));
+        } catch (Throwable) {
+            return null;
+        }
+
+        return $email !== ''
+            && filter_var($email, FILTER_VALIDATE_EMAIL) !== false
+                ? $email
+                : null;
+    }
+
+    private function hasStoredCreationEmail(Lead $lead): bool
+    {
+        return is_array($lead->leadlovers_response)
+            && array_key_exists(
+                'creation_email_encrypted',
+                $lead->leadlovers_response
+            );
+    }
+
+    private function isEmailExists(LeadLoversApiException $exception): bool
+    {
+        return $exception->statusCode === 400
+            && mb_strtoupper((string) $exception->errorCode) === 'EMAIL_EXISTS';
+    }
+
+    private function isActiveMachineCopy(
+        LeadLoversApiException $exception
+    ): bool {
+        return $exception->statusCode === 409
+            && mb_strtoupper((string) $exception->errorCode)
+                === 'ACTIVE_COPY_BETWEEN_MACHINES';
+    }
+
+    private function confirmationDelay(): int
+    {
+        $base = max(
+            1,
+            (int) config(
+                'services.leadlovers.machine_confirmation_delay_seconds',
+                15
+            )
+        );
+        $maximum = max(
+            $base,
+            (int) config(
+                'services.leadlovers.rate_limit_max_retry_seconds',
+                900
+            )
+        );
+        $multiplier = 2 ** min(max(0, $this->attempts() - 1), 5);
+
+        return min($maximum, $base * $multiplier);
+    }
+
+    private function positiveInteger(mixed $value): ?int
+    {
+        if (is_int($value)) {
+            return $value > 0 ? $value : null;
+        }
+
+        if (! is_string($value) || preg_match('/\A[1-9]\d*\z/', $value) !== 1) {
+            return null;
+        }
+
+        $integer = filter_var($value, FILTER_VALIDATE_INT);
+
+        return is_int($integer) && $integer > 0 ? $integer : null;
+    }
+
+    private function configuredInteger(mixed $value): ?int
+    {
+        if (is_int($value)) {
+            return $value;
+        }
+
+        if (! is_string($value) || preg_match('/\A-?\d+\z/', $value) !== 1) {
+            return null;
+        }
+
+        $integer = filter_var($value, FILTER_VALIDATE_INT);
+
+        return is_int($integer) ? $integer : null;
+    }
+
+    private function nullableString(mixed $value): ?string
+    {
+        return $value === null ? null : trim((string) $value);
+    }
+
+    /**
+     * @param  array{machine_id: int, sequence_id: int, level: int}  $machine
+     */
+    private function machineProgress(int $remoteLeadId, array $machine): array
+    {
+        return [
+            'lead_id' => $remoteLeadId,
+            'machine' => [
+                'machine_id' => $machine['machine_id'],
+                'sequence_id' => $machine['sequence_id'],
+                'level' => $machine['level'],
+            ],
+        ];
     }
 }
