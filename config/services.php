@@ -52,6 +52,7 @@ return [
     'leadlovers' => [
         'enabled' => env('LEADLOVERS_ENABLED', false),
         'base_url' => env('LEADLOVERS_BASE_URL', 'https://llapi.leadlovers.com/webapi/'),
+        'api_url' => env('LEADLOVERS_API_URL', 'https://api.leadlovers.com'),
         'email' => env('LEADLOVERS_EMAIL'),
         'token' => env('LEADLOVERS_TOKEN'),
         'machine' => env('LEADLOVERS_MACHINE'),
