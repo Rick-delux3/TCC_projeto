@@ -58,31 +58,113 @@ class LeadReanalysisService
                 ? trim($lead->email)
                 : '';
             $submittedValue = static fn (string $field, mixed $current): mixed => array_key_exists($field, $data) ? $data[$field] : $current;
+            $normalizeNullableString = static function (mixed $value): ?string {
+                if ($value === null) {
+                    return null;
+                }
+
+                $value = trim((string) $value);
+
+                return $value === '' ? null : $value;
+            };
+            $normalizeNullableDecimal = static function (mixed $value): ?string {
+                if ($value === null) {
+                    return null;
+                }
+
+                if (is_string($value)) {
+                    $value = trim($value);
+
+                    if ($value === '') {
+                        return null;
+                    }
+                }
+
+                return number_format((float) $value, 2, '.', '');
+            };
+            $submittedStringValue = static function (
+                string $field,
+                mixed $current
+            ) use ($data, $normalizeNullableString): mixed {
+                return array_key_exists($field, $data)
+                    ? $normalizeNullableString($data[$field])
+                    : $current;
+            };
+            $submittedStringChanged = static function (
+                string $field,
+                mixed $before,
+                mixed $after
+            ) use ($data, $normalizeNullableString): bool {
+                return array_key_exists($field, $data)
+                    && $normalizeNullableString($before)
+                        !== $normalizeNullableString($after);
+            };
+            $submittedDecimalChanged = static function (
+                string $field,
+                mixed $before,
+                mixed $after
+            ) use ($data, $normalizeNullableDecimal): bool {
+                return array_key_exists($field, $data)
+                    && $normalizeNullableDecimal($before)
+                        !== $normalizeNullableDecimal($after);
+            };
+            $hasMeaningfulValue = static function (array $values): bool {
+                foreach ($values as $value) {
+                    if (filled($value)) {
+                        return true;
+                    }
+                }
+
+                return false;
+            };
+            $originalRemoteValues = [
+                'name' => $lead->nome,
+                'phone' => $lead->tel,
+                'cpf' => $lead->cpf,
+                'estado_civil' => $lead->estado_civil,
+                'city' => $lead->endereco?->cidade_imovel,
+                'state' => $lead->endereco?->estado,
+                'conjuge_cpf' => $lead->conjuge?->cpf,
+                'valor_aluguel' => $lead->despesas?->valor_aluguel,
+                'valor_agua' => $lead->despesas?->valor_agua,
+                'valor_luz' => $lead->despesas?->valor_luz,
+                'valor_gas' => $lead->despesas?->valor_gas,
+                'valor_condominio' => $lead->despesas?->valor_condominio,
+                'valor_iptu' => $lead->despesas?->valor_iptu,
+                'outras_despesas' => $lead->despesas?->outras_despesas,
+            ];
+            $hadEndereco = $lead->endereco !== null;
+            $hadDespesas = $lead->despesas !== null;
+            $hadConjuge = $lead->conjuge !== null;
 
             $lead->fill([
                 'nome' => $data['nome'] ?? $lead->nome,
-                'tel' => $submittedValue('tel', $lead->tel),
-                'cpf' => $submittedValue('cpf', $lead->cpf),
-                'tipo_solicitante' => $submittedValue('tipo_solicitante', $lead->tipo_solicitante),
-                'estado_civil' => $submittedValue('estado_civil', $lead->estado_civil),
+                'tel' => $submittedStringValue('tel', $lead->tel),
+                'cpf' => $submittedStringValue('cpf', $lead->cpf),
+                'tipo_solicitante' => $submittedStringValue('tipo_solicitante', $lead->tipo_solicitante),
+                'estado_civil' => $submittedStringValue('estado_civil', $lead->estado_civil),
             ]);
 
             $endereco = $lead->endereco ?: $lead->endereco()->make();
             $endereco->fill([
-                'cep' => $submittedValue('cep', $endereco->cep),
-                'estado' => $submittedValue('estado', $endereco->estado),
-                'cidade_imovel' => $submittedValue('cidade_imovel', $endereco->cidade_imovel),
-                'bairro' => $submittedValue('bairro', $endereco->bairro),
-                'logradouro' => $submittedValue('logradouro', $endereco->logradouro),
-                'numero' => $submittedValue('numero', $endereco->numero),
-                'complemento' => $submittedValue('complemento', $endereco->complemento),
+                'cep' => $submittedStringValue('cep', $endereco->cep),
+                'estado' => $submittedStringValue('estado', $endereco->estado),
+                'cidade_imovel' => $submittedStringValue('cidade_imovel', $endereco->cidade_imovel),
+                'bairro' => $submittedStringValue('bairro', $endereco->bairro),
+                'logradouro' => $submittedStringValue('logradouro', $endereco->logradouro),
+                'numero' => $submittedStringValue('numero', $endereco->numero),
+                'complemento' => $submittedStringValue('complemento', $endereco->complemento),
             ]);
 
             $despesas = $lead->despesas ?: $lead->despesas()->make();
-            $numericValue = static function (string $field, mixed $current) use ($submittedValue): ?float {
+            $numericValue = static function (
+                string $field,
+                mixed $current
+            ) use ($submittedValue, $normalizeNullableDecimal): ?float {
                 $value = $submittedValue($field, $current);
+                $value = $normalizeNullableDecimal($value);
 
-                return $value === null || $value === ''
+                return $value === null
                     ? null
                     : (float) $value;
             };
@@ -113,42 +195,120 @@ class LeadReanalysisService
 
             $conjuge = $lead->conjuge ?: $lead->conjuge()->make();
             $conjuge->fill([
-                'nome' => $submittedValue('conjuge_nome', $conjuge->nome),
-                'cpf' => $submittedValue('conjuge_cpf', $conjuge->cpf),
+                'nome' => $submittedStringValue('conjuge_nome', $conjuge->nome),
+                'cpf' => $submittedStringValue('conjuge_cpf', $conjuge->cpf),
             ]);
 
             $leadChanged = $lead->isDirty();
-            $enderecoChanged = $endereco->isDirty();
-            $despesasChanged = $despesas->isDirty();
-            $conjugeChanged = $conjuge->isDirty();
+            $enderecoChanged = $hadEndereco
+                ? $endereco->isDirty()
+                : $hasMeaningfulValue($endereco->only([
+                    'cep',
+                    'estado',
+                    'cidade_imovel',
+                    'bairro',
+                    'logradouro',
+                    'numero',
+                    'complemento',
+                ]));
+            $despesasChanged = $hadDespesas
+                ? $despesas->isDirty()
+                : $hasMeaningfulValue($despesas->only([
+                    'valor_aluguel',
+                    'valor_agua',
+                    'valor_luz',
+                    'valor_gas',
+                    'valor_condominio',
+                    'valor_iptu',
+                    'outras_despesas',
+                ]));
+            $conjugeChanged = $hadConjuge
+                ? $conjuge->isDirty()
+                : $hasMeaningfulValue($conjuge->only(['nome', 'cpf']));
             $requestedLeadLoversFields = $this->normalizeLeadLoversUpdateFields([
-                array_key_exists('nome', $data) && $lead->isDirty('nome')
+                $submittedStringChanged(
+                    'nome',
+                    $originalRemoteValues['name'],
+                    $lead->nome
+                )
                     ? 'name' : null,
-                array_key_exists('tel', $data) && $lead->isDirty('tel')
+                $submittedStringChanged(
+                    'tel',
+                    $originalRemoteValues['phone'],
+                    $lead->tel
+                )
                     ? 'phone' : null,
-                array_key_exists('cpf', $data) && $lead->isDirty('cpf')
+                $submittedStringChanged(
+                    'cpf',
+                    $originalRemoteValues['cpf'],
+                    $lead->cpf
+                )
                     ? 'cpf' : null,
-                array_key_exists('estado_civil', $data) && $lead->isDirty('estado_civil')
+                $submittedStringChanged(
+                    'estado_civil',
+                    $originalRemoteValues['estado_civil'],
+                    $lead->estado_civil
+                )
                     ? 'estado_civil' : null,
-                array_key_exists('cidade_imovel', $data) && $endereco->isDirty('cidade_imovel')
+                $submittedStringChanged(
+                    'cidade_imovel',
+                    $originalRemoteValues['city'],
+                    $endereco->cidade_imovel
+                )
                     ? 'city' : null,
-                array_key_exists('estado', $data) && $endereco->isDirty('estado')
+                $submittedStringChanged(
+                    'estado',
+                    $originalRemoteValues['state'],
+                    $endereco->estado
+                )
                     ? 'state' : null,
-                array_key_exists('valor_aluguel', $data) && $despesas->isDirty('valor_aluguel')
+                $submittedDecimalChanged(
+                    'valor_aluguel',
+                    $originalRemoteValues['valor_aluguel'],
+                    $valorAluguel
+                )
                     ? 'valor_aluguel' : null,
-                array_key_exists('valor_agua', $data) && $despesas->isDirty('valor_agua')
+                $submittedDecimalChanged(
+                    'valor_agua',
+                    $originalRemoteValues['valor_agua'],
+                    $valorAgua
+                )
                     ? 'valor_agua' : null,
-                array_key_exists('valor_luz', $data) && $despesas->isDirty('valor_luz')
+                $submittedDecimalChanged(
+                    'valor_luz',
+                    $originalRemoteValues['valor_luz'],
+                    $valorLuz
+                )
                     ? 'valor_luz' : null,
-                array_key_exists('valor_gas', $data) && $despesas->isDirty('valor_gas')
+                $submittedDecimalChanged(
+                    'valor_gas',
+                    $originalRemoteValues['valor_gas'],
+                    $valorGas
+                )
                     ? 'valor_gas' : null,
-                array_key_exists('valor_condominio', $data) && $despesas->isDirty('valor_condominio')
+                $submittedDecimalChanged(
+                    'valor_condominio',
+                    $originalRemoteValues['valor_condominio'],
+                    $valorCondominio
+                )
                     ? 'valor_condominio' : null,
-                array_key_exists('valor_iptu', $data) && $despesas->isDirty('valor_iptu')
+                $submittedDecimalChanged(
+                    'valor_iptu',
+                    $originalRemoteValues['valor_iptu'],
+                    $valorIptu
+                )
                     ? 'valor_iptu' : null,
-                array_key_exists('outras_despesas', $data) && $despesas->isDirty('outras_despesas')
+                $submittedDecimalChanged(
+                    'outras_despesas',
+                    $originalRemoteValues['outras_despesas'],
+                    $outrasDespesas
+                )
                     ? 'outras_despesas' : null,
-                array_key_exists('conjuge_cpf', $data) && $conjuge->isDirty('cpf')
+                $submittedStringChanged(
+                    'conjuge_cpf',
+                    $originalRemoteValues['conjuge_cpf'],
+                    $conjuge->cpf
+                )
                     ? 'conjuge_cpf' : null,
             ]);
 

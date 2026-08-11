@@ -5,12 +5,18 @@ namespace App\Services;
 use App\Exceptions\LeadLoversRateLimitedException;
 use Closure;
 use Illuminate\Http\Client\Response;
+use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\RateLimiter;
+use Throwable;
 
 class LeadLoversService
 {
+    private const UNKNOWN_PROVIDER_ERROR_MESSAGE = 'A LeadLovers retornou uma mensagem de erro não classificada.';
+
+    private const PROVIDER_DIAGNOSTIC_MAX_BYTES = 2048;
+
     private string $baseUrl;
 
     private ?string $token;
@@ -461,15 +467,27 @@ class LeadLoversService
             }
 
             $json = is_array($decodedResponse) ? $decodedResponse : [];
+            $bodyStatusPresent = array_key_exists('StatusCode', $json)
+                || array_key_exists('statusCode', $json)
+                || array_key_exists('status', $json);
             $bodyStatus = $this->responseStatusCode($json);
-            $status = $response->successful() && $bodyStatus !== null
-                ? $bodyStatus
-                : $httpStatus;
+            $bodyStatusInvalid = $bodyStatusPresent && $bodyStatus === null;
+            $status = $bodyStatusInvalid
+                ? 502
+                : ($response->successful() && $bodyStatus !== null
+                    ? $bodyStatus
+                    : $httpStatus);
             $success = $response->successful()
+                && ! $bodyStatusInvalid
                 && ! $this->responseBodyExplicitlyFailed($json);
             $responseMessage = $this->sanitizedProviderMessage(
                 $json,
                 $success
+            );
+            $providerDiagnostic = $this->providerDiagnostic(
+                $json,
+                $success,
+                $responseMessage
             );
 
             if (! $success) {
@@ -498,6 +516,10 @@ class LeadLoversService
                     'response_keys_count' => count($json),
                     'response_body_bytes' => strlen($response->body()),
                     'response_message' => $responseMessage,
+                    'provider_error_classification' => $providerDiagnostic['classification']
+                        ?? null,
+                    'provider_error_fingerprint' => $providerDiagnostic['fingerprint']
+                        ?? null,
                 ]);
             }
 
@@ -509,6 +531,7 @@ class LeadLoversService
                 'raw_body' => null,
                 'payload' => [],
                 'response_message' => $responseMessage,
+                'provider_diagnostic' => $providerDiagnostic,
                 'error' => $success
                     ? null
                     : 'A LeadLovers recusou a atualização.',
@@ -540,7 +563,30 @@ class LeadLoversService
             ?? $response['status']
             ?? null;
 
-        return is_numeric($status) ? (int) $status : null;
+        return $this->normalizedStatusCode($status);
+    }
+
+    private function normalizedStatusCode(mixed $status): ?int
+    {
+        if (is_string($status)) {
+            $status = trim($status);
+        }
+
+        if (
+            ! is_int($status)
+            && (! is_string($status) || ! ctype_digit($status))
+        ) {
+            return null;
+        }
+
+        $normalized = filter_var($status, FILTER_VALIDATE_INT, [
+            'options' => [
+                'min_range' => 100,
+                'max_range' => 599,
+            ],
+        ]);
+
+        return $normalized === false ? null : $normalized;
     }
 
     private function sanitizedProviderMessage(
@@ -598,6 +644,77 @@ class LeadLoversService
             str_contains($normalized, 'validation') => 'A LeadLovers informou dados inválidos.',
             default => 'A LeadLovers retornou uma mensagem de erro não classificada.',
         };
+    }
+
+    private function providerDiagnostic(
+        array $response,
+        bool $success,
+        ?string $responseMessage
+    ): ?array {
+        if (
+            $success
+            || $responseMessage !== self::UNKNOWN_PROVIDER_ERROR_MESSAGE
+        ) {
+            return null;
+        }
+
+        $message = $response['Message']
+            ?? $response['message']
+            ?? $response['Error']
+            ?? $response['error']
+            ?? $response['Exception']
+            ?? $response['exception']
+            ?? null;
+
+        if (! is_scalar($message) || is_bool($message)) {
+            return null;
+        }
+
+        $message = (string) $message;
+
+        if (trim($message) === '') {
+            return null;
+        }
+
+        $appKey = (string) config('app.key', '');
+
+        if ($appKey === '') {
+            Log::warning('Diagnóstico do erro da LeadLovers não foi capturado porque a chave da aplicação está ausente.');
+
+            return null;
+        }
+
+        $capturedMessage = mb_strcut(
+            $message,
+            0,
+            self::PROVIDER_DIAGNOSTIC_MAX_BYTES,
+            'UTF-8'
+        );
+        $diagnostic = [
+            'version' => 1,
+            'classification' => 'unclassified_provider_error',
+            'fingerprint' => hash_hmac(
+                'sha256',
+                "leadlovers-provider-diagnostic:v1\0".$message,
+                $appKey
+            ),
+            'message_bytes' => strlen($message),
+            'captured_bytes' => strlen($capturedMessage),
+            'truncated' => strlen($capturedMessage) < strlen($message),
+        ];
+
+        try {
+            $diagnostic['ciphertext'] = Crypt::encryptString(
+                $capturedMessage
+            );
+        } catch (Throwable $exception) {
+            Log::warning('Falha ao criptografar diagnóstico do erro da LeadLovers.', [
+                'provider_error_fingerprint' => $diagnostic['fingerprint'],
+                'exception' => $exception::class,
+            ]);
+        }
+
+        return $diagnostic;
     }
 
     private function responseBodyExplicitlyFailed(array $response): bool
@@ -735,7 +852,14 @@ class LeadLoversService
 
             $this->throwIfRateLimited($response);
 
+            $decodedResponse = $response->json();
+            $providerStatusData = $this->leadLookupProviderStatusData(
+                is_array($decodedResponse) ? $decodedResponse : []
+            );
             $result = $this->responseData($response);
+            $result['_http_status'] = $response->status();
+            $result['_provider_statuses'] = $providerStatusData['statuses'];
+            $result['_provider_status_invalid'] = $providerStatusData['invalid'];
 
             if (! $response->successful()) {
                 Log::warning('LeadLovers respondeu erro ao consultar lead por e-mail', [
@@ -976,7 +1100,7 @@ class LeadLoversService
         $data = is_array($data) ? $data : [];
 
         $bodyStatus = $data['StatusCode'] ?? $data['statusCode']
-        ?? $data['status'] ?? null;
+            ?? $data['status'] ?? null;
 
         if (! $response->successful()) {
             $data['StatusCode'] = $response->status();
@@ -993,6 +1117,61 @@ class LeadLoversService
         }
 
         return $data;
+    }
+
+    private function leadLookupProviderStatusData(array $response): array
+    {
+        $records = [$response];
+
+        foreach ($response as $key => $value) {
+            if (is_int($key) && is_array($value)) {
+                $records[] = $value;
+            }
+        }
+
+        foreach (['Data', 'Result', 'Lead', 'Items'] as $key) {
+            $candidate = $response[$key] ?? null;
+
+            if (! is_array($candidate)) {
+                continue;
+            }
+
+            $records = array_merge(
+                $records,
+                array_is_list($candidate) ? $candidate : [$candidate]
+            );
+        }
+
+        $statuses = [];
+        $invalid = false;
+
+        foreach ($records as $record) {
+            if (! is_array($record)) {
+                continue;
+            }
+
+            foreach (['StatusCode', 'statusCode'] as $key) {
+                if (! array_key_exists($key, $record)) {
+                    continue;
+                }
+
+                $status = $this->normalizedStatusCode($record[$key]);
+
+                if ($status === null) {
+                    $invalid = true;
+                } else {
+                    $statuses[$status] = true;
+                }
+            }
+        }
+
+        return [
+            'statuses' => array_map(
+                'intval',
+                array_keys($statuses)
+            ),
+            'invalid' => $invalid,
+        ];
     }
 
     private function responseConfirmsLeadCreation(Response $response): bool
