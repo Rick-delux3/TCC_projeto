@@ -407,7 +407,27 @@ class SendLeadToLeadLoversJob implements ShouldQueue
                 $this->retryOrFail(
                     'machine_confirmation',
                     null,
-                    'A associacao do lead a maquina nao foi confirmada a tempo.'
+                    'A associacao do lead a maquina nao foi confirmada a tempo.',
+                    [
+                        'expected_machine' => $machine,
+
+                        'remote_machine_count' => count($machines),
+
+                        'remote_machines' => collect($machines)
+                            ->take(10)
+                            ->map(fn (array $remoteMachines): array => [
+                                'machine_id' => $remoteMachines['id'] ?? null,
+                                'level' => $remoteMachines['level'] ?? null,
+                                'sequence_id' => data_get(
+                                    $remoteMachines,
+                                    'sequence.id'
+                                ),
+
+                                'status' => $remoteMachines['status'] ?? null,
+                            ])
+                            ->values()
+                            ->all(),
+                    ]
                 );
 
                 return;
@@ -432,7 +452,7 @@ class SendLeadToLeadLoversJob implements ShouldQueue
         }
 
         try {
-            $action = $leadLovers->addLeadToMachine([
+            $action = $leadLovers->moveLeadsToMachine([
                 'machineFrom' => 0,
                 'machineId' => $machine['machine_id'],
                 'sequenceId' => $machine['sequence_id'],
@@ -570,10 +590,7 @@ class SendLeadToLeadLoversJob implements ShouldQueue
                 ->afterCommit()
                 ->delay(now()->addSeconds(max(
                     1,
-                    (int) config(
-                        'services.leadlovers.initial_update_delay_seconds',
-                        60
-                    )
+                    (int) config('services.leadlovers.initial_update_delay_seconds', 60)
                 )));
             Bus::dispatch($job);
         } catch (Throwable $exception) {
@@ -975,7 +992,8 @@ class SendLeadToLeadLoversJob implements ShouldQueue
     private function retryOrFail(
         string $operation,
         ?LeadLoversApiException $exception,
-        string $exhaustedMessage
+        string $exhaustedMessage,
+        array $diagnosticContext = []
     ): void {
         if ($this->attempts() >= $this->tries) {
             $this->permanentlyFail(
@@ -990,14 +1008,19 @@ class SendLeadToLeadLoversJob implements ShouldQueue
         $delay = $exception?->retryAfterSeconds
             ?? $this->confirmationDelay();
 
-        Log::notice('Envio inicial devolvido a fila para conciliacao.', [
-            'lead_id' => $this->leadId,
-            'operation' => $operation,
-            'attempt' => $this->attempts(),
-            'retry_after' => $delay,
-            'status_code' => $exception?->statusCode,
-            'error_code' => $exception?->errorCode,
-        ]);
+        Log::notice('Envio inicial devolvido a fila para conciliacao.',
+            array_merge(
+                $diagnosticContext,
+                [
+                    'lead_id' => $this->leadId,
+                    'operation' => $operation,
+                    'attempt' => $this->attempts(),
+                    'retry_after' => $delay,
+                    'status_code' => $exception?->statusCode,
+                    'error_code' => $exception?->errorCode,
+                ]
+            ) 
+        );
 
         $this->release($delay);
     }

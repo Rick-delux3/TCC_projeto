@@ -30,7 +30,6 @@ function stageFourLead(array $overrides = []): Lead
         'email' => 'person@example.test',
         'tel' => '(11) 99999-0000',
         'leadlovers_status' => 'sent',
-        'leadlovers_lead_code' => '100001',
         'leadlovers_lead_id' => 501,
         'sent_to_leadlovers_at' => now()->subMinutes(5),
         'leadlovers_update_status' => 'pending',

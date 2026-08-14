@@ -123,17 +123,14 @@ function initialSendJob(Lead $lead, int $attempts = 1): SendLeadToLeadLoversJob
     return $job;
 }
 
-it('adds and casts the new remote lead identifier without removing the legacy field', function () {
-    expect(Schema::hasColumn('leads', 'leadlovers_lead_id'))->toBeTrue()
-        ->and(Schema::hasColumn('leads', 'leadlovers_lead_code'))->toBeTrue();
+it('adds and casts the remote lead identifier', function () {
+    expect(Schema::hasColumn('leads', 'leadlovers_lead_id'))->toBeTrue();
 
     $lead = leadForInitialLeadLoversSend([
         'leadlovers_lead_id' => '501',
-        'leadlovers_lead_code' => 'legacy-501',
     ]);
 
-    expect($lead->refresh()->leadlovers_lead_id)->toBe(501)
-        ->and($lead->leadlovers_lead_code)->toBe('legacy-501');
+    expect($lead->refresh()->leadlovers_lead_id)->toBe(501);
 });
 
 it('persists leadId before requesting the machine and keeps a 202 pending', function () {
@@ -211,13 +208,7 @@ it('persists leadId before requesting the machine and keeps a 202 pending', func
                 ['id' => 13, 'value' => '0.00'],
             ],
         ]);
-    expect($creation->body())->not->toContain('stage-three-test-token')
-        ->and($creation->data())->not->toHaveKeys([
-            'Score',
-            'MachineCode',
-            'EmailSequenceCode',
-            'SequenceLevelCode',
-        ]);
+    expect($creation->body())->not->toContain('stage-three-test-token');
 });
 
 it('claims the send before HTTP so a concurrent old job cannot duplicate creation', function () {

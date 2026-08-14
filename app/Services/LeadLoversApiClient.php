@@ -159,11 +159,23 @@ final class LeadLoversApiClient
         );
     }
 
-    public function addLeadToMachine(array $payload): array
+    public function copyLeadToMachine(array $payload): array
     {
         return $this->request(
             'POST',
             '/leads/machine',
+            $payload,
+            202,
+            self::JSON_OBJECT,
+            fn (array $body): bool => $this->isBulkAction($body)
+        );
+    }
+
+    public function moveLeadsToMachine(array $payload): array
+    {
+        return $this->request(
+            'POST',
+            '/leads/move',
             $payload,
             202,
             self::JSON_OBJECT,

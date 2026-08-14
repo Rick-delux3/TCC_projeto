@@ -939,7 +939,7 @@ it('enforces the shared local rate limit without blocking the process', function
     Http::assertSentCount(1);
 });
 
-it('shares the local rate budget with the legacy service namespace', function () {
+it('uses the stable token-scoped local rate budget', function () {
     config(['services.leadlovers.requests_per_minute' => 1]);
     RateLimiter::hit(leadLoversStageOneLimiterKey(), 60);
     Http::fake([
