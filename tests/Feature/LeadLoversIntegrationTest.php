@@ -1,2220 +1,577 @@
 <?php
 
-use App\Exceptions\LeadLoversRateLimitedException;
-use App\Jobs\RunProviderAnalysisJob;
-use App\Jobs\SendLeadToLeadLoversJob;
 use App\Jobs\UpdateLeadOnLeadLoversJob;
-use App\Models\Imobiliaria;
 use App\Models\Lead;
-use App\Models\LeadLoversTag;
-use App\Services\LeadLoversService;
+use App\Services\LeadLoversApiClient;
+use App\Services\LeadLoversLeadResolver;
 use App\Services\LeadReanalysisService;
 use Illuminate\Contracts\Queue\Queue as QueueContract;
-use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Request;
-use Illuminate\Queue\Events\JobQueued;
-use Illuminate\Support\Facades\Bus;
-use Illuminate\Support\Facades\Crypt;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Queue;
 
 beforeEach(function () {
     Http::preventStrayRequests();
+    Http::fake([]);
     config([
-        'services.leadlovers.enabled' => false,
-        'services.leadlovers.token' => 'secret-token',
+        'services.leadlovers.enabled' => true,
+        'services.leadlovers.api_url' => 'https://api.leadlovers.test',
+        'services.leadlovers.token' => 'test-token',
+        'features.insurance_analysis.enabled' => false,
     ]);
 });
 
-function leadForLeadLoversUpdate(array $overrides = []): Lead
+function stageFourLead(array $overrides = []): Lead
 {
     return Lead::query()->create(array_merge([
         'tipo_solicitante' => 'locatario',
         'origem' => 'locatario',
         'nome' => 'Pessoa Teste',
         'email' => 'person@example.test',
+        'tel' => '(11) 99999-0000',
         'leadlovers_status' => 'sent',
         'leadlovers_lead_code' => '100001',
+        'leadlovers_lead_id' => 501,
         'sent_to_leadlovers_at' => now()->subMinutes(5),
         'leadlovers_update_status' => 'pending',
         'leadlovers_update_version' => 1,
     ], $overrides));
 }
 
-it('blocks outbound LeadLovers operations while the integration is disabled', function () {
-    $service = app(LeadLoversService::class);
+function stageFourSearchResult(array $records, ?int $total = null): array
+{
+    $total ??= count($records);
 
-    expect($service->updateLead([])['success'])->toBeFalse()
-        ->and($service->addTagToLeadById('person@example.test', 1)['StatusCode'])->toBe(503);
+    return [
+        'total' => $total,
+        'records' => $records,
+        'pagination' => [
+            'current' => 1,
+            'size' => 10,
+            'next' => null,
+            'prev' => null,
+            'pages' => $total === 0 ? 0 : 1,
+        ],
+    ];
+}
 
-    Http::assertNothingSent();
-});
+function stageFourSearchRecord(array $overrides = []): array
+{
+    return array_merge([
+        'id' => 9001,
+        'leadId' => 501,
+        'email' => 'person@example.test',
+        'createdAt' => '2026-08-11T12:00:00Z',
+    ], $overrides);
+}
 
-it('continues synchronizing the LeadLovers tag catalog', function () {
+function runStageFourUpdate(UpdateLeadOnLeadLoversJob $job): void
+{
+    $job->handle(
+        app(LeadLoversApiClient::class),
+        app(LeadLoversLeadResolver::class)
+    );
+}
+
+it('updates a lead by authoritative ID with camelCase fields and without tags or email', function () {
     config([
-        'services.leadlovers.enabled' => true,
-        'services.leadlovers.api_url' => 'https://api.leadlovers.test',
+        'services.leadlovers.dynamic_fields.cpf' => 101,
+    ]);
+    $lead = stageFourLead(['cpf' => '12345678900']);
+    $lead->endereco()->create([
+        'cidade_imovel' => 'Curitiba',
+        'estado' => 'PR',
     ]);
     Http::fake([
-        'https://api.leadlovers.test/tags/' => Http::response([[
-            'id' => 444,
-            'name' => 'Imobiliária Oficial',
-            'createdAt' => '2026-08-11T12:00:00Z',
-        ]]),
+        'https://api.leadlovers.test/leads/501' => Http::response([
+            'success' => true,
+        ]),
     ]);
 
-    $this->artisan('leadlovers:sync-tags')->assertSuccessful();
+    runStageFourUpdate(new UpdateLeadOnLeadLoversJob(
+        leadId: $lead->id,
+        syncVersion: 1,
+        requestedFields: ['name', 'phone', 'city', 'state', 'cpf'],
+    ));
 
-    $this->assertDatabaseHas('lead_lovers_tags', [
-        'leadlovers_tag_id' => 444,
-        'title' => 'Imobiliária Oficial',
-        'key' => 'imobiliaria_oficial',
-        'active' => true,
-    ]);
-});
-
-it('queues a safe initial retry after a pre-HTTP configuration failure', function () {
-    Queue::fake();
-    config([
-        'services.leadlovers.enabled' => true,
-        'features.insurance_analysis.enabled' => false,
-    ]);
-    $lead = Lead::create([
-        'tipo_solicitante' => 'locatario',
-        'origem' => 'locatario',
-        'nome' => 'Nome anterior',
-        'email' => 'safe-initial-retry@example.test',
-        'leadlovers_status' => 'sequence_failed',
-        'leadlovers_update_status' => 'idle',
-    ]);
-
-    app(LeadReanalysisService::class)->updateLeadDataAndMaybeUnlock(
-        $lead,
-        ['nome' => 'Nome atualizado']
-    );
-
-    Queue::assertPushed(
-        SendLeadToLeadLoversJob::class,
-        fn (SendLeadToLeadLoversJob $job): bool => $job->leadId === $lead->id
-            && $job->queue === 'leadlovers'
-            && $job->afterCommit === true
-    );
-    expect($lead->refresh())
-        ->leadlovers_status->toBe('pending')
-        ->leadlovers_update_status->toBe('waiting_initial_send')
-        ->and($lead->leadlovers_update_response['requested_fields'])
-        ->toBe(['name']);
-});
-
-it('does not repeat an initial send interrupted in an ambiguous processing state', function () {
-    Queue::fake();
-    config([
-        'services.leadlovers.enabled' => false,
-        'features.insurance_analysis.enabled' => false,
-    ]);
-    $lead = Lead::create([
-        'tipo_solicitante' => 'locatario',
-        'origem' => 'locatario',
-        'nome' => 'Nome anterior',
-        'email' => 'disabled-initial@example.test',
-        'leadlovers_status' => 'processing',
-        'leadlovers_update_status' => 'waiting_initial_send',
-        'leadlovers_update_response' => [
-            'requested_fields' => ['name'],
-        ],
-    ]);
-    (new SendLeadToLeadLoversJob($lead->id))->handle(
-        app(\App\Services\LeadLoversApiClient::class)
-    );
-
-    expect($lead->refresh())
-        ->leadlovers_status->toBe('failed')
-        ->leadlovers_update_status->toBe('failed')
-        ->and($lead->leadlovers_response)
-        ->toBe([
-            'success' => false,
-            'phase' => 'failed',
-            'operation' => 'integration_disabled',
-            'status_code' => null,
-        ]);
-
-    config(['services.leadlovers.enabled' => true]);
-    app(LeadReanalysisService::class)->updateLeadDataAndMaybeUnlock(
-        $lead,
-        ['nome' => 'Nome atualizado']
-    );
-
-    expect($lead->refresh())
-        ->leadlovers_status->toBe('failed')
-        ->leadlovers_update_status->toBe('failed')
-        ->leadlovers_update_error->toContain('conciliado')
-        ->and($lead->leadlovers_update_response['requested_fields'])
-        ->toBe(['name']);
-    Queue::assertNotPushed(SendLeadToLeadLoversJob::class);
-});
-
-it('resumes an initial send disabled before any HTTP request', function () {
-    Queue::fake();
-    config([
-        'services.leadlovers.enabled' => false,
-        'features.insurance_analysis.enabled' => false,
-    ]);
-    $lead = Lead::create([
-        'tipo_solicitante' => 'locatario',
-        'origem' => 'locatario',
-        'nome' => 'Nome anterior',
-        'email' => 'disabled-before-http@example.test',
-        'leadlovers_status' => 'pending',
-        'leadlovers_update_status' => 'waiting_initial_send',
-        'leadlovers_update_response' => [
-            'requested_fields' => ['name'],
-        ],
-    ]);
-    (new SendLeadToLeadLoversJob($lead->id))->handle(
-        app(\App\Services\LeadLoversApiClient::class)
-    );
-
-    expect($lead->refresh())
-        ->leadlovers_status->toBe('disabled')
-        ->leadlovers_update_status->toBe('disabled');
-
-    config(['services.leadlovers.enabled' => true]);
-    app(LeadReanalysisService::class)->updateLeadDataAndMaybeUnlock(
-        $lead,
-        ['nome' => 'Nome atualizado']
-    );
-
-    expect($lead->refresh())
-        ->leadlovers_status->toBe('pending')
-        ->leadlovers_update_status->toBe('waiting_initial_send')
-        ->and($lead->leadlovers_update_response['requested_fields'])
-        ->toBe(['name']);
-    Queue::assertPushed(SendLeadToLeadLoversJob::class);
-});
-
-it('returns a rate-limited lead update job to the queue', function () {
-    config(['services.leadlovers.enabled' => true]);
-
-    $lead = leadForLeadLoversUpdate();
-
-    $service = Mockery::mock(LeadLoversService::class);
-    $service->shouldReceive('updateLead')
-        ->once()
-        ->andThrow(new LeadLoversRateLimitedException(30, false));
-
-    $job = (new UpdateLeadOnLeadLoversJob($lead->id, $lead->email, 1, ['name']))
-        ->withFakeQueueInteractions();
-    $job->handle($service);
-
-    $job->assertReleased(30);
+    Http::assertSent(function (Request $request): bool {
+        return $request->method() === 'PUT'
+            && $request->url() === 'https://api.leadlovers.test/leads/501'
+            && $request->hasHeader('x-api-token', 'test-token')
+            && parse_url($request->url(), PHP_URL_QUERY) === null
+            && $request->data() === [
+                'staticFields' => [
+                    'name' => 'Pessoa Teste',
+                    'phone' => '11999990000',
+                    'city' => 'Curitiba',
+                    'state' => 'PR',
+                ],
+                'dynamicFields' => [[
+                    'id' => 101,
+                    'value' => '12345678900',
+                ]],
+            ]
+            && ! array_key_exists('tags', $request->data())
+            && ! array_key_exists('email', $request->data());
+    });
     expect($lead->refresh())
         ->leadlovers_status->toBe('sent')
-        ->leadlovers_update_status->toBe('processing');
+        ->leadlovers_update_status->toBe('synced')
+        ->leadlovers_lead_id->toBe(501)
+        ->leadlovers_update_at->not->toBeNull();
 });
 
-it('propagates rate limits from queued LeadLovers operations', function (string $method, array $arguments) {
-    config(['services.leadlovers.enabled' => true]);
-    Http::fake(['*' => Http::response('error code: 1015', 429, ['Retry-After' => '30'])]);
-
-    $exception = null;
-
-    try {
-        app(LeadLoversService::class)->{$method}(...$arguments);
-    } catch (LeadLoversRateLimitedException $e) {
-        $exception = $e;
-    }
-
-    expect($exception)->toBeInstanceOf(LeadLoversRateLimitedException::class)
-        ->and($exception->retryAfter)->toBe(30)
-        ->and($exception->cloudflareBlocked)->toBeTrue();
-    Http::assertSentCount(1);
-})->with([
-    'update lead' => ['updateLead', [[
-        'Email' => 'person@example.test',
-        'Name' => 'Pessoa Teste',
-    ]]],
-    'add tag' => ['addTagToLeadById', ['person@example.test', 1]],
-]);
-
-it('preserves the HTTP error status when a tag response has an empty or misleading body', function (array $body) {
-    config(['services.leadlovers.enabled' => true]);
+it('sends null when a changed static field was cleared', function () {
+    $lead = stageFourLead(['tel' => null]);
     Http::fake([
-        '*' => Http::response($body, 500),
+        'https://api.leadlovers.test/leads/501' => Http::response([
+            'success' => true,
+        ]),
     ]);
 
-    $tagResponse = app(LeadLoversService::class)
-        ->addTagToLeadById('person@example.test', 1);
-
-    expect($tagResponse['StatusCode'])->toBe(500);
-    Http::assertSentCount(1);
-})->with([
-    'empty body' => [[]],
-    'misleading status' => [['StatusCode' => 200]],
-]);
-
-it('fails closed when an update response contains a malformed provider status', function () {
-    config([
-        'services.leadlovers.enabled' => true,
-        'services.leadlovers.base_url' => 'https://example.test/webapi/',
-        'services.leadlovers.token' => 'test-token',
-    ]);
-    Http::fake([
-        '*' => Http::response([
-            'StatusCode' => '500.9',
-            'Success' => true,
-        ], 200),
-    ]);
-
-    $result = app(LeadLoversService::class)->updateLead([
-        'Email' => 'person@example.test',
-        'Name' => 'Pessoa Teste',
-    ]);
-
-    expect($result)
-        ->success->toBeFalse()
-        ->status->toBe(502)
-        ->http_status->toBe(200);
-    Http::assertSentCount(1);
-});
-
-it('prevents the tags command from calling HTTP while disabled', function () {
-    $this->artisan('leadlovers:sync-tags')->assertFailed();
-    Http::assertNothingSent();
-});
-
-it('sends lead updates with PATCH, the query token, and the required Email', function () {
-    config([
-        'services.leadlovers.enabled' => true,
-        'services.leadlovers.base_url' => 'https://example.test/webapi/',
-        'services.leadlovers.token' => 'test-token',
-    ]);
-
-    Http::fake([
-        '*' => Http::response([
-            'StatusCode' => 200,
-            'Success' => true,
-        ], 200),
-    ]);
-
-    $result = app(LeadLoversService::class)->updateLead([
-        'Email' => 'person@example.test',
-        'Name' => 'Pessoa Teste',
-        'Phone' => '',
-        'DynamicFields' => [
-            ['Id' => 10, 'Value' => '123'],
-        ],
-    ]);
-
-    expect($result)
-        ->success->toBeTrue()
-        ->status->toBe(200)
-        ->http_status->toBe(200);
-
-    Http::assertSent(function (Request $request): bool {
-        $query = [];
-        parse_str((string) parse_url($request->url(), PHP_URL_QUERY), $query);
-
-        return $request->method() === 'PATCH'
-            && parse_url($request->url(), PHP_URL_PATH) === '/webapi/Lead'
-            && ($query['token'] ?? null) === 'test-token'
-            && ($request['Email'] ?? null) === 'person@example.test'
-            && ($request['Name'] ?? null) === 'Pessoa Teste'
-            && ($request['DynamicFields'][0]['Id'] ?? null) === 10
-            && ! array_key_exists('Phone', $request->data())
-            && ! array_key_exists('token', $request->data());
-    });
-});
-
-it('waits until a newly sent lead is remotely queryable before PATCH', function () {
-    config([
-        'services.leadlovers.enabled' => true,
-        'services.leadlovers.base_url' => 'https://example.test/webapi/',
-        'services.leadlovers.token' => 'test-token',
-    ]);
-    $lead = leadForLeadLoversUpdate([
-        'leadlovers_lead_code' => null,
-    ]);
-    Http::fake([
-        '*' => Http::response([
-            'Message' => 'Novo lead inserido na fila para processamento',
-        ], 200),
-    ]);
-    $job = new UpdateLeadOnLeadLoversJob(
+    runStageFourUpdate(new UpdateLeadOnLeadLoversJob(
         $lead->id,
-        $lead->email,
+        1,
+        ['phone']
+    ));
+
+    Http::assertSent(
+        fn (Request $request): bool => $request->data() === [
+            'staticFields' => ['phone' => null],
+        ]
+    );
+    expect($lead->refresh()->leadlovers_update_status)->toBe('synced');
+});
+
+it('fails closed without HTTP when a dynamic field is cleared', function () {
+    config(['services.leadlovers.dynamic_fields.cpf' => 101]);
+    $lead = stageFourLead(['cpf' => null]);
+
+    runStageFourUpdate(new UpdateLeadOnLeadLoversJob(
+        $lead->id,
+        1,
+        ['cpf']
+    ));
+
+    Http::assertNothingSent();
+    expect($lead->refresh())
+        ->leadlovers_update_status->toBe('failed')
+        ->and($lead->leadlovers_update_response)->toMatchArray([
+            'operation' => 'local_preflight',
+            'requested_fields' => ['cpf'],
+            'unsupported_fields' => ['cpf'],
+        ]);
+});
+
+it('fails locally when a requested dynamic field has no configured ID', function () {
+    config(['services.leadlovers.dynamic_fields.cpf' => null]);
+    $lead = stageFourLead(['cpf' => '12345678900']);
+
+    runStageFourUpdate(new UpdateLeadOnLeadLoversJob(
+        $lead->id,
+        1,
+        ['cpf']
+    ));
+
+    Http::assertNothingSent();
+    expect($lead->refresh())
+        ->leadlovers_update_status->toBe('failed')
+        ->and($lead->leadlovers_update_response['unsupported_fields'])
+        ->toBe(['cpf']);
+});
+
+it('reconciles one old lead by exact email and persists leadId before PUT', function () {
+    $lead = stageFourLead(['leadlovers_lead_id' => null]);
+    Http::fake([
+        'https://api.leadlovers.test/leads/search' => Http::response(
+            stageFourSearchResult([
+                stageFourSearchRecord([
+                    'id' => 123,
+                    'leadId' => 777,
+                ]),
+            ])
+        ),
+        'https://api.leadlovers.test/leads/777' => Http::response([
+            'success' => true,
+        ]),
+    ]);
+
+    runStageFourUpdate(new UpdateLeadOnLeadLoversJob(
+        $lead->id,
         1,
         ['name']
-    );
+    ));
 
-    expect(fn () => $job->handle(app(LeadLoversService::class)))
-        ->toThrow(
-            RuntimeException::class,
-            'O lead ainda não está disponível para atualização na LeadLovers.'
-        );
-
-    $summary = $lead->refresh()->leadlovers_update_response;
-    expect($lead)
-        ->leadlovers_update_status->toBe('processing')
-        ->leadlovers_lead_code->toBeNull()
-        ->and($summary)
-        ->requested_fields->toBe(['name'])
-        ->response_message->toBe('O lead ainda não foi confirmado para atualização na LeadLovers.')
-        ->and($summary['readiness_check'])
-        ->toBe([
-            'confirmed' => false,
-            'provider_status' => 200,
-            'provider_status_invalid' => false,
-            'remote_identity_candidates' => 0,
-            'partial_identity_records' => 0,
-            'remote_email_matches' => false,
-            'explicit_failure' => false,
-            'patch_attempt_started' => false,
-        ]);
-    Http::assertSentCount(1);
     Http::assertSent(function (Request $request): bool {
-        return $request->method() === 'GET'
-            && parse_url($request->url(), PHP_URL_PATH) === '/webapi/Lead';
-    });
-});
-
-it('confirms the remote lead code before sending the original update payload', function () {
-    config([
-        'services.leadlovers.enabled' => true,
-        'services.leadlovers.base_url' => 'https://example.test/webapi/',
-        'services.leadlovers.token' => 'test-token',
-        'services.leadlovers.dynamic_fields' => [
-            'valor_aluguel' => 52664,
-            'valor_agua' => 121473,
-            'valor_luz' => 121474,
-        ],
-    ]);
-    $lead = leadForLeadLoversUpdate([
-        'leadlovers_lead_code' => null,
-    ]);
-    $lead->despesas()->create([
-        'valor_aluguel' => 1400,
-        'valor_agua' => 140,
-        'valor_luz' => 140,
-    ]);
-    Http::fake(function (Request $request) use ($lead) {
-        if ($request->method() === 'GET') {
-            return Http::response([
-                'Code' => 94169165,
-                'Email' => 'person@example.test',
-            ], 200);
+        if ($request->url() !== 'https://api.leadlovers.test/leads/search') {
+            return true;
         }
 
-        expect(data_get(
-            $lead->fresh()->leadlovers_update_response,
-            'readiness_check.patch_attempt_started'
-        ))->toBeTrue();
-
-        return Http::response([], 204);
-    });
-
-    (new UpdateLeadOnLeadLoversJob(
-        $lead->id,
-        $lead->email,
-        1,
-        ['name', 'valor_aluguel', 'valor_agua', 'valor_luz']
-    ))->handle(app(LeadLoversService::class));
-
-    expect($lead->refresh())
-        ->leadlovers_lead_code->toBe('94169165')
-        ->leadlovers_update_status->toBe('synced');
-    Http::assertSentCount(2);
-    $requests = Http::recorded()
-        ->map(fn (array $record): Request => $record[0])
-        ->values();
-    expect($requests[0]->method())->toBe('GET')
-        ->and($requests[1]->method())->toBe('PATCH')
-        ->and($requests[1]->data())->toBe([
-            'Email' => 'person@example.test',
-            'Name' => 'Pessoa Teste',
-            'DynamicFields' => [
-                ['Id' => 52664, 'Value' => '1400.00'],
-                ['Id' => 121473, 'Value' => '140.00'],
-                ['Id' => 121474, 'Value' => '140.00'],
-            ],
-        ]);
-});
-
-it('fails a permanent readiness client error without PATCH', function (int $status) {
-    config([
-        'services.leadlovers.enabled' => true,
-        'services.leadlovers.base_url' => 'https://example.test/webapi/',
-        'services.leadlovers.token' => 'test-token',
-    ]);
-    $lead = leadForLeadLoversUpdate([
-        'leadlovers_lead_code' => null,
-    ]);
-    Http::fake([
-        '*' => Http::response(['message' => 'Rejected'], $status),
-    ]);
-
-    (new UpdateLeadOnLeadLoversJob(
-        $lead->id,
-        $lead->email,
-        1,
-        ['name']
-    ))->handle(app(LeadLoversService::class));
-
-    expect($lead->refresh())
-        ->leadlovers_update_status->toBe('failed')
-        ->leadlovers_update_error->toBe(
-            'A consulta de prontidão do lead foi recusada pela LeadLovers.'
-        );
-    Http::assertSentCount(1);
-    Http::assertSent(
-        fn (Request $request): bool => $request->method() === 'GET'
-    );
-})->with([400, 401, 403, 422]);
-
-it('does not trust a remote lead code returned with a failed lookup status', function () {
-    config([
-        'services.leadlovers.enabled' => true,
-        'services.leadlovers.base_url' => 'https://example.test/webapi/',
-        'services.leadlovers.token' => 'test-token',
-    ]);
-    $lead = leadForLeadLoversUpdate([
-        'leadlovers_lead_code' => null,
-    ]);
-    Http::fake([
-        '*' => Http::response([
-            'Code' => 94169165,
-            'message' => 'Internal error',
-        ], 500),
-    ]);
-    $job = new UpdateLeadOnLeadLoversJob(
-        $lead->id,
-        $lead->email,
-        1,
-        ['name']
-    );
-
-    expect(fn () => $job->handle(app(LeadLoversService::class)))
-        ->toThrow(RuntimeException::class);
-    expect($lead->refresh())
-        ->leadlovers_lead_code->toBeNull()
-        ->leadlovers_update_status->toBe('processing');
-    Http::assertSentCount(1);
-    Http::assertSent(
-        fn (Request $request): bool => $request->method() === 'GET'
-    );
-});
-
-it('does not PATCH when the readiness lookup returns a different lead email', function () {
-    config([
-        'services.leadlovers.enabled' => true,
-        'services.leadlovers.base_url' => 'https://example.test/webapi/',
-        'services.leadlovers.token' => 'test-token',
-    ]);
-    $lead = leadForLeadLoversUpdate([
-        'leadlovers_lead_code' => null,
-    ]);
-    Http::fake([
-        '*' => Http::response([
-            'Code' => 94169165,
-            'Email' => 'another-person@example.test',
-        ], 200),
-    ]);
-    $job = new UpdateLeadOnLeadLoversJob(
-        $lead->id,
-        $lead->email,
-        1,
-        ['name']
-    );
-
-    $job->handle(app(LeadLoversService::class));
-    expect($lead->refresh())
-        ->leadlovers_lead_code->toBeNull()
-        ->leadlovers_update_status->toBe('failed')
-        ->and(data_get(
-            $lead->leadlovers_update_response,
-            'readiness_check.remote_email_matches'
-        ))->toBeFalse();
-    Http::assertSentCount(1);
-});
-
-it('rejects an explicitly failed readiness body even when it contains an identity', function () {
-    config([
-        'services.leadlovers.enabled' => true,
-        'services.leadlovers.base_url' => 'https://example.test/webapi/',
-        'services.leadlovers.token' => 'test-token',
-    ]);
-    $lead = leadForLeadLoversUpdate([
-        'leadlovers_lead_code' => null,
-    ]);
-    Http::fake([
-        '*' => Http::response([
-            'StatusCode' => 200,
-            'Success' => false,
-            'Code' => 94169165,
-            'Email' => 'person@example.test',
-        ], 200),
-    ]);
-
-    (new UpdateLeadOnLeadLoversJob(
-        $lead->id,
-        $lead->email,
-        1,
-        ['name']
-    ))->handle(app(LeadLoversService::class));
-
-    expect($lead->refresh())
-        ->leadlovers_lead_code->toBeNull()
-        ->leadlovers_update_status->toBe('failed')
-        ->and(data_get(
-            $lead->leadlovers_update_response,
-            'readiness_check.explicit_failure'
-        ))->toBeTrue();
-    Http::assertSentCount(1);
-});
-
-it('does not accept a non-integer remote lead code', function () {
-    config([
-        'services.leadlovers.enabled' => true,
-        'services.leadlovers.base_url' => 'https://example.test/webapi/',
-        'services.leadlovers.token' => 'test-token',
-    ]);
-    $lead = leadForLeadLoversUpdate([
-        'leadlovers_lead_code' => null,
-    ]);
-    Http::fake([
-        '*' => Http::response([
-            'Code' => 'InternalError',
-            'Email' => 'person@example.test',
-        ], 200),
-    ]);
-    $job = new UpdateLeadOnLeadLoversJob(
-        $lead->id,
-        $lead->email,
-        1,
-        ['name']
-    );
-
-    expect(fn () => $job->handle(app(LeadLoversService::class)))
-        ->toThrow(RuntimeException::class);
-    expect($lead->refresh())
-        ->leadlovers_lead_code->toBeNull()
-        ->leadlovers_update_status->toBe('processing');
-    Http::assertSentCount(1);
-});
-
-it('preserves an earlier PATCH diagnostic while readiness is still pending', function () {
-    config([
-        'services.leadlovers.enabled' => true,
-        'services.leadlovers.base_url' => 'https://example.test/webapi/',
-        'services.leadlovers.token' => 'test-token',
-    ]);
-    $providerMessage = 'Erro interno ao tentar atualizar lead.';
-    Http::fake([
-        '*' => Http::response(['message' => $providerMessage], 500),
-    ]);
-    $providerDiagnostic = app(LeadLoversService::class)->updateLead([
-        'Email' => 'person@example.test',
-        'Name' => 'Pessoa Teste',
-    ])['provider_diagnostic'];
-    $lead = leadForLeadLoversUpdate([
-        'leadlovers_lead_code' => null,
-        'leadlovers_update_status' => 'failed',
-        'leadlovers_update_response' => [
-            'requested_fields' => ['name'],
-            'provider_diagnostic' => $providerDiagnostic,
-        ],
-    ]);
-    Http::fake([
-        '*' => Http::response([
-            'Message' => 'Novo lead inserido na fila para processamento',
-        ], 200),
-    ]);
-    $job = new UpdateLeadOnLeadLoversJob(
-        $lead->id,
-        $lead->email,
-        1,
-        ['name']
-    );
-
-    try {
-        $job->handle(app(LeadLoversService::class));
-    } catch (RuntimeException) {
-        // O worker tentará novamente porque o GET ainda não confirmou o lead.
-    }
-    $job->failed(new RuntimeException('attempts exhausted'));
-
-    $summary = $lead->refresh()->leadlovers_update_response;
-    expect($lead)
-        ->leadlovers_update_status->toBe('failed')
-        ->and($summary['requested_fields'])->toBe(['name'])
-        ->and($summary['previous_patch_diagnostic'])
-        ->fingerprint->toBe($providerDiagnostic['fingerprint'])
-        ->preserved_from_previous_attempt->toBeTrue()
-        ->and(Crypt::decryptString(
-            $summary['previous_patch_diagnostic']['ciphertext']
-        ))->toBe($providerMessage);
-});
-
-it('restarts with a full PATCH attempt budget after delayed readiness confirmation', function () {
-    Bus::fake();
-    config(['services.leadlovers.enabled' => true]);
-    $lead = leadForLeadLoversUpdate([
-        'leadlovers_lead_code' => null,
-    ]);
-    $service = Mockery::mock(LeadLoversService::class);
-    $service->shouldReceive('getLeadByEmail')
-        ->once()
-        ->andReturn([
-            'StatusCode' => 200,
-            '_http_status' => 200,
-            'Code' => 94169165,
-            'Email' => 'person@example.test',
-        ]);
-    $service->shouldNotReceive('updateLead');
-    $job = Mockery::mock(UpdateLeadOnLeadLoversJob::class, [
-        $lead->id,
-        $lead->email,
-        1,
-        ['name'],
-    ])->makePartial();
-    $job->shouldReceive('attempts')->andReturn(3);
-
-    $job->handle($service);
-
-    expect($lead->refresh())
-        ->leadlovers_lead_code->toBe('94169165')
-        ->leadlovers_update_status->toBe('pending')
-        ->leadlovers_update_version->toBe(2)
-        ->leadlovers_update_error->toBeNull()
-        ->and(data_get(
-            $lead->leadlovers_update_response,
-            'readiness_check.confirmed'
-        ))->toBeTrue()
-        ->and(data_get(
-            $lead->leadlovers_update_response,
-            'readiness_check.patch_attempt_started'
-        ))->toBeFalse();
-    Bus::assertDispatched(
-        UpdateLeadOnLeadLoversJob::class,
-        fn (UpdateLeadOnLeadLoversJob $queued): bool => $queued->leadId === $lead->id
-            && $queued->syncVersion === 2
-            && $queued->requestedFields === ['name']
-            && $queued->tries === 3
-            && $queued->queue === 'leadlovers'
-    );
-
-    $queued = Bus::dispatched(UpdateLeadOnLeadLoversJob::class)->first();
-    $patchService = Mockery::mock(LeadLoversService::class);
-    $patchService->shouldNotReceive('getLeadByEmail');
-    $patchService->shouldReceive('updateLead')
-        ->once()
-        ->andReturnUsing(function () use ($job): array {
-            $job->failed(new RuntimeException('late predecessor failure'));
-
-            return [
-                'success' => true,
-                'status' => 204,
-                'http_status' => 204,
-                'response' => [],
+        return $request->method() === 'POST'
+            && $request->data() === [
+                'page' => 1,
+                'pageSize' => 10,
+                'filters' => [
+                    'staticFields' => [
+                        'email' => ['person@example.test'],
+                    ],
+                ],
             ];
-        });
-
-    $queued->handle($patchService);
-
-    expect($lead->refresh())
-        ->leadlovers_update_status->toBe('synced')
-        ->leadlovers_update_version->toBe(2)
-        ->leadlovers_update_error->toBeNull();
-});
-
-it('recovers a confirmed readiness state if the worker stopped before redispatch', function () {
-    Bus::fake();
-    config(['services.leadlovers.enabled' => true]);
-    $lead = leadForLeadLoversUpdate([
-        'leadlovers_lead_code' => '94169165',
-        'leadlovers_update_response' => [
-            'requested_fields' => ['name'],
-            'readiness_check' => [
-                'confirmed' => true,
-                'patch_attempt_started' => false,
-            ],
-        ],
-    ]);
-    $service = Mockery::mock(LeadLoversService::class);
-    $service->shouldNotReceive('getLeadByEmail');
-    $service->shouldNotReceive('updateLead');
-    $job = Mockery::mock(UpdateLeadOnLeadLoversJob::class, [
-        $lead->id,
-        $lead->email,
-        1,
-        ['name'],
-    ])->makePartial();
-    $job->shouldReceive('attempts')->andReturn(2);
-
-    $job->handle($service);
-
-    expect($lead->refresh())
-        ->leadlovers_update_status->toBe('pending')
-        ->leadlovers_update_version->toBe(2)
-        ->leadlovers_update_error->toBeNull();
-    Bus::assertDispatched(
-        UpdateLeadOnLeadLoversJob::class,
-        fn (UpdateLeadOnLeadLoversJob $queued): bool => $queued->leadId === $lead->id
-            && $queued->syncVersion === 2
-            && $queued->requestedFields === ['name']
-    );
-});
-
-it('keeps a confirmed readiness state when its redispatch fails', function () {
-    config(['services.leadlovers.enabled' => true]);
-    $providerMessage = 'Erro interno ao tentar atualizar lead.';
-    Http::fake([
-        '*' => Http::response(['message' => $providerMessage], 500),
-    ]);
-    $providerDiagnostic = app(LeadLoversService::class)->updateLead([
-        'Email' => 'person@example.test',
-        'Name' => 'Pessoa Teste',
-    ])['provider_diagnostic'];
-    $lead = leadForLeadLoversUpdate([
-        'leadlovers_lead_code' => null,
-        'leadlovers_update_error' => 'Erro anterior.',
-        'leadlovers_update_response' => [
-            'requested_fields' => ['name'],
-            'provider_diagnostic' => $providerDiagnostic,
-        ],
-    ]);
-    $service = Mockery::mock(LeadLoversService::class);
-    $service->shouldReceive('getLeadByEmail')
-        ->once()
-        ->andReturn([
-            'StatusCode' => 200,
-            '_http_status' => 200,
-            'Code' => 94169165,
-            'Email' => 'person@example.test',
-        ]);
-    $service->shouldNotReceive('updateLead');
-    Bus::shouldReceive('dispatch')
-        ->twice()
-        ->andThrow(new RuntimeException('queue unavailable'));
-    $job = Mockery::mock(UpdateLeadOnLeadLoversJob::class, [
-        $lead->id,
-        $lead->email,
-        1,
-        ['name'],
-    ])->makePartial();
-    $job->shouldReceive('attempts')->andReturn(2);
-
-    expect(fn () => $job->handle($service))
-        ->toThrow(RuntimeException::class, 'queue unavailable');
-
-    expect($lead->refresh())
-        ->leadlovers_update_status->toBe('pending')
-        ->leadlovers_update_version->toBe(2)
-        ->leadlovers_update_error->toBeNull()
-        ->and(data_get(
-            $lead->leadlovers_update_response,
-            'readiness_check.handoff_dispatched'
-        ))->toBeFalse();
-
-    $job->failed(new RuntimeException('attempts exhausted'));
-
-    $summary = $lead->refresh()->leadlovers_update_response;
-    expect($lead)
-        ->leadlovers_lead_code->toBe('94169165')
-        ->leadlovers_update_status->toBe('failed')
-        ->leadlovers_update_version->toBe(2)
-        ->leadlovers_update_error->toBe(
-            'A atualização confirmada não pôde ser recolocada na fila.'
-        )
-        ->and(data_get($summary, 'readiness_check.confirmed'))->toBeTrue()
-        ->and(data_get(
-            $summary,
-            'readiness_check.patch_attempt_started'
-        ))->toBeFalse()
-        ->and($summary['previous_patch_diagnostic']['fingerprint'])
-        ->toBe($providerDiagnostic['fingerprint']);
-});
-
-it('recovers a committed readiness handoff when the first queue push is interrupted', function () {
-    config(['services.leadlovers.enabled' => true]);
-    $lead = leadForLeadLoversUpdate([
-        'leadlovers_lead_code' => null,
-    ]);
-    $service = Mockery::mock(LeadLoversService::class);
-    $service->shouldReceive('getLeadByEmail')
-        ->once()
-        ->andReturn([
-            'StatusCode' => 200,
-            '_http_status' => 200,
-            'Code' => 94169165,
-            'Email' => 'person@example.test',
-        ]);
-    $service->shouldNotReceive('updateLead');
-    Bus::shouldReceive('dispatch')
-        ->once()
-        ->ordered()
-        ->andThrow(new RuntimeException('worker stopped before queue push'));
-    Bus::shouldReceive('dispatch')
-        ->once()
-        ->ordered()
-        ->andReturn(null);
-    $job = Mockery::mock(UpdateLeadOnLeadLoversJob::class, [
-        $lead->id,
-        $lead->email,
-        1,
-        ['name'],
-    ])->makePartial();
-    $job->shouldReceive('attempts')->andReturn(2);
-
-    expect(fn () => $job->handle($service))
-        ->toThrow(RuntimeException::class, 'worker stopped before queue push');
-
-    expect($lead->refresh())
-        ->leadlovers_update_status->toBe('pending')
-        ->leadlovers_update_version->toBe(2)
-        ->and(data_get(
-            $lead->leadlovers_update_response,
-            'readiness_check.handoff_dispatched'
-        ))->toBeFalse();
-
-    $job->handle($service);
-
-    expect($lead->refresh())
-        ->leadlovers_update_status->toBe('pending')
-        ->leadlovers_update_version->toBe(2)
-        ->and(data_get(
-            $lead->leadlovers_update_response,
-            'readiness_check.handoff_dispatched'
-        ))->toBeTrue();
-});
-
-it('commits a database readiness handoff and its queued job atomically', function () {
-    config([
-        'services.leadlovers.enabled' => true,
-        'queue.default' => 'database',
-        'queue.connections.database.connection' => null,
-    ]);
-    $lead = leadForLeadLoversUpdate([
-        'leadlovers_lead_code' => null,
-    ]);
-    $service = Mockery::mock(LeadLoversService::class);
-    $service->shouldReceive('getLeadByEmail')
-        ->once()
-        ->andReturn([
-            'StatusCode' => 200,
-            '_http_status' => 200,
-            'Code' => 94169165,
-            'Email' => 'person@example.test',
-        ]);
-    $service->shouldNotReceive('updateLead');
-    $job = Mockery::mock(UpdateLeadOnLeadLoversJob::class, [
-        $lead->id,
-        $lead->email,
-        1,
-        ['name'],
-    ])->makePartial();
-    $job->shouldReceive('attempts')->andReturn(2);
-
-    $job->handle($service);
-
-    $queuedRow = DB::table('jobs')
-        ->where('queue', 'leadlovers')
-        ->sole();
-    $payload = json_decode($queuedRow->payload, true, flags: JSON_THROW_ON_ERROR);
-    $queued = unserialize($payload['data']['command']);
-    expect($lead->refresh())
-        ->leadlovers_update_status->toBe('pending')
-        ->leadlovers_update_version->toBe(2)
-        ->and(data_get(
-            $lead->leadlovers_update_response,
-            'readiness_check.handoff_dispatched'
-        ))->toBeTrue()
-        ->and($queued)->toBeInstanceOf(UpdateLeadOnLeadLoversJob::class)
-        ->and($queued->syncVersion)->toBe(2)
-        ->and($queued->requestedFields)->toBe(['name'])
-        ->and($queued->queue)->toBe('leadlovers')
-        ->and($queued->afterCommit)->toBeFalse();
-});
-
-it('rolls back a database readiness handoff when queue insertion does not complete', function () {
-    config([
-        'services.leadlovers.enabled' => true,
-        'queue.default' => 'database',
-        'queue.connections.database.connection' => null,
-    ]);
-    $lead = leadForLeadLoversUpdate([
-        'leadlovers_lead_code' => null,
-    ]);
-    $service = Mockery::mock(LeadLoversService::class);
-    $service->shouldReceive('getLeadByEmail')
-        ->once()
-        ->andReturn([
-            'StatusCode' => 200,
-            '_http_status' => 200,
-            'Code' => 94169165,
-            'Email' => 'person@example.test',
-        ]);
-    $service->shouldNotReceive('updateLead');
-    Event::listen(JobQueued::class, function (): never {
-        throw new RuntimeException('listener stopped the atomic handoff');
     });
-    $job = Mockery::mock(UpdateLeadOnLeadLoversJob::class, [
-        $lead->id,
-        $lead->email,
-        1,
-        ['name'],
-    ])->makePartial();
-    $job->shouldReceive('attempts')->andReturn(2);
-
-    expect(fn () => $job->handle($service))
-        ->toThrow(RuntimeException::class, 'listener stopped the atomic handoff');
-
+    Http::assertSentCount(2);
     expect($lead->refresh())
-        ->leadlovers_update_status->toBe('processing')
-        ->leadlovers_update_version->toBe(1)
-        ->and(data_get(
-            $lead->leadlovers_update_response,
-            'readiness_check.confirmed'
-        ))->toBeTrue()
-        ->and(DB::table('jobs')->where('queue', 'leadlovers')->count())
-        ->toBe(0);
+        ->leadlovers_lead_id->toBe(777)
+        ->leadlovers_update_status->toBe('synced');
 });
 
-it('hands off confirmed readiness after the original attempt budget is exhausted', function () {
-    Bus::fake();
-    config(['services.leadlovers.enabled' => true]);
-    $lead = leadForLeadLoversUpdate([
-        'leadlovers_lead_code' => '94169165',
-        'leadlovers_update_status' => 'processing',
-        'leadlovers_update_response' => [
-            'requested_fields' => ['name'],
-            'readiness_check' => [
-                'confirmed' => true,
-                'patch_attempt_started' => false,
-            ],
-        ],
+it('never falls back to record id when search leadId is missing', function () {
+    $lead = stageFourLead(['leadlovers_lead_id' => null]);
+    Http::fake([
+        'https://api.leadlovers.test/leads/search' => Http::response(
+            stageFourSearchResult([
+                stageFourSearchRecord([
+                    'id' => 777,
+                    'leadId' => null,
+                ]),
+            ])
+        ),
     ]);
-    $job = new UpdateLeadOnLeadLoversJob(
+
+    runStageFourUpdate(new UpdateLeadOnLeadLoversJob(
         $lead->id,
-        $lead->email,
         1,
         ['name']
-    );
+    ));
 
-    $job->failed(new RuntimeException('worker stopped after readiness'));
-
+    Http::assertSentCount(1);
     expect($lead->refresh())
-        ->leadlovers_update_status->toBe('pending')
-        ->leadlovers_update_version->toBe(2)
-        ->leadlovers_update_error->toBeNull();
-    Bus::assertDispatched(
-        UpdateLeadOnLeadLoversJob::class,
-        fn (UpdateLeadOnLeadLoversJob $queued): bool => $queued->leadId === $lead->id
-            && $queued->syncVersion === 2
-            && $queued->requestedFields === ['name']
-            && $queued->tries === 3
-    );
+        ->leadlovers_lead_id->toBeNull()
+        ->leadlovers_update_status->toBe('failed')
+        ->and($lead->leadlovers_update_response['search_outcome'])
+        ->toBe('missing_lead_id');
 });
 
-it('does not leave a pending readiness handoff orphaned when integration is disabled', function () {
-    config(['services.leadlovers.enabled' => false]);
-    $lead = leadForLeadLoversUpdate([
-        'leadlovers_lead_code' => '94169165',
-        'leadlovers_update_status' => 'pending',
-        'leadlovers_update_version' => 2,
-        'leadlovers_update_response' => [
-            'requested_fields' => ['name'],
-            'readiness_check' => [
-                'confirmed' => true,
-                'patch_attempt_started' => false,
-                'handoff_from_version' => 1,
-                'handoff_version' => 2,
-                'handoff_dispatched' => false,
-            ],
-        ],
+it('fails safe when search is ambiguous or the email differs', function (array $records) {
+    $lead = stageFourLead(['leadlovers_lead_id' => null]);
+    Http::fake([
+        'https://api.leadlovers.test/leads/search' => Http::response(
+            stageFourSearchResult($records)
+        ),
     ]);
-    $service = Mockery::mock(LeadLoversService::class);
-    $service->shouldNotReceive('getLeadByEmail');
-    $service->shouldNotReceive('updateLead');
 
-    (new UpdateLeadOnLeadLoversJob(
+    runStageFourUpdate(new UpdateLeadOnLeadLoversJob(
         $lead->id,
-        $lead->email,
         1,
         ['name']
-    ))->handle($service);
+    ));
 
+    Http::assertSentCount(1);
     expect($lead->refresh())
-        ->leadlovers_update_status->toBe('disabled')
-        ->leadlovers_update_version->toBe(2)
-        ->leadlovers_update_error->toBe(
-            'Integração com a LeadLovers desativada.'
-        );
+        ->leadlovers_lead_id->toBeNull()
+        ->leadlovers_update_status->toBe('failed');
+})->with([
+    'two records' => [[
+        stageFourSearchRecord(['leadId' => 701]),
+        stageFourSearchRecord(['id' => 9002, 'leadId' => 702]),
+    ]],
+    'different email' => [[
+        stageFourSearchRecord(['email' => 'other@example.test']),
+    ]],
+]);
+
+it('reconciles at most once after LEAD_NOT_FOUND and retries PUT with the new ID', function () {
+    $lead = stageFourLead(['leadlovers_lead_id' => 501]);
+    Http::fake([
+        'https://api.leadlovers.test/leads/501' => Http::response([
+            'success' => false,
+            'error' => ['code' => 'LEAD_NOT_FOUND'],
+        ], 404),
+        'https://api.leadlovers.test/leads/search' => Http::response(
+            stageFourSearchResult([
+                stageFourSearchRecord(['leadId' => 777]),
+            ])
+        ),
+        'https://api.leadlovers.test/leads/777' => Http::response([
+            'success' => true,
+        ]),
+    ]);
+
+    runStageFourUpdate(new UpdateLeadOnLeadLoversJob(
+        $lead->id,
+        1,
+        ['name']
+    ));
+
+    Http::assertSentCount(3);
+    expect($lead->refresh())
+        ->leadlovers_lead_id->toBe(777)
+        ->leadlovers_update_status->toBe('synced');
 });
 
-it('returns a rate-limited readiness lookup to the queue without PATCH', function () {
-    config(['services.leadlovers.enabled' => true]);
-    $lead = leadForLeadLoversUpdate([
-        'leadlovers_lead_code' => null,
+it('does not create a lead when a 404 cannot be reconciled', function () {
+    $lead = stageFourLead();
+    Http::fake([
+        'https://api.leadlovers.test/leads/501' => Http::response([
+            'success' => false,
+            'error' => ['code' => 'LEAD_NOT_FOUND'],
+        ], 404),
+        'https://api.leadlovers.test/leads/search' => Http::response(
+            stageFourSearchResult([], 0)
+        ),
     ]);
-    $service = Mockery::mock(LeadLoversService::class);
-    $service->shouldReceive('getLeadByEmail')
-        ->once()
-        ->andThrow(new LeadLoversRateLimitedException(30, false));
-    $service->shouldNotReceive('updateLead');
+
+    runStageFourUpdate(new UpdateLeadOnLeadLoversJob(
+        $lead->id,
+        1,
+        ['name']
+    ));
+
+    Http::assertSentCount(2);
+    Http::assertNotSent(
+        fn (Request $request): bool => $request->method() === 'POST'
+            && $request->url() === 'https://api.leadlovers.test/leads/'
+    );
+    expect($lead->refresh()->leadlovers_update_status)->toBe('failed');
+});
+
+it('releases transient update failures including TIMEOUT and rate limit', function (
+    int $status,
+    array $body,
+    array $headers,
+    int $expectedDelay,
+) {
+    $lead = stageFourLead();
+    Http::fake([
+        'https://api.leadlovers.test/leads/501' => Http::response(
+            $body,
+            $status,
+            $headers
+        ),
+    ]);
     $job = (new UpdateLeadOnLeadLoversJob(
         $lead->id,
-        $lead->email,
         1,
         ['name']
     ))->withFakeQueueInteractions();
 
-    $job->handle($service);
+    runStageFourUpdate($job);
 
-    $job->assertReleased(30);
-    expect($lead->refresh())
-        ->leadlovers_update_status->toBe('processing')
-        ->leadlovers_lead_code->toBeNull();
-});
-
-it('fails closed when readiness returns more than one remote identity', function () {
-    config([
-        'services.leadlovers.enabled' => true,
-        'services.leadlovers.base_url' => 'https://example.test/webapi/',
-        'services.leadlovers.token' => 'test-token',
-    ]);
-    $lead = leadForLeadLoversUpdate([
-        'leadlovers_lead_code' => null,
-    ]);
-    Http::fake([
-        '*' => Http::response([
-            'Data' => [
-                ['Code' => 1001, 'Email' => 'person@example.test'],
-                ['Code' => 1002, 'Email' => 'person@example.test'],
-            ],
-        ], 200),
-    ]);
-
-    (new UpdateLeadOnLeadLoversJob(
-        $lead->id,
-        $lead->email,
-        1,
-        ['name']
-    ))->handle(app(LeadLoversService::class));
-
-    expect($lead->refresh())
-        ->leadlovers_update_status->toBe('failed')
-        ->leadlovers_lead_code->toBeNull()
-        ->and(data_get(
-            $lead->leadlovers_update_response,
-            'readiness_check.remote_identity_candidates'
-        ))->toBe(2);
-    Http::assertSentCount(1);
-});
-
-it('keeps a readiness 5xx retryable even with an explicit failure body', function () {
-    config([
-        'services.leadlovers.enabled' => true,
-        'services.leadlovers.base_url' => 'https://example.test/webapi/',
-        'services.leadlovers.token' => 'test-token',
-    ]);
-    $lead = leadForLeadLoversUpdate([
-        'leadlovers_lead_code' => null,
-    ]);
-    Http::fake([
-        '*' => Http::response([
-            'Success' => false,
-            'Error' => 'Internal error',
-        ], 500),
-    ]);
-    $job = new UpdateLeadOnLeadLoversJob(
-        $lead->id,
-        $lead->email,
-        1,
-        ['name']
-    );
-
-    expect(fn () => $job->handle(app(LeadLoversService::class)))
-        ->toThrow(RuntimeException::class);
-    expect($lead->refresh())
-        ->leadlovers_update_status->toBe('processing')
-        ->and(data_get(
-            $lead->leadlovers_update_response,
-            'readiness_check.explicit_failure'
-        ))->toBeTrue();
-    Http::assertSentCount(1);
-});
-
-it('does not trust a nested provider failure status during readiness', function (array $body) {
-    config([
-        'services.leadlovers.enabled' => true,
-        'services.leadlovers.base_url' => 'https://example.test/webapi/',
-        'services.leadlovers.token' => 'test-token',
-    ]);
-    $lead = leadForLeadLoversUpdate([
-        'leadlovers_lead_code' => null,
-    ]);
-    Http::fake([
-        '*' => Http::response($body, 200),
-    ]);
-    $job = new UpdateLeadOnLeadLoversJob(
-        $lead->id,
-        $lead->email,
-        1,
-        ['name']
-    );
-
-    expect(fn () => $job->handle(app(LeadLoversService::class)))
-        ->toThrow(RuntimeException::class);
-    expect($lead->refresh())
-        ->leadlovers_lead_code->toBeNull()
-        ->leadlovers_update_status->toBe('processing')
-        ->and(data_get(
-            $lead->leadlovers_update_response,
-            'readiness_check.provider_status'
-        ))->toBe(500);
-    Http::assertSentCount(1);
-    Http::assertSent(
-        fn (Request $request): bool => $request->method() === 'GET'
-    );
+    $job->assertReleased($expectedDelay);
+    expect($lead->refresh()->leadlovers_update_status)->toBe('processing');
 })->with([
-    'nested object' => [[
-        'Data' => [
-            'StatusCode' => 500,
-            'Code' => 94169165,
-            'Email' => 'person@example.test',
-        ],
-    ]],
-    'root list' => [[[
-        'StatusCode' => 500,
-        'Code' => 94169165,
-        'Email' => 'person@example.test',
-    ]]],
+    '422 TIMEOUT' => [
+        422,
+        ['success' => false, 'error' => ['code' => 'TIMEOUT']],
+        [],
+        30,
+    ],
+    '429 reset' => [
+        429,
+        ['error' => 'rate_limit', 'message' => 'Too many requests'],
+        ['RateLimit-Reset' => '17'],
+        17,
+    ],
+    '503' => [
+        503,
+        ['success' => false, 'error' => ['code' => 'UNAVAILABLE']],
+        [],
+        30,
+    ],
 ]);
 
-it('does not confuse a lead domain status with a readiness HTTP status', function () {
-    config([
-        'services.leadlovers.enabled' => true,
-        'services.leadlovers.base_url' => 'https://example.test/webapi/',
-        'services.leadlovers.token' => 'test-token',
-    ]);
-    $lead = leadForLeadLoversUpdate([
-        'leadlovers_lead_code' => null,
-    ]);
-    Http::fake(function (Request $request) {
-        return $request->method() === 'GET'
-            ? Http::response([
-                'Code' => 94169165,
-                'Email' => 'person@example.test',
-                'status' => 'Ativo',
-            ], 200)
-            : Http::response([], 204);
-    });
-
-    (new UpdateLeadOnLeadLoversJob(
-        $lead->id,
-        $lead->email,
-        1,
-        ['name']
-    ))->handle(app(LeadLoversService::class));
-
-    expect($lead->refresh())
-        ->leadlovers_lead_code->toBe('94169165')
-        ->leadlovers_update_status->toBe('synced');
-    Http::assertSentCount(2);
-});
-
-it('detects nested and conflicting readiness failure flags', function (array $body) {
-    config([
-        'services.leadlovers.enabled' => true,
-        'services.leadlovers.base_url' => 'https://example.test/webapi/',
-        'services.leadlovers.token' => 'test-token',
-    ]);
-    $lead = leadForLeadLoversUpdate([
-        'leadlovers_lead_code' => null,
-    ]);
+it('releases a connection failure without exposing transport details', function () {
+    $lead = stageFourLead();
     Http::fake([
-        '*' => Http::response($body, 200),
-    ]);
-
-    (new UpdateLeadOnLeadLoversJob(
-        $lead->id,
-        $lead->email,
-        1,
-        ['name']
-    ))->handle(app(LeadLoversService::class));
-
-    expect($lead->refresh())
-        ->leadlovers_update_status->toBe('failed')
-        ->leadlovers_lead_code->toBeNull();
-    Http::assertSentCount(1);
-})->with([
-    'nested failure' => [[
-        'Data' => [
-            'Code' => 94169165,
-            'Email' => 'person@example.test',
-            'Success' => false,
-        ],
-    ]],
-    'conflicting aliases' => [[
-        'Code' => 94169165,
-        'Email' => 'person@example.test',
-        'Success' => true,
-        'success' => false,
-    ]],
-]);
-
-it('fails closed when a readiness identity is accompanied by a partial record', function () {
-    config([
-        'services.leadlovers.enabled' => true,
-        'services.leadlovers.base_url' => 'https://example.test/webapi/',
-        'services.leadlovers.token' => 'test-token',
-    ]);
-    $lead = leadForLeadLoversUpdate([
-        'leadlovers_lead_code' => null,
-    ]);
-    Http::fake([
-        '*' => Http::response([
-            'Data' => [
-                ['Code' => 1001, 'Email' => 'person@example.test'],
-                ['Code' => 1002],
-            ],
-        ], 200),
-    ]);
-
-    (new UpdateLeadOnLeadLoversJob(
-        $lead->id,
-        $lead->email,
-        1,
-        ['name']
-    ))->handle(app(LeadLoversService::class));
-
-    expect($lead->refresh())
-        ->leadlovers_update_status->toBe('failed')
-        ->and(data_get(
-            $lead->leadlovers_update_response,
-            'readiness_check.partial_identity_records'
-        ))->toBe(1);
-    Http::assertSentCount(1);
-});
-
-it('accepts the documented identity from a root list response before PATCH', function () {
-    config([
-        'services.leadlovers.enabled' => true,
-        'services.leadlovers.base_url' => 'https://example.test/webapi/',
-        'services.leadlovers.token' => 'test-token',
-    ]);
-    $lead = leadForLeadLoversUpdate([
-        'leadlovers_lead_code' => null,
-    ]);
-    Http::fake(function (Request $request) {
-        return $request->method() === 'GET'
-            ? Http::response([[
-                'Code' => 94169165,
-                'Email' => 'person@example.test',
-            ]], 200)
-            : Http::response([], 204);
-    });
-
-    (new UpdateLeadOnLeadLoversJob(
-        $lead->id,
-        $lead->email,
-        1,
-        ['name']
-    ))->handle(app(LeadLoversService::class));
-
-    expect($lead->refresh())
-        ->leadlovers_lead_code->toBe('94169165')
-        ->leadlovers_update_status->toBe('synced');
-    Http::assertSentCount(2);
-});
-
-it('does not normalize a malformed provider status into HTTP success', function () {
-    config([
-        'services.leadlovers.enabled' => true,
-        'services.leadlovers.base_url' => 'https://example.test/webapi/',
-        'services.leadlovers.token' => 'test-token',
-    ]);
-    $lead = leadForLeadLoversUpdate([
-        'leadlovers_lead_code' => null,
-    ]);
-    Http::fake([
-        '*' => Http::response([
-            'StatusCode' => '2e2',
-            'Code' => 94169165,
-            'Email' => 'person@example.test',
-        ], 200),
-    ]);
-    $job = new UpdateLeadOnLeadLoversJob(
-        $lead->id,
-        $lead->email,
-        1,
-        ['name']
-    );
-
-    expect(fn () => $job->handle(app(LeadLoversService::class)))
-        ->toThrow(RuntimeException::class);
-    expect($lead->refresh())
-        ->leadlovers_lead_code->toBeNull()
-        ->leadlovers_update_status->toBe('processing');
-    Http::assertSentCount(1);
-});
-
-it('rejects a lead update without a valid Email before making HTTP calls', function () {
-    config(['services.leadlovers.enabled' => true]);
-    Http::fake();
-
-    $result = app(LeadLoversService::class)->updateLead([
-        'Name' => 'Pessoa Teste',
-    ]);
-
-    expect($result)
-        ->success->toBeFalse()
-        ->status->toBe(422);
-    Http::assertNothingSent();
-});
-
-it('does not report success when a successful HTTP response contains an API error', function () {
-    config(['services.leadlovers.enabled' => true]);
-    Http::fake([
-        '*' => Http::response([
-            'StatusCode' => 422,
-            'Success' => false,
-        ], 200),
-    ]);
-
-    $result = app(LeadLoversService::class)->updateLead([
-        'Email' => 'person@example.test',
-        'Name' => 'Pessoa Teste',
-    ]);
-
-    expect($result)
-        ->success->toBeFalse()
-        ->status->toBe(422)
-        ->http_status->toBe(200);
-});
-
-it('does not report success when a 2xx update body contains Error', function () {
-    config(['services.leadlovers.enabled' => true]);
-    Http::fake(['*' => Http::response([
-        'Error' => 'Campo inválido',
-    ], 200)]);
-
-    $result = app(LeadLoversService::class)->updateLead([
-        'Email' => 'person@example.test',
-        'Name' => 'Pessoa Teste',
-    ]);
-
-    expect($result)
-        ->success->toBeFalse()
-        ->status->toBe(200)
-        ->http_status->toBe(200);
-});
-
-it('preserves the HTTP error when the response body claims success', function () {
-    config(['services.leadlovers.enabled' => true]);
-    Http::fake([
-        '*' => Http::response([
-            'StatusCode' => 200,
-            'Success' => true,
-        ], 500),
-    ]);
-
-    $result = app(LeadLoversService::class)->updateLead([
-        'Email' => 'person@example.test',
-        'Name' => 'Pessoa Teste',
-    ]);
-
-    expect($result)
-        ->success->toBeFalse()
-        ->status->toBe(500)
-        ->http_status->toBe(500);
-});
-
-it('captures unknown provider errors encrypted without leaking personal data', function () {
-    config(['services.leadlovers.enabled' => true]);
-    $providerMessage = 'Falha técnica para person@example.test, CPF 123.456.789-00 e chave sk_live_abc123.';
-    Http::fake([
-        '*' => Http::response(['message' => $providerMessage], 500),
-    ]);
-    Log::spy();
-    $service = app(LeadLoversService::class);
-
-    $first = $service->updateLead([
-        'Email' => 'person@example.test',
-        'Name' => 'Pessoa Teste',
-    ]);
-    $second = $service->updateLead([
-        'Email' => 'person@example.test',
-        'Name' => 'Pessoa Teste',
-    ]);
-
-    $firstDiagnostic = $first['provider_diagnostic'];
-    $secondDiagnostic = $second['provider_diagnostic'];
-    expect($first)
-        ->success->toBeFalse()
-        ->response_message->toBe('A LeadLovers retornou uma mensagem de erro não classificada.')
-        ->and($firstDiagnostic)
-        ->classification->toBe('unclassified_provider_error')
-        ->truncated->toBeFalse()
-        ->message_bytes->toBe(strlen($providerMessage))
-        ->captured_bytes->toBe(strlen($providerMessage))
-        ->and($firstDiagnostic['fingerprint'])
-        ->toMatch('/\A[a-f0-9]{64}\z/')
-        ->toBe($secondDiagnostic['fingerprint'])
-        ->and($firstDiagnostic['ciphertext'])
-        ->not->toBe($secondDiagnostic['ciphertext'])
-        ->and(Crypt::decryptString($firstDiagnostic['ciphertext']))
-        ->toBe($providerMessage)
-        ->and(json_encode($firstDiagnostic, JSON_THROW_ON_ERROR))
-        ->not->toContain('person@example.test')
-        ->not->toContain('123.456.789-00')
-        ->not->toContain('sk_live_abc123');
-
-    Log::shouldHaveReceived('warning')
-        ->twice()
-        ->with(
-            'LeadLovers recusou atualização do lead.',
-            Mockery::on(function (array $context) use (
-                $firstDiagnostic,
-                $providerMessage,
-                $secondDiagnostic
-            ): bool {
-                $serialized = json_encode($context, JSON_THROW_ON_ERROR);
-
-                return $context['provider_error_classification']
-                        === 'unclassified_provider_error'
-                    && preg_match(
-                        '/\A[a-f0-9]{64}\z/',
-                        $context['provider_error_fingerprint']
-                    ) === 1
-                    && ! str_contains($serialized, $providerMessage)
-                    && ! str_contains($serialized, 'person@example.test')
-                    && ! str_contains($serialized, '123.456.789-00')
-                    && ! str_contains($serialized, 'sk_live_abc123')
-                    && ! str_contains(
-                        $serialized,
-                        $firstDiagnostic['ciphertext']
-                    )
-                    && ! str_contains(
-                        $serialized,
-                        $secondDiagnostic['ciphertext']
-                    );
-            })
-        );
-});
-
-it('fingerprints the complete provider message beyond the encrypted capture limit', function () {
-    config(['services.leadlovers.enabled' => true]);
-    $commonPrefix = str_repeat('x', 2048);
-    Http::fakeSequence()
-        ->push(['message' => $commonPrefix.'A'], 500)
-        ->push(['message' => $commonPrefix.'B'], 500);
-    $service = app(LeadLoversService::class);
-
-    $first = $service->updateLead([
-        'Email' => 'person@example.test',
-        'Name' => 'Pessoa Teste',
-    ]);
-    $second = $service->updateLead([
-        'Email' => 'person@example.test',
-        'Name' => 'Pessoa Teste',
-    ]);
-
-    expect($first['provider_diagnostic']['fingerprint'])
-        ->not->toBe($second['provider_diagnostic']['fingerprint'])
-        ->and(Crypt::decryptString(
-            $first['provider_diagnostic']['ciphertext']
-        ))
-        ->toBe($commonPrefix)
-        ->and(Crypt::decryptString(
-            $second['provider_diagnostic']['ciphertext']
-        ))
-        ->toBe($commonPrefix);
-});
-
-it('caps encrypted provider diagnostics without breaking UTF-8', function () {
-    config(['services.leadlovers.enabled' => true]);
-    $providerMessage = str_repeat('€', 1000);
-    Http::fake([
-        '*' => Http::response(['message' => $providerMessage], 500),
-    ]);
-
-    $result = app(LeadLoversService::class)->updateLead([
-        'Email' => 'person@example.test',
-        'Name' => 'Pessoa Teste',
-    ]);
-
-    $diagnostic = $result['provider_diagnostic'];
-    $captured = Crypt::decryptString($diagnostic['ciphertext']);
-    expect($diagnostic)
-        ->message_bytes->toBe(3000)
-        ->captured_bytes->toBe(2046)
-        ->truncated->toBeTrue()
-        ->and(strlen($captured))->toBe(2046)
-        ->and(mb_check_encoding($captured, 'UTF-8'))->toBeTrue()
-        ->and($providerMessage)->toStartWith($captured);
-});
-
-it('keeps provider failures operational when diagnostic encryption fails', function () {
-    config(['services.leadlovers.enabled' => true]);
-    Http::fake([
-        '*' => Http::response(['message' => 'Falha técnica opaca.'], 500),
-    ]);
-    Crypt::shouldReceive('encryptString')
-        ->once()
-        ->andThrow(new RuntimeException('encryption unavailable'));
-
-    $result = app(LeadLoversService::class)->updateLead([
-        'Email' => 'person@example.test',
-        'Name' => 'Pessoa Teste',
-    ]);
-
-    expect($result)
-        ->success->toBeFalse()
-        ->status->toBe(500)
-        ->and($result['provider_diagnostic'])
-        ->classification->toBe('unclassified_provider_error')
-        ->not->toHaveKey('ciphertext');
-});
-
-it('preserves encrypted provider diagnostics after job exhaustion', function () {
-    config(['services.leadlovers.enabled' => true]);
-    $providerMessage = 'Falha técnica para person@example.test e chave sk_live_abc123.';
-    $lead = leadForLeadLoversUpdate();
-    Http::fake([
-        '*' => Http::response(['message' => $providerMessage], 500),
-    ]);
-    Log::spy();
-    $job = new UpdateLeadOnLeadLoversJob(
-        $lead->id,
-        $lead->email,
-        1,
-        ['name']
-    );
-
-    try {
-        $job->handle(app(LeadLoversService::class));
-    } catch (RuntimeException) {
-        // O worker chama failed() quando as tentativas se esgotam.
-    }
-
-    $job->failed(new RuntimeException('attempts exhausted'));
-    $lead->refresh();
-    $diagnostic = $lead->leadlovers_update_response['provider_diagnostic'];
-    $rawSummary = (string) DB::table('leads')
-        ->where('id', $lead->id)
-        ->value('leadlovers_update_response');
-
-    expect($lead)
-        ->leadlovers_update_status->toBe('failed')
-        ->and($diagnostic)
-        ->classification->toBe('unclassified_provider_error')
-        ->and(Crypt::decryptString($diagnostic['ciphertext']))
-        ->toBe($providerMessage)
-        ->and($rawSummary)
-        ->not->toContain($providerMessage)
-        ->not->toContain('person@example.test')
-        ->not->toContain('sk_live_abc123');
-
-    Log::shouldHaveReceived('warning')
-        ->with(
-            'Atualização do lead falhou transitoriamente na LeadLovers.',
-            Mockery::on(function (array $context) use (
-                $diagnostic,
-                $providerMessage
-            ): bool {
-                $serialized = json_encode($context, JSON_THROW_ON_ERROR);
-
-                return $context['provider_error_fingerprint']
-                        === $diagnostic['fingerprint']
-                    && $context['provider_error_classification']
-                        === 'unclassified_provider_error'
-                    && ! str_contains($serialized, $providerMessage)
-                    && ! str_contains(
-                        $serialized,
-                        $diagnostic['ciphertext']
-                    );
-            })
-        )
-        ->once();
-});
-
-it('preserves an earlier provider diagnostic across a later transient failure', function () {
-    config(['services.leadlovers.enabled' => true]);
-    $providerMessage = 'Falha técnica opaca da tentativa anterior.';
-    Http::fake([
-        '*' => Http::response(['message' => $providerMessage], 500),
-    ]);
-    $previousResult = app(LeadLoversService::class)->updateLead([
-        'Email' => 'person@example.test',
-        'Name' => 'Pessoa Teste',
-    ]);
-    $previousDiagnostic = $previousResult['provider_diagnostic'];
-    $lead = leadForLeadLoversUpdate([
-        'leadlovers_update_response' => [
-            'requested_fields' => ['name'],
-            'provider_diagnostic' => $previousDiagnostic,
-        ],
-    ]);
-    $service = Mockery::mock(LeadLoversService::class);
-    $service->shouldReceive('updateLead')
-        ->once()
-        ->andReturn([
-            'success' => false,
-            'status' => null,
-            'http_status' => null,
-            'response' => [],
-        ]);
-    $job = new UpdateLeadOnLeadLoversJob(
-        $lead->id,
-        $lead->email,
-        1,
-        ['name']
-    );
-
-    try {
-        $job->handle($service);
-    } catch (RuntimeException) {
-        // Simula uma tentativa posterior sem resposta do provedor.
-    }
-
-    $job->failed(new RuntimeException('attempts exhausted'));
-    $storedDiagnostic = $lead->refresh()
-        ->leadlovers_update_response['provider_diagnostic'];
-    expect($storedDiagnostic)
-        ->fingerprint->toBe($previousDiagnostic['fingerprint'])
-        ->ciphertext->toBe($previousDiagnostic['ciphertext'])
-        ->preserved_from_previous_attempt->toBeTrue()
-        ->and(Crypt::decryptString($storedDiagnostic['ciphertext']))
-        ->toBe($providerMessage);
-});
-
-it('does not attribute an earlier provider diagnostic to a later classified response', function () {
-    config(['services.leadlovers.enabled' => true]);
-    Http::fake([
-        '*' => Http::response([
-            'message' => 'Falha técnica opaca da tentativa anterior.',
-        ], 500),
-    ]);
-    $previousResult = app(LeadLoversService::class)->updateLead([
-        'Email' => 'person@example.test',
-        'Name' => 'Pessoa Teste',
-    ]);
-    $lead = leadForLeadLoversUpdate([
-        'leadlovers_update_response' => [
-            'requested_fields' => ['name'],
-            'provider_diagnostic' => $previousResult['provider_diagnostic'],
-        ],
-    ]);
-    $service = Mockery::mock(LeadLoversService::class);
-    $service->shouldReceive('updateLead')
-        ->once()
-        ->andReturn([
-            'success' => false,
-            'status' => 400,
-            'http_status' => 400,
-            'response' => [],
-            'response_message' => 'A LeadLovers informou falha de autenticação.',
-        ]);
-
-    (new UpdateLeadOnLeadLoversJob(
-        $lead->id,
-        $lead->email,
-        1,
-        ['name']
-    ))->handle($service);
-
-    $summary = $lead->refresh()->leadlovers_update_response;
-    expect($summary)
-        ->status->toBe(400)
-        ->http_status->toBe(400)
-        ->response_message->toBe('A LeadLovers informou falha de autenticação.')
-        ->not->toHaveKey('provider_diagnostic');
-});
-
-it('does not confirm a lead update from a non-JSON successful response', function () {
-    config(['services.leadlovers.enabled' => true]);
-    Http::fake([
-        '*' => Http::response(
-            '<html><body>proxy response</body></html>',
-            200,
-            ['Content-Type' => 'text/html']
+        'https://api.leadlovers.test/leads/501' => Http::failedConnection(
+            'connection failed for person@example.test and test-token'
         ),
     ]);
+    $job = (new UpdateLeadOnLeadLoversJob(
+        $lead->id,
+        1,
+        ['name']
+    ))->withFakeQueueInteractions();
 
-    $result = app(LeadLoversService::class)->updateLead([
-        'Email' => 'person@example.test',
-        'Name' => 'Pessoa Teste',
-    ]);
+    runStageFourUpdate($job);
 
-    expect($result)
-        ->success->toBeFalse()
-        ->status->toBe(502)
-        ->http_status->toBe(200)
-        ->response->toBe([])
-        ->raw_body->toBeNull();
+    $job->assertReleased(30);
+    $stored = json_encode(
+        $lead->refresh()->leadlovers_update_response,
+        JSON_THROW_ON_ERROR
+    );
+    expect($lead->leadlovers_update_status)->toBe('processing')
+        ->and($stored)->not->toContain('person@example.test')
+        ->not->toContain('test-token');
 });
 
-it('accepts an empty successful response without inventing a response body', function () {
-    config(['services.leadlovers.enabled' => true]);
-    Http::fake(['*' => Http::response('', 204)]);
-
-    $result = app(LeadLoversService::class)->updateLead([
-        'Email' => 'person@example.test',
-        'Name' => 'Pessoa Teste',
+it('retries a malformed 200 response as a protocol failure', function () {
+    $lead = stageFourLead();
+    Http::fake([
+        'https://api.leadlovers.test/leads/501' => Http::response([
+            'success' => false,
+        ]),
     ]);
+    $job = (new UpdateLeadOnLeadLoversJob(
+        $lead->id,
+        1,
+        ['name']
+    ))->withFakeQueueInteractions();
 
-    expect($result)
-        ->success->toBeTrue()
-        ->status->toBe(204)
-        ->http_status->toBe(204)
-        ->response->toBe([])
-        ->provider_diagnostic->toBeNull();
+    runStageFourUpdate($job);
+
+    $job->assertReleased(30);
+    expect($lead->refresh()->leadlovers_update_status)->toBe('processing');
 });
 
-it('returns a retryable result when the LeadLovers connection fails', function () {
-    config(['services.leadlovers.enabled' => true]);
-    Http::fake(fn () => throw new ConnectionException('connection failed'));
-
-    $result = app(LeadLoversService::class)->updateLead([
-        'Email' => 'person@example.test',
-        'Name' => 'Pessoa Teste',
+it('marks a transient update failed after the configured attempt budget', function () {
+    $lead = stageFourLead(['leadlovers_update_status' => 'processing']);
+    Http::fake([
+        'https://api.leadlovers.test/leads/501' => Http::response([
+            'success' => false,
+            'error' => ['code' => 'TRANSACTION_FAILED'],
+        ], 422),
     ]);
+    $job = (new UpdateLeadOnLeadLoversJob(
+        $lead->id,
+        1,
+        ['name']
+    ))->withFakeQueueInteractions();
+    $job->job->attempts = 3;
 
-    expect($result)
-        ->success->toBeFalse()
-        ->status->toBeNull()
-        ->http_status->toBeNull();
+    runStageFourUpdate($job);
+
+    $job->assertNotReleased();
+    expect($lead->refresh())
+        ->leadlovers_update_status->toBe('failed')
+        ->leadlovers_update_error->toContain('tentativas');
 });
 
-it('marks a confirmed update as synced without changing the initial-send status', function () {
-    config(['services.leadlovers.enabled' => true]);
-    $lead = leadForLeadLoversUpdate();
+it('marks definitive update errors as failed without changing initial-send state', function (
+    int $status,
+    string $code,
+) {
+    $lead = stageFourLead();
+    Http::fake([
+        'https://api.leadlovers.test/leads/501' => Http::response([
+            'success' => false,
+            'error' => ['code' => $code],
+        ], $status),
+    ]);
 
-    $service = Mockery::mock(LeadLoversService::class);
-    $service->shouldReceive('updateLead')
-        ->once()
-        ->with(Mockery::on(fn (array $payload): bool => ($payload['Email'] ?? null) === $lead->email
-            && ($payload['Name'] ?? null) === $lead->nome))
-        ->andReturn([
-            'success' => true,
-            'status' => 200,
-            'http_status' => 200,
-            'response' => ['StatusCode' => 200],
-        ]);
+    runStageFourUpdate(new UpdateLeadOnLeadLoversJob(
+        $lead->id,
+        1,
+        ['name']
+    ));
 
-    (new UpdateLeadOnLeadLoversJob($lead->id, $lead->email, 1, ['name']))
-        ->handle($service);
-
-    $lead->refresh();
-
-    expect($lead)
+    expect($lead->refresh())
         ->leadlovers_status->toBe('sent')
-        ->leadlovers_update_status->toBe('synced')
-        ->leadlovers_update_at->not->toBeNull()
-        ->leadlovers_response->toBeNull()
-        ->and($lead->leadlovers_update_response)->toMatchArray([
+        ->leadlovers_update_status->toBe('failed')
+        ->and($lead->leadlovers_update_response['error_code'])->toBe($code);
+})->with([
+    'EMAIL_EXISTS' => [400, 'EMAIL_EXISTS'],
+    'PHONE_EXISTS' => [400, 'PHONE_EXISTS'],
+    'VALIDATION_FAILED' => [422, 'VALIDATION_FAILED'],
+    'unauthorized' => [401, 'UNAUTHORIZED'],
+]);
+
+it('allows an explicit retry of the same failed version', function () {
+    $lead = stageFourLead(['leadlovers_update_status' => 'failed']);
+    Http::fake([
+        'https://api.leadlovers.test/leads/501' => Http::response([
             'success' => true,
-            'status' => 200,
-            'http_status' => 200,
-        ]);
-});
-
-it('sends only the requested filled dynamic fields in a queued lead update', function () {
-    config([
-        'services.leadlovers.enabled' => true,
-        'services.leadlovers.base_url' => 'https://example.test/webapi/',
-        'services.leadlovers.token' => 'test-token',
-        'services.leadlovers.dynamic_fields' => [
-            'cpf' => 101,
-            'estado_civil' => 102,
-            'conjuge_cpf' => 103,
-            'valor_aluguel' => 104,
-            'valor_agua' => 105,
-            'valor_luz' => 106,
-            'valor_gas' => 107,
-            'valor_condominio' => 108,
-            'valor_iptu' => 109,
-            'outras_despesas' => 110,
-        ],
+        ]),
     ]);
 
-    $lead = leadForLeadLoversUpdate([
-        'cpf' => '12345678900',
-        'estado_civil' => 'solteiro',
-    ]);
-    $lead->despesas()->create([
-        'valor_aluguel' => 1500,
-        'valor_agua' => 100,
-        'valor_luz' => 100,
-        'valor_gas' => 50,
-        'valor_condominio' => 300,
-        'valor_iptu' => 80,
-        'outras_despesas' => 20,
-    ]);
-
-    Http::fake(function (Request $request) {
-        $hasBlankDynamicField = collect(
-            $request['DynamicFields'] ?? []
-        )->contains(
-            fn (array $field): bool => blank($field['Value'] ?? null)
-        );
-
-        return Http::response(
-            [
-                'StatusCode' => $hasBlankDynamicField ? 500 : 200,
-                'Success' => ! $hasBlankDynamicField,
-            ],
-            $hasBlankDynamicField ? 500 : 200
-        );
-    });
-
-    (new UpdateLeadOnLeadLoversJob($lead->id, $lead->email, 1, [
-        'cpf',
-        'estado_civil',
-        'valor_aluguel',
-        'valor_agua',
-        'valor_luz',
-        'valor_gas',
-        'valor_condominio',
-        'valor_iptu',
-        'outras_despesas',
-    ]))
-        ->handle(app(LeadLoversService::class));
-
-    expect($lead->refresh()->leadlovers_update_status)->toBe('synced');
-
-    Http::assertSent(function (Request $request): bool {
-        $dynamicFields = collect($request['DynamicFields'] ?? []);
-
-        return $dynamicFields->count() === 9
-            && ! $dynamicFields->contains('Id', 103)
-            && ! $dynamicFields->contains(
-                fn (array $field): bool => blank($field['Value'] ?? null)
-            );
-    });
-});
-
-it('allows an explicitly retried failed update to claim the same version', function () {
-    config(['services.leadlovers.enabled' => true]);
-    $lead = leadForLeadLoversUpdate([
-        'leadlovers_update_status' => 'failed',
-    ]);
-
-    $service = Mockery::mock(LeadLoversService::class);
-    $service->shouldReceive('updateLead')
-        ->once()
-        ->andReturn([
-            'success' => true,
-            'status' => 200,
-            'http_status' => 200,
-            'response' => ['StatusCode' => 200],
-        ]);
-
-    (new UpdateLeadOnLeadLoversJob($lead->id, $lead->email, 1, ['name']))
-        ->handle($service);
+    runStageFourUpdate(new UpdateLeadOnLeadLoversJob(
+        $lead->id,
+        1,
+        ['name']
+    ));
 
     expect($lead->refresh())
         ->leadlovers_update_version->toBe(1)
         ->leadlovers_update_status->toBe('synced');
 });
 
-it('marks definitive LeadLovers errors as failed without retrying or changing the initial-send status', function (int $status) {
-    config(['services.leadlovers.enabled' => true]);
-    $lead = leadForLeadLoversUpdate();
-
-    $service = Mockery::mock(LeadLoversService::class);
-    $service->shouldReceive('updateLead')
-        ->once()
-        ->andReturn([
-            'success' => false,
-            'status' => $status,
-            'http_status' => $status,
-            'response' => [],
-        ]);
-
-    (new UpdateLeadOnLeadLoversJob($lead->id, $lead->email, 1, ['name']))
-        ->handle($service);
-
-    expect($lead->refresh())
-        ->leadlovers_status->toBe('sent')
-        ->leadlovers_update_status->toBe('failed')
-        ->leadlovers_update_error->toBe('A LeadLovers recusou a atualização.');
-})->with([400, 401, 403, 422]);
-
-it('retries transient failures and records failure after attempts are exhausted', function (?int $status) {
-    config(['services.leadlovers.enabled' => true]);
-    $lead = leadForLeadLoversUpdate();
-
-    $service = Mockery::mock(LeadLoversService::class);
-    $service->shouldReceive('updateLead')
-        ->once()
-        ->andReturn([
-            'success' => false,
-            'status' => $status,
-            'http_status' => $status,
-            'response' => [],
-        ]);
-
-    $job = new UpdateLeadOnLeadLoversJob($lead->id, $lead->email, 1, ['name']);
-    $exception = null;
-
-    try {
-        $job->handle($service);
-    } catch (RuntimeException $caught) {
-        $exception = $caught;
-    }
-
-    expect($exception)->toBeInstanceOf(RuntimeException::class)
-        ->and($lead->refresh()->leadlovers_update_status)->toBe('processing');
-
-    $job->failed($exception);
-
-    expect($lead->refresh())
-        ->leadlovers_status->toBe('sent')
-        ->leadlovers_update_status->toBe('failed');
-})->with([408, 425, 500, 503, null]);
-
-it('does not let a stale job or its failed callback overwrite a newer request', function () {
-    config(['services.leadlovers.enabled' => true]);
-    $lead = leadForLeadLoversUpdate([
+it('does not let a stale job or failed callback overwrite a newer version', function () {
+    $lead = stageFourLead([
         'leadlovers_update_version' => 2,
         'leadlovers_update_status' => 'pending',
     ]);
+    $job = new UpdateLeadOnLeadLoversJob($lead->id, 1, ['name']);
 
-    $service = Mockery::mock(LeadLoversService::class);
-    $service->shouldNotReceive('updateLead');
+    runStageFourUpdate($job);
+    $job->failed(new RuntimeException('old job'));
 
-    $job = new UpdateLeadOnLeadLoversJob($lead->id, $lead->email, 1);
-    $job->handle($service);
-    $job->failed(new RuntimeException('stale'));
-
+    Http::assertNothingSent();
     expect($lead->refresh())
-        ->leadlovers_status->toBe('sent')
         ->leadlovers_update_version->toBe(2)
         ->leadlovers_update_status->toBe('pending');
 });
 
-it('stops a queued job serialized before the sync version was introduced', function () {
-    config(['services.leadlovers.enabled' => true]);
-    $lead = leadForLeadLoversUpdate();
-    $service = Mockery::mock(LeadLoversService::class);
-    $service->shouldNotReceive('updateLead');
+it('queues a newer reconciliation when an old PUT finishes after a newer local edit', function () {
+    Queue::fake();
+    $lead = stageFourLead();
+    Http::fake(function (Request $request) use ($lead) {
+        Lead::query()->whereKey($lead->id)->update([
+            'leadlovers_update_version' => 2,
+            'leadlovers_update_status' => 'pending',
+            'leadlovers_update_response' => json_encode([
+                'requested_fields' => ['phone'],
+            ], JSON_THROW_ON_ERROR),
+        ]);
 
-    $legacyJob = new UpdateLeadOnLeadLoversJob($lead->id, $lead->email, 1);
-    unset($legacyJob->syncVersion);
+        return Http::response(['success' => true]);
+    });
 
-    $restoredJob = unserialize(
-        serialize($legacyJob),
-        ['allowed_classes' => true]
+    runStageFourUpdate(new UpdateLeadOnLeadLoversJob(
+        $lead->id,
+        1,
+        ['name']
+    ));
+
+    Queue::assertPushed(
+        UpdateLeadOnLeadLoversJob::class,
+        fn (UpdateLeadOnLeadLoversJob $queued): bool => $queued->syncVersion === 3
+            && $queued->requestedFields === ['name', 'phone']
+            && $queued->afterCommit === true
     );
-
-    expect($restoredJob->syncVersion)->toBe(0);
-    $restoredJob->handle($service);
-
     expect($lead->refresh())
-        ->leadlovers_update_version->toBe(1)
+        ->leadlovers_update_version->toBe(3)
         ->leadlovers_update_status->toBe('pending');
 });
 
-it('fails an old serialized update job without field context and without HTTP', function () {
-    config(['services.leadlovers.enabled' => true]);
-    $lead = leadForLeadLoversUpdate();
-    $remote = Mockery::mock(LeadLoversService::class);
-    $remote->shouldNotReceive('updateLead');
-
-    $legacyJob = new UpdateLeadOnLeadLoversJob(
-        $lead->id,
-        $lead->email,
-        1,
-        ['name']
-    );
-    unset($legacyJob->requestedFields);
-    $restoredJob = unserialize(
-        serialize($legacyJob),
-        ['allowed_classes' => true]
-    );
-
-    expect($restoredJob->requestedFields)->toBe([]);
-    $restoredJob->handle($remote);
-
-    expect($lead->refresh())
-        ->leadlovers_update_status->toBe('failed')
-        ->and($lead->leadlovers_update_response)
-        ->toMatchArray([
-            'requested_fields' => [],
-            'unsupported_fields' => ['legacy_job_without_field_context'],
-        ]);
-});
-
-it('reconciles the latest data when an older remote PATCH finishes last', function () {
-    Queue::fake();
-    config(['services.leadlovers.enabled' => true]);
-
-    $lead = leadForLeadLoversUpdate([
-        'nome' => 'Versão um',
-        'tel' => '11911111111',
+it('keeps old serialized jobs without version or field context from calling HTTP', function () {
+    $lead = stageFourLead([
         'leadlovers_update_version' => 1,
         'leadlovers_update_status' => 'pending',
-        'leadlovers_update_response' => [
-            'requested_fields' => ['name'],
-        ],
     ]);
-    $remoteName = null;
-    $remotePhone = null;
 
-    $newerService = Mockery::mock(LeadLoversService::class);
-    $newerService->shouldReceive('updateLead')
-        ->once()
-        ->andReturnUsing(function (array $payload) use (
-            &$remoteName,
-            &$remotePhone
-        ): array {
-            $remoteName = $payload['Name'];
-            $remotePhone = $payload['Phone'];
+    runStageFourUpdate(new UpdateLeadOnLeadLoversJob($lead->id));
 
-            return [
-                'success' => true,
-                'status' => 200,
-                'http_status' => 200,
-                'response' => ['StatusCode' => 200],
-            ];
-        });
-
-    $olderService = Mockery::mock(LeadLoversService::class);
-    $olderService->shouldReceive('updateLead')
-        ->once()
-        ->andReturnUsing(function (array $payload) use (
-            $lead,
-            $newerService,
-            &$remoteName,
-            &$remotePhone
-        ): array {
-            Lead::query()->whereKey($lead->id)->update([
-                'nome' => 'Versão dois',
-                'tel' => '11922222222',
-                'leadlovers_update_version' => 2,
-                'leadlovers_update_status' => 'pending',
-                'leadlovers_update_response' => json_encode([
-                    'requested_fields' => ['name', 'phone'],
-                ], JSON_THROW_ON_ERROR),
-            ]);
-
-            (new UpdateLeadOnLeadLoversJob(
-                $lead->id,
-                $lead->email,
-                2,
-                ['name', 'phone']
-            ))
-                ->handle($newerService);
-
-            expect($remoteName)->toBe('Versão dois');
-            expect($remotePhone)->toBe('11922222222');
-
-            $remoteName = $payload['Name'];
-
-            return [
-                'success' => true,
-                'status' => 200,
-                'http_status' => 200,
-                'response' => ['StatusCode' => 200],
-            ];
-        });
-
-    (new UpdateLeadOnLeadLoversJob($lead->id, $lead->email, 1, ['name']))
-        ->handle($olderService);
-
-    expect($lead->refresh())
-        ->nome->toBe('Versão dois')
-        ->tel->toBe('11922222222')
-        ->leadlovers_update_version->toBe(3)
-        ->leadlovers_update_status->toBe('pending')
-        ->and($remoteName)->toBe('Versão um')
-        ->and($remotePhone)->toBe('11922222222');
-
-    $reconciliationJob = null;
-
-    Queue::assertPushed(
-        UpdateLeadOnLeadLoversJob::class,
-        function (UpdateLeadOnLeadLoversJob $job) use ($lead, &$reconciliationJob): bool {
-            $reconciliationJob = $job;
-
-            return $job->leadId === $lead->id
-                && $job->syncVersion === 3
-                && $job->requestedFields === ['name', 'phone']
-                && $job->queue === 'leadlovers'
-                && $job->afterCommit === true;
-        }
-    );
-
-    $reconciliationService = Mockery::mock(LeadLoversService::class);
-    $reconciliationService->shouldReceive('updateLead')
-        ->once()
-        ->andReturnUsing(function (array $payload) use (
-            &$remoteName,
-            &$remotePhone
-        ): array {
-            $remoteName = $payload['Name'];
-            $remotePhone = $payload['Phone'];
-
-            return [
-                'success' => true,
-                'status' => 200,
-                'http_status' => 200,
-                'response' => ['StatusCode' => 200],
-            ];
-        });
-
-    expect($reconciliationJob)->toBeInstanceOf(UpdateLeadOnLeadLoversJob::class);
-    $reconciliationJob->handle($reconciliationService);
-
-    expect($lead->refresh())
-        ->leadlovers_update_version->toBe(3)
-        ->leadlovers_update_status->toBe('synced')
-        ->and($remoteName)->toBe('Versão dois')
-        ->and($remotePhone)->toBe('11922222222');
+    Http::assertNothingSent();
+    expect($lead->refresh()->leadlovers_update_status)->toBe('pending');
 });
 
-it('finishes pending jobs safely when the integration is disabled', function () {
-    $lead = leadForLeadLoversUpdate();
-    $service = Mockery::mock(LeadLoversService::class);
-    $service->shouldNotReceive('updateLead');
+it('does no HTTP while integration is disabled', function () {
+    config(['services.leadlovers.enabled' => false]);
+    $lead = stageFourLead();
 
-    (new UpdateLeadOnLeadLoversJob($lead->id, $lead->email, 1))
-        ->handle($service);
+    runStageFourUpdate(new UpdateLeadOnLeadLoversJob(
+        $lead->id,
+        1,
+        ['name']
+    ));
 
-    expect($lead->refresh())
-        ->leadlovers_status->toBe('sent')
-        ->leadlovers_update_status->toBe('disabled');
+    Http::assertNothingSent();
+    expect($lead->refresh()->leadlovers_update_status)->toBe('disabled');
 });
 
-it('marks an invalid original email as failed without calling LeadLovers', function () {
-    config(['services.leadlovers.enabled' => true]);
-    $lead = leadForLeadLoversUpdate();
-    $service = Mockery::mock(LeadLoversService::class);
-    $service->shouldNotReceive('updateLead');
-
-    (new UpdateLeadOnLeadLoversJob($lead->id, 'invalid-email', 1))
-        ->handle($service);
-
-    expect($lead->refresh())
-        ->leadlovers_status->toBe('sent')
-        ->leadlovers_update_status->toBe('failed');
-});
-
-it('keeps the local save when a sent lead has no valid original email for the remote lookup', function () {
+it('persists locally and dispatches the ID-based update after commit', function () {
     Queue::fake();
-    config([
-        'services.leadlovers.enabled' => true,
-        'features.insurance_analysis.enabled' => false,
-    ]);
-
-    $lead = leadForLeadLoversUpdate([
+    $lead = stageFourLead([
         'nome' => 'Nome anterior',
-        'email' => '',
         'leadlovers_update_status' => 'idle',
         'leadlovers_update_version' => 0,
     ]);
@@ -2224,179 +581,22 @@ it('keeps the local save when a sent lead has no valid original email for the re
             'nome' => 'Nome atualizado',
         ]);
 
-    expect($result)
-        ->changed->toBeTrue()
-        ->message->toContain('não pôde ser enfileirada')
+    Queue::assertPushed(
+        UpdateLeadOnLeadLoversJob::class,
+        fn (UpdateLeadOnLeadLoversJob $queued): bool => $queued->leadId === $lead->id
+            && $queued->syncVersion === 1
+            && $queued->requestedFields === ['name']
+            && ! str_contains(serialize($queued), 'person@example.test')
+            && $queued->queue === 'leadlovers'
+            && $queued->afterCommit === true
+    );
+    expect($result['message'])->toContain('fila')
         ->and($lead->refresh())
         ->nome->toBe('Nome atualizado')
-        ->leadlovers_status->toBe('sent')
-        ->leadlovers_update_status->toBe('failed');
-    Queue::assertNotPushed(UpdateLeadOnLeadLoversJob::class);
-    Queue::assertNotPushed(RunProviderAnalysisJob::class);
-    Http::assertNothingSent();
+        ->leadlovers_update_status->toBe('pending');
 });
 
-it('clears nullable local fields while preserving the readonly email', function () {
-    Queue::fake();
-
-    $lead = leadForLeadLoversUpdate([
-        'email' => 'readonly@example.test',
-        'tel' => '(11) 99999-0000',
-        'cpf' => '12345678900',
-        'tipo_solicitante' => 'locatario',
-        'estado_civil' => 'casado',
-    ]);
-    $lead->endereco()->create([
-        'cep' => '01001000',
-        'estado' => 'SP',
-        'cidade_imovel' => 'São Paulo',
-        'bairro' => 'Centro',
-        'logradouro' => 'Praça da Sé',
-        'numero' => '1',
-        'complemento' => 'Sala 1',
-    ]);
-    $lead->despesas()->create([
-        'valor_aluguel' => 1500,
-        'valor_agua' => 100,
-        'valor_luz' => 100,
-        'valor_gas' => 50,
-        'valor_condominio' => 300,
-        'valor_iptu' => 80,
-        'outras_despesas' => 20,
-        'valor_total_encargos' => 2150,
-    ]);
-    $lead->conjuge()->create([
-        'nome' => 'Pessoa Cônjuge',
-        'cpf' => '98765432100',
-    ]);
-
-    $result = app(LeadReanalysisService::class)
-        ->updateLeadDataAndMaybeUnlock($lead, [
-            'email' => 'tampered@example.test',
-            'tel' => null,
-            'cpf' => null,
-            'tipo_solicitante' => null,
-            'estado_civil' => null,
-            'cep' => null,
-            'estado' => null,
-            'cidade_imovel' => null,
-            'bairro' => null,
-            'logradouro' => null,
-            'numero' => null,
-            'complemento' => null,
-            'valor_aluguel' => null,
-            'valor_agua' => null,
-            'valor_luz' => null,
-            'valor_gas' => null,
-            'valor_condominio' => null,
-            'valor_iptu' => null,
-            'outras_despesas' => null,
-            'conjuge_nome' => null,
-            'conjuge_cpf' => null,
-        ]);
-
-    $lead->refresh()->load(['endereco', 'despesas', 'conjuge']);
-
-    expect($result['changed'])->toBeTrue()
-        ->and($lead)
-        ->email->toBe('readonly@example.test')
-        ->tel->toBeNull()
-        ->cpf->toBeNull()
-        ->tipo_solicitante->toBeNull()
-        ->estado_civil->toBeNull()
-        ->and($lead->endereco->only([
-            'cep',
-            'estado',
-            'cidade_imovel',
-            'bairro',
-            'logradouro',
-            'numero',
-            'complemento',
-        ]))->each->toBeNull()
-        ->and($lead->despesas->only([
-            'valor_aluguel',
-            'valor_agua',
-            'valor_luz',
-            'valor_gas',
-            'valor_condominio',
-            'valor_iptu',
-            'outras_despesas',
-        ]))->each->toBeNull()
-        ->and($lead->despesas->valor_total_encargos)->toBe('0.00')
-        ->and($lead->conjuge->nome)->toBeNull()
-        ->and($lead->conjuge->cpf)->toBeNull()
-        ->and($lead->endereco()->count())->toBe(1)
-        ->and($lead->despesas()->count())->toBe(1)
-        ->and($lead->conjuge()->count())->toBe(1);
-
-    Queue::assertNothingPushed();
-    Http::assertNothingSent();
-});
-
-it('persists locally and dispatches the LeadLovers update after commit while analyses are disabled', function () {
-    Queue::fake();
-    config([
-        'services.leadlovers.enabled' => true,
-        'features.insurance_analysis.enabled' => false,
-    ]);
-
-    $lead = leadForLeadLoversUpdate([
-        'nome' => 'Nome anterior',
-        'leadlovers_update_status' => 'idle',
-        'leadlovers_update_version' => 0,
-    ]);
-    $lead->forceFill([
-        'analysis_final_status' => 'approved',
-        'reanalysis_unlocked_at' => null,
-    ])->save();
-
-    $result = app(LeadReanalysisService::class)
-        ->updateLeadDataAndMaybeUnlock($lead, [
-            'nome' => 'Nome atualizado',
-            'tel' => '(11) 99999-0000',
-            'cep' => '01001-000',
-            'cidade_imovel' => 'São Paulo',
-            'estado' => 'SP',
-            'valor_aluguel' => 1500,
-            'conjuge_nome' => 'Pessoa Cônjuge',
-        ]);
-
-    $lead->refresh()->load(['endereco', 'despesas', 'conjuge']);
-
-    expect($result)
-        ->changed->toBeTrue()
-        ->unlocked->toBeFalse()
-        ->message->toBe('Dados salvos no sistema. A sincronização com a LeadLovers foi colocada na fila.')
-        ->and($lead)
-        ->nome->toBe('Nome atualizado')
-        ->tel->toBe('(11) 99999-0000')
-        ->leadlovers_status->toBe('sent')
-        ->leadlovers_update_status->toBe('pending')
-        ->leadlovers_update_version->toBe(1)
-        ->leadlovers_update_requested_at->not->toBeNull()
-        ->reanalysis_unlocked_at->toBeNull()
-        ->and($lead->endereco->cep)->toBe('01001-000')
-        ->and($lead->despesas->valor_aluguel)->toBe('1500.00')
-        ->and($lead->conjuge->nome)->toBe('Pessoa Cônjuge');
-
-    Queue::assertPushed(
-        UpdateLeadOnLeadLoversJob::class,
-        fn (UpdateLeadOnLeadLoversJob $job): bool => $job->leadId === $lead->id
-            && $job->originalEmail === 'person@example.test'
-            && $job->syncVersion === 1
-            && $job->queue === 'leadlovers'
-            && $job->afterCommit === true
-    );
-    Queue::assertNotPushed(RunProviderAnalysisJob::class);
-    Http::assertNothingSent();
-});
-
-it('keeps the local save and marks the sync failed when the queue push fails', function () {
-    config([
-        'services.leadlovers.enabled' => true,
-        'features.insurance_analysis.enabled' => false,
-    ]);
-
+it('keeps the local save and marks only the matching version failed when queueing fails', function () {
     $queue = Mockery::mock(QueueContract::class);
     $queue->shouldReceive('push')
         ->once()
@@ -2404,8 +604,7 @@ it('keeps the local save and marks the sync failed when the queue push fails', f
     Queue::shouldReceive('connection')
         ->once()
         ->andReturn($queue);
-
-    $lead = leadForLeadLoversUpdate([
+    $lead = stageFourLead([
         'nome' => 'Nome anterior',
         'leadlovers_update_status' => 'idle',
         'leadlovers_update_version' => 0,
@@ -2416,255 +615,18 @@ it('keeps the local save and marks the sync failed when the queue push fails', f
             'nome' => 'Nome salvo localmente',
         ]);
 
-    expect($result)
-        ->changed->toBeTrue()
-        ->message->toContain('não pôde ser enfileirada')
+    expect($result['message'])->toContain('enfileirada')
         ->and($lead->refresh())
         ->nome->toBe('Nome salvo localmente')
         ->leadlovers_update_version->toBe(1)
         ->leadlovers_update_status->toBe('failed')
         ->leadlovers_status->toBe('sent');
-
     Http::assertNothingSent();
-});
-
-it('waits for the initial LeadLovers send before dispatching an update', function () {
-    Queue::fake();
-    config([
-        'services.leadlovers.enabled' => true,
-        'features.insurance_analysis.enabled' => false,
-    ]);
-
-    $lead = leadForLeadLoversUpdate([
-        'nome' => 'Nome anterior',
-        'leadlovers_status' => 'pending',
-        'sent_to_leadlovers_at' => null,
-        'leadlovers_update_status' => 'idle',
-        'leadlovers_update_version' => 0,
-    ]);
-
-    $result = app(LeadReanalysisService::class)
-        ->updateLeadDataAndMaybeUnlock($lead, [
-            'nome' => 'Nome atualizado',
-        ]);
-
-    expect($result)
-        ->changed->toBeTrue()
-        ->message->toContain('aguarda o envio inicial')
-        ->and($lead->refresh()->leadlovers_update_status)
-        ->toBe('waiting_initial_send')
-        ->and($lead->leadlovers_update_response['requested_fields'])
-        ->toBe(['name']);
-    Queue::assertNotPushed(UpdateLeadOnLeadLoversJob::class);
-    Queue::assertNotPushed(RunProviderAnalysisJob::class);
-});
-
-it('queues a newer accumulated update after a confirmed initial send', function () {
-    Queue::fake();
-    config([
-        'services.leadlovers.enabled' => true,
-        'services.leadlovers.initial_update_delay_seconds' => 60,
-    ]);
-
-    $lead = leadForLeadLoversUpdate([
-        'nome' => 'Nome já alterado',
-        'email' => 'follow-up@example.test',
-        'sent_to_leadlovers_at' => now(),
-        'leadlovers_update_response' => [
-            'requested_fields' => ['name'],
-        ],
-    ]);
-
-    $settleUntil = $lead->sent_to_leadlovers_at->copy()->addSeconds(60);
-    app(LeadReanalysisService::class)->updateLeadDataAndMaybeUnlock(
-        $lead,
-        ['tel' => '11999990000']
-    );
-
-    Queue::assertPushed(
-        UpdateLeadOnLeadLoversJob::class,
-        fn (UpdateLeadOnLeadLoversJob $job): bool => $job->leadId === $lead->id
-            && $job->syncVersion === 2
-            && $job->requestedFields === ['name', 'phone']
-            && $job->delay instanceof \DateTimeInterface
-            && $job->delay >= $settleUntil
-    );
-    expect($lead->refresh()->leadlovers_update_version)->toBe(2);
-});
-
-it('sends exactly Email and Name after a name-only edit', function () {
-    Queue::fake();
-    config([
-        'services.leadlovers.enabled' => true,
-        'services.leadlovers.base_url' => 'https://example.test/webapi/',
-        'features.insurance_analysis.enabled' => false,
-    ]);
-
-    $lead = leadForLeadLoversUpdate([
-        'nome' => 'Nome anterior',
-        'leadlovers_update_status' => 'idle',
-        'leadlovers_update_version' => 0,
-    ]);
-
-    app(LeadReanalysisService::class)->updateLeadDataAndMaybeUnlock(
-        $lead,
-        ['nome' => 'Nome mínimo']
-    );
-
-    $queuedJob = null;
-    Queue::assertPushed(
-        UpdateLeadOnLeadLoversJob::class,
-        function (UpdateLeadOnLeadLoversJob $job) use (&$queuedJob): bool {
-            $queuedJob = $job;
-
-            return $job->requestedFields === ['name'];
-        }
-    );
-
-    Http::fake(['*' => Http::response(['StatusCode' => 200], 200)]);
-    expect($queuedJob)->toBeInstanceOf(UpdateLeadOnLeadLoversJob::class);
-    $queuedJob->handle(app(LeadLoversService::class));
-
-    Http::assertSent(
-        fn (Request $request): bool => $request->method() === 'PATCH'
-            && array_keys($request->data()) === ['Email', 'Name']
-            && $request['Name'] === 'Nome mínimo'
-    );
-
-    expect($lead->refresh())
-        ->leadlovers_update_status->toBe('synced')
-        ->and($lead->leadlovers_update_response['requested_fields'])
-        ->toBe(['name']);
-});
-
-it('does not invent remote changes for absent optional relations', function (
-    mixed $emptySpouseName,
-    mixed $emptySpouseCpf,
-    mixed $emptyExpenseValue
-) {
-    Queue::fake();
-    config([
-        'services.leadlovers.enabled' => true,
-        'services.leadlovers.base_url' => 'https://example.test/webapi/',
-        'services.leadlovers.dynamic_fields.conjuge_cpf' => 103,
-        'features.insurance_analysis.enabled' => false,
-    ]);
-    $lead = leadForLeadLoversUpdate([
-        'nome' => 'Nome anterior',
-        'leadlovers_update_status' => 'idle',
-        'leadlovers_update_version' => 0,
-    ]);
-
-    app(LeadReanalysisService::class)->updateLeadDataAndMaybeUnlock(
-        $lead,
-        [
-            'nome' => 'Nome atualizado',
-            'cidade_imovel' => 'Cidade atualizada',
-            'estado' => null,
-            'conjuge_nome' => $emptySpouseName,
-            'conjuge_cpf' => $emptySpouseCpf,
-            'valor_aluguel' => $emptyExpenseValue,
-            'valor_agua' => $emptyExpenseValue,
-            'valor_luz' => $emptyExpenseValue,
-            'valor_gas' => $emptyExpenseValue,
-            'valor_condominio' => $emptyExpenseValue,
-            'valor_iptu' => $emptyExpenseValue,
-            'outras_despesas' => $emptyExpenseValue,
-        ]
-    );
-
-    $queuedJob = null;
-    Queue::assertPushed(
-        UpdateLeadOnLeadLoversJob::class,
-        function (UpdateLeadOnLeadLoversJob $job) use (&$queuedJob): bool {
-            $queuedJob = $job;
-
-            return $job->requestedFields === ['name', 'city'];
-        }
-    );
-    expect($lead->refresh())
-        ->leadlovers_update_status->toBe('pending')
-        ->and($lead->conjuge()->count())->toBe(0)
-        ->and($lead->despesas()->count())->toBe(0)
-        ->and($lead->endereco()->count())->toBe(1);
-
-    Http::fake(['*' => Http::response(['StatusCode' => 200], 200)]);
-    $queuedJob->handle(app(LeadLoversService::class));
-
-    Http::assertSent(
-        fn (Request $request): bool => $request->method() === 'PATCH'
-            && array_keys($request->data()) === ['Email', 'Name', 'City']
-            && ! array_key_exists('DynamicFields', $request->data())
-    );
-    expect($lead->refresh()->leadlovers_update_status)->toBe('synced');
-})->with([
-    'null values' => [null, null, null],
-    'empty strings' => ['', '', ''],
-    'whitespace strings' => ['   ', "\t", '   '],
-]);
-
-it('keeps a real spouse CPF clear explicit and fail closed', function () {
-    Queue::fake();
-    config([
-        'services.leadlovers.enabled' => true,
-        'features.insurance_analysis.enabled' => false,
-    ]);
-    $lead = leadForLeadLoversUpdate([
-        'leadlovers_update_status' => 'idle',
-        'leadlovers_update_version' => 0,
-    ]);
-    $lead->conjuge()->create([
-        'nome' => 'Pessoa Cônjuge',
-        'cpf' => '98765432100',
-    ]);
-
-    app(LeadReanalysisService::class)->updateLeadDataAndMaybeUnlock(
-        $lead,
-        ['conjuge_cpf' => null]
-    );
-
-    $queuedJob = null;
-    Queue::assertPushed(
-        UpdateLeadOnLeadLoversJob::class,
-        function (UpdateLeadOnLeadLoversJob $job) use (&$queuedJob): bool {
-            $queuedJob = $job;
-
-            return $job->requestedFields === ['conjuge_cpf'];
-        }
-    );
-    $remote = Mockery::mock(LeadLoversService::class);
-    $remote->shouldNotReceive('updateLead');
-    $queuedJob->handle($remote);
-
-    expect($lead->refresh())
-        ->leadlovers_update_status->toBe('failed')
-        ->and($lead->conjuge->cpf)->toBeNull()
-        ->and($lead->leadlovers_update_response)
-        ->toMatchArray([
-            'requested_fields' => ['conjuge_cpf'],
-            'unsupported_fields' => ['conjuge_cpf'],
-        ]);
-    Http::assertNothingSent();
-
-    app(LeadReanalysisService::class)->updateLeadDataAndMaybeUnlock(
-        $lead,
-        ['nome' => 'Nome após o clear']
-    );
-    Queue::assertPushed(
-        UpdateLeadOnLeadLoversJob::class,
-        fn (UpdateLeadOnLeadLoversJob $job): bool => $job->syncVersion === 2
-            && $job->requestedFields === ['name', 'conjuge_cpf']
-    );
 });
 
 it('unions pending remote fields across consecutive local edits', function () {
     Queue::fake();
-    config([
-        'services.leadlovers.enabled' => true,
-        'features.insurance_analysis.enabled' => false,
-    ]);
-
-    $lead = leadForLeadLoversUpdate([
+    $lead = stageFourLead([
         'nome' => 'Nome anterior',
         'tel' => '11900000000',
         'leadlovers_update_status' => 'idle',
@@ -2675,162 +637,41 @@ it('unions pending remote fields across consecutive local edits', function () {
     $service->updateLeadDataAndMaybeUnlock($lead, ['nome' => 'Nome novo']);
     $service->updateLeadDataAndMaybeUnlock($lead, ['tel' => '11999990000']);
 
-    $latestJob = null;
     Queue::assertPushed(
         UpdateLeadOnLeadLoversJob::class,
-        function (UpdateLeadOnLeadLoversJob $job) use (&$latestJob): bool {
-            if ($job->syncVersion === 2) {
-                $latestJob = $job;
-            }
-
-            return true;
-        }
+        fn (UpdateLeadOnLeadLoversJob $queued): bool => $queued->syncVersion === 2
+            && $queued->requestedFields === ['name', 'phone']
     );
-
-    expect($latestJob)
-        ->toBeInstanceOf(UpdateLeadOnLeadLoversJob::class)
-        ->requestedFields->toBe(['name', 'phone'])
-        ->and($lead->refresh()->leadlovers_update_response['requested_fields'])
+    expect($lead->refresh()->leadlovers_update_response['requested_fields'])
         ->toBe(['name', 'phone']);
 });
 
-it('keeps permanently failed fields in the next synchronization version', function () {
+it('waits for the initial send and keeps accumulated fields', function () {
     Queue::fake();
-    config([
-        'services.leadlovers.enabled' => true,
-        'features.insurance_analysis.enabled' => false,
-    ]);
-
-    $lead = leadForLeadLoversUpdate([
-        'nome' => 'Nome pendente',
-        'tel' => '11900000000',
-        'leadlovers_update_response' => [
-            'requested_fields' => ['name'],
-        ],
-    ]);
-    $remote = Mockery::mock(LeadLoversService::class);
-    $remote->shouldReceive('updateLead')
-        ->once()
-        ->andReturn([
-            'success' => false,
-            'status' => 400,
-            'http_status' => 400,
-            'response_message' => 'Campo inválido',
-        ]);
-
-    (new UpdateLeadOnLeadLoversJob(
-        $lead->id,
-        $lead->email,
-        1,
-        ['name']
-    ))->handle($remote);
-
-    expect($lead->refresh())
-        ->leadlovers_update_status->toBe('failed')
-        ->and($lead->leadlovers_update_response['requested_fields'])
-        ->toBe(['name']);
-
-    app(LeadReanalysisService::class)->updateLeadDataAndMaybeUnlock(
-        $lead,
-        ['tel' => '11999990000']
-    );
-
-    Queue::assertPushed(
-        UpdateLeadOnLeadLoversJob::class,
-        fn (UpdateLeadOnLeadLoversJob $job): bool => $job->syncVersion === 2
-            && $job->requestedFields === ['name', 'phone']
-    );
-});
-
-it('sends only one requested DynamicField id', function () {
-    config([
-        'services.leadlovers.enabled' => true,
-        'services.leadlovers.base_url' => 'https://example.test/webapi/',
-        'services.leadlovers.dynamic_fields' => ['cpf' => 101],
-    ]);
-    $lead = leadForLeadLoversUpdate(['cpf' => '12345678900']);
-    Http::fake(['*' => Http::response(['StatusCode' => 200], 200)]);
-
-    (new UpdateLeadOnLeadLoversJob(
-        $lead->id,
-        $lead->email,
-        1,
-        ['cpf']
-    ))->handle(app(LeadLoversService::class));
-
-    Http::assertSent(
-        fn (Request $request): bool => array_keys($request->data()) === ['Email', 'DynamicFields']
-            && $request['DynamicFields'] === [[
-                'Id' => 101,
-                'Value' => '12345678900',
-            ]]
-    );
-    expect($lead->refresh()->leadlovers_update_status)->toBe('synced');
-});
-
-it('fails closed without HTTP when clearing a remote field is unsupported', function () {
-    Queue::fake();
-    config([
-        'services.leadlovers.enabled' => true,
-        'features.insurance_analysis.enabled' => false,
-    ]);
-
-    $lead = leadForLeadLoversUpdate([
-        'tel' => '11999990000',
+    $lead = stageFourLead([
+        'nome' => 'Nome anterior',
+        'leadlovers_status' => 'pending',
+        'leadlovers_lead_id' => null,
+        'sent_to_leadlovers_at' => null,
         'leadlovers_update_status' => 'idle',
         'leadlovers_update_version' => 0,
     ]);
 
     app(LeadReanalysisService::class)->updateLeadDataAndMaybeUnlock(
         $lead,
-        ['tel' => null]
+        ['nome' => 'Nome atualizado']
     );
 
-    $queuedJob = null;
-    Queue::assertPushed(
-        UpdateLeadOnLeadLoversJob::class,
-        function (UpdateLeadOnLeadLoversJob $job) use (&$queuedJob): bool {
-            $queuedJob = $job;
-
-            return $job->requestedFields === ['phone'];
-        }
-    );
-
-    $remote = Mockery::mock(LeadLoversService::class);
-    $remote->shouldNotReceive('updateLead');
-    Log::spy();
-    $queuedJob->handle($remote);
-
-    Log::shouldHaveReceived('warning')
-        ->once()
-        ->with(
-            'Atualização da LeadLovers bloqueada pela validação local; nenhum PATCH foi enviado.',
-            Mockery::on(
-                fn (array $context): bool => $context['failure_stage'] === 'local_preflight'
-                    && $context['http_request_sent'] === false
-                    && $context['retryable'] === false
-                    && $context['requested_fields'] === ['phone']
-                    && $context['unsupported_fields'] === ['phone']
-            )
-        );
-
+    Queue::assertNotPushed(UpdateLeadOnLeadLoversJob::class);
     expect($lead->refresh())
-        ->leadlovers_update_status->toBe('failed')
-        ->and($lead->leadlovers_update_response)
-        ->toMatchArray([
-            'requested_fields' => ['phone'],
-            'unsupported_fields' => ['phone'],
-        ]);
+        ->leadlovers_update_status->toBe('waiting_initial_send')
+        ->and($lead->leadlovers_update_response['requested_fields'])
+        ->toBe(['name']);
 });
 
-it('does not disturb an existing sync state for a local-only edit', function () {
+it('does not disturb a pending remote sync for a local-only edit', function () {
     Queue::fake();
-    config([
-        'services.leadlovers.enabled' => true,
-        'features.insurance_analysis.enabled' => false,
-    ]);
-
-    $lead = leadForLeadLoversUpdate([
+    $lead = stageFourLead([
         'leadlovers_update_status' => 'failed',
         'leadlovers_update_version' => 4,
         'leadlovers_update_error' => 'Falha anterior',
@@ -2853,13 +694,9 @@ it('does not disturb an existing sync state for a local-only edit', function () 
     Queue::assertNotPushed(UpdateLeadOnLeadLoversJob::class);
 });
 
-it('normalizes the legacy send lifecycle before queuing an update', function () {
+it('normalizes the legacy sent lifecycle before queueing an ID-based update', function () {
     Queue::fake();
-    config([
-        'services.leadlovers.enabled' => true,
-        'features.insurance_analysis.enabled' => false,
-    ]);
-    $lead = leadForLeadLoversUpdate([
+    $lead = stageFourLead([
         'nome' => 'Nome anterior',
         'leadlovers_status' => 'send',
         'leadlovers_update_status' => 'idle',
@@ -2880,57 +717,207 @@ it('normalizes the legacy send lifecycle before queuing an update', function () 
     );
 });
 
-it('sanitizes the provider message before exposing update diagnostics', function () {
-    config([
-        'services.leadlovers.enabled' => true,
-        'services.leadlovers.base_url' => 'https://example.test/webapi/',
-        'services.leadlovers.token' => 'private-provider-token',
+it('runs backfill dry-run for selected local IDs without persisting', function () {
+    $lead = stageFourLead(['leadlovers_lead_id' => null]);
+    $other = stageFourLead([
+        'email' => 'other@example.test',
+        'leadlovers_lead_id' => null,
+    ]);
+    Http::fake([
+        'https://api.leadlovers.test/leads/search' => Http::response(
+            stageFourSearchResult([
+                stageFourSearchRecord(['leadId' => 777]),
+            ])
+        ),
     ]);
 
-    Http::fake(['*' => Http::response([
-        'message' => 'Lead person@example.test Pessoa Secreta CPF 123.456.789-00 telefone (11) 98888-7777 token=private-provider-token inválido',
-    ], 400)]);
+    $this->artisan('leadlovers:backfill-lead-ids', [
+        '--dry-run' => true,
+        '--id' => [(string) $lead->id],
+        '--chunk' => 1,
+    ])->assertSuccessful();
 
-    $result = app(LeadLoversService::class)->updateLead([
-        'Email' => 'person@example.test',
-
-        'Name' => 'Pessoa Secreta',
-        'Phone' => '11988887777',
-        'DynamicFields' => [[
-            'Id' => 10,
-            'Value' => '12345678900',
-        ]],
-    ]);
-
-    expect($result)
-        ->success->toBeFalse()
-        ->status->toBe(400)
-        ->provider_diagnostic->toBeNull()
-        ->response_message->toBe('A LeadLovers informou falha de autenticação.')
-        ->response_message->not->toContain('person@example.test')
-        ->response_message->not->toContain('Pessoa Secreta')
-        ->response_message->not->toContain('123.456.789-00')
-        ->response_message->not->toContain('(11) 98888-7777')
-        ->response_message->not->toContain('private-provider-token');
+    Http::assertSentCount(1);
+    expect($lead->refresh()->leadlovers_lead_id)->toBeNull()
+        ->and($other->refresh()->leadlovers_lead_id)->toBeNull();
 });
 
-it('sanitizes short known values echoed by the provider', function () {
+it('backfills an exact leadId and never overwrites an existing one', function () {
+    $lead = stageFourLead(['leadlovers_lead_id' => null]);
+    $existing = stageFourLead([
+        'email' => 'existing@example.test',
+        'leadlovers_lead_id' => 888,
+    ]);
+    Http::fake([
+        'https://api.leadlovers.test/leads/search' => Http::response(
+            stageFourSearchResult([
+                stageFourSearchRecord(['leadId' => 777]),
+            ])
+        ),
+    ]);
+
+    $this->artisan('leadlovers:backfill-lead-ids', [
+        '--id' => [(string) $lead->id, (string) $existing->id],
+        '--chunk' => 1,
+    ])->assertSuccessful();
+
+    Http::assertSentCount(1);
+    expect($lead->refresh()->leadlovers_lead_id)->toBe(777)
+        ->and($existing->refresh()->leadlovers_lead_id)->toBe(888);
+});
+
+it('resumes backfill after a transient interruption without repeating reconciled leads', function () {
+    $first = stageFourLead(['leadlovers_lead_id' => null]);
+    $second = stageFourLead([
+        'email' => 'resume@example.test',
+        'leadlovers_lead_id' => null,
+    ]);
+    $run = 1;
+    Http::fake(function (Request $request) use (&$run) {
+        $email = data_get($request->data(), 'filters.staticFields.email.0');
+
+        if ($email === 'person@example.test') {
+            return Http::response(stageFourSearchResult([
+                stageFourSearchRecord(['leadId' => 701]),
+            ]));
+        }
+
+        if ($run === 1) {
+            return Http::response([
+                'success' => false,
+                'error' => ['code' => 'UNAVAILABLE'],
+            ], 503);
+        }
+
+        return Http::response(stageFourSearchResult([
+            stageFourSearchRecord([
+                'id' => 9002,
+                'leadId' => 702,
+                'email' => 'resume@example.test',
+            ]),
+        ]));
+    });
+
+    $this->artisan('leadlovers:backfill-lead-ids', ['--chunk' => 1])
+        ->assertFailed();
+
+    expect($first->refresh()->leadlovers_lead_id)->toBe(701)
+        ->and($second->refresh()->leadlovers_lead_id)->toBeNull();
+
+    $run = 2;
+    $this->artisan('leadlovers:backfill-lead-ids', ['--chunk' => 1])
+        ->assertSuccessful();
+
+    Http::assertSentCount(3);
+    expect($first->refresh()->leadlovers_lead_id)->toBe(701)
+        ->and($second->refresh()->leadlovers_lead_id)->toBe(702);
+});
+
+it('reports ambiguous backfill matches without persisting an ID', function () {
+    $lead = stageFourLead(['leadlovers_lead_id' => null]);
+    Http::fake([
+        'https://api.leadlovers.test/leads/search' => Http::response(
+            stageFourSearchResult([
+                stageFourSearchRecord(['leadId' => 701]),
+                stageFourSearchRecord(['id' => 9002, 'leadId' => 702]),
+            ])
+        ),
+    ]);
+
+    $this->artisan('leadlovers:backfill-lead-ids', [
+        '--id' => [(string) $lead->id],
+    ])->assertFailed();
+
+    expect($lead->refresh()->leadlovers_lead_id)->toBeNull();
+});
+
+it('reports a lead missing from backfill and leaves its ID empty', function () {
+    $lead = stageFourLead(['leadlovers_lead_id' => null]);
+    Http::fake([
+        'https://api.leadlovers.test/leads/search' => Http::response(
+            stageFourSearchResult([], 0)
+        ),
+    ]);
+
+    $this->artisan('leadlovers:backfill-lead-ids', [
+        '--id' => [(string) $lead->id],
+    ])->expectsOutputToContain('ausente')
+        ->assertFailed();
+
+    expect($lead->refresh()->leadlovers_lead_id)->toBeNull();
+});
+
+it('validates configured custom-field IDs through the administrative command', function () {
     config([
-        'services.leadlovers.enabled' => true,
-        'services.leadlovers.base_url' => 'https://example.test/webapi/',
-        'services.leadlovers.token' => 'tok',
+        'services.leadlovers.dynamic_fields' => [
+            'cpf' => 101,
+            'estado_civil' => 102,
+        ],
     ]);
-    Http::fake(['*' => Http::response([
-        'message' => 'Nome Ana rejeitado; token=tok',
-    ], 400)]);
-
-    $result = app(LeadLoversService::class)->updateLead([
-        'Email' => 'person@example.test',
-        'Name' => 'Ana',
+    Http::fake([
+        'https://api.leadlovers.test/leads/custom-fields' => Http::response([
+            [
+                'id' => 101,
+                'name' => 'CPF',
+                'label' => 'CPF',
+                'tag' => 'cpf',
+                'typeId' => 1,
+                'order' => 1,
+                'values' => [],
+            ],
+            [
+                'id' => 102,
+                'name' => 'Estado civil',
+                'label' => 'Estado civil',
+                'tag' => 'estado_civil',
+                'typeId' => 1,
+                'order' => 2,
+                'values' => [],
+            ],
+        ]),
     ]);
 
-    expect($result['response_message'])
-        ->toBe('A LeadLovers informou falha de autenticação.')
-        ->not->toContain('Ana')
-        ->not->toContain('tok');
+    $this->artisan('leadlovers:validate-custom-fields')
+        ->assertSuccessful();
+
+    Http::assertSentCount(1);
+});
+
+it('fails custom-field validation for missing or duplicate configured IDs', function () {
+    config([
+        'services.leadlovers.dynamic_fields' => [
+            'cpf' => 101,
+            'estado_civil' => 101,
+            'conjuge_cpf' => 999,
+        ],
+    ]);
+    Http::fake([
+        'https://api.leadlovers.test/leads/custom-fields' => Http::response([
+            [
+                'id' => 101,
+                'name' => 'CPF',
+                'label' => 'CPF',
+                'tag' => 'cpf',
+                'typeId' => 1,
+                'order' => null,
+                'values' => [],
+            ],
+        ]),
+    ]);
+
+    $this->artisan('leadlovers:validate-custom-fields')
+        ->assertFailed();
+
+    Http::assertSentCount(1);
+});
+
+it('does not call either administrative endpoint while disabled', function () {
+    config(['services.leadlovers.enabled' => false]);
+
+    $this->artisan('leadlovers:backfill-lead-ids', ['--dry-run' => true])
+        ->assertFailed();
+    $this->artisan('leadlovers:validate-custom-fields')
+        ->assertFailed();
+
+    Http::assertNothingSent();
 });

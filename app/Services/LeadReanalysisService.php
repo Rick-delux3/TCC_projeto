@@ -54,9 +54,6 @@ class LeadReanalysisService
                 ->lockForUpdate()
                 ->firstOrFail();
 
-            $originalEmail = is_string($lead->email)
-                ? trim($lead->email)
-                : '';
             $submittedValue = static fn (string $field, mixed $current): mixed => array_key_exists($field, $data) ? $data[$field] : $current;
             $normalizeNullableString = static function (mixed $value): ?string {
                 if ($value === null) {
@@ -362,8 +359,6 @@ class LeadReanalysisService
             ], true);
             $initialSendNeedsReconciliation = $lead->leadlovers_status
                 === 'failed';
-            $hasValidOriginalEmail = $originalEmail !== ''
-                && filter_var($originalEmail, FILTER_VALIDATE_EMAIL) !== false;
             $syncStatus = 'idle';
             $dispatch = null;
 
@@ -423,13 +418,6 @@ class LeadReanalysisService
                         'lead_id' => (int) $lead->id,
                     ];
                 }
-            } elseif (! $hasValidOriginalEmail) {
-                $syncStatus = 'failed';
-
-                $lead->forceFill([
-                    'leadlovers_update_status' => $syncStatus,
-                    'leadlovers_update_error' => 'O e-mail original não permite localizar o lead na LeadLovers.',
-                ])->saveQuietly();
             } else {
                 $syncStatus = 'pending';
                 $syncVersion = (int) $lead->leadlovers_update_version + 1;
@@ -451,7 +439,6 @@ class LeadReanalysisService
                 $dispatch = [
                     'job_type' => 'update',
                     'lead_id' => (int) $lead->id,
-                    'original_email' => $originalEmail,
                     'sync_version' => $syncVersion,
                     'requested_fields' => $requestedLeadLoversFields,
                     'not_before' => $this->leadLoversUpdateNotBefore($lead),
@@ -499,7 +486,6 @@ class LeadReanalysisService
                 } else {
                     $job = new UpdateLeadOnLeadLoversJob(
                         leadId: $dispatch['lead_id'],
-                        originalEmail: $dispatch['original_email'],
                         syncVersion: $dispatch['sync_version'],
                         requestedFields: $dispatch['requested_fields'],
                     );

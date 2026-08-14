@@ -65,6 +65,10 @@ return [
         'rate_limit_window_seconds' => (int) env('LEADLOVERS_RATE_LIMIT_WINDOW_SECONDS', 60),
         'initial_update_delay_seconds' => (int) env('LEADLOVERS_INITIAL_UPDATE_DELAY_SECONDS', 60),
         'machine_confirmation_delay_seconds' => (int) env('LEADLOVERS_MACHINE_CONFIRMATION_DELAY_SECONDS', 15),
+        'tag_confirmation_delay_seconds' => (int) env('LEADLOVERS_TAG_CONFIRMATION_DELAY_SECONDS', 15),
+        'tag_uncertain_retry_checks' => (int) env('LEADLOVERS_TAG_UNCERTAIN_RETRY_CHECKS', 2),
+        'tag_max_post_attempts' => (int) env('LEADLOVERS_TAG_MAX_POST_ATTEMPTS', 2),
+        'tag_posting_stale_seconds' => (int) env('LEADLOVERS_TAG_POSTING_STALE_SECONDS', 60),
         'dynamic_fields' => [
             'cpf' => env('LEADLOVERS_FIELD_CPF'),
             'estado_civil' => env('LEADLOVERS_FIELD_ESTADO_CIVIL'),

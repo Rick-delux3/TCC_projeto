@@ -337,14 +337,15 @@ it('marks the lead sent only after the expected machine state is confirmed', fun
     Queue::assertPushed(
         UpdateLeadOnLeadLoversJob::class,
         fn (UpdateLeadOnLeadLoversJob $queued): bool => $queued->leadId === $lead->id
-            && $queued->originalEmail === 'person@example.test'
             && $queued->syncVersion === 1
             && $queued->requestedFields === ['name']
+            && $queued->afterCommit === true
+            && ! str_contains(serialize($queued), 'person@example.test')
     );
     Http::assertSentCount(1);
 });
 
-it('fails a pending update closed when the frozen creation email cannot be decrypted', function () {
+it('queues a pending update by remote ID even when the frozen creation email is unavailable', function () {
     Queue::fake();
     $lead = leadForInitialLeadLoversSend([
         'email' => 'current@example.test',
@@ -371,9 +372,15 @@ it('fails a pending update closed when the frozen creation email cannot be decry
 
     expect($lead->refresh())
         ->leadlovers_status->toBe('sent')
-        ->leadlovers_update_status->toBe('failed')
-        ->leadlovers_update_error->toContain('e-mail');
-    Queue::assertNotPushed(UpdateLeadOnLeadLoversJob::class);
+        ->leadlovers_update_status->toBe('pending')
+        ->leadlovers_update_error->toBeNull();
+    Queue::assertPushed(
+        UpdateLeadOnLeadLoversJob::class,
+        fn (UpdateLeadOnLeadLoversJob $queued): bool => $queued->leadId === $lead->id
+            && $queued->syncVersion === 1
+            && $queued->requestedFields === ['name']
+            && $queued->afterCommit === true
+    );
 });
 
 it('releases confirmation when the expected machine is not visible and sends no post', function () {

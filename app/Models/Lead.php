@@ -153,6 +153,11 @@ class Lead extends Model
         return $this->hasMany(InsuranceAnalysisBatch::class);
     }
 
+    public function leadLoversTagOperation()
+    {
+        return $this->hasOne(LeadLoversTagOperation::class);
+    }
+
     public function createdByAdmin()
     {
         return $this->createdByCorretor();

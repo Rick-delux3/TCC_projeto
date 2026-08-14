@@ -563,17 +563,18 @@ class SendLeadToLeadLoversJob implements ShouldQueue
         try {
             $job = new UpdateLeadOnLeadLoversJob(
                 leadId: $pendingUpdate['lead_id'],
-                originalEmail: $pendingUpdate['original_email'],
                 syncVersion: $pendingUpdate['sync_version'],
                 requestedFields: $pendingUpdate['requested_fields'],
             );
-            $job->onQueue('leadlovers')->delay(now()->addSeconds(max(
-                1,
-                (int) config(
-                    'services.leadlovers.initial_update_delay_seconds',
-                    60
-                )
-            )));
+            $job->onQueue('leadlovers')
+                ->afterCommit()
+                ->delay(now()->addSeconds(max(
+                    1,
+                    (int) config(
+                        'services.leadlovers.initial_update_delay_seconds',
+                        60
+                    )
+                )));
             Bus::dispatch($job);
         } catch (Throwable $exception) {
             Lead::query()
@@ -597,7 +598,7 @@ class SendLeadToLeadLoversJob implements ShouldQueue
     }
 
     /**
-     * @return array{lead_id: int, original_email: string, sync_version: int, requested_fields: array<int, string>}|null
+     * @return array{lead_id: int, sync_version: int, requested_fields: array<int, string>}|null
      */
     private function completeInitialSend(
         int $remoteLeadId,
@@ -632,10 +633,6 @@ class SendLeadToLeadLoversJob implements ShouldQueue
                 && is_array($lead->leadlovers_response['action'] ?? null)
                     ? $lead->leadlovers_response['action']
                     : null;
-            $hasStoredCreationEmail = $this->hasStoredCreationEmail($lead);
-            $originalEmail = $hasStoredCreationEmail
-                ? $this->storedCreationEmail($lead)
-                : trim((string) $lead->email);
             $summary = [
                 'success' => true,
                 'phase' => 'machine_confirmed',
@@ -663,19 +660,6 @@ class SendLeadToLeadLoversJob implements ShouldQueue
                 return null;
             }
 
-            if (
-                ! is_string($originalEmail)
-                || $originalEmail === ''
-                || filter_var($originalEmail, FILTER_VALIDATE_EMAIL) === false
-            ) {
-                $lead->forceFill([
-                    'leadlovers_update_status' => 'failed',
-                    'leadlovers_update_error' => 'O e-mail nao permite concluir a atualizacao apos o envio inicial.',
-                ])->save();
-
-                return null;
-            }
-
             $syncVersion = (int) $lead->leadlovers_update_version + 1;
 
             $lead->forceFill([
@@ -690,7 +674,6 @@ class SendLeadToLeadLoversJob implements ShouldQueue
 
             return [
                 'lead_id' => (int) $lead->id,
-                'original_email' => $originalEmail,
                 'sync_version' => $syncVersion,
                 'requested_fields' => $requestedFields,
             ];
@@ -1301,15 +1284,6 @@ class SendLeadToLeadLoversJob implements ShouldQueue
             && filter_var($email, FILTER_VALIDATE_EMAIL) !== false
                 ? $email
                 : null;
-    }
-
-    private function hasStoredCreationEmail(Lead $lead): bool
-    {
-        return is_array($lead->leadlovers_response)
-            && array_key_exists(
-                'creation_email_encrypted',
-                $lead->leadlovers_response
-            );
     }
 
     private function isEmailExists(LeadLoversApiException $exception): bool

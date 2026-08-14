@@ -1407,8 +1407,7 @@
                 && (! $lastAnalysis
                     || $lead->reanalysis_unlocked_at->gt($lastAnalysis->created_at));
 
-            $leadHasValidEmail = filled($lead->email)
-                && filter_var($lead->email, FILTER_VALIDATE_EMAIL) !== false;
+            $leadHasRemoteId = (int) $lead->leadlovers_lead_id > 0;
 
             $leadWasConfirmedByLeadLovers = $lead->leadlovers_status === 'sent'
                 && filled($lead->sent_to_leadlovers_at);
@@ -1416,7 +1415,7 @@
             $leadResultIsEligible = $manualResultRouteExists
                 && $leadLoversIntegrationEnabled
                 && $leadWasConfirmedByLeadLovers
-                && $leadHasValidEmail;
+                && $leadHasRemoteId;
 
             $leadResultUnavailableMessage = match (true) {
                 ! $manualResultRouteExists =>
@@ -1425,8 +1424,8 @@
                     'A integração com a LeadLovers está desativada.',
                 ! $leadWasConfirmedByLeadLovers =>
                     'Este lead ainda não foi confirmado na LeadLovers.',
-                ! $leadHasValidEmail =>
-                    'O lead não possui um e-mail válido para localização na LeadLovers.',
+                ! $leadHasRemoteId =>
+                    'O lead não possui um ID remoto válido da LeadLovers.',
                 default => null,
             };
 
