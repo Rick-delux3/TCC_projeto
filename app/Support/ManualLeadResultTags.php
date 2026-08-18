@@ -8,8 +8,9 @@ final class ManualLeadResultTags
 
     public const APPROVED = 'approved';
     public const REJECTED = 'rejected';
+    public const RENTAL_CONFIRMED = 'rental_confirmed';
+    public const NO_RENT_OR_INSURANCE = 'no_rent_or_insurance';
     public const IN_NEGOTIATION = 'in_negotiation';
-    public const RENT_CLOSED = 'rent_closed';
 
     private const DEFINITIONS = [
         self::APPROVED => [
@@ -27,10 +28,15 @@ final class ManualLeadResultTags
             'leadlovers_key' => 'em_negociacao',
         ],
 
-        self::RENT_CLOSED => [
-            'label' => 'Fechado Alguel',
+        self::RENTAL_CONFIRMED => [
+            'label' => 'Fechado aluguel',
             'leadlovers_key' => 'fechado_aluguel'
         ],
+
+        self::NO_RENT_OR_INSURANCE => [
+            'label' => 'Não aluguei nem seguro',
+            'leadlovers_key' => 'nao_aluguel_nem_seguro'
+        ]
     ];
 
 

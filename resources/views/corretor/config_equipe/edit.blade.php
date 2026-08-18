@@ -14,27 +14,17 @@
 @endonce
 
 @php
-    use Illuminate\Support\Str;
-
     $integrante = $integrante ?? null;
 
     $indexRoute = route('admin.config-equipe.index');
     $updateRoute = route('admin.config-equipe.update', $integrante);
 
-    $availablePermissions = collect($permissions ?? [])
-        ->reject(function ($label, $key) {
-            $normalizedPermission = Str::lower(Str::ascii((string) $key . ' ' . (string) $label));
-
-            return str_contains($normalizedPermission, 'gerenciar equipe')
-                || str_contains($normalizedPermission, 'gerenciar organizacao')
-                || str_contains($normalizedPermission, 'manage organization')
-                || str_contains($normalizedPermission, 'manage team')
-                || str_contains($normalizedPermission, 'equipe.gerenciar')
-                || str_contains($normalizedPermission, 'organizacao.gerenciar');
-        });
-
     $currentPermissions = $integrante?->permissions ?? [];
-    $oldPermissions = old('permissions', $currentPermissions);
+    $permissionsWereSubmitted = old('permissions_submitted') === '1';
+    $oldPermissions = old(
+        'permissions',
+        $permissionsWereSubmitted ? [] : $currentPermissions,
+    );
     $oldPermissions = is_array($oldPermissions) ? $oldPermissions : [];
 
     $isActive = old(
@@ -55,14 +45,6 @@
     $conviteNaoEnviado = ! $conviteAceito
         && blank($integrante?->invite_last_sent_at);
 
-    $permissionIcons = [
-        'leads.visualizar' => 'bi-people',
-        'leads.editar' => 'bi-pencil-square',
-        'analises.visualizar' => 'bi-clipboard2-data',
-        'analises.criar' => 'bi-shield-check',
-        'imobiliarias.visualizar' => 'bi-buildings',
-        'tags.visualizar' => 'bi-tags',
-    ];
 @endphp
 
 <style>
@@ -567,7 +549,13 @@
                                         <h2 class="h6 fw-bold mb-0">
                                             Permissões operacionais
                                         </h2>
-                                        <span class="team-permission-count" data-team-permission-count hidden></span>
+                                        <span
+                                            class="team-permission-count"
+                                            data-team-permission-count
+                                            aria-live="polite"
+                                            aria-atomic="true"
+                                            hidden
+                                        ></span>
                                     </div>
 
                                     <p class="text-muted small mb-0">
@@ -576,41 +564,9 @@
                                 </div>
                             </div>
 
-                            <div class="row g-3">
-                                @forelse ($availablePermissions as $permissionKey => $permissionLabel)
-                                    @php
-                                        $permissionId = 'permission-' . Str::slug($permissionKey);
-                                        $permissionIcon = $permissionIcons[$permissionKey] ?? 'bi-check2-circle';
-                                    @endphp
-
-                                    <div class="col-12 col-md-6">
-                                        <label class="team-permission-option" for="{{ $permissionId }}">
-                                            <input
-                                                class="form-check-input @error('permissions') is-invalid @enderror @error('permissions.*') is-invalid @enderror"
-                                                type="checkbox"
-                                                name="permissions[]"
-                                                id="{{ $permissionId }}"
-                                                value="{{ $permissionKey }}"
-                                                @checked(in_array((string) $permissionKey, $oldPermissions, true))
-                                            >
-
-                                            <span class="team-permission-icon">
-                                                <i class="bi {{ $permissionIcon }}"></i>
-                                            </span>
-
-                                            <span class="fw-semibold">
-                                                {{ $permissionLabel }}
-                                            </span>
-                                        </label>
-                                    </div>
-                                @empty
-                                    <div class="col-12">
-                                        <div class="alert alert-warning rounded-4 border-0 mb-0">
-                                            Nenhuma permissão operacional foi disponibilizada para seleção.
-                                        </div>
-                                    </div>
-                                @endforelse
-                            </div>
+                            @include('corretor.config_equipe.permission-groups', [
+                                'selectedPermissions' => $oldPermissions,
+                            ])
 
                             @if ($errors->has('permissions') || $errors->has('permissions.*'))
                                 <div class="invalid-feedback d-block mt-2">

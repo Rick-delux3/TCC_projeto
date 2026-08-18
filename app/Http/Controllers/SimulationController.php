@@ -431,31 +431,47 @@ class SimulationController extends Controller
             $leadIdentity['origem'] = $context['origem'];
         }
 
-        $lead = Lead::updateOrCreate(
-            $leadIdentity,
-            [
-                'company_id' => $company?->id,
-                'tipo_solicitante' => $context['tipo_solicitante'],
-                'nome' => $data['nome'],
-                'email' => $data['email'],
-                'cpf' => $data['cpf'] ?? null,
-                'tel' => $data['tel'] ?? null,
-                'estado_civil' => $data['estado_civil'] ?? null,
-                'imobiliaria' => $company?->name
-                    ??
-                    (($context['tipo_solicitante'] ?? null) === 'imobiliaria_nao_cadastrada'
+        $leadAttributes = [
+            'company_id' => $company?->id,
+            'tipo_solicitante' => $context['tipo_solicitante'],
+            'nome' => $data['nome'],
+            'email' => $data['email'],
+            'cpf' => $data['cpf'] ?? null,
+            'tel' => $data['tel'] ?? null,
+            'estado_civil' => $data['estado_civil'] ?? null,
+            'imobiliaria' => $company?->name
+                ??
+                (($context['tipo_solicitante'] ?? null) === 'imobiliaria_nao_cadastrada'
                     ? ($data['responsavel_nome'] ?? null)
                     : null),
-                'tags_originais' => $this->tagsAsString($context['tipo_solicitante'], $company),
-                'status' => 'novo',
-                'origem' => $context['origem'],
-                'leadlovers_status' => 'pending',
-                'ip' => $request->ip(),
-                'user_agent' => $request->userAgent(),
-                'aceite_termos' => $request->boolean('aceite_termos'),
-                'observacoes' => $data['observacoes'] ?? null,
-            ]
+            'tags_originais' => $this->tagsAsString($context['tipo_solicitante'], $company),
+            'status' => 'novo',
+            'origem' => $context['origem'],
+            'leadlovers_status' => 'pending',
+            'ip' => $request->ip(),
+            'user_agent' => $request->userAgent(),
+            'aceite_termos' => $request->boolean('aceite_termos'),
+            'observacoes' => $data['observacoes'] ?? null,
+        ];
+        $lead = Lead::query()->firstOrCreate(
+            $leadIdentity,
+            $leadAttributes
         );
+
+        if (! $lead->wasRecentlyCreated) {
+            $lead = Lead::query()
+                ->whereKey($lead->getKey())
+                ->lockForUpdate()
+                ->firstOrFail();
+            $leadAttributes['leadlovers_status'] = in_array(
+                $lead->leadlovers_status,
+                ['sent', 'send'],
+                true
+            )
+                ? $lead->leadlovers_status
+                : 'pending';
+            $lead->fill($leadAttributes)->save();
+        }
 
         $lead->endereco()->updateOrCreate(
             ['lead_id' => $lead->id],
