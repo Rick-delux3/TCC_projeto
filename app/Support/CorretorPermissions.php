@@ -12,6 +12,18 @@ class CorretorPermissions
 
     public const DELETE_REAL_ESTATE_COMPANIES = 'imobiliarias.remover';
 
+    public const VIEW_LEADS = 'leads.visualizar';
+
+    public const EDIT_LEADS = 'lead.editar';
+
+    public const VIEW_TAGS = 'tags.visualizar';
+
+    public const MANAGE_LEAD_TAGS = 'tags.gerenciar';
+
+    public const VIEW_ANALYSIS = 'analises.visualizar';
+
+    public const CREATE_ANALYSIS = 'analises.criar';
+   
     /**
      * Relação única entre as abilities usadas pelos Gates e as permissões
      * persistidas no cadastro do integrante. Dependências entre permissões
@@ -20,20 +32,19 @@ class CorretorPermissions
     public static function abilities(): array
     {
         return [
-            'view-leads' => ['leads.visualizar', 'leads.editar'],
-            'edit-leads' => ['leads.editar'],
-            'view-analyses' => ['analises.visualizar', 'analises.criar'],
-            'create-analysis' => ['analises.criar'],
+            'view-leads' => [self::VIEW_LEADS],
+            'edit-leads' => [self::EDIT_LEADS],
+            'view-analyses' => [self::VIEW_ANALYSIS],
+            'create-analysis' => [self::CREATE_ANALYSIS],
             'view-real-estate-companies' => [self::VIEW_REAL_ESTATE_COMPANIES],
             'create-real-estate-company' => [self::CREATE_REAL_ESTATE_COMPANIES],
             'update-real-estate-company' => [self::UPDATE_REAL_ESTATE_COMPANIES],
             'delete-real-estate-company' => [self::DELETE_REAL_ESTATE_COMPANIES],
             'view-tags' => [
-                'tags.visualizar',
-                'tags.gerenciar',
+                self::VIEW_TAGS
             ],
             'manage-lead-tags' => [
-                'tags.gerenciar',
+                self::MANAGE_LEAD_TAGS
             ],
         ];
     }
@@ -41,16 +52,16 @@ class CorretorPermissions
     public static function all(): array
     {
         return [
-            'leads.visualizar' => 'Visualizar leads/clientes',
-            'leads.editar' => 'Editar dados de leads/clientes',
-            'analises.visualizar' => 'Visualizar análises',
-            'analises.criar' => 'Solicitar análises',
+            self::VIEW_LEADS => 'Visualizar leads/clientes',
+            self::EDIT_LEADS => 'Editar dados de leads/clientes',
+            self::VIEW_ANALYSIS => 'Visualizar análises',
+            self::CREATE_ANALYSIS => 'Solicitar análises',
             self::VIEW_REAL_ESTATE_COMPANIES => 'Visualizar imobiliárias',
             self::CREATE_REAL_ESTATE_COMPANIES => 'Cadastrar imobiliárias',
             self::UPDATE_REAL_ESTATE_COMPANIES => 'Editar dados de imobiliárias',
             self::DELETE_REAL_ESTATE_COMPANIES => 'Remover imobiliárias',
-            'tags.visualizar' => 'Visualizar tags',
-            'tags.gerenciar' => 'Gerenciar tags dos leads',
+            self::VIEW_TAGS => 'Visualizar tags',
+            self::MANAGE_LEAD_TAGS => 'Gerenciar tags dos leads',
         ];
     }
 
@@ -64,6 +75,12 @@ class CorretorPermissions
             self::CREATE_REAL_ESTATE_COMPANIES => [self::VIEW_REAL_ESTATE_COMPANIES],
             self::UPDATE_REAL_ESTATE_COMPANIES => [self::VIEW_REAL_ESTATE_COMPANIES],
             self::DELETE_REAL_ESTATE_COMPANIES => [self::VIEW_REAL_ESTATE_COMPANIES],
+
+            self::EDIT_LEADS => [self::VIEW_LEADS],
+
+            self::CREATE_ANALYSIS => [self::VIEW_ANALYSIS],
+
+            self::MANAGE_LEAD_TAGS => [self::VIEW_TAGS],
         ];
     }
 
@@ -112,12 +129,18 @@ class CorretorPermissions
             'leads' => [
                 'label' => 'Leads e clientes',
                 'description' => 'Consulta e manutenção dos dados comerciais.',
-                'permissions' => ['leads.visualizar', 'leads.editar'],
+                'permissions' => [
+                    self::VIEW_LEADS,
+                    self::EDIT_LEADS,
+                ],
             ],
             'analyses' => [
                 'label' => 'Análises',
                 'description' => 'Acesso às consultas e solicitações de análise.',
-                'permissions' => ['analises.visualizar', 'analises.criar'],
+                'permissions' => [
+                    self::VIEW_ANALYSIS,
+                    self::CREATE_ANALYSIS,
+                ],
             ],
             'real-estate-companies' => [
                 'label' => 'Imobiliárias',
@@ -132,7 +155,10 @@ class CorretorPermissions
             'tags' => [
                 'label' => 'Tags dos leads',
                 'description' => 'Consulta e gerenciamento dos resultados comerciais.',
-                'permissions' => ['tags.visualizar', 'tags.gerenciar'],
+                'permissions' => [
+                    self::VIEW_TAGS,
+                    self::MANAGE_LEAD_TAGS,
+                ],
             ],
         ];
 
