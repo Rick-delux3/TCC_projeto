@@ -1,8 +1,7 @@
-@extends('layout-inicial.dashboard_Admin')
+@extends('layout-inicial.Dashboard_Admin')
 
 @section('content_a')
 @php
-    use App\Support\ManualLeadResultTags;
     use Illuminate\Support\Facades\Gate;
     use Illuminate\Support\Facades\Route;
     use Illuminate\Support\Str;
@@ -48,25 +47,114 @@
     $leads = $leads ?? collect();
     $imobiliarias = $imobiliarias ?? collect();
 
-    $manualResultOptions = collect(ManualLeadResultTags::keys())
-        ->mapWithKeys(
-            fn (string $result): array => [
-                $result => ManualLeadResultTags::label($result),
-            ]
+    $resultadoOptions = collect(
+        $resultadoOptions ?? []
+    );
+
+    $manualResultOptions = $resultadoOptions
+        ->map(
+            fn ($definition): ?string =>
+                is_array($definition)
+                && filled($definition['label'] ?? null)
+                    ? (string) $definition['label']
+                    : null
         )
         ->filter(fn (?string $label): bool => filled($label));
+
+    $manualResultVisuals = [
+        'approved' => [
+            'active' => 'text-bg-success',
+            'inactive' => 'text-bg-light border border-success text-success',
+            'icon' => 'bi-check-circle',
+        ],
+        'rejected' => [
+            'active' => 'text-bg-danger',
+            'inactive' => 'text-bg-light border border-danger text-danger',
+            'icon' => 'bi-x-circle',
+        ],
+        'in_negotiation' => [
+            'active' => 'text-bg-warning text-dark',
+            'inactive' => 'text-bg-light border border-warning text-dark',
+            'icon' => 'bi-hourglass-split',
+        ],
+        'rental_confirmed' => [
+            'active' => 'text-bg-primary',
+            'inactive' => 'text-bg-light border border-primary text-primary',
+            'icon' => 'bi-house-check',
+        ],
+        'no_rent_or_insurance' => [
+            'active' => 'text-bg-secondary',
+            'inactive' => 'text-bg-light border border-secondary text-secondary',
+            'icon' => 'bi-house-x',
+        ],
+    ];
+
+    $defaultResultVisual = [
+        'active' => 'text-bg-secondary',
+        'inactive' => 'text-bg-light border border-secondary text-secondary',
+        'icon' => 'bi-dash-circle',
+    ];
 
     $manualResultRouteExists = Route::has('admin.leads.result-tag.update');
     $leadLoversIntegrationEnabled = (bool) config(
         'services.leadlovers.enabled',
         false
     );
+    $insuranceAnalysisEnabled = (bool) config(
+        'features.insurance_analysis.enabled',
+        false
+    );
+
+    $leadValidationFields = [
+        'nome',
+        'email',
+        'tel',
+        'cpf',
+        'tipo_solicitante',
+        'estado_civil',
+        'conjuge_nome',
+        'conjuge_cpf',
+        'valor_aluguel',
+        'valor_agua',
+        'valor_luz',
+        'valor_gas',
+        'valor_condominio',
+        'valor_iptu',
+        'outras_despesas',
+        'cep',
+        'estado',
+        'cidade_imovel',
+        'bairro',
+        'logradouro',
+        'numero',
+        'complemento',
+    ];
 
     $resultValidationTargets = null;
     $resultContextLeadId = (string) old('result_context_lead_id', '');
     $visibleLeads = method_exists($leads, 'getCollection')
         ? $leads->getCollection()
         : collect($leads);
+
+    $leadContextId = (string) old('lead_context_id', '');
+    $firstInvalidLeadField = collect($leadValidationFields)->first(
+        fn (string $field): bool => $errors->has($field)
+    );
+    $leadValidationTargets = null;
+
+    if (filled($leadContextId) && filled($firstInvalidLeadField)) {
+        $leadContextLead = $visibleLeads->first(
+            fn ($lead): bool => (string) $lead->id === $leadContextId
+        );
+
+        if ($leadContextLead) {
+            $leadValidationTargets = [
+                'modal' => 'adminLeadModal'.$leadContextLead->id,
+                'tab' => 'admin-lead-data-tab-'.$leadContextLead->id,
+                'field' => 'admin-lead-'.$leadContextLead->id.'-'.str_replace('_', '-', $firstInvalidLeadField),
+            ];
+        }
+    }
 
     if ($errors->has('result') && filled($resultContextLeadId)) {
         $resultContextLead = $visibleLeads->first(
@@ -83,17 +171,23 @@
     }
 
     $canAccessSimulationForms = $canAccessSimulationForms
+        ?? ($canAcessSimulationForms ?? null)
         ?? (
             $corretor
                 ? Gate::forUser($corretor)->allows('access-simulation-forms')
                 : false
         );
 
-    $canCreateAnalysis = $canCreateAnalysis
-    ?? (
-        $corretor ? Gate::forUser($corretor)->allows('create-analysis')
-        : false
-    );
+    $canCreateAnalysis = $insuranceAnalysisEnabled
+        && (
+            $canCreateAnalysis
+            ?? ($canStartInsuranceAnalysis ?? null)
+            ?? (
+                $corretor
+                    ? Gate::forUser($corretor)->allows('create-analysis')
+                    : false
+            )
+        );
 
     $simulationCompanies = collect(
         $simulationCompanies
@@ -197,10 +291,6 @@
     |--------------------------------------------------------------------------
     */
 
-    $resultadoLabels = [
-        'aprovado' => 'Aprovados',
-        'recusado' => 'Recusados/Reprovados',
-    ];
 
     if ($selectedImobiliaria === 'sem_vinculo') {
         $selectedImobiliariaModel = null;
@@ -229,15 +319,25 @@
             ->map(fn ($tag) => $normalizeTag($tag))
             ->filter();
 
-        $matchesRentClosed = $normalizedTags->contains(
+        $matchesRentalConfirmed = $normalizedTags->contains(
             fn (string $tag): bool =>
-                str_contains($tag, 'fechado aluguel')
-                || str_contains($tag, 'aluguel fechado')
-                || str_contains($tag, 'fechado alguel')
+                in_array($tag, [
+                    'fechado aluguel',
+                    'aluguel fechado',
+                    'fechado alguel',
+                ], true)
+        );
+
+        $matchesNoRentOrInsurance = $normalizedTags->contains(
+            fn (string $tag): bool =>
+                in_array($tag, [
+                    'nao aluguei nem seguro',
+                    'nao aluguel nem seguro',
+                ], true)
         );
 
         $matchesNegotiation = $normalizedTags->contains(
-            fn (string $tag): bool => str_contains($tag, 'negociacao')
+            fn (string $tag): bool => $tag === 'em negociacao'
         );
 
         $matchesRejected = $normalizedTags->contains(
@@ -253,24 +353,35 @@
 
         /*
          * Prioridade visual determinística para dados legados inconsistentes:
-         * aluguel fechado, negociação, recusado e aprovado.
+         * fechado aluguel, não aluguei nem seguro, negociação, recusado e aprovado.
          */
         $tones = [
             [
-                'matches' => $matchesRentClosed,
+                'matches' => $matchesRentalConfirmed,
                 'tone' => [
-                    'label' => 'Aluguel fechado',
+                    'label' => 'Fechado aluguel',
                     'badge' => 'text-bg-primary',
-                    'card' => 'lead-card--approved',
+                    'card' => 'lead-card--rent-closed',
                     'icon' => 'bi-house-check',
                 ],
             ],
+
+            [
+                'matches' => $matchesNoRentOrInsurance,
+                'tone' => [
+                    'label' => 'Não aluguei nem seguro',
+                    'badge' => 'text-bg-secondary',
+                    'card' => 'lead-card--no-rent-or-insurance',
+                    'icon' => 'bi-house-x',
+                ],
+            ],
+
             [
                 'matches' => $matchesNegotiation,
                 'tone' => [
                     'label' => 'Em negociação',
                     'badge' => 'text-bg-warning',
-                    'card' => 'lead-card--neutral',
+                    'card' => 'lead-card--negotiation',
                     'icon' => 'bi-hourglass-split',
                 ],
             ],
@@ -352,6 +463,12 @@
             </div>
         @endif
 
+        @if (filled($firstInvalidLeadField) && $leadValidationTargets === null)
+            <div class="alert alert-danger rounded-4 border-0 shadow-sm" role="alert">
+                Não foi possível associar os erros ao lead exibido nesta página.
+            </div>
+        @endif
+
         @if ($errors->has('result') && $resultValidationTargets === null)
             <div class="alert alert-danger rounded-4 border-0 shadow-sm" role="alert">
                 {{ $errors->first('result') }}
@@ -375,12 +492,14 @@
             </div>
 
             <div class="d-flex flex-column flex-sm-row gap-2">
-                @can('view-analyses')
-                    <a href="{{ $analisesRoute }}" class="btn btn-outline-primary">
-                        <i class="bi bi-clipboard2-data me-1"></i>
-                        Visualizar análises
-                    </a>
-                @endcan
+                @if ($insuranceAnalysisEnabled)
+                    @can('view-analyses')
+                        <a href="{{ $analisesRoute }}" class="btn btn-outline-primary">
+                            <i class="bi bi-clipboard2-data me-1" aria-hidden="true"></i>
+                            Visualizar análises
+                        </a>
+                    @endcan
+                @endif
 
                 <button type="button" class="btn btn-outline-secondary" id="dashboardThemeToggle">
                     Modo escuro
@@ -404,7 +523,7 @@
                                 </h2>
 
                                 <p class="text-white-50 mb-4">
-                                    Acompanhe os clientes enviados pelas imobiliárias, filtre por origem e identifique rapidamente aprovados e recusados.
+                                    Acompanhe os diferentes status comerciais dos leads.
                                 </p>
 
                                 <div class="d-flex flex-wrap gap-2">
@@ -458,11 +577,11 @@
                                 </span>
 
                                 <h2 class="h3 fw-bold mb-3">
-                                    Nova solicitação de análise
+                                    Novo lead
                                 </h2>
 
                                 <p class="text-muted mb-3">
-                                    Escolha o vínculo e abra o formulário adequado para solicitar uma nova análise.
+                                    Escolha o vínculo e abra o formulário adequado para cadastrar um novo lead.
                                 </p>
 
                                 <p class="small text-muted mb-4">
@@ -480,7 +599,7 @@
                                     @disabled(! $adminSimulationRouteExists)
                                 >
                                     <i class="bi bi-clipboard-plus me-1" aria-hidden="true"></i>
-                                    {{ $adminSimulationRouteExists ? 'Solicitar análise' : 'Solicitação indisponível' }}
+                                    {{ $adminSimulationRouteExists ? 'Abrir formulário' : 'Formulário indisponível' }}
                                 </button>
 
                                 @unless ($adminSimulationRouteExists)
@@ -623,7 +742,7 @@
 
                                 <div class="input-group">
                                     <span class="input-group-text bg-white">
-                                        <i class="bi bi-search"></i>
+                                        <i class="bi bi-search" aria-hidden="true"></i>
                                     </span>
 
                                     <input
@@ -701,21 +820,29 @@
                                     Resultado/tag
                                 </label>
 
-                                <select id="admin-resultado-filter" name="resultado" class="form-select">
+                                <select
+                                    id="admin-resultado-filter"
+                                    name="resultado"
+                                    class="form-select"
+                                >
                                     <option value="">Todos</option>
-                                    <option value="aprovado" @selected($selectedResultado === 'aprovado')>
-                                        Aprovados
-                                    </option>
-                                    <option value="recusado" @selected($selectedResultado === 'recusado')>
-                                        Recusados/Reprovados
-                                    </option>
+
+                                    @foreach ($manualResultOptions as $result => $label)
+                                        <option
+                                            value="{{ $result }}"
+                                            @selected($selectedResultado === $result)
+                                        >
+                                            {{ $label }}
+                                        </option>
+                                    @endforeach
                                 </select>
                             </div>
 
                             {{-- Botão --}}
                             <div class="col-12 col-md-6 col-xl-1 d-grid">
                                 <button type="submit" class="btn btn-primary" title="Filtrar">
-                                    <i class="bi bi-funnel"></i>
+                                    <i class="bi bi-funnel" aria-hidden="true"></i>
+                                    <span class="visually-hidden">Aplicar filtros</span>
                                 </button>
                             </div>
                         </div>
@@ -734,7 +861,7 @@
                                     class="badge rounded-pill text-bg-primary text-decoration-none px-3 py-2"
                                 >
                                     Busca: {{ $leadSearch }}
-                                    <i class="bi bi-x ms-1"></i>
+                                    <i class="bi bi-x ms-1" aria-hidden="true"></i>
                                 </a>
                             @endif
 
@@ -744,7 +871,7 @@
                                     class="badge rounded-pill text-bg-success text-decoration-none px-3 py-2"
                                 >
                                     Vínculo: {{ $selectedImobiliariaName ?? 'Selecionado' }}
-                                    <i class="bi bi-x ms-1"></i>
+                                    <i class="bi bi-x ms-1" aria-hidden="true"></i>
                                 </a>
                             @endif
 
@@ -754,17 +881,24 @@
                                     class="badge rounded-pill text-bg-info text-decoration-none px-3 py-2"
                                 >
                                     Perfil: {{ $tipoSolicitantesOptions[$selectedTipoSolicitante] ?? $selectedTipoSolicitante }}
-                                    <i class="bi bi-x ms-1"></i>
+                                    <i class="bi bi-x ms-1" aria-hidden="true"></i>
                                 </a>
                             @endif
 
                             @if (filled($selectedResultado))
+                                @php
+                                    $selectedResultVisual = $manualResultVisuals[$selectedResultado]
+                                        ?? $defaultResultVisual;
+                                    $selectedResultLabel = $manualResultOptions->get($selectedResultado);
+                                @endphp
                                 <a
                                     href="{{ request()->fullUrlWithQuery(['resultado' => null, 'page' => 1]) }}#leads-section"
-                                    class="badge rounded-pill text-bg-warning text-dark text-decoration-none px-3 py-2"
+                                    class="badge rounded-pill {{ $selectedResultVisual['active'] }} text-decoration-none px-3 py-2"
+                                    aria-label="Remover filtro de resultado {{ $selectedResultLabel }}"
                                 >
-                                    Resultado: {{ $resultadoLabels[$selectedResultado] ?? $selectedResultado }}
-                                    <i class="bi bi-x ms-1"></i>
+                                    <i class="bi {{ $selectedResultVisual['icon'] }} me-1" aria-hidden="true"></i>
+                                    Resultado: {{ $selectedResultLabel }}
+                                    <i class="bi bi-x ms-1" aria-hidden="true"></i>
                                 </a>
                             @endif
                         </div>
@@ -785,23 +919,32 @@
                         <a
                             href="{{ request()->fullUrlWithQuery(['resultado' => null, 'page' => 1]) }}#leads-section"
                             class="badge rounded-pill text-decoration-none px-3 py-2 {{ blank($selectedResultado) ? 'text-bg-dark' : 'text-bg-light border text-muted' }}"
+                            @if (blank($selectedResultado)) aria-current="true" @endif
                         >
                             Todos
+                            @if (blank($selectedResultado))
+                                <span class="visually-hidden"> (selecionado)</span>
+                            @endif
                         </a>
 
-                        <a
-                            href="{{ request()->fullUrlWithQuery(['resultado' => 'aprovado', 'page' => 1]) }}#leads-section"
-                            class="badge rounded-pill text-decoration-none px-3 py-2 {{ $selectedResultado === 'aprovado' ? 'text-bg-success' : 'text-bg-light border text-success' }}"
-                        >
-                            Aprovados
-                        </a>
-
-                        <a
-                            href="{{ request()->fullUrlWithQuery(['resultado' => 'recusado', 'page' => 1]) }}#leads-section"
-                            class="badge rounded-pill text-decoration-none px-3 py-2 {{ $selectedResultado === 'recusado' ? 'text-bg-danger' : 'text-bg-light border text-danger' }}"
-                        >
-                            Recusados/Reprovados
-                        </a>
+                        @foreach ($manualResultOptions as $result => $label)
+                            @php
+                                $resultVisual = $manualResultVisuals[$result]
+                                    ?? $defaultResultVisual;
+                                $resultIsSelected = $selectedResultado === $result;
+                            @endphp
+                            <a
+                                href="{{ request()->fullUrlWithQuery(['resultado' => $result, 'page' => 1]) }}#leads-section"
+                                class="badge rounded-pill text-decoration-none px-3 py-2 d-inline-flex align-items-center gap-1 {{ $resultIsSelected ? $resultVisual['active'] : $resultVisual['inactive'] }}"
+                                @if ($resultIsSelected) aria-current="true" @endif
+                            >
+                                <i class="bi {{ $resultVisual['icon'] }}" aria-hidden="true"></i>
+                                <span>{{ $label }}</span>
+                                @if ($resultIsSelected)
+                                    <span class="visually-hidden"> (selecionado)</span>
+                                @endif
+                            </a>
+                        @endforeach
                     </div>
                 @else
                     <div class="alert alert-warning rounded-4 mb-0">
@@ -942,7 +1085,7 @@
                                         </div>
 
                                         <span class="badge {{ $resultTone['badge'] }}">
-                                            <i class="bi {{ $resultTone['icon'] }} me-1"></i>
+                                            <i class="bi {{ $resultTone['icon'] }} me-1" aria-hidden="true"></i>
                                             {{ $resultTone['label'] }}
                                         </span>
                                     </div>
@@ -958,27 +1101,33 @@
                                             Visualizar
                                         </button>
 
-                                        @can('create-analysis')
-                                            @if ($solicitarAnaliseRoute($lead) !== '#')
-                                                <form method="POST" action="{{ $solicitarAnaliseRoute($lead) }}">
-                                                    @csrf
+                                        @if ($insuranceAnalysisEnabled)
+                                            @can('create-analysis')
+                                                @if ($solicitarAnaliseRoute($lead) !== '#')
+                                                    <form method="POST" action="{{ $solicitarAnaliseRoute($lead) }}">
+                                                        @csrf
 
-                                                    <button type="submit" class="btn btn-sm btn-warning w-100 text-nowrap">
+                                                        <button type="submit" class="btn btn-sm btn-warning w-100 text-nowrap">
+                                                            Analisar
+                                                        </button>
+                                                    </form>
+                                                @else
+                                                    <button type="button" class="btn btn-sm btn-warning w-100 text-nowrap" disabled>
                                                         Analisar
                                                     </button>
-                                                </form>
-                                            @else
-                                                <button type="button" class="btn btn-sm btn-warning w-100 text-nowrap" disabled>
-                                                    Analisar
-                                                </button>
-                                            @endif
-                                        @endcan
+                                                @endif
+                                            @endcan
+                                        @endif
                                     </div>
                                 </div>
 
-                                {{-- Tags visíveis --}}
-                                @if ($visibleTags->isNotEmpty())
-                                    <div class="d-flex flex-wrap gap-2 mt-3 pt-3 border-top">
+                                <div class="d-flex flex-wrap align-items-center gap-2 mt-3 pt-3 border-top">
+                                    <span class="small text-muted">
+                                        LeadLovers:
+                                    </span>
+                                    @include('partials.leadlovers-sync-status', ['lead' => $lead])
+
+                                    @if ($visibleTags->isNotEmpty())
                                         @foreach ($visibleTags as $tag)
                                             <span class="badge rounded-pill text-bg-light border text-muted">
                                                 {{ $tag }}
@@ -990,8 +1139,8 @@
                                                 +{{ $remainingTags }}
                                             </span>
                                         @endif
-                                    </div>
-                                @endif
+                                    @endif
+                                </div>
                             </div>
                         </article>
                     @endforeach
@@ -1047,7 +1196,7 @@
 </div>
 
 @if ($canAccessSimulationForms)
-    {{-- Seleção global do formulário de nova análise --}}
+    {{-- Seleção global do formulário de novo lead --}}
     <div
         class="modal fade"
         id="adminSimulationModal"
@@ -1247,16 +1396,18 @@
 
             $resultTone = $getLeadResultTone($allTags);
 
-            $lastAnalysis = $lead->insuranceAnalyses
-                ->sortByDesc('created_at')
-                ->first();
+            $lastAnalysis = $insuranceAnalysisEnabled
+                ? $lead->insuranceAnalyses
+                    ->sortByDesc('created_at')
+                    ->first()
+                : null;
 
-            $canReanalyze = filled($lead->reanalysis_unlocked_at)
+            $canReanalyze = $insuranceAnalysisEnabled
+                && filled($lead->reanalysis_unlocked_at)
                 && (! $lastAnalysis
                     || $lead->reanalysis_unlocked_at->gt($lastAnalysis->created_at));
 
-            $leadHasValidEmail = filled($lead->email)
-                && filter_var($lead->email, FILTER_VALIDATE_EMAIL) !== false;
+            $leadHasRemoteId = (int) $lead->leadlovers_lead_id > 0;
 
             $leadWasConfirmedByLeadLovers = $lead->leadlovers_status === 'sent'
                 && filled($lead->sent_to_leadlovers_at);
@@ -1264,7 +1415,7 @@
             $leadResultIsEligible = $manualResultRouteExists
                 && $leadLoversIntegrationEnabled
                 && $leadWasConfirmedByLeadLovers
-                && $leadHasValidEmail;
+                && $leadHasRemoteId;
 
             $leadResultUnavailableMessage = match (true) {
                 ! $manualResultRouteExists =>
@@ -1273,8 +1424,8 @@
                     'A integração com a LeadLovers está desativada.',
                 ! $leadWasConfirmedByLeadLovers =>
                     'Este lead ainda não foi confirmado na LeadLovers.',
-                ! $leadHasValidEmail =>
-                    'O lead não possui um e-mail válido para localização na LeadLovers.',
+                ! $leadHasRemoteId =>
+                    'O lead não possui um ID remoto válido da LeadLovers.',
                 default => null,
             };
 
@@ -1284,6 +1435,9 @@
             $resultErrorMessage = $isResultContextLead
                 ? $errors->first('result')
                 : null;
+
+            $isLeadValidationContext = filled($firstInvalidLeadField)
+                && $leadContextId === (string) $lead->id;
         @endphp
 
         <div
@@ -1307,6 +1461,8 @@
                                 <span class="badge text-bg-info">
                                     {{ $tipoSolicitanteLabel }}
                                 </span>
+
+                                @include('partials.leadlovers-sync-status', ['lead' => $lead])
                             </div>
 
                             <h5 class="modal-title fw-bold" id="adminLeadModalLabel{{ $lead->id }}">
@@ -1335,7 +1491,7 @@
                                     aria-controls="admin-lead-data-pane-{{ $lead->id }}"
                                     aria-selected="true"
                                 >
-                                    Dados para reanálise
+                                    Dados do lead
                                 </button>
                             </li>
 
@@ -1373,22 +1529,24 @@
                                 </li>
                             @endcan
 
-                            @can('create-analysis')
-                                <li class="nav-item" role="presentation">
-                                    <button
-                                        id="admin-lead-reanalysis-tab-{{ $lead->id }}"
-                                        class="nav-link"
-                                        data-bs-toggle="pill"
-                                        data-bs-target="#admin-lead-reanalysis-pane-{{ $lead->id }}"
-                                        type="button"
-                                        role="tab"
-                                        aria-controls="admin-lead-reanalysis-pane-{{ $lead->id }}"
-                                        aria-selected="false"
-                                    >
-                                        Reanálise
-                                    </button>
-                                </li>
-                            @endcan
+                            @if ($insuranceAnalysisEnabled)
+                                @can('create-analysis')
+                                    <li class="nav-item" role="presentation">
+                                        <button
+                                            id="admin-lead-reanalysis-tab-{{ $lead->id }}"
+                                            class="nav-link"
+                                            data-bs-toggle="pill"
+                                            data-bs-target="#admin-lead-reanalysis-pane-{{ $lead->id }}"
+                                            type="button"
+                                            role="tab"
+                                            aria-controls="admin-lead-reanalysis-pane-{{ $lead->id }}"
+                                            aria-selected="false"
+                                        >
+                                            Reanálise
+                                        </button>
+                                    </li>
+                                @endcan
+                            @endif
                         </ul>
 
                         <div class="tab-content">
@@ -1407,6 +1565,8 @@
                                         action="{{ $adminUpdateLeadRoute($lead) }}"
                                         id="adminLeadUpdateForm{{ $lead->id }}"
                                         class="lead-update-form"
+                                        data-lead-id="{{ $lead->id }}"
+                                        data-lead-tab-id="admin-lead-data-tab-{{ $lead->id }}"
                                     >
                                         @csrf
                                 @else
@@ -1421,254 +1581,18 @@
                                     <fieldset disabled aria-label="Dados do lead disponíveis somente para visualização">
                                 @endcan
 
-                                        <div class="row g-4">
-                                            <div class="alert alert-warning rounded-4" role="alert">
-                                                <i class="bi bi-exclamation-triangle me-1" aria-hidden="true"></i>
-                                                    A reanálise pode retornar RECUSADO!
-                                                </div>
-                                            
-                                             
-                                            <div class="col-12">
-                                                <div class="card border rounded-4">
-                                                    <div class="card-body">
-                                                        <h6 class="fw-bold mb-3">
-                                                            Dados do solicitante
-                                                        </h6>
+                                        @include('partials.leadlovers-sync-status', [
+                                            'lead' => $lead,
+                                            'showLeadLoversBadge' => false,
+                                            'showLeadLoversFailureMessage' => true,
+                                        ])
 
-                                                        <div class="row g-3">
-                                                            <div class="col-12 col-md-6">
-                                                                <label class="form-label">Nome</label>
-                                                                <input
-                                                                    type="text"
-                                                                    name="nome"
-                                                                    class="form-control"
-                                                                    value="{{ old('nome', $lead->nome) }}"
-                                                                >
-                                                            </div>
-
-                                                            <div class="col-12 col-md-6">
-                                                                <label class="form-label">E-mail</label>
-                                                                <input
-                                                                    type="email"
-                                                                    name="email"
-                                                                    class="form-control"
-                                                                    value="{{ old('email', $lead->email) }}"
-                                                                >
-                                                            </div>
-
-                                                            <div class="col-12 col-md-4">
-                                                                <label class="form-label">Telefone</label>
-                                                                <input
-                                                                    type="text"
-                                                                    name="tel"
-                                                                    class="form-control"
-                                                                    value="{{ old('tel', $lead->tel) }}"
-                                                                >
-                                                            </div>
-
-                                                            <div class="col-12 col-md-4">
-                                                                <label class="form-label">CPF</label>
-                                                                <input
-                                                                    type="text"
-                                                                    name="cpf"
-                                                                    class="form-control"
-                                                                    value="{{ old('cpf', $lead->cpf) }}"
-                                                                >
-                                                            </div>
-
-                                                            <div class="col-12 col-md-4">
-                                                                <label class="form-label">Estado civil</label>
-                                                                <input
-                                                                    type="text"
-                                                                    name="estado_civil"
-                                                                    class="form-control"
-                                                                    value="{{ old('estado_civil', $lead->estado_civil) }}"
-                                                                >
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            {{-- Endereço --}}
-                                            <div class="col-12">
-                                                <div class="card border rounded-4">
-                                                    <div class="card-body">
-                                                        <h6 class="fw-bold mb-3">
-                                                            Endereço do imóvel
-                                                        </h6>
-
-                                                        <div class="row g-3">
-                                                            <div class="col-12 col-md-3">
-                                                                <label class="form-label">CEP</label>
-                                                                <input
-                                                                    type="text"
-                                                                    name="cep"
-                                                                    class="form-control"
-                                                                    value="{{ old('cep', $lead->endereco?->cep) }}"
-                                                                >
-                                                            </div>
-
-                                                            <div class="col-12 col-md-2">
-                                                                <label class="form-label">UF</label>
-                                                                <input
-                                                                    type="text"
-                                                                    name="estado"
-                                                                    class="form-control"
-                                                                    value="{{ old('estado', $lead->endereco?->estado) }}"
-                                                                >
-                                                            </div>
-
-                                                            <div class="col-12 col-md-4">
-                                                                <label class="form-label">Cidade</label>
-                                                                <input
-                                                                    type="text"
-                                                                    name="cidade_imovel"
-                                                                    class="form-control"
-                                                                    value="{{ old('cidade_imovel', $lead->endereco?->cidade_imovel) }}"
-                                                                >
-                                                            </div>
-
-                                                            <div class="col-12 col-md-3">
-                                                                <label class="form-label">Bairro</label>
-                                                                <input
-                                                                    type="text"
-                                                                    name="bairro"
-                                                                    class="form-control"
-                                                                    value="{{ old('bairro', $lead->endereco?->bairro) }}"
-                                                                >
-                                                            </div>
-
-                                                            <div class="col-12 col-md-8">
-                                                                <label class="form-label">Logradouro</label>
-                                                                <input
-                                                                    type="text"
-                                                                    name="logradouro"
-                                                                    class="form-control"
-                                                                    value="{{ old('logradouro', $lead->endereco?->logradouro) }}"
-                                                                >
-                                                            </div>
-
-                                                            <div class="col-12 col-md-2">
-                                                                <label class="form-label">Número</label>
-                                                                <input
-                                                                    type="text"
-                                                                    name="numero"
-                                                                    class="form-control"
-                                                                    value="{{ old('numero', $lead->endereco?->numero) }}"
-                                                                >
-                                                            </div>
-
-                                                            <div class="col-12 col-md-2">
-                                                                <label class="form-label">Complemento</label>
-                                                                <input
-                                                                    type="text"
-                                                                    name="complemento"
-                                                                    class="form-control"
-                                                                    value="{{ old('complemento', $lead->endereco?->complemento) }}"
-                                                                >
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            {{-- Despesas --}}
-                                            <div class="col-12">
-                                                <div class="card border rounded-4">
-                                                    <div class="card-body">
-                                                        <h6 class="fw-bold mb-3">
-                                                            Valores da locação
-                                                        </h6>
-
-                                                        <div class="row g-3">
-                                                            <div class="col-6 col-md-3">
-                                                                <label class="form-label">Aluguel</label>
-                                                                <input
-                                                                    type="number"
-                                                                    step="0.01"
-                                                                    min="0"
-                                                                    name="valor_aluguel"
-                                                                    class="form-control"
-                                                                    value="{{ old('valor_aluguel', $lead->despesas?->valor_aluguel) }}"
-                                                                >
-                                                            </div>
-
-                                                            <div class="col-6 col-md-3">
-                                                                <label class="form-label">Água</label>
-                                                                <input
-                                                                    type="number"
-                                                                    step="0.01"
-                                                                    min="0"
-                                                                    name="valor_agua"
-                                                                    class="form-control"
-                                                                    value="{{ old('valor_agua', $lead->despesas?->valor_agua) }}"
-                                                                >
-                                                            </div>
-
-                                                            <div class="col-6 col-md-3">
-                                                                <label class="form-label">Luz</label>
-                                                                <input
-                                                                    type="number"
-                                                                    step="0.01"
-                                                                    min="0"
-                                                                    name="valor_luz"
-                                                                    class="form-control"
-                                                                    value="{{ old('valor_luz', $lead->despesas?->valor_luz) }}"
-                                                                >
-                                                            </div>
-
-                                                            <div class="col-6 col-md-3">
-                                                                <label class="form-label">Gás</label>
-                                                                <input
-                                                                    type="number"
-                                                                    step="0.01"
-                                                                    min="0"
-                                                                    name="valor_gas"
-                                                                    class="form-control"
-                                                                    value="{{ old('valor_gas', $lead->despesas?->valor_gas) }}"
-                                                                >
-                                                            </div>
-
-                                                            <div class="col-6 col-md-4">
-                                                                <label class="form-label">Condomínio</label>
-                                                                <input
-                                                                    type="number"
-                                                                    step="0.01"
-                                                                    min="0"
-                                                                    name="valor_condominio"
-                                                                    class="form-control"
-                                                                    value="{{ old('valor_condominio', $lead->despesas?->valor_condominio) }}"
-                                                                >
-                                                            </div>
-
-                                                            <div class="col-6 col-md-4">
-                                                                <label class="form-label">IPTU</label>
-                                                                <input
-                                                                    type="number"
-                                                                    step="0.01"
-                                                                    min="0"
-                                                                    name="valor_iptu"
-                                                                    class="form-control"
-                                                                    value="{{ old('valor_iptu', $lead->despesas?->valor_iptu) }}"
-                                                                >
-                                                            </div>
-
-                                                            <div class="col-12 col-md-4">
-                                                                <label class="form-label">Outras despesas</label>
-                                                                <input
-                                                                    type="number"
-                                                                    step="0.01"
-                                                                    min="0"
-                                                                    name="outras_despesas"
-                                                                    class="form-control"
-                                                                    value="{{ old('outras_despesas', $lead->despesas?->outras_despesas) }}"
-                                                                >
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
+                                        <div class="mt-3">
+                                            @include('partials.lead-update-fields', [
+                                                'lead' => $lead,
+                                                'leadUpdateIdPrefix' => 'admin-lead',
+                                                'isLeadValidationContext' => $isLeadValidationContext,
+                                            ])
                                         </div>
                                 @can('edit-leads')
                                     </form>
@@ -1862,54 +1786,56 @@
                             @endcan
 
 
-                            @can('create-analysis')
-                                <div
-                                    class="tab-pane fade"
-                                    id="admin-lead-reanalysis-pane-{{ $lead->id }}"
-                                    role="tabpanel"
-                                    aria-labelledby="admin-lead-reanalysis-tab-{{ $lead->id }}"
-                                >
-                                    @if ($canReanalyze)
-                                        <div class="alert alert-success rounded-4">
-                                            <strong>Reanálise liberada.</strong>
-                                            Este cliente possui alterações salvas depois da última análise.
-                                        </div>
+                            @if ($insuranceAnalysisEnabled)
+                                @can('create-analysis')
+                                    <div
+                                        class="tab-pane fade"
+                                        id="admin-lead-reanalysis-pane-{{ $lead->id }}"
+                                        role="tabpanel"
+                                        aria-labelledby="admin-lead-reanalysis-tab-{{ $lead->id }}"
+                                    >
+                                        @if ($canReanalyze)
+                                            <div class="alert alert-success rounded-4">
+                                                <strong>Reanálise liberada.</strong>
+                                                Este cliente possui alterações salvas depois da última análise.
+                                            </div>
 
-                                        <form
-                                            method="POST"
-                                            action="{{ $solicitarAnaliseRoute($lead) }}"
-                                        >
-                                            @csrf
-
-                                            <button
-                                                type="submit"
-                                                class="btn btn-warning"
-                                                @disabled($solicitarAnaliseRoute($lead) === '#')
+                                            <form
+                                                method="POST"
+                                                action="{{ $solicitarAnaliseRoute($lead) }}"
                                             >
-                                                <i class="bi bi-arrow-repeat me-1"></i>
-                                                Solicitar reanálise
-                                            </button>
-                                        </form>
-                                    @else
-                                        <div class="alert alert-info rounded-4">
-                                            <strong>Reanálise bloqueada.</strong>
-                                            Para solicitar uma nova análise, altere algum dado do cliente e clique em
-                                            <strong>Salvar alterações</strong>.
-                                        </div>
+                                                @csrf
 
-                                        @if ($lastAnalysis)
-                                            <p class="text-muted small mb-0">
-                                                Última análise registrada em:
-                                                {{ $lastAnalysis->created_at->format('d/m/Y H:i') }}
-                                            </p>
+                                                <button
+                                                    type="submit"
+                                                    class="btn btn-warning"
+                                                    @disabled($solicitarAnaliseRoute($lead) === '#')
+                                                >
+                                                    <i class="bi bi-arrow-repeat me-1" aria-hidden="true"></i>
+                                                    Solicitar reanálise
+                                                </button>
+                                            </form>
                                         @else
-                                            <p class="text-muted small mb-0">
-                                                Nenhuma análise anterior foi encontrada para este cliente.
-                                            </p>
+                                            <div class="alert alert-info rounded-4">
+                                                <strong>Reanálise bloqueada.</strong>
+                                                Para solicitar uma nova análise, altere algum dado do cliente e clique em
+                                                <strong>Salvar alterações</strong>.
+                                            </div>
+
+                                            @if ($lastAnalysis)
+                                                <p class="text-muted small mb-0">
+                                                    Última análise registrada em:
+                                                    {{ $lastAnalysis->created_at->format('d/m/Y H:i') }}
+                                                </p>
+                                            @else
+                                                <p class="text-muted small mb-0">
+                                                    Nenhuma análise anterior foi encontrada para este cliente.
+                                                </p>
+                                            @endif
                                         @endif
-                                    @endif
-                                </div>
-                            @endcan
+                                    </div>
+                                @endcan
+                            @endif
                         </div>
                     </div>
 
@@ -1919,8 +1845,15 @@
                                 type="submit"
                                 form="adminLeadUpdateForm{{ $lead->id }}"
                                 class="btn btn-primary"
+                                data-lead-submit
+                                data-lead-id="{{ $lead->id }}"
                             >
-                                Salvar alterações
+                                <span
+                                    class="spinner-border spinner-border-sm me-2 d-none"
+                                    aria-hidden="true"
+                                    data-lead-spinner
+                                ></span>
+                                <span data-lead-submit-label>Salvar alterações</span>
                             </button>
                         @endcan
 
@@ -1933,6 +1866,12 @@
         </div>
     @endforeach
 @endcan
+
+<script id="dashboardUserConfig" type="application/json">
+    {!! json_encode([
+        'leadValidationTargets' => $leadValidationTargets,
+    ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) !!}
+</script>
 
 @can('manage-lead-tags')
     <script>

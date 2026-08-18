@@ -120,7 +120,7 @@ it('uses the framed client logo in both dashboard headers and sidebars', functio
     }
 })->with(['tcc', 'client']);
 
-it('keeps read-only analysis pages and simulation links available when analyses are disabled', function () {
+it('hides analysis navigation and keeps lead simulation available when analyses are disabled', function () {
     $this->actingAs(User::factory()->create());
     config(['features.insurance_analysis.enabled' => false]);
 
@@ -129,7 +129,7 @@ it('keeps read-only analysis pages and simulation links available when analyses 
     ])->render();
 
     expect($html)
-        ->toContain(route('insurance-analyses.index'))
+        ->not->toContain(route('insurance-analyses.index'))
         ->toContain(route('simulation.registered-company.access'))
         ->toContain('Página de simulação');
 
