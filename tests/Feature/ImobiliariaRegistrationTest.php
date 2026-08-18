@@ -75,10 +75,11 @@ it('creates and stores a remote tag when no local tag is available', function ()
 
     Http::preventStrayRequests();
     Http::fake([
-        'https://api.leadlovers.com/tags/' => Http::response([
-            'id' => 888,
-            'name' => 'Imobiliária Auditada',
-        ], 200),
+        '*' => Http::sequence()
+            ->push([], 201)
+            ->push([
+                ['Id' => 888, 'Title' => 'Imobiliária Auditada'],
+            ], 200),
     ]);
 
     $response = $this->post(
@@ -105,7 +106,7 @@ it('creates and stores a remote tag when no local tag is available', function ()
         'active' => true,
     ]);
 
-    Http::assertSentCount(1);
+    Http::assertSentCount(2);
 });
 
 it('rejects fields from the inactive registration mode', function () {

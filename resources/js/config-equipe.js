@@ -65,11 +65,6 @@ document.querySelectorAll('[data-team-form]').forEach((form) => {
     const activeInput = form.querySelector('#active');
     const activeLabel = form.querySelector('[data-team-status-label]');
     const permissionInputs = Array.from(form.querySelectorAll('input[name="permissions[]"]'));
-    const permissionInputsByKey = new Map(
-        permissionInputs
-            .filter((input) => input.dataset.teamPermissionKey)
-            .map((input) => [input.dataset.teamPermissionKey, input]),
-    );
     const permissionCount = form.querySelector('[data-team-permission-count]');
     const submitButton = form.querySelector('[data-team-submit]');
     const originalSubmitContent = submitButton?.innerHTML;
@@ -85,40 +80,9 @@ document.querySelectorAll('[data-team-form]').forEach((form) => {
         activeLabel.classList.toggle('is-inactive', !isActive);
     };
 
-    const syncPermissionDependencies = () => {
-        permissionInputs.forEach((input) => {
-            const requiredKeys = (input.dataset.teamPermissionRequires ?? '')
-                .split(/\s+/)
-                .filter(Boolean);
-
-            if (requiredKeys.length === 0) {
-                return;
-            }
-
-            const dependenciesSatisfied = requiredKeys.every(
-                (permissionKey) => permissionInputsByKey.get(permissionKey)?.checked === true,
-            );
-
-            if (!dependenciesSatisfied) {
-                input.checked = false;
-            }
-
-            input.disabled = !dependenciesSatisfied;
-
-            if (dependenciesSatisfied) {
-                input.removeAttribute('aria-disabled');
-            } else {
-                input.setAttribute('aria-disabled', 'true');
-            }
-        });
-    };
-
     const updatePermissions = () => {
         permissionInputs.forEach((input) => {
-            const option = input.closest('.team-permission-option');
-
-            option?.classList.toggle('is-selected', input.checked);
-            option?.classList.toggle('is-disabled', input.disabled);
+            input.closest('.team-permission-option')?.classList.toggle('is-selected', input.checked);
         });
 
         if (!permissionCount) {
@@ -134,15 +98,9 @@ document.querySelectorAll('[data-team-form]').forEach((form) => {
         window.setTimeout(() => permissionCount.classList.remove('is-updating'), 180);
     };
 
-    const handlePermissionChange = () => {
-        syncPermissionDependencies();
-        updatePermissions();
-    };
-
     activeInput?.addEventListener('change', updateActiveState);
-    permissionInputs.forEach((input) => input.addEventListener('change', handlePermissionChange));
+    permissionInputs.forEach((input) => input.addEventListener('change', updatePermissions));
     updateActiveState();
-    syncPermissionDependencies();
     updatePermissions();
 
     form.querySelectorAll('[data-team-panel]').forEach((panel) => {
@@ -166,7 +124,6 @@ document.querySelectorAll('[data-team-form]').forEach((form) => {
     };
 
     form.addEventListener('submit', () => {
-        syncPermissionDependencies();
         form.setAttribute('aria-busy', 'true');
 
         if (submitButton) {

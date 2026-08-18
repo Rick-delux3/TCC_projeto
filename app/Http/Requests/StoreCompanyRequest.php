@@ -155,7 +155,7 @@ class StoreCompanyRequest extends FormRequest
                 'bail',
                 'required',
                 'string',
-                'max:100',
+                'max:255',
                 Rule::unique('imobiliarias', 'name'),
                 Rule::unique('lead_lovers_tags', 'title'),
             ];
@@ -205,7 +205,7 @@ class StoreCompanyRequest extends FormRequest
 
             'company_name.string' => 'O nome da imobiliária é inválido.',
 
-            'company_name.max' => 'O nome da imobiliária deve ter no máximo 100 caracteres.',
+            'company_name.max' => 'O nome da imobiliária deve ter no máximo 255 caracteres.',
 
             'company_name.unique' => 'Já existe uma imobiliária ou tag cadastrada com esse nome.',
 

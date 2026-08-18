@@ -1,55 +1,28 @@
 <?php
 
-use App\Exceptions\LeadLoversApiException;
+use App\Exceptions\LeadLoversHttpException;
+use App\Exceptions\LeadLoversRateLimitedException;
+use App\Exceptions\LeadLoversStateNotConfirmedException;
 use App\Exceptions\PermanentLeadTagException;
 use App\Jobs\ApplyManualLeadResultTagJob;
 use App\Models\Corretor;
 use App\Models\CorretorActivityLog;
 use App\Models\Lead;
 use App\Models\LeadLoversTag;
-use App\Models\LeadLoversTagOperation;
-use App\Services\LeadLoversApiClient;
-use App\Services\LeadLoversResultTagService;
-use App\Services\LeadLoversTagOperationCoordinator;
+use App\Services\LeadLoversService;
 use App\Support\ManualLeadResultTags;
-use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Queue;
-use Illuminate\Support\Facades\RateLimiter;
-
-const MANUAL_LEAD_TAG_API_URL = 'https://api.leadlovers.manual.test';
-const MANUAL_LEAD_TAG_TOKEN = 'manual-flow-secret-token';
-const MANUAL_LEAD_TAG_CONFIRMATION_DELAY = 17;
 
 beforeEach(function () {
     Http::preventStrayRequests();
-    Http::fake([]);
 
     config([
         'services.leadlovers.enabled' => true,
-        'services.leadlovers.api_url' => MANUAL_LEAD_TAG_API_URL,
-        'services.leadlovers.token' => MANUAL_LEAD_TAG_TOKEN,
-        'services.leadlovers.requests_per_minute' => 90,
-        'services.leadlovers.rate_limit_window_seconds' => 60,
-        'services.leadlovers.rate_limit_retry_seconds' => 60,
-        'services.leadlovers.rate_limit_max_retry_seconds' => 900,
-        'services.leadlovers.tag_confirmation_delay_seconds' => MANUAL_LEAD_TAG_CONFIRMATION_DELAY,
+        'services.leadlovers.token' => 'manual-flow-secret-token',
     ]);
-
-    RateLimiter::clear(manualLeadTagLimiterKey());
 });
-
-afterEach(function () {
-    RateLimiter::clear(manualLeadTagLimiterKey());
-});
-
-function manualLeadTagLimiterKey(): string
-{
-    return 'leadlovers:requests:'.hash(
-        'sha256',
-        (string) config('services.leadlovers.token')
-    );
-}
 
 function manualLeadTagCorretor(array $overrides = []): Corretor
 {
@@ -74,34 +47,23 @@ function manualLeadTagLead(array $overrides = []): Lead
         'email' => 'lead@example.test',
         'tags_originais' => 'Imobiliária Azul, Ruim, Origem X',
         'leadlovers_status' => 'sent',
-        'leadlovers_lead_id' => 501,
         'sent_to_leadlovers_at' => now(),
     ], $overrides));
 }
 
-/**
- * @return array<string, array{id: int, title: string}>
- */
-function manualLeadTagDefinitions(): array
-{
-    return [
-        'aprovados' => ['id' => 101, 'title' => 'Aprovados'],
-        'ruim' => ['id' => 102, 'title' => 'Ruim'],
-        'em_negociacao' => ['id' => 103, 'title' => 'Em negociação'],
-        'fechado_aluguel' => ['id' => 104, 'title' => 'Fechado Aluguel'],
-        'nao_aluguel_nem_seguro' => [
-            'id' => 105,
-            'title' => 'Não aluguei nem seguro',
-        ],
-    ];
-}
-
 function manualLeadTagCatalog(): void
 {
-    foreach (manualLeadTagDefinitions() as $key => $definition) {
+    $definitions = [
+        'aprovados' => [1, 'Aprovados'],
+        'ruim' => [2, 'Ruim'],
+        'em_negociacao' => [3, 'Em negociação'],
+        'fechado_aluguel' => [4, 'Fechado Aluguel'],
+    ];
+
+    foreach ($definitions as $key => [$id, $title]) {
         LeadLoversTag::query()->create([
-            'leadlovers_tag_id' => $definition['id'],
-            'title' => $definition['title'],
+            'leadlovers_tag_id' => $id,
+            'title' => $title,
             'key' => $key,
             'active' => true,
         ]);
@@ -124,47 +86,7 @@ function manualLeadTagRequestLog(
     ]);
 }
 
-function manualLeadTagPendingLog(
-    Corretor $corretor,
-    Lead $lead,
-    string $result,
-    int $requestLogId,
-    ?array $bulkAction = null
-): CorretorActivityLog {
-    return CorretorActivityLog::query()->create([
-        'corretor_id' => $corretor->id,
-        'action' => 'lead_tag_update_pending_confirmation',
-        'model_type' => Lead::class,
-        'model_id' => $lead->id,
-        'new_values' => [
-            'request_log_id' => $requestLogId,
-            'requested_result' => $result,
-            'phase' => 'pending_confirmation',
-            'outcome_uncertain' => false,
-            'bulk_action' => $bulkAction,
-        ],
-    ]);
-}
-
-function manualLeadTagRemoteTag(int $id, string $name): array
-{
-    return [
-        'id' => $id,
-        'name' => $name,
-        'linkedAt' => '2026-08-11T12:00:00Z',
-    ];
-}
-
-function handleManualLeadTagJob(ApplyManualLeadResultTagJob $job): void
-{
-    $job->handle(
-        app(LeadLoversApiClient::class),
-        app(LeadLoversResultTagService::class),
-        app(LeadLoversTagOperationCoordinator::class),
-    );
-}
-
-it('allows an active member with permission to request each commercial result', function (string $result) {
+it('allows an active member with the tag management permission to request a result', function () {
     Queue::fake();
     manualLeadTagCatalog();
 
@@ -175,37 +97,29 @@ it('allows an active member with permission to request each commercial result', 
         ->actingAs($corretor, 'admin')
         ->from('/Dashboard/Admin')
         ->patch(route('admin.leads.result-tag.update', $lead), [
-            'result' => $result,
+            'result' => ManualLeadResultTags::APPROVED,
             'result_context_lead_id' => $lead->id,
             'corretor_id' => 999999,
         ])
         ->assertRedirect('/Dashboard/Admin')
         ->assertSessionHasNoErrors();
 
-    $requestLogId = CorretorActivityLog::query()
-        ->where('action', 'lead_tag_update_requested')
-        ->where('model_type', Lead::class)
-        ->where('model_id', $lead->id)
-        ->value('id');
-
     Queue::assertPushed(
         ApplyManualLeadResultTagJob::class,
         fn (ApplyManualLeadResultTagJob $job): bool => $job->leadId === $lead->id
             && $job->corretorId === $corretor->id
-            && $job->result === $result
-            && $job->requestLogId === $requestLogId
-            && $job->phase === null
+            && $job->result === ManualLeadResultTags::APPROVED
+            && $job->requestLogId === CorretorActivityLog::query()
+                ->where('action', 'lead_tag_update_requested')
+                ->where('model_type', Lead::class)
+                ->where('model_id', $lead->id)
+                ->value('id')
     );
-})->with([
-    'Aprovado' => [ManualLeadResultTags::APPROVED],
-    'Recusado' => [ManualLeadResultTags::REJECTED],
-    'Em negociação' => [ManualLeadResultTags::IN_NEGOTIATION],
-    'Fechado aluguel' => [ManualLeadResultTags::RENTAL_CONFIRMED],
-    'Não aluguei nem seguro' => [ManualLeadResultTags::NO_RENT_OR_INSURANCE],
-]);
+});
 
-it('rejects unauthenticated inactive unverified and unauthorized members', function (string $state) {
+it('rejects unauthenticated, inactive, unverified, and unauthorized members', function (string $state) {
     Queue::fake();
+
     $lead = manualLeadTagLead();
 
     if ($state === 'guest') {
@@ -218,7 +132,9 @@ it('rejects unauthenticated inactive unverified and unauthorized members', funct
             'unverified' => ['first_login_verified_at' => null],
             'unauthorized' => ['permissions' => []],
         };
+
         $corretor = manualLeadTagCorretor($overrides);
+
         $response = $this
             ->actingAs($corretor, 'admin')
             ->patch(route('admin.leads.result-tag.update', $lead), [
@@ -233,7 +149,6 @@ it('rejects unauthenticated inactive unverified and unauthorized members', funct
     }
 
     Queue::assertNothingPushed();
-    Http::assertNothingSent();
 })->with([
     'guest' => ['guest'],
     'inactive member' => ['inactive'],
@@ -243,6 +158,7 @@ it('rejects unauthenticated inactive unverified and unauthorized members', funct
 
 it('rejects an unknown result before dispatching the job', function () {
     Queue::fake();
+
     $corretor = manualLeadTagCorretor();
     $lead = manualLeadTagLead();
 
@@ -257,73 +173,37 @@ it('rejects an unknown result before dispatching the job', function () {
         ->assertSessionHasErrors('result');
 
     Queue::assertNothingPushed();
-    Http::assertNothingSent();
 });
 
-it('rejects a controller request when the remote lead id is absent', function () {
-    Queue::fake();
-    $corretor = manualLeadTagCorretor();
-    $lead = manualLeadTagLead(['leadlovers_lead_id' => null]);
-
-    $this
-        ->actingAs($corretor, 'admin')
-        ->from('/Dashboard/Admin')
-        ->patch(route('admin.leads.result-tag.update', $lead), [
-            'result' => ManualLeadResultTags::APPROVED,
-            'result_context_lead_id' => $lead->id,
-        ])
-        ->assertRedirect('/Dashboard/Admin')
-        ->assertSessionHasErrors('result');
-
-    Queue::assertNothingPushed();
-    Http::assertNothingSent();
-});
-
-it('fails locally when the lead no longer exists', function () {
+it('does not call LeadLovers when the lead no longer exists', function () {
     $corretor = manualLeadTagCorretor([
         'role' => Corretor::ROLE_CEO,
         'permissions' => null,
     ]);
+
+    $service = Mockery::mock(LeadLoversService::class);
+    $service->shouldNotReceive('getLeadByEmail');
+
     $job = (new ApplyManualLeadResultTagJob(
         999999,
         ManualLeadResultTags::APPROVED,
         $corretor->id,
     ))->withFakeQueueInteractions();
 
-    handleManualLeadTagJob($job);
+    $job->handle($service);
 
     $job->assertFailedWith(PermanentLeadTagException::class);
-    Http::assertNothingSent();
 });
 
-it('fails locally when the lead has no valid remote id', function () {
+it('does not execute a request superseded by a newer manual result decision', function () {
     manualLeadTagCatalog();
-    $corretor = manualLeadTagCorretor([
-        'role' => Corretor::ROLE_CEO,
-        'permissions' => null,
-    ]);
-    $lead = manualLeadTagLead(['leadlovers_lead_id' => null]);
-    $job = (new ApplyManualLeadResultTagJob(
-        $lead->id,
-        ManualLeadResultTags::APPROVED,
-        $corretor->id,
-    ))->withFakeQueueInteractions();
 
-    handleManualLeadTagJob($job);
-
-    $job->assertFailedWith(PermanentLeadTagException::class);
-    expect($lead->fresh()->tags_originais)
-        ->toBe('Imobiliária Azul, Ruim, Origem X');
-    Http::assertNothingSent();
-});
-
-it('does not execute a request superseded by a newer decision', function () {
-    manualLeadTagCatalog();
     $corretor = manualLeadTagCorretor([
         'role' => Corretor::ROLE_CEO,
         'permissions' => null,
     ]);
     $lead = manualLeadTagLead();
+
     $olderRequest = manualLeadTagRequestLog(
         $corretor,
         $lead,
@@ -334,27 +214,26 @@ it('does not execute a request superseded by a newer decision', function () {
         $lead,
         ManualLeadResultTags::REJECTED
     );
+
+    $service = Mockery::mock(LeadLoversService::class);
+    $service->shouldNotReceive('getLeadByEmail');
+
     $job = new ApplyManualLeadResultTagJob(
         $lead->id,
         ManualLeadResultTags::APPROVED,
         $corretor->id,
-        requestLogId: $olderRequest->id,
     );
+    $job->requestLogId = $olderRequest->id;
 
-    handleManualLeadTagJob($job);
+    $job->handle($service);
 
     expect($lead->fresh()->tags_originais)
         ->toBe('Imobiliária Azul, Ruim, Origem X');
-    Http::assertNothingSent();
-    $this->assertDatabaseMissing('logs_atividades_corretores', [
-        'action' => 'lead_tag_update_completed',
-        'model_type' => Lead::class,
-        'model_id' => $lead->id,
-    ]);
 });
 
-it('does not persist when a newer decision arrives during the remote read', function () {
+it('does not persist after a newer decision arrives during the remote operation', function () {
     manualLeadTagCatalog();
+
     $corretor = manualLeadTagCorretor([
         'role' => Corretor::ROLE_CEO,
         'permissions' => null,
@@ -366,35 +245,60 @@ it('does not persist when a newer decision arrives during the remote read', func
         ManualLeadResultTags::APPROVED
     );
 
-    Http::fake(function (Request $request) use ($corretor, $lead) {
-        expect($request->method())->toBe('GET')
-            ->and($request->url())->toBe(
-                MANUAL_LEAD_TAG_API_URL.'/leads/501/tags'
+    $service = Mockery::mock(LeadLoversService::class);
+    $service->shouldReceive('getLeadByEmail')
+        ->once()
+        ->andReturn([
+            'StatusCode' => 200,
+            'Code' => '501',
+        ]);
+    $service->shouldReceive('getLeadTagsByCode')
+        ->once()
+        ->andReturn([
+            'StatusCode' => 200,
+            'Data' => [
+                'Tags' => [
+                    ['Id' => 2, 'Title' => 'Ruim'],
+                ],
+            ],
+        ]);
+    $service->shouldReceive('addTagToLeadById')
+        ->once()
+        ->andReturn(['StatusCode' => 200]);
+    $service->shouldReceive('removeTagFromLead')
+        ->once()
+        ->andReturn(['StatusCode' => 200]);
+    $service->shouldReceive('getLeadTagsByCode')
+        ->once()
+        ->andReturnUsing(function () use ($corretor, $lead): array {
+            manualLeadTagRequestLog(
+                $corretor,
+                $lead,
+                ManualLeadResultTags::REJECTED
             );
 
-        manualLeadTagRequestLog(
-            $corretor,
-            $lead,
-            ManualLeadResultTags::REJECTED
-        );
+            return [
+                'StatusCode' => 200,
+                'Data' => [
+                    'Tags' => [
+                        ['Id' => 1, 'Title' => 'Aprovados'],
+                    ],
+                ],
+            ];
+        });
 
-        return Http::response([
-            manualLeadTagRemoteTag(900, 'Imobiliária Azul'),
-            manualLeadTagRemoteTag(101, 'Aprovados'),
-        ], 200);
-    });
-
-    handleManualLeadTagJob(new ApplyManualLeadResultTagJob(
+    $job = new ApplyManualLeadResultTagJob(
         $lead->id,
         ManualLeadResultTags::APPROVED,
         $corretor->id,
         requestLogId: $olderRequest->id,
-        phase: 'confirmation',
-    ));
+    );
 
-    Http::assertSentCount(1);
+    $job->handle($service);
+
     expect($lead->fresh()->tags_originais)
         ->toBe('Imobiliária Azul, Ruim, Origem X');
+
     $this->assertDatabaseMissing('logs_atividades_corretores', [
         'action' => 'lead_tag_update_completed',
         'model_type' => Lead::class,
@@ -402,12 +306,13 @@ it('does not persist when a newer decision arrives during the remote read', func
     ]);
 });
 
-it('uses the audit request and phase as queue uniqueness versions', function () {
+it('uses the server audit request as the uniqueness version', function () {
     $corretor = manualLeadTagCorretor([
         'role' => Corretor::ROLE_CEO,
         'permissions' => null,
     ]);
     $lead = manualLeadTagLead();
+
     $firstRequest = manualLeadTagRequestLog(
         $corretor,
         $lead,
@@ -418,47 +323,99 @@ it('uses the audit request and phase as queue uniqueness versions', function () 
         $lead,
         ManualLeadResultTags::APPROVED
     );
+
     $firstJob = new ApplyManualLeadResultTagJob(
         $lead->id,
         ManualLeadResultTags::APPROVED,
         $corretor->id,
-        requestLogId: $firstRequest->id,
     );
+    $firstJob->requestLogId = $firstRequest->id;
+
     $secondJob = new ApplyManualLeadResultTagJob(
         $lead->id,
         ManualLeadResultTags::APPROVED,
         $corretor->id,
-        requestLogId: $secondRequest->id,
     );
-    $confirmationJob = new ApplyManualLeadResultTagJob(
-        $lead->id,
-        ManualLeadResultTags::APPROVED,
-        $corretor->id,
-        requestLogId: $firstRequest->id,
-        phase: 'confirmation',
-    );
+    $secondJob->requestLogId = $secondRequest->id;
 
-    expect($firstJob->uniqueId())->not->toBe($secondJob->uniqueId())
-        ->and($firstJob->uniqueId())->not->toBe($confirmationJob->uniqueId())
-        ->and($confirmationJob->uniqueId())
-        ->toBe($firstJob->uniqueId().':confirmation');
+    expect($firstJob->uniqueId())->not->toBe($secondJob->uniqueId());
 });
 
-it('fails before HTTP when the final tag catalog has unsafe data', function (string $state) {
+it('rejects invalid add-tag arguments before consuming an HTTP request', function () {
+    Http::fake();
+
+    $result = app(LeadLoversService::class)
+        ->addTagToLeadById('invalid-email', 0);
+
+    expect($result['StatusCode'])->toBe(422);
+    Http::assertNothingSent();
+});
+
+it('rejects an invalid lead code before consuming an HTTP request', function () {
+    Http::fake();
+
+    $result = app(LeadLoversService::class)
+        ->getLeadTagsByCode('0');
+
+    expect($result['StatusCode'])->toBe(422);
+    Http::assertNothingSent();
+});
+
+it('fails before changing tags when an email resolves to multiple remote leads', function () {
     manualLeadTagCatalog();
+
     $corretor = manualLeadTagCorretor([
         'role' => Corretor::ROLE_CEO,
         'permissions' => null,
     ]);
     $lead = manualLeadTagLead();
+
+    $service = Mockery::mock(LeadLoversService::class);
+    $service->shouldReceive('getLeadByEmail')
+        ->once()
+        ->with($lead->email)
+        ->andReturn([
+            'StatusCode' => 200,
+            'Data' => [
+                ['Code' => '501'],
+                ['Code' => '502'],
+            ],
+        ]);
+    $service->shouldNotReceive('getLeadTagsByCode');
+    $service->shouldNotReceive('addTagToLeadById');
+    $service->shouldNotReceive('removeTagFromLead');
+
+    $job = (new ApplyManualLeadResultTagJob(
+        $lead->id,
+        ManualLeadResultTags::APPROVED,
+        $corretor->id,
+    ))->withFakeQueueInteractions();
+
+    $job->handle($service);
+
+    $job->assertFailedWith(PermanentLeadTagException::class);
+
+    expect($lead->fresh()->tags_originais)
+        ->toBe('Imobiliária Azul, Ruim, Origem X');
+});
+
+it('fails before HTTP when the final tag catalog has unsafe titles', function (string $state) {
+    manualLeadTagCatalog();
 
     LeadLoversTag::query()
         ->where('key', 'ruim')
-        ->update(match ($state) {
-            'blank' => ['title' => ''],
-            'duplicate title' => ['title' => 'Aprovados'],
-            'invalid id' => ['leadlovers_tag_id' => 0],
-        });
+        ->update([
+            'title' => $state === 'blank' ? '' : 'Aprovados',
+        ]);
+
+    $corretor = manualLeadTagCorretor([
+        'role' => Corretor::ROLE_CEO,
+        'permissions' => null,
+    ]);
+    $lead = manualLeadTagLead();
+
+    $service = Mockery::mock(LeadLoversService::class);
+    $service->shouldNotReceive('getLeadByEmail');
 
     $job = (new ApplyManualLeadResultTagJob(
         $lead->id,
@@ -466,372 +423,50 @@ it('fails before HTTP when the final tag catalog has unsafe data', function (str
         $corretor->id,
     ))->withFakeQueueInteractions();
 
-    handleManualLeadTagJob($job);
+    $job->handle($service);
 
     $job->assertFailedWith(PermanentLeadTagException::class);
-    Http::assertNothingSent();
 })->with([
     'blank title' => ['blank'],
-    'duplicate normalized title' => ['duplicate title'],
-    'invalid remote id' => ['invalid id'],
+    'duplicate normalized title' => ['duplicate'],
 ]);
 
-it('does not mutate when the selected result is already confirmed remotely', function () {
+it('fails before changing tags when the stored remote code diverges', function () {
     manualLeadTagCatalog();
+
     $corretor = manualLeadTagCorretor([
         'role' => Corretor::ROLE_CEO,
         'permissions' => null,
     ]);
-    $lead = manualLeadTagLead();
-    $requestLog = manualLeadTagRequestLog(
-        $corretor,
-        $lead,
-        ManualLeadResultTags::APPROVED
-    );
-
-    Http::fake([
-        MANUAL_LEAD_TAG_API_URL.'/leads/501/tags' => Http::response([
-            manualLeadTagRemoteTag(900, 'Imobiliária Azul'),
-            manualLeadTagRemoteTag(101, 'Aprovados'),
-        ], 200),
+    $lead = manualLeadTagLead([
+        'leadlovers_lead_code' => '500',
     ]);
 
-    handleManualLeadTagJob(new ApplyManualLeadResultTagJob(
-        $lead->id,
-        ManualLeadResultTags::APPROVED,
-        $corretor->id,
-        requestLogId: $requestLog->id,
-    ));
-
-    Http::assertSentCount(1);
-    Http::assertSent(fn (Request $request): bool => $request->method() === 'GET'
-        && $request->url() === MANUAL_LEAD_TAG_API_URL.'/leads/501/tags'
-    );
-    expect($lead->fresh())
-        ->tags_originais->toBe('Imobiliária Azul, Origem X, Aprovados')
-        ->updated_by_corretor_id->toBe($corretor->id);
-    $this->assertDatabaseHas('logs_atividades_corretores', [
-        'action' => 'lead_tag_update_completed',
-        'model_type' => Lead::class,
-        'model_id' => $lead->id,
-    ]);
-    $this->assertDatabaseMissing('logs_atividades_corretores', [
-        'action' => 'lead_tag_update_pending_confirmation',
-        'model_type' => Lead::class,
-        'model_id' => $lead->id,
-    ]);
-});
-
-it('does not reapply a selected tag when only another final tag must be removed', function () {
-    Queue::fake();
-    manualLeadTagCatalog();
-    $corretor = manualLeadTagCorretor([
-        'role' => Corretor::ROLE_CEO,
-        'permissions' => null,
-    ]);
-    $lead = manualLeadTagLead();
-    $requestLog = manualLeadTagRequestLog(
-        $corretor,
-        $lead,
-        ManualLeadResultTags::APPROVED
-    );
-
-    Http::fake([
-        MANUAL_LEAD_TAG_API_URL.'/leads/501/tags' => Http::response([
-            manualLeadTagRemoteTag(900, 'Imobiliária Azul'),
-            manualLeadTagRemoteTag(101, 'Aprovados'),
-            manualLeadTagRemoteTag(102, 'Ruim'),
-        ], 200),
-        MANUAL_LEAD_TAG_API_URL.'/leads/tags' => Http::response([
-            'actionId' => 7002,
-            'status' => 'pending',
-            'total' => 1,
-        ], 202),
-    ]);
-
-    handleManualLeadTagJob(new ApplyManualLeadResultTagJob(
-        $lead->id,
-        ManualLeadResultTags::APPROVED,
-        $corretor->id,
-        requestLogId: $requestLog->id,
-    ));
-
-    Http::assertSent(fn (Request $request): bool => $request->method() === 'POST'
-        && $request->url() === MANUAL_LEAD_TAG_API_URL.'/leads/tags'
-        && $request->data() === [
-            'applyTags' => [],
-            'removeTags' => [102],
-            'leadsIds' => [501],
-        ]
-    );
-    expect($lead->fresh()->tags_originais)
-        ->toBe('Imobiliária Azul, Ruim, Origem X');
-});
-
-it('uses one bulk mutation for each of the five commercial outcomes', function (
-    string $result,
-    int $selectedTagId,
-    int $oldFinalTagId,
-    string $oldFinalTagTitle
-) {
-    Queue::fake();
-    manualLeadTagCatalog();
-    $corretor = manualLeadTagCorretor([
-        'role' => Corretor::ROLE_CEO,
-        'permissions' => null,
-    ]);
-    $lead = manualLeadTagLead();
-    $requestLog = manualLeadTagRequestLog($corretor, $lead, $result);
-    $bulkAction = [
-        'actionId' => 7001,
-        'status' => 'pending',
-        'total' => 1,
-    ];
-
-    Http::fake([
-        MANUAL_LEAD_TAG_API_URL.'/leads/501/tags' => Http::response([
-            manualLeadTagRemoteTag(900, 'Imobiliária Azul'),
-            manualLeadTagRemoteTag($oldFinalTagId, $oldFinalTagTitle),
-        ], 200),
-        MANUAL_LEAD_TAG_API_URL.'/leads/tags' => Http::response(
-            $bulkAction,
-            202
-        ),
-    ]);
-
-    handleManualLeadTagJob(new ApplyManualLeadResultTagJob(
-        $lead->id,
-        $result,
-        $corretor->id,
-        requestLogId: $requestLog->id,
-    ));
-
-    Http::assertSentCount(2);
-    Http::assertSent(fn (Request $request): bool => $request->method() === 'POST'
-        && $request->url() === MANUAL_LEAD_TAG_API_URL.'/leads/tags'
-        && $request->data() === [
-            'applyTags' => [$selectedTagId],
-            'removeTags' => [$oldFinalTagId],
-            'leadsIds' => [501],
-        ]
-        && ! in_array(900, $request->data()['removeTags'], true)
-    );
-    expect($lead->fresh()->tags_originais)
-        ->toBe('Imobiliária Azul, Ruim, Origem X');
-    $pending = CorretorActivityLog::query()
-        ->where('action', 'lead_tag_update_pending_confirmation')
-        ->sole();
-    expect(data_get($pending->new_values, 'request_log_id'))
-        ->toBe($requestLog->id)
-        ->and(data_get($pending->new_values, 'bulk_action'))
-        ->toBe($bulkAction);
-    $this->assertDatabaseMissing('logs_atividades_corretores', [
-        'action' => 'lead_tag_update_completed',
-        'model_type' => Lead::class,
-        'model_id' => $lead->id,
-    ]);
-    Queue::assertPushed(
-        ApplyManualLeadResultTagJob::class,
-        function (ApplyManualLeadResultTagJob $job) use (
-            $lead,
-            $result,
-            $requestLog,
-            $bulkAction
-        ): bool {
-            $delay = $job->delay;
-
-            return $job->leadId === $lead->id
-                && $job->result === $result
-                && $job->requestLogId === $requestLog->id
-                && $job->phase === 'confirmation'
-                && $job->bulkAction === $bulkAction
-                && $delay instanceof DateTimeInterface
-                && $delay->getTimestamp() >= now()
-                    ->addSeconds(MANUAL_LEAD_TAG_CONFIRMATION_DELAY - 1)
-                    ->getTimestamp();
-        }
-    );
-})->with([
-    'Aprovado' => [ManualLeadResultTags::APPROVED, 101, 102, 'Ruim'],
-    'Recusado' => [ManualLeadResultTags::REJECTED, 102, 101, 'Aprovados'],
-    'Em negociação' => [
-        ManualLeadResultTags::IN_NEGOTIATION,
-        103,
-        101,
-        'Aprovados',
-    ],
-    'Fechado aluguel' => [
-        ManualLeadResultTags::RENTAL_CONFIRMED,
-        104,
-        101,
-        'Aprovados',
-    ],
-    'Não aluguei nem seguro' => [
-        ManualLeadResultTags::NO_RENT_OR_INSURANCE,
-        105,
-        101,
-        'Aprovados',
-    ],
-]);
-
-it('does not repeat the bulk mutation when the request is already pending', function () {
-    Queue::fake();
-    manualLeadTagCatalog();
-    $corretor = manualLeadTagCorretor([
-        'role' => Corretor::ROLE_CEO,
-        'permissions' => null,
-    ]);
-    $lead = manualLeadTagLead();
-    $requestLog = manualLeadTagRequestLog(
-        $corretor,
-        $lead,
-        ManualLeadResultTags::APPROVED
-    );
-    manualLeadTagPendingLog(
-        $corretor,
-        $lead,
-        ManualLeadResultTags::APPROVED,
-        $requestLog->id,
-        ['actionId' => 7001, 'status' => 'pending', 'total' => 1],
-    );
-
-    Http::fake([
-        MANUAL_LEAD_TAG_API_URL.'/leads/501/tags' => Http::response([
-            manualLeadTagRemoteTag(900, 'Imobiliária Azul'),
-            manualLeadTagRemoteTag(102, 'Ruim'),
-        ], 200),
-    ]);
-
-    handleManualLeadTagJob(new ApplyManualLeadResultTagJob(
-        $lead->id,
-        ManualLeadResultTags::APPROVED,
-        $corretor->id,
-        requestLogId: $requestLog->id,
-    ));
-
-    Http::assertSentCount(1);
-    Http::assertNotSent(fn (Request $request): bool => $request->method() === 'POST'
-    );
-    Queue::assertPushed(
-        ApplyManualLeadResultTagJob::class,
-        fn (ApplyManualLeadResultTagJob $job): bool => $job->phase === 'confirmation'
-            && $job->requestLogId === $requestLog->id
-    );
-    expect($lead->fresh()->tags_originais)
-        ->toBe('Imobiliária Azul, Ruim, Origem X');
-});
-
-it('normalizes reordered bulk action properties while confirming the remote state', function () {
-    manualLeadTagCatalog();
-    $corretor = manualLeadTagCorretor([
-        'role' => Corretor::ROLE_CEO,
-        'permissions' => null,
-    ]);
-    $lead = manualLeadTagLead();
-    $requestLog = manualLeadTagRequestLog(
-        $corretor,
-        $lead,
-        ManualLeadResultTags::APPROVED
-    );
-    $reorderedBulkAction = [
-        'status' => 'pending',
-        'total' => 1,
-        'actionId' => 7001,
-    ];
-    manualLeadTagPendingLog(
-        $corretor,
-        $lead,
-        ManualLeadResultTags::APPROVED,
-        $requestLog->id,
-        $reorderedBulkAction,
-    );
-
-    Http::fake([
-        MANUAL_LEAD_TAG_API_URL.'/leads/501/tags' => Http::sequence()
-            ->push([
-                manualLeadTagRemoteTag(900, 'Imobiliária Azul'),
-                manualLeadTagRemoteTag(102, 'Ruim'),
-            ], 200)
-            ->push([
-                manualLeadTagRemoteTag(900, 'Imobiliária Azul'),
-                manualLeadTagRemoteTag(101, 'Aprovados'),
-            ], 200),
-    ]);
-    $job = (new ApplyManualLeadResultTagJob(
-        $lead->id,
-        ManualLeadResultTags::APPROVED,
-        $corretor->id,
-        requestLogId: $requestLog->id,
-        phase: 'confirmation',
-        bulkAction: $reorderedBulkAction,
-    ))->withFakeQueueInteractions();
-
-    handleManualLeadTagJob($job);
-
-    $job->assertReleased(MANUAL_LEAD_TAG_CONFIRMATION_DELAY);
-    expect($lead->fresh()->tags_originais)
-        ->toBe('Imobiliária Azul, Ruim, Origem X');
-
-    handleManualLeadTagJob($job);
-
-    Http::assertSentCount(2);
-    Http::assertNotSent(fn (Request $request): bool => $request->method() === 'POST'
-    );
-    expect($lead->fresh())
-        ->tags_originais->toBe('Imobiliária Azul, Origem X, Aprovados')
-        ->updated_by_corretor_id->toBe($corretor->id);
-    $completed = CorretorActivityLog::query()
-        ->where('action', 'lead_tag_update_completed')
-        ->sole();
-    expect(data_get($completed->new_values, 'request_log_id'))
-        ->toBe($requestLog->id)
-        ->and(data_get($completed->new_values, 'bulk_action'))
-        ->toBe([
-            'actionId' => 7001,
-            'status' => 'pending',
-            'total' => 1,
+    $service = Mockery::mock(LeadLoversService::class);
+    $service->shouldReceive('getLeadByEmail')
+        ->once()
+        ->andReturn([
+            'StatusCode' => 200,
+            'Code' => '501',
         ]);
-});
+    $service->shouldNotReceive('getLeadTagsByCode');
+    $service->shouldNotReceive('addTagToLeadById');
+    $service->shouldNotReceive('removeTagFromLead');
 
-it('fails confirmation permanently after its attempt budget without changing local tags', function () {
-    manualLeadTagCatalog();
-    $corretor = manualLeadTagCorretor([
-        'role' => Corretor::ROLE_CEO,
-        'permissions' => null,
-    ]);
-    $lead = manualLeadTagLead();
-    $requestLog = manualLeadTagRequestLog(
-        $corretor,
-        $lead,
-        ManualLeadResultTags::APPROVED
-    );
-    Http::fake([
-        MANUAL_LEAD_TAG_API_URL.'/leads/501/tags' => Http::response([
-            manualLeadTagRemoteTag(900, 'Imobiliária Azul'),
-            manualLeadTagRemoteTag(102, 'Ruim'),
-        ], 200),
-    ]);
     $job = (new ApplyManualLeadResultTagJob(
         $lead->id,
         ManualLeadResultTags::APPROVED,
         $corretor->id,
-        requestLogId: $requestLog->id,
-        phase: 'confirmation',
     ))->withFakeQueueInteractions();
-    $job->tries = 1;
 
-    handleManualLeadTagJob($job);
+    $job->handle($service);
 
     $job->assertFailedWith(PermanentLeadTagException::class);
-    expect($lead->fresh()->tags_originais)
-        ->toBe('Imobiliária Azul, Ruim, Origem X');
-    Http::assertSentCount(1);
-    Http::assertNotSent(fn (Request $request): bool => $request->method() === 'POST'
-    );
 });
 
-it('fails a permanent API error without changing local tags', function () {
+it('returns a rate-limited manual tag job to the queue', function () {
     manualLeadTagCatalog();
+
     $corretor = manualLeadTagCorretor([
         'role' => Corretor::ROLE_CEO,
         'permissions' => null,
@@ -842,17 +477,12 @@ it('fails a permanent API error without changing local tags', function () {
         $lead,
         ManualLeadResultTags::APPROVED
     );
-    Http::fake([
-        MANUAL_LEAD_TAG_API_URL.'/leads/501/tags' => Http::response([
-            manualLeadTagRemoteTag(102, 'Ruim'),
-        ], 200),
-        MANUAL_LEAD_TAG_API_URL.'/leads/tags' => Http::response([
-            'error' => [
-                'code' => 'VALIDATION_FAILED',
-                'message' => 'Payload inválido.',
-            ],
-        ], 422),
-    ]);
+
+    $service = Mockery::mock(LeadLoversService::class);
+    $service->shouldReceive('getLeadByEmail')
+        ->once()
+        ->andThrow(new LeadLoversRateLimitedException(30, false));
+
     $job = (new ApplyManualLeadResultTagJob(
         $lead->id,
         ManualLeadResultTags::APPROVED,
@@ -860,60 +490,144 @@ it('fails a permanent API error without changing local tags', function () {
         requestLogId: $requestLog->id,
     ))->withFakeQueueInteractions();
 
-    handleManualLeadTagJob($job);
-
-    $job->assertFailedWith(LeadLoversApiException::class);
-    expect($lead->fresh()->tags_originais)
-        ->toBe('Imobiliária Azul, Ruim, Origem X');
-    $this->assertDatabaseMissing('logs_atividades_corretores', [
-        'action' => 'lead_tag_update_pending_confirmation',
-        'model_type' => Lead::class,
-        'model_id' => $lead->id,
-    ]);
-    Http::assertSentCount(2);
-});
-
-it('releases the job according to the remote rate limit', function () {
-    manualLeadTagCatalog();
-    $corretor = manualLeadTagCorretor([
-        'role' => Corretor::ROLE_CEO,
-        'permissions' => null,
-    ]);
-    $lead = manualLeadTagLead();
-    $requestLog = manualLeadTagRequestLog(
-        $corretor,
-        $lead,
-        ManualLeadResultTags::APPROVED
-    );
-    Http::fake([
-        MANUAL_LEAD_TAG_API_URL.'/leads/501/tags' => Http::response([
-            'error' => [
-                'code' => 'RATE_LIMITED',
-                'message' => 'Tente novamente.',
-            ],
-        ], 429, ['RateLimit-Reset' => '30']),
-    ]);
-    $job = (new ApplyManualLeadResultTagJob(
-        $lead->id,
-        ManualLeadResultTags::APPROVED,
-        $corretor->id,
-        requestLogId: $requestLog->id,
-    ))->withFakeQueueInteractions();
-
-    handleManualLeadTagJob($job);
+    $job->handle($service);
 
     $job->assertReleased(30);
     expect($lead->fresh()->tags_originais)
         ->toBe('Imobiliária Azul, Ruim, Origem X');
+});
+
+it('uses the local limiter without a type error or a second HTTP request', function () {
+    config([
+        'services.leadlovers.token' => 'local-limiter-test-token',
+        'services.leadlovers.requests_per_minute' => 1,
+        'services.leadlovers.rate_limit_window_seconds' => 60,
+    ]);
+
+    Http::fake([
+        '*' => Http::response([
+            'Code' => '501',
+        ], 200),
+    ]);
+
+    $service = app(LeadLoversService::class);
+    $service->getLeadByEmail('lead@example.test');
+
+    $exception = null;
+
+    try {
+        $service->getLeadByEmail('lead@example.test');
+    } catch (LeadLoversRateLimitedException $caught) {
+        $exception = $caught;
+    }
+
+    expect($exception)
+        ->toBeInstanceOf(LeadLoversRateLimitedException::class)
+        ->retryAfter->toBeInt()
+        ->retryAfter->toBeGreaterThanOrEqual(1);
     Http::assertSentCount(1);
 });
 
-it('does not persist sensitive exception details in the failure audit', function () {
+it('propagates rate limits from the tag catalog request', function () {
+    config([
+        'services.leadlovers.token' => 'get-all-tags-rate-limit-token',
+    ]);
+
+    Http::fake([
+        '*' => Http::response(
+            'error code: 1015',
+            429,
+            ['Retry-After' => '30']
+        ),
+    ]);
+
+    expect(
+        fn () => app(LeadLoversService::class)->getAllTags()
+    )->toThrow(LeadLoversRateLimitedException::class);
+});
+
+it('caps an HTTP-date Retry-After value to the configured maximum', function () {
+    config([
+        'services.leadlovers.token' => 'retry-after-date-token',
+        'services.leadlovers.rate_limit_retry_seconds' => 60,
+        'services.leadlovers.rate_limit_max_retry_seconds' => 120,
+    ]);
+
+    Http::fake([
+        '*' => Http::response('', 429, [
+            'Retry-After' => now()->addMinutes(10)->toRfc7231String(),
+        ]),
+    ]);
+
+    $exception = null;
+
+    try {
+        app(LeadLoversService::class)
+            ->getLeadByEmail('lead@example.test');
+    } catch (LeadLoversRateLimitedException $caught) {
+        $exception = $caught;
+    }
+
+    expect($exception)
+        ->toBeInstanceOf(LeadLoversRateLimitedException::class)
+        ->retryAfter->toBe(120);
+});
+
+it('does not write an authenticated URL from a connection exception to logs', function () {
+    Log::spy();
+
+    Http::fake(function () {
+        throw new RuntimeException(
+            'Connection failed for https://llapi.example/Tag?token=manual-flow-secret-token'
+        );
+    });
+
+    $result = app(LeadLoversService::class)
+        ->addTagToLeadById('lead@example.test', 1);
+
+    expect($result['StatusCode'])->toBe(500);
+
+    Log::shouldHaveReceived('error')
+        ->once()
+        ->withArgs(
+            fn (string $message, array $context): bool => $message === 'Erro ao adicionar tag ao lead na LeadLovers'
+                && ! str_contains(
+                    json_encode($context, JSON_THROW_ON_ERROR),
+                    'manual-flow-secret-token'
+                )
+        );
+});
+
+it('does not write an authenticated URL returned by the API to logs', function () {
+    Log::spy();
+
+    Http::fake([
+        '*' => Http::response([
+            'Message' => 'See https://llapi.example/Lead?token=manual-flow-secret-token',
+        ], 400),
+    ]);
+
+    app(LeadLoversService::class)
+        ->getLeadByEmail('lead@example.test');
+
+    Log::shouldHaveReceived('warning')
+        ->once()
+        ->withArgs(
+            fn (string $message, array $context): bool => $message === 'LeadLovers respondeu erro ao consultar lead por e-mail'
+                && ! str_contains(
+                    json_encode($context, JSON_THROW_ON_ERROR),
+                    'manual-flow-secret-token'
+                )
+        );
+});
+
+it('does not persist a raw failure exception in the activity audit', function () {
     $corretor = manualLeadTagCorretor([
         'role' => Corretor::ROLE_CEO,
         'permissions' => null,
     ]);
     $lead = manualLeadTagLead();
+
     $job = new ApplyManualLeadResultTagJob(
         $lead->id,
         ManualLeadResultTags::APPROVED,
@@ -921,24 +635,372 @@ it('does not persist sensitive exception details in the failure audit', function
     );
 
     $job->failed(new RuntimeException(
-        'Connection failed for https://api.leadlovers.test?token='.
-        MANUAL_LEAD_TAG_TOKEN
+        'Connection failed for https://llapi.example/Tag?token=manual-flow-secret-token'
     ));
 
     $failureLog = CorretorActivityLog::query()
         ->where('action', 'lead_tag_update_failed')
         ->sole();
-    $serializedAudit = json_encode(
-        $failureLog->new_values,
-        JSON_THROW_ON_ERROR
-    );
 
-    expect($serializedAudit)
-        ->not->toContain(MANUAL_LEAD_TAG_TOKEN)
-        ->not->toContain('https://api.leadlovers.test');
+    expect(json_encode($failureLog->new_values, JSON_THROW_ON_ERROR))
+        ->not->toContain('manual-flow-secret-token')
+        ->not->toContain('https://llapi.example');
 });
 
-it('uses one shared overlap lock per lead and keeps the configured backoff', function () {
+it('does not attach personal data from a remote error to the job failure', function () {
+    $job = new ApplyManualLeadResultTagJob(
+        1,
+        ManualLeadResultTags::APPROVED,
+        1,
+    );
+
+    $method = new ReflectionMethod($job, 'assertSuccessfulResponse');
+    $method->setAccessible(true);
+
+    $exception = null;
+
+    try {
+        $method->invoke($job, [
+            'StatusCode' => 400,
+            'Message' => 'CPF 52998224725 rejected for manual-flow-secret-token',
+        ], 'A consulta do lead falhou.');
+    } catch (LeadLoversHttpException $caught) {
+        $exception = $caught;
+    }
+
+    expect($exception)
+        ->toBeInstanceOf(LeadLoversHttpException::class)
+        ->and($exception->getMessage())
+        ->not->toContain('52998224725')
+        ->not->toContain('manual-flow-secret-token');
+});
+
+it('keeps non-final tags while replacing a confirmed final result', function () {
+    manualLeadTagCatalog();
+
+    $corretor = manualLeadTagCorretor([
+        'role' => Corretor::ROLE_CEO,
+        'permissions' => null,
+    ]);
+    $lead = manualLeadTagLead();
+    $requestLog = manualLeadTagRequestLog(
+        $corretor,
+        $lead,
+        ManualLeadResultTags::APPROVED
+    );
+
+    $service = Mockery::mock(LeadLoversService::class);
+    $service->shouldReceive('getLeadByEmail')
+        ->once()
+        ->with($lead->email)
+        ->andReturn([
+            'StatusCode' => 200,
+            'Code' => '501',
+        ]);
+    $service->shouldReceive('getLeadTagsByCode')
+        ->twice()
+        ->with('501')
+        ->andReturn(
+            [
+                'StatusCode' => 200,
+                'Data' => [
+                    'Tags' => [
+                        ['Id' => 900, 'Title' => 'Imobiliária Azul'],
+                        ['Id' => 2, 'Title' => 'Ruim'],
+                    ],
+                ],
+            ],
+            [
+                'StatusCode' => 200,
+                'Data' => [
+                    'Tags' => [
+                        ['Id' => 900, 'Title' => 'Imobiliária Azul'],
+                        ['Id' => 1, 'Title' => 'Aprovados'],
+                    ],
+                ],
+            ],
+        );
+    $service->shouldReceive('addTagToLeadById')
+        ->once()
+        ->with($lead->email, 1)
+        ->andReturn(['StatusCode' => 200]);
+    $service->shouldReceive('removeTagFromLead')
+        ->once()
+        ->with($lead->email, 2)
+        ->andReturn(['StatusCode' => 200]);
+
+    $job = new ApplyManualLeadResultTagJob(
+        $lead->id,
+        ManualLeadResultTags::APPROVED,
+        $corretor->id,
+    );
+    $job->requestLogId = $requestLog->id;
+
+    $job->handle($service);
+
+    expect($lead->fresh())
+        ->tags_originais->toBe('Imobiliária Azul, Origem X, Aprovados')
+        ->updated_by_corretor_id->toBe($corretor->id);
+
+    $this->assertDatabaseHas('logs_atividades_corretores', [
+        'corretor_id' => $corretor->id,
+        'action' => 'lead_tag_update_completed',
+        'model_type' => Lead::class,
+        'model_id' => $lead->id,
+    ]);
+});
+
+it('does not repeat mutable requests when the selected tag is already the only final tag', function () {
+    manualLeadTagCatalog();
+
+    $corretor = manualLeadTagCorretor([
+        'role' => Corretor::ROLE_CEO,
+        'permissions' => null,
+    ]);
+    $lead = manualLeadTagLead([
+        'tags_originais' => 'Imobiliária Azul, Aprovados, Origem X',
+    ]);
+
+    $service = Mockery::mock(LeadLoversService::class);
+    $service->shouldReceive('getLeadByEmail')
+        ->once()
+        ->andReturn([
+            'StatusCode' => 200,
+            'Code' => '501',
+        ]);
+    $service->shouldReceive('getLeadTagsByCode')
+        ->twice()
+        ->andReturn([
+            'StatusCode' => 200,
+            'Data' => [
+                'Tags' => [
+                    ['Id' => 900, 'Title' => 'Imobiliária Azul'],
+                    ['Id' => 1, 'Title' => 'Aprovados'],
+                ],
+            ],
+        ]);
+    $service->shouldNotReceive('addTagToLeadById');
+    $service->shouldNotReceive('removeTagFromLead');
+
+    (new ApplyManualLeadResultTagJob(
+        $lead->id,
+        ManualLeadResultTags::APPROVED,
+        $corretor->id,
+    ))->handle($service);
+
+    expect($lead->fresh()->tags_originais)
+        ->toBe('Imobiliária Azul, Origem X, Aprovados');
+});
+
+it('does not update local tags when removing an old final tag fails', function () {
+    manualLeadTagCatalog();
+
+    $corretor = manualLeadTagCorretor([
+        'role' => Corretor::ROLE_CEO,
+        'permissions' => null,
+    ]);
+    $lead = manualLeadTagLead();
+
+    $service = Mockery::mock(LeadLoversService::class);
+    $service->shouldReceive('getLeadByEmail')
+        ->once()
+        ->andReturn([
+            'StatusCode' => 200,
+            'Code' => '501',
+        ]);
+    $service->shouldReceive('getLeadTagsByCode')
+        ->once()
+        ->andReturn([
+            'StatusCode' => 200,
+            'Data' => [
+                'Tags' => [
+                    ['Id' => 2, 'Title' => 'Ruim'],
+                ],
+            ],
+        ]);
+    $service->shouldReceive('addTagToLeadById')
+        ->once()
+        ->andReturn(['StatusCode' => 200]);
+    $service->shouldReceive('removeTagFromLead')
+        ->once()
+        ->andReturn([
+            'StatusCode' => 500,
+            'Message' => 'Temporary failure',
+        ]);
+
+    $exception = null;
+
+    try {
+        (new ApplyManualLeadResultTagJob(
+            $lead->id,
+            ManualLeadResultTags::APPROVED,
+            $corretor->id,
+        ))->handle($service);
+    } catch (LeadLoversHttpException $caught) {
+        $exception = $caught;
+    }
+
+    expect($exception)
+        ->toBeInstanceOf(LeadLoversHttpException::class)
+        ->isRetryable()->toBeTrue()
+        ->and($lead->fresh()->tags_originais)
+        ->toBe('Imobiliária Azul, Ruim, Origem X');
+});
+
+it('does not update local tags when applying the selected tag fails', function () {
+    manualLeadTagCatalog();
+
+    $corretor = manualLeadTagCorretor([
+        'role' => Corretor::ROLE_CEO,
+        'permissions' => null,
+    ]);
+    $lead = manualLeadTagLead();
+
+    $service = Mockery::mock(LeadLoversService::class);
+    $service->shouldReceive('getLeadByEmail')
+        ->once()
+        ->andReturn([
+            'StatusCode' => 200,
+            'Code' => '501',
+        ]);
+    $service->shouldReceive('getLeadTagsByCode')
+        ->once()
+        ->andReturn([
+            'StatusCode' => 200,
+            'Data' => [
+                'Tags' => [
+                    ['Id' => 2, 'Title' => 'Ruim'],
+                ],
+            ],
+        ]);
+    $service->shouldReceive('addTagToLeadById')
+        ->once()
+        ->andReturn([
+            'StatusCode' => 500,
+            'Message' => 'Temporary failure',
+        ]);
+    $service->shouldNotReceive('removeTagFromLead');
+
+    expect(
+        fn () => (new ApplyManualLeadResultTagJob(
+            $lead->id,
+            ManualLeadResultTags::APPROVED,
+            $corretor->id,
+        ))->handle($service)
+    )->toThrow(LeadLoversHttpException::class);
+
+    expect($lead->fresh()->tags_originais)
+        ->toBe('Imobiliária Azul, Ruim, Origem X');
+});
+
+it('repeats only confirmation reads when the first confirmed state is stale', function () {
+    manualLeadTagCatalog();
+
+    $corretor = manualLeadTagCorretor([
+        'role' => Corretor::ROLE_CEO,
+        'permissions' => null,
+    ]);
+    $lead = manualLeadTagLead([
+        'tags_originais' => 'Imobiliária Azul, Origem X',
+    ]);
+
+    $service = Mockery::mock(LeadLoversService::class);
+    $service->shouldReceive('getLeadByEmail')
+        ->once()
+        ->andReturn([
+            'StatusCode' => 200,
+            'Code' => '501',
+        ]);
+    $service->shouldReceive('getLeadTagsByCode')
+        ->times(3)
+        ->andReturn(
+            [
+                'StatusCode' => 200,
+                'Data' => [
+                    'Tags' => [
+                        ['Id' => 900, 'Title' => 'Imobiliária Azul'],
+                    ],
+                ],
+            ],
+            [
+                'StatusCode' => 200,
+                'Data' => [
+                    'Tags' => [
+                        ['Id' => 900, 'Title' => 'Imobiliária Azul'],
+                    ],
+                ],
+            ],
+            [
+                'StatusCode' => 200,
+                'Data' => [
+                    'Tags' => [
+                        ['Id' => 900, 'Title' => 'Imobiliária Azul'],
+                        ['Id' => 1, 'Title' => 'Aprovados'],
+                    ],
+                ],
+            ],
+        );
+    $service->shouldReceive('addTagToLeadById')
+        ->once()
+        ->andReturn(['StatusCode' => 200]);
+    $service->shouldNotReceive('removeTagFromLead');
+
+    (new ApplyManualLeadResultTagJob(
+        $lead->id,
+        ManualLeadResultTags::APPROVED,
+        $corretor->id,
+    ))->handle($service);
+
+    expect($lead->fresh()->tags_originais)
+        ->toBe('Imobiliária Azul, Origem X, Aprovados');
+});
+
+it('does not update local tags when the remote state cannot be confirmed', function () {
+    manualLeadTagCatalog();
+
+    $corretor = manualLeadTagCorretor([
+        'role' => Corretor::ROLE_CEO,
+        'permissions' => null,
+    ]);
+    $lead = manualLeadTagLead([
+        'tags_originais' => 'Imobiliária Azul, Origem X',
+    ]);
+
+    $service = Mockery::mock(LeadLoversService::class);
+    $service->shouldReceive('getLeadByEmail')
+        ->once()
+        ->andReturn([
+            'StatusCode' => 200,
+            'Code' => '501',
+        ]);
+    $service->shouldReceive('getLeadTagsByCode')
+        ->times(4)
+        ->andReturn([
+            'StatusCode' => 200,
+            'Data' => [
+                'Tags' => [
+                    ['Id' => 900, 'Title' => 'Imobiliária Azul'],
+                ],
+            ],
+        ]);
+    $service->shouldReceive('addTagToLeadById')
+        ->once()
+        ->andReturn(['StatusCode' => 200]);
+    $service->shouldNotReceive('removeTagFromLead');
+
+    expect(
+        fn () => (new ApplyManualLeadResultTagJob(
+            $lead->id,
+            ManualLeadResultTags::APPROVED,
+            $corretor->id,
+        ))->handle($service)
+    )->toThrow(LeadLoversStateNotConfirmedException::class);
+
+    expect($lead->fresh()->tags_originais)
+        ->toBe('Imobiliária Azul, Origem X');
+});
+
+it('uses one shared overlap lock per lead with an expiry above the timeout', function () {
     $firstJob = new ApplyManualLeadResultTagJob(
         10,
         ManualLeadResultTags::APPROVED,
@@ -950,8 +1012,8 @@ it('uses one shared overlap lock per lead and keeps the configured backoff', fun
         ManualLeadResultTags::REJECTED,
         1,
         requestLogId: 101,
-        phase: 'confirmation',
     );
+
     $firstMiddleware = $firstJob->middleware()[0];
     $secondMiddleware = $secondJob->middleware()[0];
 
@@ -960,18 +1022,17 @@ it('uses one shared overlap lock per lead and keeps the configured backoff', fun
         ->toBe($secondMiddleware->getLockKey($secondJob))
         ->and($firstMiddleware->shareKey)->toBeTrue()
         ->and($firstMiddleware->expiresAfter)->toBeGreaterThan($firstJob->timeout)
-        ->and($firstMiddleware->releaseAfter)->toBe(15)
-        ->and($firstJob->backoff())->toBe([10, 30, 60, 120, 180]);
+        ->and($firstMiddleware->releaseAfter)->toBe(15);
 });
 
-it('keeps queued jobs serialized before request and phase versioning compatible', function () {
+it('keeps queued jobs serialized before the request version compatible', function () {
     $job = new ApplyManualLeadResultTagJob(
         10,
         ManualLeadResultTags::APPROVED,
         1,
     );
 
-    unset($job->requestLogId, $job->phase, $job->bulkAction);
+    unset($job->requestLogId);
 
     $restoredJob = unserialize(
         serialize($job),
@@ -986,457 +1047,37 @@ it('keeps queued jobs serialized before request and phase versioning compatible'
 
 it('stops a legacy queued job when its result is no longer current', function () {
     manualLeadTagCatalog();
+
     $corretor = manualLeadTagCorretor([
         'role' => Corretor::ROLE_CEO,
         'permissions' => null,
     ]);
     $lead = manualLeadTagLead();
+
     manualLeadTagRequestLog(
         $corretor,
         $lead,
         ManualLeadResultTags::REJECTED
     );
+
+    $service = Mockery::mock(LeadLoversService::class);
+    $service->shouldNotReceive('getLeadByEmail');
+
     $legacyJob = new ApplyManualLeadResultTagJob(
         $lead->id,
         ManualLeadResultTags::APPROVED,
         $corretor->id,
     );
-    unset($legacyJob->requestLogId, $legacyJob->phase, $legacyJob->bulkAction);
+
+    unset($legacyJob->requestLogId);
+
     $restoredJob = unserialize(
         serialize($legacyJob),
         ['allowed_classes' => true]
     );
 
-    handleManualLeadTagJob($restoredJob);
+    $restoredJob->handle($service);
 
     expect($lead->fresh()->tags_originais)
         ->toBe('Imobiliária Azul, Ruim, Origem X');
-    Http::assertNothingSent();
-});
-
-it('drains an accepted older decision before submitting a newer decision', function () {
-    Queue::fake();
-    manualLeadTagCatalog();
-    $corretor = manualLeadTagCorretor([
-        'role' => Corretor::ROLE_CEO,
-        'permissions' => null,
-    ]);
-    $lead = manualLeadTagLead();
-    $coordinator = app(LeadLoversTagOperationCoordinator::class);
-    $requestA = manualLeadTagRequestLog(
-        $corretor,
-        $lead,
-        ManualLeadResultTags::APPROVED
-    );
-    $stateA = $coordinator->registerManualDesired(
-        $lead->id,
-        'aprovados',
-        ManualLeadResultTags::APPROVED,
-        $requestA->id,
-        $corretor->id,
-    );
-    $coordinator->claimBeforePost($lead->id, $stateA->version);
-    $coordinator->markAccepted($lead->id, $stateA->version, [
-        'actionId' => 8001,
-        'status' => 'pending',
-        'total' => 1,
-    ]);
-    $requestB = manualLeadTagRequestLog(
-        $corretor,
-        $lead,
-        ManualLeadResultTags::REJECTED
-    );
-    $stateB = $coordinator->registerManualDesired(
-        $lead->id,
-        'ruim',
-        ManualLeadResultTags::REJECTED,
-        $requestB->id,
-        $corretor->id,
-    );
-
-    Http::fake([
-        MANUAL_LEAD_TAG_API_URL.'/leads/501/tags' => Http::response([
-            manualLeadTagRemoteTag(900, 'Imobiliária Azul'),
-            manualLeadTagRemoteTag(101, 'Aprovados'),
-        ], 200),
-    ]);
-
-    handleManualLeadTagJob(new ApplyManualLeadResultTagJob(
-        $lead->id,
-        ManualLeadResultTags::REJECTED,
-        $corretor->id,
-        requestLogId: $requestB->id,
-        phase: 'confirmation',
-        version: $stateB->version,
-    ));
-
-    Http::assertSentCount(1);
-    Http::assertNotSent(fn (Request $request): bool => $request->method() === 'POST');
-    expect($lead->fresh()->tags_originais)
-        ->toBe('Imobiliária Azul, Ruim, Origem X');
-    $state = LeadLoversTagOperation::query()->sole();
-    expect($state->version)->toBe($stateB->version)
-        ->and($state->inflight_version)->toBeNull()
-        ->and($state->desired_result)->toBe(ManualLeadResultTags::REJECTED)
-        ->and($state->phase)->toBe(LeadLoversTagOperationCoordinator::PHASE_PENDING);
-    Queue::assertPushed(
-        ApplyManualLeadResultTagJob::class,
-        fn (ApplyManualLeadResultTagJob $job): bool => $job->version === $stateB->version
-            && $job->result === ManualLeadResultTags::REJECTED
-            && $job->phase === null
-    );
-});
-
-it('confirms before retrying one uncertain mutation for the same decision', function () {
-    Queue::fake();
-    $this->travelTo('2026-08-13 12:00:00');
-    manualLeadTagCatalog();
-    $corretor = manualLeadTagCorretor([
-        'role' => Corretor::ROLE_CEO,
-        'permissions' => null,
-    ]);
-    $lead = manualLeadTagLead();
-    $request = manualLeadTagRequestLog(
-        $corretor,
-        $lead,
-        ManualLeadResultTags::APPROVED
-    );
-    $coordinator = app(LeadLoversTagOperationCoordinator::class);
-    $state = $coordinator->registerManualDesired(
-        $lead->id,
-        'aprovados',
-        ManualLeadResultTags::APPROVED,
-        $request->id,
-        $corretor->id,
-    );
-    $coordinator->claimBeforePost($lead->id, $state->version);
-    $coordinator->markUncertain($lead->id, $state->version);
-    config([
-        'services.leadlovers.tag_uncertain_retry_checks' => 2,
-        'services.leadlovers.tag_posting_stale_seconds' => 30,
-        'services.leadlovers.tag_max_post_attempts' => 2,
-    ]);
-
-    Http::fake([
-        MANUAL_LEAD_TAG_API_URL.'/leads/501/tags' => Http::response([
-            manualLeadTagRemoteTag(102, 'Ruim'),
-        ], 200),
-        MANUAL_LEAD_TAG_API_URL.'/leads/tags' => Http::response([
-            'actionId' => 8100,
-            'status' => 'pending',
-            'total' => 1,
-        ], 202),
-    ]);
-
-    $firstCheck = (new ApplyManualLeadResultTagJob(
-        $lead->id,
-        ManualLeadResultTags::APPROVED,
-        $corretor->id,
-        requestLogId: $request->id,
-        phase: 'confirmation',
-        version: $state->version,
-    ))->withFakeQueueInteractions();
-    handleManualLeadTagJob($firstCheck);
-    $firstCheck->assertReleased(MANUAL_LEAD_TAG_CONFIRMATION_DELAY);
-    Http::assertSentCount(1);
-
-    $this->travel(31)->seconds();
-    $secondCheck = (new ApplyManualLeadResultTagJob(
-        $lead->id,
-        ManualLeadResultTags::APPROVED,
-        $corretor->id,
-        requestLogId: $request->id,
-        phase: 'confirmation',
-        version: $state->version,
-    ))->withFakeQueueInteractions();
-    handleManualLeadTagJob($secondCheck);
-
-    Http::assertSentCount(3);
-    Http::assertSent(fn (Request $httpRequest): bool => $httpRequest->method() === 'POST'
-        && $httpRequest->data() === [
-            'applyTags' => [101],
-            'removeTags' => [102],
-            'leadsIds' => [501],
-        ]
-    );
-    $state = LeadLoversTagOperation::query()->sole();
-    expect($state->post_attempts)->toBe(2)
-        ->and($state->outcome_uncertain)->toBeFalse()
-        ->and($state->action_id)->toBe(8100)
-        ->and($lead->fresh()->tags_originais)
-        ->toBe('Imobiliária Azul, Ruim, Origem X');
-});
-
-it('blocks a newer decision behind an uncertain predecessor without posting it', function () {
-    Queue::fake();
-    manualLeadTagCatalog();
-    $corretor = manualLeadTagCorretor([
-        'role' => Corretor::ROLE_CEO,
-        'permissions' => null,
-    ]);
-    $lead = manualLeadTagLead();
-    $coordinator = app(LeadLoversTagOperationCoordinator::class);
-    $requestA = manualLeadTagRequestLog($corretor, $lead, ManualLeadResultTags::APPROVED);
-    $stateA = $coordinator->registerManualDesired(
-        $lead->id,
-        'aprovados',
-        ManualLeadResultTags::APPROVED,
-        $requestA->id,
-        $corretor->id,
-    );
-    $coordinator->claimBeforePost($lead->id, $stateA->version);
-    $coordinator->markUncertain($lead->id, $stateA->version);
-    $requestB = manualLeadTagRequestLog($corretor, $lead, ManualLeadResultTags::REJECTED);
-    $stateB = $coordinator->registerManualDesired(
-        $lead->id,
-        'ruim',
-        ManualLeadResultTags::REJECTED,
-        $requestB->id,
-        $corretor->id,
-    );
-
-    Http::fake([
-        MANUAL_LEAD_TAG_API_URL.'/leads/501/tags' => Http::response([
-            manualLeadTagRemoteTag(900, 'Imobiliária Azul'),
-        ], 200),
-    ]);
-    $job = (new ApplyManualLeadResultTagJob(
-        $lead->id,
-        ManualLeadResultTags::REJECTED,
-        $corretor->id,
-        requestLogId: $requestB->id,
-        phase: 'confirmation',
-        version: $stateB->version,
-    ))->withFakeQueueInteractions();
-    $job->tries = 1;
-
-    handleManualLeadTagJob($job);
-
-    Http::assertSentCount(1);
-    Http::assertNotSent(fn (Request $httpRequest): bool => $httpRequest->method() === 'POST');
-    $state = LeadLoversTagOperation::query()->sole();
-    expect($state->phase)->toBe(LeadLoversTagOperationCoordinator::PHASE_BLOCKED)
-        ->and($state->inflight_version)->toBe($stateA->version)
-        ->and($state->version)->toBe($stateB->version)
-        ->and($state->blocked_reason)->toBe('uncertain_predecessor')
-        ->and($lead->fresh()->tags_originais)
-        ->toBe('Imobiliária Azul, Ruim, Origem X');
-});
-
-it('does not let a completed stale manual job consume a newer accepted analysis', function () {
-    Queue::fake();
-    manualLeadTagCatalog();
-    $corretor = manualLeadTagCorretor([
-        'role' => Corretor::ROLE_CEO,
-        'permissions' => null,
-    ]);
-    $lead = manualLeadTagLead();
-    $coordinator = app(LeadLoversTagOperationCoordinator::class);
-    $manualRequest = manualLeadTagRequestLog(
-        $corretor,
-        $lead,
-        ManualLeadResultTags::REJECTED
-    );
-    $manualState = $coordinator->registerManualDesired(
-        $lead->id,
-        'ruim',
-        ManualLeadResultTags::REJECTED,
-        $manualRequest->id,
-        $corretor->id,
-    );
-    $coordinator->completeWithoutInflight($lead->id, $manualState->version);
-    CorretorActivityLog::query()->create([
-        'corretor_id' => $corretor->id,
-        'action' => 'lead_tag_update_completed',
-        'model_type' => Lead::class,
-        'model_id' => $lead->id,
-        'new_values' => [
-            'request_log_id' => $manualRequest->id,
-            'result' => ManualLeadResultTags::REJECTED,
-        ],
-    ]);
-
-    $analysisState = $coordinator->registerAnalysisDesired(
-        leadId: $lead->id,
-        tagKey: 'aprovados',
-        batchId: 9901,
-        attemptId: 'analysis-a',
-        isReanalysis: false,
-    );
-    $coordinator->claimBeforePost($lead->id, $analysisState->version);
-    $coordinator->markAccepted($lead->id, $analysisState->version, [
-        'actionId' => 9902,
-        'status' => 'pending',
-        'total' => 1,
-    ]);
-
-    $stateBefore = LeadLoversTagOperation::query()->sole()->getAttributes();
-    $leadBefore = $lead->fresh()->getAttributes();
-    $auditCountBefore = CorretorActivityLog::query()
-        ->where('model_type', Lead::class)
-        ->where('model_id', $lead->id)
-        ->count();
-
-    Http::fake([
-        MANUAL_LEAD_TAG_API_URL.'/leads/501/tags' => Http::response([
-            manualLeadTagRemoteTag(900, 'Imobiliária Azul'),
-            manualLeadTagRemoteTag(101, 'Aprovados'),
-        ], 200),
-    ]);
-
-    handleManualLeadTagJob(new ApplyManualLeadResultTagJob(
-        leadId: $lead->id,
-        result: ManualLeadResultTags::REJECTED,
-        corretorId: $corretor->id,
-        requestLogId: $manualRequest->id,
-        phase: 'confirmation',
-        bulkAction: [
-            'actionId' => 8801,
-            'status' => 'done',
-            'total' => 1,
-        ],
-        version: $manualState->version,
-    ));
-
-    $stateAfter = LeadLoversTagOperation::query()->sole();
-    expect($lead->fresh()->getAttributes())->toBe($leadBefore)
-        ->and(CorretorActivityLog::query()
-            ->where('model_type', Lead::class)
-            ->where('model_id', $lead->id)
-            ->count())->toBe($auditCountBefore)
-        ->and($stateAfter->getAttributes())->toBe($stateBefore)
-        ->and($stateAfter->phase)
-        ->toBe(LeadLoversTagOperationCoordinator::PHASE_CONFIRMING)
-        ->and($stateAfter->inflight_source)->toBe('analysis')
-        ->and($stateAfter->inflight_version)->toBe($analysisState->version)
-        ->and($stateAfter->action_id)->toBe(9902);
-
-    Http::assertNothingSent();
-    Queue::assertNothingPushed();
-});
-
-it('fails an orphaned pending manual state so a later analysis can advance', function () {
-    Queue::fake();
-    manualLeadTagCatalog();
-    $corretor = manualLeadTagCorretor([
-        'role' => Corretor::ROLE_CEO,
-        'permissions' => null,
-    ]);
-    $lead = manualLeadTagLead();
-    $request = manualLeadTagRequestLog(
-        $corretor,
-        $lead,
-        ManualLeadResultTags::REJECTED
-    );
-    $coordinator = app(LeadLoversTagOperationCoordinator::class);
-    $manualState = $coordinator->registerManualDesired(
-        $lead->id,
-        'ruim',
-        ManualLeadResultTags::REJECTED,
-        $request->id,
-        $corretor->id,
-    );
-
-    $corretor->delete();
-
-    $job = (new ApplyManualLeadResultTagJob(
-        leadId: $lead->id,
-        result: ManualLeadResultTags::REJECTED,
-        corretorId: $corretor->id,
-        requestLogId: $request->id,
-        version: $manualState->version,
-    ))->withFakeQueueInteractions();
-
-    handleManualLeadTagJob($job);
-
-    $job->assertFailedWith(PermanentLeadTagException::class);
-    $failedState = LeadLoversTagOperation::query()->sole();
-    expect($failedState->version)->toBe($manualState->version)
-        ->and($failedState->desired_source)->toBe('manual')
-        ->and($failedState->phase)
-        ->toBe(LeadLoversTagOperationCoordinator::PHASE_FAILED)
-        ->and($failedState->inflight_version)->toBeNull();
-
-    Http::assertNothingSent();
-    Queue::assertNothingPushed();
-
-    $analysisState = $coordinator->registerAnalysisDesired(
-        leadId: $lead->id,
-        tagKey: 'aprovados',
-        batchId: 9903,
-        attemptId: 'analysis-after-orphan',
-        isReanalysis: false,
-    );
-
-    expect($analysisState->version)->toBeGreaterThan($manualState->version)
-        ->and($analysisState->desired_source)->toBe('analysis')
-        ->and($analysisState->desired_tag_key)->toBe('aprovados')
-        ->and($analysisState->desired_batch_id)->toBe(9903)
-        ->and($analysisState->desired_attempt_id)->toBe('analysis-after-orphan')
-        ->and($analysisState->phase)
-        ->toBe(LeadLoversTagOperationCoordinator::PHASE_PENDING)
-        ->and($analysisState->inflight_version)->toBeNull();
-
-    Http::assertNothingSent();
-    Queue::assertNothingPushed();
-});
-
-it('blocks an orphaned accepted manual action without losing its remote metadata', function () {
-    Queue::fake();
-    manualLeadTagCatalog();
-    $corretor = manualLeadTagCorretor([
-        'role' => Corretor::ROLE_CEO,
-        'permissions' => null,
-    ]);
-    $lead = manualLeadTagLead();
-    $originalTags = $lead->tags_originais;
-    $request = manualLeadTagRequestLog(
-        $corretor,
-        $lead,
-        ManualLeadResultTags::REJECTED
-    );
-    $coordinator = app(LeadLoversTagOperationCoordinator::class);
-    $manualState = $coordinator->registerManualDesired(
-        $lead->id,
-        'ruim',
-        ManualLeadResultTags::REJECTED,
-        $request->id,
-        $corretor->id,
-    );
-    $coordinator->claimBeforePost($lead->id, $manualState->version);
-    $coordinator->markAccepted($lead->id, $manualState->version, [
-        'actionId' => 9904,
-        'status' => 'pending',
-        'total' => 1,
-    ]);
-
-    $corretor->delete();
-
-    $job = (new ApplyManualLeadResultTagJob(
-        leadId: $lead->id,
-        result: ManualLeadResultTags::REJECTED,
-        corretorId: $corretor->id,
-        requestLogId: $request->id,
-        phase: 'confirmation',
-        version: $manualState->version,
-    ))->withFakeQueueInteractions();
-
-    handleManualLeadTagJob($job);
-
-    $job->assertFailedWith(PermanentLeadTagException::class);
-    $blocked = LeadLoversTagOperation::query()->sole();
-    expect($blocked->version)->toBe($manualState->version)
-        ->and($blocked->phase)
-        ->toBe(LeadLoversTagOperationCoordinator::PHASE_BLOCKED)
-        ->and($blocked->blocked_reason)->toBe('local_failure')
-        ->and($blocked->inflight_source)->toBe('manual')
-        ->and($blocked->inflight_version)->toBe($manualState->version)
-        ->and($blocked->action_id)->toBe(9904)
-        ->and($blocked->action_status)->toBe('pending')
-        ->and($blocked->action_total)->toBe(1)
-        ->and($lead->fresh()->tags_originais)
-        ->toBe($originalTags);
-
-    Http::assertNothingSent();
-    Queue::assertNothingPushed();
 });

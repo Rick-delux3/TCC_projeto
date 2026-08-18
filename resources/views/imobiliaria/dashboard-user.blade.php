@@ -1,4 +1,4 @@
-@extends('layout-inicial.Dashboard_User')
+@extends('layout-inicial.dashboard_User')
 
 @section('content_w')
 @php
@@ -119,56 +119,6 @@
     $leadFormAvailable = filled($leadFormUrl);
     $leadAccessCodeAvailable = filled($leadAccessCode);
 
-    $insuranceAnalysisEnabled = (bool) config(
-        'features.insurance_analysis.enabled',
-        false
-    );
-
-    $leadValidationFields = [
-        'nome',
-        'email',
-        'tel',
-        'cpf',
-        'tipo_solicitante',
-        'estado_civil',
-        'conjuge_nome',
-        'conjuge_cpf',
-        'valor_aluguel',
-        'valor_agua',
-        'valor_luz',
-        'valor_gas',
-        'valor_condominio',
-        'valor_iptu',
-        'outras_despesas',
-        'cep',
-        'estado',
-        'cidade_imovel',
-        'bairro',
-        'logradouro',
-        'numero',
-        'complemento',
-    ];
-
-    $leadContextId = (string) old('lead_context_id', '');
-    $firstInvalidLeadField = collect($leadValidationFields)->first(
-        fn (string $field): bool => $errors->has($field)
-    );
-    $leadValidationTargets = null;
-
-    if (filled($leadContextId) && filled($firstInvalidLeadField)) {
-        $contextLead = $leads->first(
-            fn ($lead): bool => (string) $lead->id === $leadContextId
-        );
-
-        if ($contextLead) {
-            $leadValidationTargets = [
-                'modal' => 'leadModal'.$contextLead->id,
-                'tab' => 'lead-data-tab-'.$contextLead->id,
-                'field' => 'company-lead-'.$contextLead->id.'-'.str_replace('_', '-', $firstInvalidLeadField),
-            ];
-        }
-    }
-
 @endphp
 
 
@@ -183,12 +133,6 @@
         @if (session('error'))
             <div class="alert alert-warning rounded-4 border-0 shadow-sm">
                 {{ session('error') }}
-            </div>
-        @endif
-
-        @if (filled($firstInvalidLeadField) && $leadValidationTargets === null)
-            <div class="alert alert-danger rounded-4 border-0 shadow-sm" role="alert">
-                Não foi possível associar os erros ao lead exibido nesta página.
             </div>
         @endif
 
@@ -853,13 +797,6 @@
                                         </div>
 
                                     </div>
-
-                                    <div class="d-flex flex-wrap align-items-center gap-2 mt-3 pt-3 border-top">
-                                        <span class="small text-muted">
-                                            LeadLovers:
-                                        </span>
-                                        @include('partials.leadlovers-sync-status', ['lead' => $lead])
-                                    </div>
                                 </div>
                             </article>
                         @endforeach
@@ -939,22 +876,16 @@
             return mb_strtolower(trim($tag)) === $companyTagName;
         });
 
-    $lastAnalysis = $insuranceAnalysisEnabled
-        ? $lead->insuranceAnalyses()
-            ->latest('created_at')
-            ->first()
-        : null;
+    $lastAnalysis = $lead->insuranceAnalyses()
+        ->latest('created_at')
+        ->first();
 
     $lastLeadUpdate = collect([
         $lead->updated_at,
         optional($lead->endereco)->updated_at,
     ])->filter()->max();
 
-    $canReanalyze = $insuranceAnalysisEnabled
-        && $lead->canRequestReanalysis();
-
-    $isLeadValidationContext = filled($firstInvalidLeadField)
-        && $leadContextId === (string) $lead->id;
+    $canReanalyze = $lead->canRequestReanalysis();
 @endphp
 <div
     class="modal fade lead-details-modal"
@@ -968,12 +899,9 @@
 
             <div class="modal-header border-0 pb-0">
                 <div>
-                    <div class="d-flex flex-wrap gap-2 mb-2">
-                        <span class="badge {{ $statusBadge }}">
-                            {{ $statusLabel }}
-                        </span>
-                        @include('partials.leadlovers-sync-status', ['lead' => $lead])
-                    </div>
+                    <span class="badge {{ $statusBadge }} mb-2">
+                        {{ $statusLabel }}
+                    </span>
 
                     <h5 class="modal-title fw-bold" id="leadModalLabel{{ $lead->id }}">
                         {{ $leadName }}
@@ -992,45 +920,36 @@
                 <ul class="nav nav-pills mb-4" role="tablist">
                     <li class="nav-item" role="presentation">
                         <button
-                            id="lead-data-tab-{{ $lead->id }}"
                             class="nav-link active"
                             data-bs-toggle="pill"
                             data-bs-target="#lead-data-pane-{{ $lead->id }}"
                             type="button"
                             role="tab"
-                            aria-controls="lead-data-pane-{{ $lead->id }}"
-                            aria-selected="true"
                         >
-                            Dados do lead
+                            Dados para reanálise
                         </button>
                     </li>
 
                     <li class="nav-item" role="presentation">
                         <button
-                            id="lead-tags-tab-{{ $lead->id }}"
                             class="nav-link"
                             data-bs-toggle="pill"
                             data-bs-target="#lead-tags-pane-{{ $lead->id }}"
                             type="button"
                             role="tab"
-                            aria-controls="lead-tags-pane-{{ $lead->id }}"
-                            aria-selected="false"
                         >
                             Tags
                         </button>
                     </li>
 
-                    @if ($insuranceAnalysisEnabled)
+                    @if (config('features.insurance_analysis.enabled', false))
                         <li class="nav-item" role="presentation">
                             <button
-                                id="lead-reanalysis-tab-{{ $lead->id }}"
                                 class="nav-link"
                                 data-bs-toggle="pill"
                                 data-bs-target="#lead-reanalysis-pane-{{ $lead->id }}"
                                 type="button"
                                 role="tab"
-                                aria-controls="lead-reanalysis-pane-{{ $lead->id }}"
-                                aria-selected="false"
                             >
                                 Reanálise
                             </button>
@@ -1045,7 +964,6 @@
                         class="tab-pane fade show active"
                         id="lead-data-pane-{{ $lead->id }}"
                         role="tabpanel"
-                        aria-labelledby="lead-data-tab-{{ $lead->id }}"
                     >
                         <form
                             method="POST"
@@ -1053,23 +971,179 @@
                             id="leadUpdateForm{{ $lead->id }}"
                             class="lead-update-form"
                             data-lead-id="{{ $lead->id }}"
-                            data-lead-tab-id="lead-data-tab-{{ $lead->id }}"
                         >
                             @csrf
                             @method('PUT')
 
-                            @include('partials.leadlovers-sync-status', [
-                                'lead' => $lead,
-                                'showLeadLoversBadge' => false,
-                                'showLeadLoversFailureMessage' => true,
-                            ])
+                            <div
+                                id="leadNoChangesAlert{{ $lead->id }}"
+                                class="alert alert-warning rounded-4 d-none"
+                            >
+                                Altere pelo menos um dado do lead antes de salvar.
+                            </div>
 
-                            <div class="mt-3">
-                                @include('partials.lead-update-fields', [
-                                    'lead' => $lead,
-                                    'leadUpdateIdPrefix' => 'company-lead',
-                                    'isLeadValidationContext' => $isLeadValidationContext,
-                                ])
+                            <div class="row g-4">
+
+                                <div class="col-12">
+                                    <div class="card border rounded-4">
+                                        <div class="card-body">
+                                            <h6 class="fw-bold mb-3">
+                                                Dados do solicitante
+                                            </h6>
+
+                                            <div class="row g-3">
+                                                <div class="col-12 col-md-6">
+                                                    <label class="form-label small text-muted">Nome</label>
+                                                    <input type="text" name="nome" class="form-control" value="{{ old('nome', $lead->nome) }}">
+                                                </div>
+
+                                                <div class="col-12 col-md-6">
+                                                    <label class="form-label small text-muted">E-mail</label>
+                                                    <input type="email" name="email" class="form-control" value="{{ old('email', $lead->email) }}" readonly>
+                                                </div>
+
+                                                <div class="col-12 col-md-4">
+                                                    <label class="form-label small text-muted">Telefone</label>
+                                                    <input type="text" name="tel" class="form-control" value="{{ old('tel', $lead->tel) }}">
+                                                </div>
+
+                                                <div class="col-12 col-md-4">
+                                                    <label class="form-label small text-muted">CPF/CNPJ</label>
+                                                    <input type="text" name="cpf" class="form-control" value="{{ old('cpf', $lead->cpf) }}">
+                                                </div>
+
+                                                <div class="col-12 col-md-4">
+                                                    <label class="form-label small text-muted">Tipo de solicitante</label>
+                                                    <input type="text" name="tipo_solicitante" class="form-control" value="{{ old('tipo_solicitante', $lead->tipo_solicitante) }}">
+                                                </div>
+
+                                                <div class="col-12 col-md-4">
+                                                    <label class="form-label small text-muted">Estado civil</label>
+                                                    <input type="text" name="estado_civil" class="form-control" value="{{ old('estado_civil', $lead->estado_civil) }}">
+                                                </div>
+
+                                                <div class="col-12 col-md-4">
+                                                    <label class="form-label small text-muted">Nome do cônjuge</label>
+                                                    <input type="text" name="conjuge_nome" class="form-control" value="{{ old('conjuge_nome', $lead->conjuge_nome) }}">
+                                                </div>
+
+                                                <div class="col-12 col-md-4">
+                                                    <label class="form-label small text-muted">CPF do cônjuge</label>
+                                                    <input type="text" name="conjuge_cpf" class="form-control" value="{{ old('conjuge_cpf', $lead->conjuge_cpf) }}">
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="col-12">
+                                    <div class="card border rounded-4">
+                                        <div class="card-body">
+                                            <h6 class="fw-bold mb-3">
+                                                Endereço do imóvel
+                                            </h6>
+
+                                            <div class="row g-3">
+                                                <div class="col-12 col-md-3">
+                                                    <label class="form-label small text-muted">CEP</label>
+                                                    <input type="text" name="cep" class="form-control" value="{{ old('cep', $lead->endereco?->cep) }}">
+                                                </div>
+
+                                                <div class="col-12 col-md-3">
+                                                    <label class="form-label small text-muted">Estado</label>
+                                                    <input type="text" name="estado" class="form-control" value="{{ old('estado', $lead->endereco?->estado) }}">
+                                                </div>
+
+                                                <div class="col-12 col-md-6">
+                                                    <label class="form-label small text-muted">Cidade</label>
+                                                    <input type="text" name="cidade_imovel" class="form-control" value="{{ old('cidade_imovel', $lead->endereco?->cidade_imovel) }}">
+                                                </div>
+
+                                                <div class="col-12 col-md-6">
+                                                    <label class="form-label small text-muted">Bairro</label>
+                                                    <input type="text" name="bairro" class="form-control" value="{{ old('bairro', $lead->endereco?->bairro) }}">
+                                                </div>
+
+                                                <div class="col-12 col-md-6">
+                                                    <label class="form-label small text-muted">Logradouro</label>
+                                                    <input type="text" name="logradouro" class="form-control" value="{{ old('logradouro', $lead->endereco?->logradouro) }}">
+                                                </div>
+
+                                                <div class="col-12 col-md-3">
+                                                    <label class="form-label small text-muted">Número</label>
+                                                    <input type="text" name="numero" class="form-control" value="{{ old('numero', $lead->endereco?->numero) }}">
+                                                </div>
+
+                                                <div class="col-12 col-md-9">
+                                                    <label class="form-label small text-muted">Complemento</label>
+                                                    <input type="text" name="complemento" class="form-control" value="{{ old('complemento', $lead->endereco?->complemento) }}">
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="col-12">
+                                    <div class="card border rounded-4">
+                                        <div class="card-body">
+                                            <h6 class="fw-bold mb-3">
+                                                Valores da locação
+                                            </h6>
+
+                                            <div class="row g-3">
+                                                <div class="col-6 col-md-3">
+                                                    <label class="form-label small text-muted">Aluguel</label>
+                                                    <input type="number" step="0.01" min="0" name="valor_aluguel" class="form-control" value="{{ old('valor_aluguel', $lead->despesas?->valor_aluguel) }}">
+                                                </div>
+
+                                                <div class="col-6 col-md-3">
+                                                    <label class="form-label small text-muted">Condomínio</label>
+                                                    <input type="number" step="0.01" min="0" name="valor_condominio" class="form-control" value="{{ old('valor_condominio', $lead->despesas?->valor_condominio) }}">
+                                                </div>
+
+                                                <div class="col-6 col-md-3">
+                                                    <label class="form-label small text-muted">IPTU</label>
+                                                    <input type="number" step="0.01" min="0" name="valor_iptu" class="form-control" value="{{ old('valor_iptu', $lead->despesas?->valor_iptu) }}">
+                                                </div>
+
+                                                <div class="col-6 col-md-3">
+                                                    <label class="form-label small text-muted">Gás</label>
+                                                    <input type="number" step="0.01" min="0" name="valor_gas" class="form-control" value="{{ old('valor_gas', $lead->despesas?->valor_gas) }}">
+                                                </div>
+
+                                                <div class="col-6 col-md-3">
+                                                    <label class="form-label small text-muted">Água</label>
+                                                    <input type="number" step="0.01" min="0" name="valor_agua" class="form-control" value="{{ old('valor_agua', $lead->despesas?->valor_agua) }}">
+                                                </div>
+
+                                                <div class="col-6 col-md-3">
+                                                    <label class="form-label small text-muted">Luz</label>
+                                                    <input type="number" step="0.01" min="0" name="valor_luz" class="form-control" value="{{ old('valor_luz', $lead->despesas?->valor_luz) }}">
+                                                </div>
+
+                                                <div class="col-6 col-md-3">
+                                                    <label class="form-label small text-muted">Outras despesas</label>
+                                                    <input type="number" step="0.01" min="0" name="outras_despesas" class="form-control" value="{{ old('outras_despesas', $lead->despesas?->outras_despesas) }}">
+                                                </div>
+
+                                                <div class="col-6 col-md-3">
+                                                    <label class="form-label small text-muted">Total atual</label>
+                                                    <input
+                                                        type="text"
+                                                        class="form-control fw-bold"
+                                                        value="R$ {{ number_format((float) $lead->despesas?->valor_total_encargos, 2, ',', '.') }}"
+                                                        readonly
+                                                    >
+                                                </div>
+                                            </div>
+
+                                            <div class="small text-muted mt-3">
+                                                Após salvar os dados, solicite a reanálise na aba “Reanálise”.
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
                             </div>
                         </form>
                     </div>
@@ -1079,7 +1153,6 @@
                         class="tab-pane fade"
                         id="lead-tags-pane-{{ $lead->id }}"
                         role="tabpanel"
-                        aria-labelledby="lead-tags-tab-{{ $lead->id }}"
                     >
                         <div class="card border rounded-4">
                             <div class="card-body">
@@ -1114,13 +1187,12 @@
                         </div>
                     </div>
 
-                    @if ($insuranceAnalysisEnabled)
+                    @if (config('features.insurance_analysis.enabled', false))
                         {{-- Aba 3: reanálise --}}
                         <div
                             class="tab-pane fade"
                             id="lead-reanalysis-pane-{{ $lead->id }}"
                             role="tabpanel"
-                            aria-labelledby="lead-reanalysis-tab-{{ $lead->id }}"
                         >
                         @if ($canReanalyze)
                             <div class="alert alert-success rounded-4">
@@ -1168,15 +1240,8 @@
                     type="submit"
                     form="leadUpdateForm{{ $lead->id }}"
                     class="btn btn-primary"
-                    data-lead-submit
-                    data-lead-id="{{ $lead->id }}"
                 >
-                    <span
-                        class="spinner-border spinner-border-sm me-2 d-none"
-                        aria-hidden="true"
-                        data-lead-spinner
-                    ></span>
-                    <span data-lead-submit-label>Salvar dados</span>
+                    Salvar dados
                 </button>
 
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
@@ -1198,8 +1263,8 @@
         'leadFormUrl' => $leadFormUrl,
         'leadAccessCode' => $leadAccessCode,
         'dashboardActivityHash' => $dashboardActivityHash ?? null,
-        'leadValidationTargets' => $leadValidationTargets,
     ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) !!}
 </script>
 
+@vite(['resources/js/dashboard-user.js'])
 @endsection

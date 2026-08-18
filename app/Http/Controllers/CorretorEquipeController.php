@@ -12,7 +12,6 @@ use Illuminate\Validation\Rule;
 use App\Services\CorretorInvitationService;
 use DomainException;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Validation\ValidationException;
 
 
 
@@ -45,11 +44,9 @@ class CorretorEquipeController extends Controller
 
     public function create()
     {
-        $permissionGroups = CorretorPermissions::groups();
+        $permissions = CorretorPermissions::all();
 
-        return view('corretor.config_equipe.create', [
-            'permissionGroups' => $permissionGroups,
-        ]);
+        return view('corretor.config_equipe.create', ['permissions' => $permissions]);
     }
 
     public function store(Request $request)
@@ -69,7 +66,7 @@ class CorretorEquipeController extends Controller
             'email' => ['required', 'email', 'max:255', 'unique:corretores,email'],
             'password' => ['required', 'string', 'min:8', 'confirmed'],
             'permissions' => ['nullable', 'array'],
-            'permissions.*' => ['string', 'distinct', Rule::in(CorretorPermissions::keys())],
+            'permissions.*' => ['string', Rule::in(CorretorPermissions::keys())],
             'active' => ['nullable', 'boolean'],
 
         ],
@@ -82,14 +79,9 @@ class CorretorEquipeController extends Controller
             'password.min' => 'A senha deve ter pelo menos 8 caracteres!',
             'password.confirmed' => 'As senhas não conferem!',
             'permissions.*.in' => 'Uma das permissões selecionadas é inválida!',
-            'permissions.*.distinct' => 'Uma permissão não pode ser selecionada mais de uma vez!',
         ]
         
         
-        );
-
-        $validated['permissions'] = $this->normalizeAndValidatePermissions(
-            $validated['permissions'] ?? [],
         );
 
         $integrante = Corretor::create([
@@ -143,11 +135,11 @@ class CorretorEquipeController extends Controller
     {
         abort_if($corretor->role === Corretor::ROLE_CEO, 403);
 
-        $permissionGroups = CorretorPermissions::groups();
+        $permissions = CorretorPermissions::all();
 
         return view('corretor.config_equipe.edit', [
             'integrante' => $corretor,
-            'permissionGroups' => $permissionGroups,
+            'permissions' => $permissions,
         ]);
     }
 
@@ -165,7 +157,6 @@ class CorretorEquipeController extends Controller
             'permissions' => ['nullable', 'array'],
             'permissions.*' => [
                 'string',
-                'distinct',
                 Rule::in(CorretorPermissions::keys()),
             ],
 
@@ -180,13 +171,8 @@ class CorretorEquipeController extends Controller
                 'password.min' => 'A senha deve ter pelo menos 8 caracteres.',
                 'password.confirmed' => 'A confirmação da senha não confere.',
                 'permissions.*.in' => 'Uma das permissões selecionadas é inválida.',
-                'permissions.*.distinct' => 'Uma permissão não pode ser selecionada mais de uma vez.',
             ]
         
-        );
-
-        $validated['permissions'] = $this->normalizeAndValidatePermissions(
-            $validated['permissions'] ?? [],
         );
 
         $data = [
@@ -257,17 +243,5 @@ class CorretorEquipeController extends Controller
             );
         }
     }
-
-    private function normalizeAndValidatePermissions(array $permissions): array
-    {
-        $permissions = array_values(array_unique($permissions));
-
-        if (! CorretorPermissions::selectionSatisfiesDependencies($permissions)) {
-            throw ValidationException::withMessages([
-                'permissions' => 'Para cadastrar, editar ou remover imobiliárias, selecione também “Visualizar imobiliárias”.',
-            ]);
-        }
-
-        return $permissions;
-    }
 }
+ 

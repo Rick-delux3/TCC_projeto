@@ -1,15 +1,9 @@
 document.addEventListener('DOMContentLoaded', function () {
     const configElement = document.getElementById('dashboardUserConfig');
 
-    let config = {};
-
-    if (configElement) {
-        try {
-            config = JSON.parse(configElement.textContent || '{}');
-        } catch (error) {
-            console.warn('Não foi possível carregar a configuração do dashboard.');
-        }
-    }
+    const config = configElement
+        ? JSON.parse(configElement.textContent || '{}')
+        : {};
 
     const realtimeUrl = config.routes?.realtimeStatus || null;
 
@@ -34,18 +28,18 @@ document.addEventListener('DOMContentLoaded', function () {
     |--------------------------------------------------------------------------
     */
     function applyDashboardTheme(theme) {
-        if(!dashboardThemeRoot || !dashboardThemeToggle) {
+        if (!dashboardThemeRoot || !dashboardThemeToggle) {
             return;
         }
 
+        const normalizedTheme = theme === 'dark' ? 'dark' : 'light';
 
-        const normalizeTheme = (theme === 'dark' ? 'dark' : 'light');
-        dashboardThemeRoot.setAttribute('data-dashboard-theme', normalizeTheme);
+        dashboardThemeRoot.setAttribute('data-dashboard-theme', normalizedTheme);
+        dashboardThemeToggle.textContent = normalizedTheme === 'dark' ? 'Modo claro' : 'Modo escuro';
 
-        dashboardThemeToggle.textContent = normalizeTheme === 'dark' ? 'Modo claro' : 'Modo escuro';
-        dashboardThemeToggle.classList.toggle('btn-outline-light', normalizeTheme === 'dark');
-        dashboardThemeToggle.classList.toggle('btn-outline-secondary', normalizeTheme !== 'dark');
-    } 
+        dashboardThemeToggle.classList.toggle('btn-outline-light', normalizedTheme === 'dark');
+        dashboardThemeToggle.classList.toggle('btn-outline-secondary', normalizedTheme !== 'dark');
+    }
 
     if (dashboardThemeRoot && dashboardThemeToggle) {
         let savedTheme = 'light';
@@ -164,38 +158,10 @@ document.addEventListener('DOMContentLoaded', function () {
 
     /*
     |--------------------------------------------------------------------------
-    | Controle isolado dos formulários de edição de lead
+    | Bloqueia envio do formulário do modal se nada foi alterado
     |--------------------------------------------------------------------------
     */
     const leadUpdateForms = document.querySelectorAll('.lead-update-form');
-
-    function leadSubmitButtons(form) {
-        const leadId = form.dataset.leadId;
-
-        if (!leadId) {
-            return [];
-        }
-
-        return Array.from(document.querySelectorAll(
-            `[data-lead-submit][data-lead-id="${leadId}"]`
-        ));
-    }
-
-    function resetLeadUpdateForm(form) {
-        delete form.dataset.submitting;
-
-        leadSubmitButtons(form).forEach(function (submitButton) {
-            const spinner = submitButton.querySelector('[data-lead-spinner]');
-            const label = submitButton.querySelector('[data-lead-submit-label]');
-
-            submitButton.disabled = false;
-            spinner?.classList.add('d-none');
-
-            if (label && label.dataset.defaultLabel) {
-                label.textContent = label.dataset.defaultLabel;
-            }
-        });
-    }
 
     leadUpdateForms.forEach(function (form) {
         const leadId = form.dataset.leadId;
@@ -206,7 +172,7 @@ document.addEventListener('DOMContentLoaded', function () {
         const fields = Array.from(
             form.querySelectorAll('input[name], select[name], textarea[name]')
         ).filter(function (field) {
-            return !['_token', '_method', 'lead_context_id'].includes(field.name);
+            return !['_token', '_method'].includes(field.name);
         });
 
         const initialValues = new Map();
@@ -238,19 +204,8 @@ document.addEventListener('DOMContentLoaded', function () {
         });
 
         form.addEventListener('submit', function (event) {
-            if (form.dataset.submitting === 'true') {
-                event.preventDefault();
-                return;
-            }
-
             if (!formHasChanges()) {
                 event.preventDefault();
-
-                const dataTab = document.getElementById(form.dataset.leadTabId);
-
-                if (dataTab && window.bootstrap?.Tab) {
-                    window.bootstrap.Tab.getOrCreateInstance(dataTab).show();
-                }
 
                 if (alertBox) {
                     alertBox.classList.remove('d-none');
@@ -259,74 +214,9 @@ document.addEventListener('DOMContentLoaded', function () {
                         block: 'center',
                     });
                 }
-
-                return;
             }
-
-            if (!form.checkValidity()) {
-                return;
-            }
-
-            form.dataset.submitting = 'true';
-
-            leadSubmitButtons(form).forEach(function (submitButton) {
-                const spinner = submitButton.querySelector('[data-lead-spinner]');
-                const label = submitButton.querySelector('[data-lead-submit-label]');
-
-                submitButton.disabled = true;
-                spinner?.classList.remove('d-none');
-
-                if (label) {
-                    label.dataset.defaultLabel ||= label.textContent.trim();
-                    label.textContent = 'Salvando...';
-                }
-            });
-
-            window.setTimeout(function () {
-                if (event.defaultPrevented) {
-                    resetLeadUpdateForm(form);
-                }
-            }, 0);
         });
     });
-
-    window.addEventListener('pageshow', function () {
-        leadUpdateForms.forEach(resetLeadUpdateForm);
-    });
-
-    const leadValidationTargets = config.leadValidationTargets || null;
-
-    if (
-        leadValidationTargets
-        && window.bootstrap?.Modal
-        && window.bootstrap?.Tab
-    ) {
-        const modalElement = document.getElementById(leadValidationTargets.modal);
-        const tabElement = document.getElementById(leadValidationTargets.tab);
-        const fieldElement = document.getElementById(leadValidationTargets.field);
-
-        if (modalElement && tabElement && fieldElement) {
-            const revealLeadValidationError = function () {
-                window.bootstrap.Tab.getOrCreateInstance(tabElement).show();
-
-                window.setTimeout(function () {
-                    fieldElement.focus();
-                }, 0);
-            };
-
-            if (modalElement.classList.contains('show')) {
-                revealLeadValidationError();
-            } else {
-                modalElement.addEventListener(
-                    'shown.bs.modal',
-                    revealLeadValidationError,
-                    { once: true }
-                );
-
-                window.bootstrap.Modal.getOrCreateInstance(modalElement).show();
-            }
-        }
-    }
 
     /*
     |--------------------------------------------------------------------------

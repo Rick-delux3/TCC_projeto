@@ -8,13 +8,15 @@ use App\Models\Corretor;
 use App\Models\CorretorActivityLog;
 use App\Models\Lead;
 use App\Models\LeadLoversTag;
-use App\Services\LeadLoversTagOperationCoordinator;
 use App\Support\ManualLeadResultTags;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\DB;
 
+
 class AdminLeadTagController extends Controller
 {
+    
+
     public function update(
         UpdateLeadResultTagRequest $request,
         Lead $lead
@@ -26,29 +28,34 @@ class AdminLeadTagController extends Controller
             403
         );
 
-        if (! config('services.leadlovers.enabled', false)) {
+         if (! config('services.leadlovers.enabled', false)) {
             return back()
                 ->withErrors([
-                    'result' => 'A integração com a LeadLovers está desativada.',
+                    'result' =>
+                        'A integração com a LeadLovers está desativada.',
                 ])
                 ->withInput();
         }
 
-        if (
+        if(
             $lead->leadlovers_status !== 'sent'
             || $lead->sent_to_leadlovers_at === null
         ) {
             return back()->withErrors([
                 'result' => 'Este lead ainda não foi enviado para a LeadLovers.',
             ])
-                ->withInput();
+            ->withInput();
         }
 
-        if ((int) $lead->leadlovers_lead_id <= 0) {
+        if(
+            blank($lead->email) 
+            || filter_var($lead->email, FILTER_VALIDATE_EMAIL) === false
+        ) {
             return back()->withErrors([
-                'result' => 'O lead não possui um ID remoto válido da LeadLovers.',
+                'result' => 'O lead não possui um e-mail válido.',
             ])->withInput();
         }
+
 
         $validated = $request->validated();
 
@@ -64,13 +71,14 @@ class AdminLeadTagController extends Controller
         ) {
             return back()
                 ->withErrors([
-                    'result' => 'Não foi possível mapear o resultado selecionado.',
+                    'result' =>
+                        'Não foi possível mapear o resultado selecionado.',
                 ])
                 ->withInput();
         }
 
         /*
-         * Confirma se as cinco tags finais estão cadastradas.
+         * Confirma se as quatro tags finais estão cadastradas.
          */
         $expectedTagKeys = collect(
             ManualLeadResultTags::leadLoversKeys()
@@ -88,20 +96,23 @@ class AdminLeadTagController extends Controller
         if ($missingTagKeys->isNotEmpty()) {
             return back()
                 ->withErrors([
-                    'result' => 'O catálogo de tags finais está incompleto. '
+                    'result' =>
+                        'O catálogo de tags finais está incompleto. '
                         .'Atualize as tags antes de tentar novamente.',
                 ])
                 ->withInput();
         }
 
         $invalidTag = $resultTagCatalog->first(
-            fn (LeadLoversTag $tag): bool => (int) $tag->leadlovers_tag_id <= 0
+            fn (LeadLoversTag $tag): bool =>
+                (int) $tag->leadlovers_tag_id <= 0
         );
 
         if ($invalidTag instanceof LeadLoversTag) {
             return back()
                 ->withErrors([
-                    'result' => 'O catálogo possui uma tag com ID LeadLovers inválido.',
+                    'result' =>
+                        'O catálogo possui uma tag com ID LeadLovers inválido.',
                 ])
                 ->withInput();
         }
@@ -116,7 +127,8 @@ class AdminLeadTagController extends Controller
         ) {
             return back()
                 ->withErrors([
-                    'result' => 'A tag correspondente ao resultado está desativada.',
+                    'result' =>
+                        'A tag correspondente ao resultado está desativada.',
                 ])
                 ->withInput();
         }
@@ -145,16 +157,19 @@ class AdminLeadTagController extends Controller
                 'model_id' => $lockedLead->id,
 
                 'old_values' => [
-                    'tags_originais' => $lockedLead->tags_originais,
+                    'tags_originais' =>
+                        $lockedLead->tags_originais,
 
-                    'updated_by_corretor_id' => $lockedLead->updated_by_corretor_id,
+                    'updated_by_corretor_id' =>
+                        $lockedLead->updated_by_corretor_id,
                 ],
 
                 'new_values' => [
                     'requested_result' => $result,
                     'requested_label' => $resultLabel,
                     'leadlovers_tag_key' => $selectedTagKey,
-                    'leadlovers_tag_id' => (int) $selectedTag->leadlovers_tag_id,
+                    'leadlovers_tag_id' =>
+                        (int) $selectedTag->leadlovers_tag_id,
                 ],
 
                 'description' => sprintf(
@@ -171,15 +186,6 @@ class AdminLeadTagController extends Controller
                 ),
             ]);
 
-            $syncState = app(LeadLoversTagOperationCoordinator::class)
-                ->registerManualDesired(
-                    leadId: $lockedLead->id,
-                    tagKey: $selectedTagKey,
-                    result: $result,
-                    requestLogId: $requestLog->id,
-                    corretorId: $corretor->id,
-                );
-
             ApplyManualLeadResultTagJob::dispatch(
                 $lockedLead->id,
                 $result,
@@ -187,7 +193,6 @@ class AdminLeadTagController extends Controller
                 $request->ip(),
                 $request->userAgent(),
                 $requestLog->id,
-                version: $syncState->version,
             )->afterCommit();
         });
 
@@ -204,9 +209,7 @@ class AdminLeadTagController extends Controller
         ?string $ip
     ): ?string {
 
-        if (blank($ip)) {
-            return null;
-        }
+        if(blank($ip)) return null;
 
         return mb_substr(
             trim($ip),
@@ -214,14 +217,11 @@ class AdminLeadTagController extends Controller
             45
         );
     }
-
     private function normalizedUserAgent(
         ?string $userAgent
     ): ?string {
 
-        if (blank($userAgent)) {
-            return null;
-        }
+        if(blank($userAgent)) return null;
 
         return mb_substr(
             trim($userAgent),

@@ -37,30 +37,20 @@ class Lead extends Model
         'user_agent',
         'aceite_termos',
         'observacoes',
-        'leadlovers_lead_id',
+        'leadlovers_lead_code',
         'leadlovers_status',
         'leadlovers_response',
         'sent_to_leadlovers_at',
         'created_by_corretor_id',
         'updated_by_corretor_id',
         'reanalysis_unlocked_at',
-        'leadlovers_update_status',
-        'leadlovers_update_version',
-        'leadlovers_update_response',
-        'leadlovers_update_error',
-        'leadlovers_update_requested_at',
-        'leadlovers_update_at',
     ];
 
     protected $casts = [
-        'leadlovers_lead_id' => 'integer',
         'leadlovers_response' => 'array',
         'sent_to_leadlovers_at' => 'datetime',
         'aceite_termos' => 'boolean',
         'reanalysis_unlocked_at' => 'datetime',
-        'leadlovers_update_response' => 'array',
-        'leadlovers_update_requested_at' => 'datetime',
-        'leadlovers_update_at' => 'datetime',
     ];
 
     public function scopeCreatedThroughSystem(Builder $query): Builder
@@ -150,11 +140,6 @@ class Lead extends Model
     public function lotesAnalisesSeguro()
     {
         return $this->hasMany(InsuranceAnalysisBatch::class);
-    }
-
-    public function leadLoversTagOperation()
-    {
-        return $this->hasOne(LeadLoversTagOperation::class);
     }
 
     public function createdByAdmin()

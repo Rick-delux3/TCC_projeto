@@ -74,10 +74,7 @@ class AppServiceProvider extends ServiceProvider
             Gate::define($ability, function (Corretor $corretor) use ($permissions) {
                 return $corretor->isActive()
                     && collect($permissions)->contains(
-                        fn (string $permission): bool => $corretor->hasPermission($permission)
-                            && collect(CorretorPermissions::dependenciesFor($permission))->every(
-                                fn (string $dependency): bool => $corretor->hasPermission($dependency)
-                            )
+                        fn (string $permission) => $corretor->hasPermission($permission)
                     );
             });
         }

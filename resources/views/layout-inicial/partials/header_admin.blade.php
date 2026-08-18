@@ -38,11 +38,6 @@
 
     $notificationCount = $dashboardStats['newLeads'] ?? 0;
 
-    $insuranceAnalysisEnabled = (bool) config(
-        'features.insurance_analysis.enabled',
-        false
-    );
-
     /*
     |--------------------------------------------------------------------------
     | Rotas principais do dashboard admin/corretores
@@ -87,7 +82,7 @@
                 aria-controls="dashboardAdminSidebar"
                 aria-label="Abrir menu lateral"
             >
-                <i class="bi bi-list" aria-hidden="true"></i>
+                <i class="bi bi-list"></i>
             </button>
 
             {{-- Logo / marca --}}
@@ -121,7 +116,7 @@
                         aria-expanded="false"
                         aria-label="Abrir notificações"
                     >
-                        <i class="bi bi-bell" aria-hidden="true"></i>
+                        <i class="bi bi-bell"></i>
 
                         @if ($notificationCount > 0)
                             <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger">
@@ -145,7 +140,7 @@
                             @if ($notificationCount > 0)
                                 <div class="d-flex gap-3 align-items-start">
                                     <span class="dashboard-notification-icon bg-primary-subtle text-primary">
-                                        <i class="bi bi-person-plus" aria-hidden="true"></i>
+                                        <i class="bi bi-person-plus"></i>
                                     </span>
 
                                     <div>
@@ -164,7 +159,7 @@
                                 </div>
                             @else
                                 <div class="text-center py-3">
-                                    <i class="bi bi-check-circle text-success fs-4" aria-hidden="true"></i>
+                                    <i class="bi bi-check-circle text-success fs-4"></i>
 
                                     <p class="small text-muted mb-0 mt-2">
                                         Nenhuma nova notificação no momento.
@@ -192,7 +187,7 @@
                             <small>{{ $adminRole }}</small>
                         </span>
 
-                        <i class="bi bi-chevron-down small d-none d-md-inline" aria-hidden="true"></i>
+                        <i class="bi bi-chevron-down small d-none d-md-inline"></i>
                     </button>
 
                     <ul class="dropdown-menu dropdown-menu-end shadow border-0 rounded-4 dashboard-profile-menu">
@@ -213,22 +208,20 @@
                         @can('manage-organization')
                             <li>
                                 <a class="dropdown-item py-2" href="{{ $equipeRoute }}">
-                                    <i class="bi bi-person-gear me-2" aria-hidden="true"></i>
+                                    <i class="bi bi-person-gear me-2"></i>
                                     Gerenciar equipe
                                 </a>
                             </li>
                         @endcan
 
-                        @if ($insuranceAnalysisEnabled)
-                            @can('view-analyses')
-                                <li>
-                                    <a class="dropdown-item py-2" href="{{ $analisesRoute }}">
-                                        <i class="bi bi-clipboard2-data me-2" aria-hidden="true"></i>
-                                        Visualizar análises
-                                    </a>
-                                </li>
-                            @endcan
-                        @endif
+                        @can('view-analyses')
+                            <li>
+                                <a class="dropdown-item py-2" href="{{ $analisesRoute }}">
+                                    <i class="bi bi-clipboard2-data me-2"></i>
+                                    Visualizar análises
+                                </a>
+                            </li>
+                        @endcan
 
                         <li>
                             <a
@@ -237,7 +230,7 @@
                                 target="_blank"
                                 rel="noopener noreferrer"
                             >
-                                <i class="bi bi-question-circle me-2" aria-hidden="true"></i>
+                                <i class="bi bi-question-circle me-2"></i>
                                 Tirar dúvidas
                             </a>
                         </li>
@@ -251,7 +244,7 @@
                                 @csrf
 
                                 <button type="submit" class="dropdown-item py-2 text-danger">
-                                    <i class="bi bi-box-arrow-right me-2" aria-hidden="true"></i>
+                                    <i class="bi bi-box-arrow-right me-2"></i>
                                     Sair
                                 </button>
                             </form>
@@ -337,23 +330,21 @@
                     href="{{ $dashboardRoute }}"
                     class="dashboard-sidebar-link {{ request()->routeIs('Dashboard-Admin') ? 'active' : '' }}"
                 >
-                    <i class="bi bi-grid-1x2" aria-hidden="true"></i>
+                    <i class="bi bi-grid-1x2"></i>
                     <span>Dashboard</span>
                 </a>
             @endcan
 
             {{-- Visualizar análises --}}
-            @if ($insuranceAnalysisEnabled)
-                @can('view-analyses')
-                    <a
-                        href="{{ $analisesRoute }}"
-                        class="dashboard-sidebar-link {{ request()->routeIs('admin.insurance-analyses.*') || request()->routeIs('insurance-analyses.*') ? 'active' : '' }}"
-                    >
-                        <i class="bi bi-clipboard2-data" aria-hidden="true"></i>
-                        <span>Visualizar análises</span>
-                    </a>
-                @endcan
-            @endif
+            @can('view-analyses')
+                <a
+                    href="{{ $analisesRoute }}"
+                    class="dashboard-sidebar-link {{ request()->routeIs('admin.insurance-analyses.*') || request()->routeIs('insurance-analyses.*') ? 'active' : '' }}"
+                >
+                    <i class="bi bi-clipboard2-data"></i>
+                    <span>Visualizar análises</span>
+                </a>
+            @endcan
 
             {{-- Equipe: somente CEO --}}
             @can('manage-organization')
@@ -361,7 +352,7 @@
                     href="{{ $equipeRoute }}"
                     class="dashboard-sidebar-link {{ request()->routeIs('admin.config-equipe.*') ? 'active' : '' }}"
                 >
-                    <i class="bi bi-person-gear" aria-hidden="true"></i>
+                    <i class="bi bi-person-gear"></i>
                     <span>Equipe</span>
                 </a>
             @endcan
@@ -373,7 +364,7 @@
                     class="dashboard-sidebar-link {{ request()->routeIs('admin.imobiliarias.*') ? 'active' : '' }} {{ $imobiliariasRoute === '#' ? 'disabled opacity-50' : '' }}"
                     @if ($imobiliariasRoute === '#') aria-disabled="true" tabindex="-1" @endif
                 >
-                    <i class="bi bi-buildings" aria-hidden="true"></i>
+                    <i class="bi bi-buildings"></i>
                     <span>Imobiliárias</span>
                 </a>
             @endcan
@@ -384,7 +375,7 @@
                     href="{{ $leadsRoute }}"
                     class="dashboard-sidebar-link {{ request()->routeIs('admin.leads.*') ? 'active' : '' }}"
                 >
-                    <i class="bi bi-people" aria-hidden="true"></i>
+                    <i class="bi bi-people"></i>
                     <span>Leads</span>
                 </a>
             @endcan
@@ -396,7 +387,7 @@
                 rel="noopener noreferrer"
                 class="dashboard-sidebar-link"
             >
-                <i class="bi bi-question-circle" aria-hidden="true"></i>
+                <i class="bi bi-question-circle"></i>
                 <span>Tirar dúvidas</span>
             </a>
         </nav>
@@ -410,7 +401,7 @@
                     type="submit"
                     class="dashboard-sidebar-link dashboard-sidebar-link-danger border-0 bg-transparent w-100 text-start"
                 >
-                    <i class="bi bi-box-arrow-right" aria-hidden="true"></i>
+                    <i class="bi bi-box-arrow-right"></i>
                     <span>Sair</span>
                 </button>
             </form>

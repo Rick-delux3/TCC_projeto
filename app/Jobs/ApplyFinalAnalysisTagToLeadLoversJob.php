@@ -2,240 +2,102 @@
 
 namespace App\Jobs;
 
-use App\Exceptions\LeadLoversApiException;
-use App\Exceptions\PermanentLeadTagException;
-use App\Models\InsuranceAnalysis;
+use App\Exceptions\LeadLoversRateLimitedException;
 use App\Models\InsuranceAnalysisBatch;
-use App\Models\InsuranceAnalysisEvent;
 use App\Models\Lead;
 use App\Models\LeadLoversTag;
-use App\Models\LeadLoversTagOperation;
-use App\Services\LeadLoversApiClient;
-use App\Services\LeadLoversResultTagService;
-use App\Services\LeadLoversTagOperationCoordinator;
-use App\Support\ManualLeadResultTags;
-use DateTimeInterface;
-use Illuminate\Contracts\Queue\ShouldBeUniqueUntilProcessing;
+use App\Services\LeadLoversService;
+use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
-use Illuminate\Database\Eloquent\Model;
-use Illuminate\Foundation\Queue\Queueable;
-use Illuminate\Queue\Middleware\WithoutOverlapping;
-use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Foundation\Bus\Dispatchable;
+use Illuminate\Queue\InteractsWithQueue;
+use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
-use Throwable;
 
-class ApplyFinalAnalysisTagToLeadLoversJob implements ShouldBeUniqueUntilProcessing, ShouldQueue
+class ApplyFinalAnalysisTagToLeadLoversJob implements ShouldQueue
 {
-    use Queueable;
+    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    private const PHASE_CONFIRMATION = 'confirmation';
-
-    private const ATTEMPT_START_EVENTS = [
-        'created',
-        'analysis_restarted',
-        'analysis_started',
-        'reanalysis_requested',
-        'reanalysis_started',
-        'technical_retry_requested',
-    ];
-
-    public int $tries = 10;
-
-    public int $maxExceptions = 3;
+    public int $tries = 3;
 
     public int $timeout = 120;
 
-    public bool $failOnTimeout = true;
+    /*
+     * Essas keys precisam bater com as keys salvas na tabela lead_lovers_tags.
+     *
+     * Exemplo:
+     * Tag na LeadLovers: "Aprovados"
+     * Key gerada pelo seu comando: "aprovados"
+     *
+     * Tag na LeadLovers: "Em negociação"
+     * Key gerada pelo seu comando: "em_negociacao"
+     *
+     * Tag na LeadLovers: "Ruim"
+     * Key gerada pelo seu comando: "ruim"
+     */
+    private const TAG_KEY_APPROVED = 'aprovados';
 
-    public int $uniqueFor = 10800;
+    private const TAG_KEY_REJECTED = 'ruim';
 
-    public ?string $phase = null;
-
-    /** @var array{actionId: int, status: string, total: int}|null */
-    public ?array $bulkAction = null;
-
-    public ?int $version = null;
-
-    private ?int $trackedInflightVersion = null;
+    private const TAG_KEY_NEGOTIATION = 'em_negociacao';
 
     public function __construct(
         public int $batchId,
         public ?string $attemptId = null,
         public bool $isReanalysis = false,
-        ?string $phase = null,
-        ?array $bulkAction = null,
-        ?int $version = null,
-    ) {
-        $this->phase = $phase;
-        $this->bulkAction = $bulkAction;
-        $this->version = $version;
-    }
+    ) {}
 
-    public function uniqueId(): string
+    public function handle(LeadLoversService $leadLoversService): void
     {
-        $attempt = filled($this->attemptId)
-            ? (string) $this->attemptId
-            : 'legacy';
-        $phase = $this->isConfirmationPhase() ? ':confirmation' : '';
-
-        return 'leadlovers-final-analysis-tag:'
-            .$this->batchId.':'.$attempt
-            .($this->version !== null ? ':version:'.$this->version : '')
-            .$phase;
-    }
-
-    public function overlapKey(): string
-    {
-        $leadId = InsuranceAnalysisBatch::query()
-            ->whereKey($this->batchId)
-            ->value('lead_id');
-
-        return $leadId !== null
-            ? 'leadlovers-result-tag:lead:'.$leadId
-            : 'leadlovers-result-tag:batch:'.$this->batchId;
-    }
-
-    public function middleware(): array
-    {
-        return [
-            (new WithoutOverlapping($this->overlapKey()))
-                ->shared()
-                ->releaseAfter(15)
-                ->expireAfter(180),
-        ];
-    }
-
-    public function retryUntil(): DateTimeInterface
-    {
-        return now()->addHours(3);
-    }
-
-    public function backoff(): array
-    {
-        return [10, 30, 60, 120, 180];
-    }
-
-    public function handle(
-        LeadLoversApiClient $leadLovers,
-        LeadLoversResultTagService $resultTags,
-        LeadLoversTagOperationCoordinator $coordinator
-    ): void {
-        if (
-            ! config('features.insurance_analysis.enabled', false)
-            || ! config('services.leadlovers.enabled', false)
-        ) {
-            Log::notice(
-                'Job de análise ignorado porque o módulo está desativado.',
-                ['job' => static::class]
-            );
+        if (! config('features.insurance_analysis.enabled', false)
+            || ! config('services.leadlovers.enabled', false)) {
+            logger()->notice('Job de análise ignorado porque o módulo está desativado.', ['job' => static::class]);
 
             return;
         }
 
-        try {
-            $this->process($leadLovers, $resultTags, $coordinator);
-        } catch (PermanentLeadTagException $exception) {
-            $this->blockInflightAfterTerminalFailure(
-                $coordinator,
-                'local_failure'
-            );
-            $this->recordFailure($exception);
-            $this->fail($exception);
-        } catch (LeadLoversApiException $exception) {
-            if (! $exception->isTransient) {
-                $this->blockInflightAfterTerminalFailure(
-                    $coordinator,
-                    'api_failure'
-                );
-                $this->recordFailure($exception);
-                $this->fail($exception);
-
-                return;
-            }
-
-            if ($this->attempts() >= $this->tries) {
-                $this->blockInflightAfterTerminalFailure(
-                    $coordinator,
-                    'transient_retry_exhausted'
-                );
-                $this->recordFailure($exception);
-                $this->fail($exception);
-
-                return;
-            }
-
-            $delay = $this->retryDelay($exception);
-
-            Log::notice(
-                'Aplicação da tag final devolvida à fila por falha transitória.',
-                [
-                    'batch_id' => $this->batchId,
-                    'phase' => $this->currentPhase(),
-                    'attempt' => $this->attempts(),
-                    'status' => $exception->statusCode,
-                    'error_code' => $exception->errorCode,
-                    'retry_after' => $delay,
-                ]
-            );
-
-            $this->release($delay);
-        } catch (Throwable $exception) {
-            Log::warning(
-                'Erro ao aplicar a tag final da análise na LeadLovers.',
-                [
-                    'batch_id' => $this->batchId,
-                    'phase' => $this->currentPhase(),
-                    'exception' => $exception::class,
-                ]
-            );
-
-            throw $exception;
-        }
-    }
-
-    private function process(
-        LeadLoversApiClient $leadLovers,
-        LeadLoversResultTagService $resultTags,
-        LeadLoversTagOperationCoordinator $coordinator
-    ): void {
+        /*
+         * Carrega o lote com:
+         * - lead: para pegar e-mail e dados do lead;
+         * - analyses: para analisar os status das companhias;
+         * - analyses.events: para verificar se a tag final já foi aplicada.
+         */
         $batch = InsuranceAnalysisBatch::with([
             'lead',
             'analyses.events',
         ])->findOrFail($this->batchId);
-        $lead = $batch->lead;
-        $attemptIsCurrent = $this->attemptIsCurrent($batch);
-        $state = $lead instanceof Lead
-            ? $coordinator->snapshot($lead->id)
-            : null;
-        $this->trackedInflightVersion = $this->ownsAnalysisInflight($state, $batch)
-            ? $state->inflight_version
-            : null;
 
-        if (
-            ! $attemptIsCurrent
-            && ! $this->ownsAnalysisInflight($state, $batch)
-        ) {
+        $lead = $batch->lead;
+
+        if (! $lead || ! $lead->email) {
             return;
         }
 
-        if (! $lead instanceof Lead) {
-            throw new PermanentLeadTagException(
-                'O lote não possui um lead associado.'
-            );
-        }
+        /*
+         * Evita aplicar a mesma tag final mais de uma vez.
+         * Isso é importante porque jobs podem ser executados novamente.
 
-        if ((int) $lead->leadlovers_lead_id <= 0) {
-            throw new PermanentLeadTagException(
-                'O lead não possui um ID remoto válido da LeadLovers.'
-            );
-        }
+        /*
+         * Descobre qual tag final deve ser aplicada:
+         * - aprovados
+         * - em_negociacao
+         * - ruim
+         */
+        $tagKey = $this->resolveFinalTagKey($batch);
 
-        $tagKey = $attemptIsCurrent
-            ? $this->resolveFinalTagKey($batch)
-            : null;
+        $lead->forceFill([
+            'analysis_final_status' => match ($tagKey) {
+                self::TAG_KEY_APPROVED => 'approved',
+                self::TAG_KEY_REJECTED => 'rejected',
+                self::TAG_KEY_NEGOTIATION => 'negotiation',
+                default => null,
+            },
+            'analysis_final_tag_key' => $tagKey,
+            'last_analysis_batch_id' => $batch->id,
+            'analysis_finalized_at' => now(),
+        ])->save();
 
-        if ($attemptIsCurrent && $tagKey === null) {
+        if (! $tagKey) {
             $this->registerEventForAllAnalyses(
                 batch: $batch,
                 eventType: 'leadlovers_final_tag_not_resolved',
@@ -247,941 +109,351 @@ class ApplyFinalAnalysisTagToLeadLoversJob implements ShouldBeUniqueUntilProcess
             return;
         }
 
-        if ($attemptIsCurrent && is_string($tagKey)) {
-            $state = $coordinator->registerAnalysisDesired(
-                leadId: $lead->id,
-                tagKey: $tagKey,
-                batchId: $batch->id,
-                attemptId: $this->attemptId,
-                isReanalysis: $this->isReanalysis,
-            );
+        /*
+         * Busca a tag no banco local.
+         * Essa tabela é preenchida pelo comando:
+         *
+         * php artisan leadlovers:sync-tags
+         */
+        $tag = LeadLoversTag::where('key', $tagKey)
+            ->where('active', true)
+            ->first();
 
-            if ($this->stateDesiresThisAnalysis($state, $batch)) {
-                $lead->forceFill([
-                    'analysis_final_status' => match ($tagKey) {
-                        'aprovados' => 'approved',
-                        'ruim' => 'rejected',
-                        'em_negociacao' => 'negotiation',
-                        default => null,
-                    },
-                    'analysis_final_tag_key' => $tagKey,
-                    'last_analysis_batch_id' => $batch->id,
-                    'analysis_finalized_at' => now(),
-                ])->save();
-            } elseif (! $this->ownsAnalysisInflight($state, $batch)) {
-                return;
-            }
-        }
-
-        if (
-            $state instanceof LeadLoversTagOperation
-            && ! $this->stateDesiresThisAnalysis($state, $batch)
-            && ! $this->ownsAnalysisInflight($state, $batch)
-        ) {
-            return;
-        }
-
-        if (
-            ! $state instanceof LeadLoversTagOperation
-            || $state->phase === LeadLoversTagOperationCoordinator::PHASE_BLOCKED
-        ) {
-            return;
-        }
-
-        if (
-            $this->version !== null
-            && $state->inflight_version !== $this->version
-        ) {
-            return;
-        }
-
-        if (
-            $state->inflight_version === null
-            && (
-                ! $attemptIsCurrent
-                || ! is_string($tagKey)
-                || ! $this->stateDesiresThisAnalysis($state, $batch)
-            )
-        ) {
-            return;
-        }
-
-        if (
-            $this->isConfirmationPhase()
-            && $state->inflight_version === null
-        ) {
-            if ($this->version !== null) {
-                return;
-            }
-
-            $pendingOperation = is_string($tagKey)
-                ? $this->pendingOperation($batch, $tagKey)
-                : null;
-            $pendingAction = is_array($pendingOperation)
-                ? $this->normalizedBulkAction(
-                    $pendingOperation['response'] ?? null
-                )
-                : $this->bulkActionOrNull();
-
-            if ($pendingAction === null && ! is_array($pendingOperation)) {
-                return;
-            }
-            $state = $coordinator->adoptExistingInflight(
-                leadId: $lead->id,
-                version: $state->version,
-                action: $pendingAction,
-                outcomeUncertain: $pendingAction === null,
-            ) ?? $state;
-        }
-
-        $inflightVersion = $state->inflight_version;
-        $operationTagKey = $inflightVersion !== null
-            ? $state->inflight_tag_key
-            : $tagKey;
-
-        if (! is_string($operationTagKey)) {
-            return;
-        }
-
-        $this->trackedInflightVersion = $inflightVersion;
-
-        $catalog = $resultTags->catalog();
-        $selectedTag = $resultTags->selectedTag($catalog, $operationTagKey);
-        $remoteLeadId = (int) $lead->leadlovers_lead_id;
-        $remoteTags = $leadLovers->listLeadTags($remoteLeadId);
-        $plan = $resultTags->plan(
-            remoteTags: $remoteTags,
-            catalog: $catalog,
-            selectedTag: $selectedTag,
-            remoteLeadId: $remoteLeadId,
-        );
-
-        $freshState = $coordinator->snapshot($lead->id);
-
-        if (! $freshState instanceof LeadLoversTagOperation) {
-            return;
-        }
-
-        if ($inflightVersion !== null) {
-            if (
-                $freshState->inflight_version !== $inflightVersion
-                || $freshState->inflight_tag_key !== $operationTagKey
-            ) {
-                return;
-            }
-        } elseif (
-            $freshState->version !== $state->version
-            || $freshState->inflight_version !== null
-            || ! $this->attemptIsCurrent($batch)
-            || ! $this->stateDesiresThisAnalysis($freshState, $batch)
-        ) {
-            return;
-        }
-
-        $state = $freshState;
-        $attemptIsCurrent = $this->attemptIsCurrent($batch);
-
-        if ($plan['confirmed']) {
-            if (
-                $inflightVersion !== null
-                && (
-                    $state->version !== $inflightVersion
-                    || ! $attemptIsCurrent
-                    || ! $this->stateDesiresThisAnalysis($state, $batch)
-                )
-            ) {
-                $drained = $coordinator->completeAndDrain(
-                    $lead->id,
-                    $inflightVersion
-                );
-
-                if ($drained instanceof LeadLoversTagOperation) {
-                    $this->dispatchDesiredState($drained);
-                }
-
-                return;
-            }
-
-            if (! $attemptIsCurrent || ! is_string($tagKey)) {
-                return;
-            }
-
-            $coordinator->completeCurrent(
-                $lead->id,
-                $state->version,
-                fn (): bool => $this->persistConfirmedTag(
-                    $batch,
-                    $resultTags,
-                    $catalog,
-                    $selectedTag,
-                    $operationTagKey
-                )
+        if (! $tag) {
+            $this->registerEventForAllAnalyses(
+                batch: $batch,
+                eventType: 'leadlovers_final_tag_not_found',
+                status: null,
+                message: "Tag final não encontrada no banco local: {$tagKey}",
+                payload: [
+                    'expected_key' => $tagKey,
+                ]
             );
 
             return;
         }
 
-        if ($inflightVersion !== null) {
-            if ($state->phase === LeadLoversTagOperationCoordinator::PHASE_POSTING) {
-                $state = $coordinator->markPostingAsUncertain(
-                    $lead->id,
-                    $inflightVersion
-                ) ?? $state;
-            }
+        if ($this->finalTagAlreadyApplied($batch)) {
+            $this->appendLocalTag($lead, $tag->title);
 
-            $state = $coordinator->incrementConfirmation(
-                $lead->id,
-                $inflightVersion
-            ) ?? $state;
+            return;
+        }
 
-            if (! $this->isConfirmationPhase()) {
-                $this->dispatchConfirmation();
-
-                return;
-            }
-
-            if (
-                $state->outcome_uncertain
-                && $state->version === $inflightVersion
-                && $attemptIsCurrent
-                && $this->uncertainPostCanBeRetried($state)
-            ) {
-                $claimed = $coordinator->reclaimUncertainPost(
-                    $lead->id,
-                    $inflightVersion
-                );
-
-                if ($claimed instanceof LeadLoversTagOperation) {
-                    $this->postMutation(
-                        $leadLovers,
-                        $coordinator,
-                        $batch,
-                        $operationTagKey,
-                        $plan,
-                        $inflightVersion,
-                    );
-                }
-
-                return;
-            }
-
-            $this->releaseUnconfirmedState(
-                $batch,
-                $operationTagKey,
-                $plan,
-                $state,
-                $coordinator,
-                $inflightVersion,
+        try {
+            /*
+             * Aqui você aplica a tag no LeadLovers.
+             *
+             * Recomendo aplicar pelo ID da tag sincronizada:
+             * $tag->leadlovers_tag_id
+             *
+             * Se o seu LeadLoversService aplicar por nome,
+             * troque para:
+             * $tag->title
+             */
+            $response = $leadLoversService->addTagToLeadById(
+                $lead->email,
+                $tag->leadlovers_tag_id
             );
 
-            return;
-        }
+            if (! $this->leadLoversResponseWasSuccessful($response)) {
+                Log::warning('LeadLovers nao confirmou aplicacao da tag final', [
+                    'batch_id' => $batch->id,
+                    'lead_id' => $lead->id,
+                    'lead_ref' => hash('sha256', mb_strtolower(trim($lead->email))),
+                    'tag_key' => $tagKey,
+                    'status' => $response['StatusCode']
+                        ?? $response['statusCode']
+                        ?? $response['status']
+                        ?? null,
+                ]);
 
-        $pendingOperation = $this->pendingOperation($batch, $operationTagKey);
-
-        if (is_array($pendingOperation)) {
-            $this->bulkAction = $this->normalizedBulkAction(
-                $pendingOperation['response'] ?? null
-            );
-            $this->dispatchConfirmation();
-
-            return;
-        }
-
-        $claimed = $coordinator->claimBeforePost($lead->id, $state->version);
-
-        if ($claimed === null || $claimed->inflight_version === null) {
-            $this->dispatchConfirmation();
-
-            return;
-        }
-
-        $this->trackedInflightVersion = $claimed->inflight_version;
-
-        $this->postMutation(
-            $leadLovers,
-            $coordinator,
-            $batch,
-            $operationTagKey,
-            $plan,
-            $claimed->inflight_version,
-        );
-    }
-
-    /**
-     * @param  Collection<string, LeadLoversTag>  $catalog
-     */
-    private function persistConfirmedTag(
-        InsuranceAnalysisBatch $batch,
-        LeadLoversResultTagService $resultTags,
-        Collection $catalog,
-        LeadLoversTag $selectedTag,
-        string $tagKey
-    ): bool {
-        return DB::transaction(function () use (
-            $batch,
-            $resultTags,
-            $catalog,
-            $selectedTag,
-            $tagKey
-        ): bool {
-            $lead = Lead::query()
-                ->lockForUpdate()
-                ->findOrFail((int) $batch->lead_id);
-
-            if (! $this->attemptIsCurrent($batch)) {
-                return false;
-            }
-
-            $alreadyApplied = $this->finalTagAlreadyApplied($batch, $tagKey);
-
-            $lead->forceFill([
-                'tags_originais' => $resultTags->replaceLocalFinalTag(
-                    currentTagString: $lead->tags_originais,
-                    catalog: $catalog,
-                    selectedTag: $selectedTag,
-                ),
-            ])->save();
-
-            if (! $alreadyApplied) {
                 $this->registerEventForAllAnalyses(
                     batch: $batch,
-                    eventType: 'leadlovers_final_tag_applied',
+                    eventType: 'leadlovers_final_tag_failed',
                     status: $tagKey,
-                    message: 'Tag final confirmada na LeadLovers.',
+                    message: "LeadLovers nao confirmou a aplicacao da tag final: {$tag->title}",
                     payload: [
-                        'tag_id' => (int) $selectedTag->leadlovers_tag_id,
-                        'tag_key' => $tagKey,
-                        'phase' => 'confirmed',
+                        'tag_id' => $tag->leadlovers_tag_id,
+                        'tag_title' => $tag->title,
+                        'tag_key' => $tag->key,
                     ],
-                    response: $this->bulkActionOrNull()
+                    response: $response
                 );
-            }
-
-            return true;
-        });
-    }
-
-    private function ownsAnalysisInflight(
-        ?LeadLoversTagOperation $state,
-        InsuranceAnalysisBatch $batch
-    ): bool {
-        return $state instanceof LeadLoversTagOperation
-            && $state->inflight_source === 'analysis'
-            && $state->inflight_batch_id === $batch->id
-            && $state->inflight_attempt_id === $this->attemptId;
-    }
-
-    private function stateDesiresThisAnalysis(
-        LeadLoversTagOperation $state,
-        InsuranceAnalysisBatch $batch
-    ): bool {
-        return $state->desired_source === 'analysis'
-            && $state->desired_batch_id === $batch->id
-            && $state->desired_attempt_id === $this->attemptId;
-    }
-
-    /**
-     * @param  array{payload: array{applyTags: array<int, int>, removeTags: array<int, int>, leadsIds: array<int, int>}}  $plan
-     */
-    private function postMutation(
-        LeadLoversApiClient $leadLovers,
-        LeadLoversTagOperationCoordinator $coordinator,
-        InsuranceAnalysisBatch $batch,
-        string $tagKey,
-        array $plan,
-        int $inflightVersion
-    ): void {
-        try {
-            $bulkAction = $leadLovers->mutateLeadTags($plan['payload']);
-        } catch (LeadLoversApiException $exception) {
-            if ($this->mutationOutcomeMayBeUncertain($exception)) {
-                $coordinator->markUncertain($batch->lead_id, $inflightVersion);
-                $this->recordPendingOperation($batch, $tagKey, null, true);
-                $this->dispatchConfirmation();
 
                 return;
             }
 
-            $coordinator->markDefiniteRejection($batch->lead_id, $inflightVersion);
+            /*
+            * Correção principal:
+            * A tag foi aplicada na LeadLovers, mas o dashboard lê as tags
+            * do campo local leads.tags_originais.
+            *
+            * Portanto, precisamos salvar a tag final também no banco local.
+            */
+            $this->appendLocalTag($lead, $tag->title);
 
-            throw $exception;
-        }
-
-        $this->bulkAction = $bulkAction;
-        $coordinator->markAccepted($batch->lead_id, $inflightVersion, $bulkAction);
-        $this->recordPendingOperation($batch, $tagKey, $bulkAction, false);
-        $this->dispatchConfirmation();
-    }
-
-    private function dispatchDesiredState(LeadLoversTagOperation $state): void
-    {
-        if ($state->phase !== LeadLoversTagOperationCoordinator::PHASE_PENDING) {
-            return;
-        }
-
-        if (
-            $state->desired_source === 'manual'
-            && is_string($state->desired_result)
-            && $state->desired_corretor_id !== null
-            && $state->desired_request_log_id !== null
-        ) {
-            ApplyManualLeadResultTagJob::dispatch(
-                leadId: (int) $state->lead_id,
-                result: $state->desired_result,
-                corretorId: $state->desired_corretor_id,
-                requestLogId: $state->desired_request_log_id,
-                version: $state->version,
-            )->afterCommit();
-
-            return;
-        }
-
-        if (
-            $state->desired_source === 'analysis'
-            && $state->desired_batch_id !== null
-            && is_string($state->desired_attempt_id)
-        ) {
-            self::dispatch(
-                batchId: $state->desired_batch_id,
-                attemptId: $state->desired_attempt_id,
-                isReanalysis: (bool) $state->desired_is_reanalysis,
-                version: $state->version,
-            )->afterCommit();
-        }
-    }
-
-    private function blockInflightAfterTerminalFailure(
-        LeadLoversTagOperationCoordinator $coordinator,
-        string $reason
-    ): void {
-        $leadId = InsuranceAnalysisBatch::query()
-            ->whereKey($this->batchId)
-            ->value('lead_id');
-
-        if ($leadId === null) {
-            return;
-        }
-
-        $state = $coordinator->snapshot((int) $leadId);
-        $ownsInflight = $state instanceof LeadLoversTagOperation
-            && $state->inflight_source === 'analysis'
-            && $state->inflight_batch_id === $this->batchId
-            && $state->inflight_attempt_id === $this->attemptId;
-        $desiresThisAnalysis = $state instanceof LeadLoversTagOperation
-            && $state->desired_source === 'analysis'
-            && $state->desired_batch_id === $this->batchId
-            && $state->desired_attempt_id === $this->attemptId;
-
-        if (
-            $this->trackedInflightVersion === null
-            ||
-            ! $state instanceof LeadLoversTagOperation
-            || $state->inflight_version !== $this->trackedInflightVersion
-            || $state->inflight_source !== 'analysis'
-            || (! $ownsInflight && ! $desiresThisAnalysis)
-            || in_array(
-                $state->phase,
-                [
-                    LeadLoversTagOperationCoordinator::PHASE_FAILED,
-                    LeadLoversTagOperationCoordinator::PHASE_BLOCKED,
+            $this->registerEventForAllAnalyses(
+                batch: $batch,
+                eventType: 'leadlovers_final_tag_applied',
+                status: $tagKey,
+                message: "Tag final aplicada no LeadLovers: {$tag->title}",
+                payload: [
+                    'tag_id' => $tag->leadlovers_tag_id,
+                    'tag_title' => $tag->title,
+                    'tag_key' => $tag->key,
                 ],
-                true
-            )
-        ) {
-            return;
-        }
+                response: $response
+            );
+        } catch (LeadLoversRateLimitedException $e) {
+            if ($this->attempts() >= $this->tries) {
+                $this->registerEventForAllAnalyses(
+                    batch: $batch,
+                    eventType: 'leadlovers_final_tag_failed',
+                    status: $tagKey,
+                    message: 'Limite de requisições persistiu após várias tentativas.',
+                    payload: [
+                        'tag_key' => $tagKey,
+                    ]
+                );
 
-        $coordinator->block(
-            (int) $leadId,
-            $state->inflight_version,
-            $reason
-        );
-    }
+                throw $e;
+            }
 
-    private function uncertainPostCanBeRetried(
-        LeadLoversTagOperation $state
-    ): bool {
-        return $state->confirmation_checks >= $this->uncertainRetryChecks()
-            && $state->post_attempts < $this->maxPostAttempts()
-            && $state->last_posted_at !== null
-            && $state->last_posted_at->addSeconds($this->postingStaleSeconds())->isPast();
-    }
+            $retryAfter = max(
+                1,
+                $e->retryAfter
+                    ?? (int) config('services.leadlovers.rate_limit_retry_seconds', 60)
+            );
 
-    /**
-     * @param  array{selectedPresent: bool, otherFinalTagIds: array<int, int>, remoteTagIds: array<int, int>}  $plan
-     */
-    private function releaseUnconfirmedState(
-        InsuranceAnalysisBatch $batch,
-        string $tagKey,
-        array $plan,
-        LeadLoversTagOperation $state,
-        LeadLoversTagOperationCoordinator $coordinator,
-        int $inflightVersion
-    ): void {
-        Log::notice(
-            'Tag final da análise ainda não foi confirmada remotamente.',
-            [
+            Log::notice('Aplicação da tag devolvida à fila por rate limit.', [
                 'batch_id' => $batch->id,
-                'lead_id' => $batch->lead_id,
+                'lead_id' => $lead->id,
                 'tag_key' => $tagKey,
                 'attempt' => $this->attempts(),
-                'selected_tag_found' => $plan['selectedPresent'],
-                'remaining_tag_ids' => $plan['otherFinalTagIds'],
-                'confirmed_remote_tag_ids' => $plan['remoteTagIds'],
-            ]
-        );
+                'retry_after' => $retryAfter,
+                'cloudflare_1015' => $e->cloudflareBlocked,
+            ]);
 
-        if ($state->confirmation_checks >= $this->confirmationBudget()) {
-            $coordinator->block(
-                $batch->lead_id,
-                $inflightVersion,
-                'confirmation_budget_exhausted'
-            );
-            $exception = new PermanentLeadTagException(
-                'A tag final não foi confirmada dentro da janela esperada.'
-            );
-            $this->recordFailure($exception, $batch, $tagKey);
-            $this->fail($exception);
+            $this->release($retryAfter);
+        } catch (\Throwable $e) {
+            Log::warning('Erro ao aplicar tag final no LeadLovers', [
+                'batch_id' => $batch->id,
+                'lead_id' => $lead->id,
+                'lead_ref' => hash('sha256', mb_strtolower(trim($lead->email))),
+                'tag_key' => $tagKey,
+                'message' => $e->getMessage(),
+            ]);
 
-            return;
+            $this->registerEventForAllAnalyses(
+                batch: $batch,
+                eventType: 'leadlovers_final_tag_failed',
+                status: $tagKey,
+                message: $e->getMessage(),
+                payload: [
+                    'tag_key' => $tagKey,
+                ]
+            );
+        }
+    }
+
+    private function leadLoversResponseWasSuccessful(array $response): bool
+    {
+        $statusCode = $response['StatusCode']
+            ?? $response['statusCode']
+            ?? $response['status']
+            ?? null;
+
+        if ($statusCode !== null) {
+            return (int) $statusCode >= 200 && (int) $statusCode < 300;
         }
 
-        $this->release($this->confirmationDelay());
+        $success = $response['Success'] ?? $response['success'] ?? null;
+
+        if ($success === true) {
+            return true;
+        }
+
+        $exception = $response['Exception'] ?? $response['exception'] ?? null;
+        $error = $response['Error'] ?? $response['error'] ?? null;
+
+        return blank($exception) && blank($error);
+
     }
 
     /**
-     * @param  array{actionId: int, status: string, total: int}|null  $bulkAction
+     * Define a tag final do lote.
+     *
+     * Prioridade:
+     * 1. Se alguma companhia aprovou, o lead é considerado aprovado.
+     * 2. Se nenhuma aprovou, mas existe análise em negociação/manual, aplica em_negociacao.
+     * 3. Se todas recusaram ou falharam, aplica ruim.
      */
-    private function recordPendingOperation(
-        InsuranceAnalysisBatch $batch,
-        string $tagKey,
-        ?array $bulkAction,
-        bool $outcomeUncertain
-    ): void {
-        $this->registerEventForAllAnalyses(
-            batch: $batch,
-            eventType: 'leadlovers_final_tag_pending_confirmation',
-            status: $tagKey,
-            message: 'A alteração remota aguarda confirmação.',
-            payload: [
-                'tag_key' => $tagKey,
-                'phase' => 'pending_confirmation',
-                'outcome_uncertain' => $outcomeUncertain,
-            ],
-            response: $bulkAction
-        );
-    }
-
-    private function dispatchConfirmation(): void
+    private function resolveFinalTagKey(InsuranceAnalysisBatch $batch): ?string
     {
-        $version = $this->trackedInflightVersion;
-
-        if ($version === null) {
-            $leadId = InsuranceAnalysisBatch::query()
-                ->whereKey($this->batchId)
-                ->value('lead_id');
-            $version = $leadId !== null
-                ? app(LeadLoversTagOperationCoordinator::class)
-                    ->snapshot((int) $leadId)?->inflight_version
-                : null;
-        }
-
-        self::dispatch(
-            batchId: $this->batchId,
-            attemptId: $this->attemptId,
-            isReanalysis: $this->isReanalysis,
-            phase: self::PHASE_CONFIRMATION,
-            bulkAction: $this->bulkActionOrNull(),
-            version: $version,
-        )
-            ->delay(now()->addSeconds($this->confirmationDelay()))
-            ->afterCommit();
-    }
-
-    private function resolveFinalTagKey(
-        InsuranceAnalysisBatch $batch
-    ): ?string {
         $statuses = $batch->analyses
             ->pluck('status')
             ->filter()
-            ->map(fn (mixed $status): string => mb_strtolower((string) $status))
+            ->map(fn ($status) => mb_strtolower((string) $status))
             ->values();
 
         if ($statuses->isEmpty()) {
             return null;
         }
 
-        if ($statuses->contains(fn (string $status): bool => in_array(
-            $status,
-            ['approved', 'quoted'],
-            true
-        ))) {
-            return ManualLeadResultTags::leadloversKey(
-                ManualLeadResultTags::APPROVED
-            );
+        /*
+         * Se qualquer companhia aprovou, o resultado comercial é bom.
+         */
+        if ($statuses->contains(fn ($status) => in_array($status, [
+            'approved',
+            'quoted',
+        ], true))) {
+            return self::TAG_KEY_APPROVED;
         }
 
-        if ($statuses->contains(fn (string $status): bool => in_array(
-            $status,
-            [
-                'pending',
-                'processing',
-                'queued',
-                'running',
-                'manual_review',
-                'underanalysis',
-                'failed',
-                'error',
-            ],
-            true
-        ))) {
-            return ManualLeadResultTags::leadloversKey(
-                ManualLeadResultTags::IN_NEGOTIATION
-            );
+        /*
+         * Se ainda existe algo cotado, pendente ou em análise manual,
+         * não tratamos como ruim.
+         */
+        if ($statuses->contains(fn ($status) => in_array($status, [
+            'pending',
+            'processing',
+            'queued',
+            'running',
+            'manual_review',
+            'underanalysis',
+            'failed',
+            'error',
+        ], true))) {
+            return self::TAG_KEY_NEGOTIATION;
         }
 
-        $allRejected = $statuses->every(fn (string $status): bool => in_array(
-            $status,
-            ['rejected', 'denied', 'refused'],
-            true
-        ));
+        /*
+         * Se todas terminaram como rejected ou failed,
+         * o lead entra como ruim.
+         */
+        $allBad = $statuses->every(fn ($status) => in_array($status, [
+            'rejected',
+            'denied',
+            'refused',
+        ], true));
 
-        return $allRejected
-            ? ManualLeadResultTags::leadloversKey(
-                ManualLeadResultTags::REJECTED
-            )
-            : null;
-    }
-
-    private function attemptIsCurrent(InsuranceAnalysisBatch $batch): bool
-    {
-        if (blank($this->attemptId)) {
-            return false;
-        }
-
-        $batchStatus = InsuranceAnalysisBatch::query()
-            ->whereKey($batch->id)
-            ->value('status');
-
-        if (! in_array($batchStatus, ['completed', 'completed_with_errors'], true)) {
-            return false;
-        }
-
-        $analysisIds = $batch->analyses()->select('id');
-        $tickets = InsuranceAnalysisEvent::query()
-            ->whereIn('insurance_analysis_id', clone $analysisIds)
-            ->where('event_type', 'email_queued')
-            ->orderBy('id')
-            ->get(['id', 'payload']);
-        $ticket = $tickets->last(
-            fn (InsuranceAnalysisEvent $event): bool => data_get($event->payload, 'attempt_id') === $this->attemptId
-        );
-
-        if (
-            ! $ticket instanceof InsuranceAnalysisEvent
-            || $tickets->last()?->id !== $ticket->id
-        ) {
-            return false;
-        }
-
-        $markers = InsuranceAnalysisEvent::query()
-            ->whereIn(
-                'insurance_analysis_id',
-                clone $analysisIds
-            )
-            ->whereIn('event_type', self::ATTEMPT_START_EVENTS)
-            ->orderBy('id')
-            ->get(['id', 'insurance_analysis_id', 'payload']);
-
-        if ($markers->contains(function (InsuranceAnalysisEvent $event) use ($ticket): bool {
-            $attemptId = data_get($event->payload, 'attempt_id');
-
-            return $event->id > $ticket->id
-                && is_string($attemptId)
-                && $attemptId !== $this->attemptId;
-        })) {
-            return false;
-        }
-        $ownedAnalysisIds = $markers
-            ->filter(fn (InsuranceAnalysisEvent $event): bool => data_get($event->payload, 'attempt_id') === $this->attemptId
-            )
-            ->pluck('insurance_analysis_id')
-            ->unique();
-
-        if ($ownedAnalysisIds->isEmpty()) {
-            return false;
-        }
-
-        return $ownedAnalysisIds->every(function (int $analysisId) use ($markers): bool {
-            $latest = $markers
-                ->where('insurance_analysis_id', $analysisId)
-                ->sortByDesc('id')
-                ->first();
-
-            return $latest instanceof InsuranceAnalysisEvent
-                && data_get($latest->payload, 'attempt_id') === $this->attemptId;
-        });
-    }
-
-    private function finalTagAlreadyApplied(
-        InsuranceAnalysisBatch $batch,
-        string $tagKey
-    ): bool {
-        return $batch->analyses->contains(
-            fn (InsuranceAnalysis $analysis): bool => $this->analysisHasEvent(
-                $analysis,
-                'leadlovers_final_tag_applied',
-                $tagKey
-            )
-        );
-    }
-
-    /** @return array{response: mixed}|null */
-    private function pendingOperation(
-        InsuranceAnalysisBatch $batch,
-        string $tagKey
-    ): ?array {
-        foreach ($batch->analyses as $analysis) {
-            $event = $this->matchingEvent(
-                $analysis,
-                'leadlovers_final_tag_pending_confirmation',
-                $tagKey
-            );
-
-            if ($event !== null) {
-                return ['response' => $event->response];
-            }
+        if ($allBad) {
+            return self::TAG_KEY_REJECTED;
         }
 
         return null;
     }
 
-    private function analysisHasEvent(
-        InsuranceAnalysis $analysis,
-        string $eventType,
-        ?string $tagKey
-    ): bool {
-        return $this->matchingEvent($analysis, $eventType, $tagKey) !== null;
+    /**
+     * Verifica se uma tag final já foi aplicada.
+     *
+     * Como você ainda não tem tabela de eventos do batch,
+     * usamos os eventos das análises do lote.
+     */
+    private function finalTagAlreadyApplied(InsuranceAnalysisBatch $batch): bool
+    {
+        foreach ($batch->analyses as $analysis) {
+            $alreadyApplied = $analysis->events
+                ->where('event_type', 'leadlovers_final_tag_applied')
+                ->isNotEmpty();
+
+            if ($alreadyApplied) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
-    private function matchingEvent(
-        InsuranceAnalysis $analysis,
-        string $eventType,
-        ?string $tagKey
-    ): ?Model {
-        return $analysis->events()
-            ->where('event_type', $eventType)
-            ->get(['payload', 'response'])
-            ->first(function ($event) use ($tagKey): bool {
-                return data_get($event->payload, 'attempt_id') === $this->attemptId
-                    && data_get($event->payload, 'tag_key') === $tagKey;
-            });
-    }
-
+    /**
+     * Registra o mesmo evento em todas as análises do lote.
+     *
+     * Isso ajuda você a ver no dashboard/histórico que a tag final foi aplicada
+     * após o fechamento do lote.
+     */
     private function registerEventForAllAnalyses(
         InsuranceAnalysisBatch $batch,
         string $eventType,
         ?string $status,
         string $message,
         array $payload = [],
-        ?array $response = null
+        mixed $response = null
     ): void {
-        $deduplicateByTagKey = array_key_exists('tag_key', $payload);
-        $tagKey = is_string($payload['tag_key'] ?? null)
-            ? $payload['tag_key']
-            : null;
-
         foreach ($batch->analyses as $analysis) {
-            if (
-                $deduplicateByTagKey
-                && $this->analysisHasEvent($analysis, $eventType, $tagKey)
-            ) {
-                continue;
-            }
-
             $analysis->events()->create([
                 'event_type' => $eventType,
                 'status' => $status ?? $analysis->status,
                 'message' => $message,
-                'payload' => array_merge($payload, [
-                    'attempt_id' => $this->attemptId,
-                    'is_reanalysis' => $this->isReanalysis,
-                    'batch_id' => $batch->id,
-                ]),
+                'payload' => $payload,
                 'response' => $response,
             ]);
         }
     }
 
-    private function recordFailure(
-        Throwable $exception,
-        ?InsuranceAnalysisBatch $batch = null,
-        ?string $tagKey = null
-    ): void {
-        try {
-            $batch ??= InsuranceAnalysisBatch::with('analyses.events')
-                ->find($this->batchId);
-
-            if (! $batch instanceof InsuranceAnalysisBatch) {
-                return;
-            }
-
-            $this->registerEventForAllAnalyses(
-                batch: $batch,
-                eventType: 'leadlovers_final_tag_failed',
-                status: $tagKey,
-                message: 'Não foi possível confirmar a tag final na LeadLovers.',
-                payload: [
-                    'tag_key' => $tagKey,
-                    'phase' => $this->currentPhase(),
-                    'exception' => $exception::class,
-                    'http_status' => $exception instanceof LeadLoversApiException
-                        ? $exception->statusCode
-                        : null,
-                    'error_code' => $exception instanceof LeadLoversApiException
-                        ? $exception->errorCode
-                        : null,
-                ],
-                response: $this->bulkActionOrNull()
-            );
-        } catch (Throwable $logException) {
-            Log::critical(
-                'Falha ao registrar o erro da tag final da análise.',
-                [
-                    'batch_id' => $this->batchId,
-                    'exception' => $logException::class,
-                ]
-            );
-        }
-    }
-
-    public function failed(?Throwable $exception): void
+    /**
+     * Adiciona a tag final no campo local tags_originais do lead.
+     *
+     * O dashboard da imobiliária não consulta a LeadLovers em tempo real.
+     * Ele exibe e filtra tags a partir de leads.tags_originais.
+     *
+     * Por isso, toda tag aplicada na LeadLovers também precisa ser
+     * espelhada neste campo local.
+     */
+    private function appendLocalTag(Lead $lead, string $tagTitle): void
     {
-        $this->blockInflightAfterTerminalFailure(
-            app(LeadLoversTagOperationCoordinator::class),
-            'job_failed'
-        );
-        $this->recordFailure(
-            $exception ?? new PermanentLeadTagException(
-                'O job de tag final falhou sem uma exceção disponível.'
-            )
-        );
-    }
+        $tagTitle = trim($tagTitle);
 
-    private function mutationOutcomeMayBeUncertain(
-        LeadLoversApiException $exception
-    ): bool {
-        return $exception->isTransient
-            && $exception->errorCode !== 'LOCAL_RATE_LIMIT'
-            && $exception->statusCode !== 429;
-    }
-
-    private function retryDelay(LeadLoversApiException $exception): int
-    {
-        if ($exception->retryAfterSeconds !== null) {
-            return max(1, $exception->retryAfterSeconds);
+        if ($tagTitle === '') {
+            return;
         }
 
-        $backoff = $this->backoff();
-        $index = min(max(0, $this->attempts() - 1), count($backoff) - 1);
+        $currentTags = collect(preg_split('/\s*,\s*/', (string) $lead->tags_originais))
+            ->filter(fn ($tag) => filled($tag))
+            ->map(fn ($tag) => trim($tag))
+            ->values();
 
-        return $backoff[$index];
-    }
+        $alreadyExists = $currentTags->contains(function ($tag) use ($tagTitle) {
+            return mb_strtolower($tag) === mb_strtolower($tagTitle);
+        });
 
-    private function confirmationDelay(): int
-    {
-        return max(
-            1,
-            (int) config(
-                'services.leadlovers.tag_confirmation_delay_seconds',
-                15
-            )
-        );
-    }
-
-    private function uncertainRetryChecks(): int
-    {
-        return max(
-            1,
-            (int) config('services.leadlovers.tag_uncertain_retry_checks', 2)
-        );
-    }
-
-    private function maxPostAttempts(): int
-    {
-        return max(
-            1,
-            (int) config('services.leadlovers.tag_max_post_attempts', 2)
-        );
-    }
-
-    private function postingStaleSeconds(): int
-    {
-        return max(
-            1,
-            (int) config('services.leadlovers.tag_posting_stale_seconds', 60)
-        );
-    }
-
-    private function confirmationBudget(): int
-    {
-        return max(1, $this->tries);
-    }
-
-    private function currentPhase(): string
-    {
-        return $this->isConfirmationPhase()
-            ? self::PHASE_CONFIRMATION
-            : 'mutation';
-    }
-
-    private function isConfirmationPhase(): bool
-    {
-        return isset($this->phase)
-            && $this->phase === self::PHASE_CONFIRMATION;
-    }
-
-    /** @return array{actionId: int, status: string, total: int}|null */
-    private function bulkActionOrNull(): ?array
-    {
-        return $this->normalizedBulkAction(
-            isset($this->bulkAction) ? $this->bulkAction : null
-        );
-    }
-
-    /** @return array{actionId: int, status: string, total: int}|null */
-    private function normalizedBulkAction(mixed $candidate): ?array
-    {
-        $statuses = [
-            'pending',
-            'mapping',
-            'processing',
-            'done',
-            'failed',
-            'cancelled',
-        ];
-
-        if (
-            ! is_array($candidate)
-            || count($candidate) !== 3
-            || ! array_key_exists('actionId', $candidate)
-            || ! array_key_exists('status', $candidate)
-            || ! array_key_exists('total', $candidate)
-            || ! is_int($candidate['actionId'])
-            || $candidate['actionId'] <= 0
-            || ! is_string($candidate['status'])
-            || ! in_array($candidate['status'], $statuses, true)
-            || ! is_int($candidate['total'])
-            || $candidate['total'] < 0
-        ) {
-            return null;
+        if (! $alreadyExists) {
+            $currentTags->push($tagTitle);
         }
 
-        return [
-            'actionId' => $candidate['actionId'],
-            'status' => $candidate['status'],
-            'total' => $candidate['total'],
-        ];
+        $lead->forceFill([
+            'tags_originais' => $currentTags
+                ->unique(fn ($tag) => mb_strtolower($tag))
+                ->values()
+                ->implode(', '),
+        ])->save();
+    }
+
+    private function replaceLocalFinalTag(Lead $lead, string $tagTitle): void
+    {
+        $finalTagTitles = LeadLoversTag::query()
+            ->whereIn('key', [
+                self::TAG_KEY_APPROVED,
+                self::TAG_KEY_REJECTED,
+                self::TAG_KEY_NEGOTIATION,
+            ])
+            ->pluck('title')
+            ->filter()
+            ->map(fn ($title) => mb_strtolower(trim((string) $title)))
+            ->values();
+
+        $currentTags = collect(preg_split('/\s*,\s*/', (string) $lead->tags_originais))
+            ->filter(fn ($tag) => filled($tag))
+            ->map(fn ($tag) => trim($tag))
+            ->reject(fn ($tag) => $finalTagTitles->contains(mb_strtolower(trim($tag))))
+            ->values();
+
+        $currentTags->push($tagTitle);
+
+        $lead->forceFill([
+            'tags_originais' => $currentTags
+                ->unique(fn ($tag) => mb_strtolower($tag))
+                ->values()
+                ->implode(', '),
+        ])->save();
     }
 }

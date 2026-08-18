@@ -210,7 +210,7 @@ it('applies the client brand theme to the company administration pages', functio
 
 it('allows creators and the CEO to open the registration form', function () {
     $creator = createImobiliariaAdmin([
-        'permissions' => ['imobiliarias.visualizar', 'imobiliarias.cadastrar'],
+        'permissions' => ['imobiliarias.cadastrar'],
     ]);
 
     $ceo = createImobiliariaAdmin([
@@ -280,7 +280,7 @@ it('denies company pages according to the assigned permissions', function () {
 
 it('applies the inherited validation rules to administrative registration', function () {
     $creator = createImobiliariaAdmin([
-        'permissions' => ['imobiliarias.visualizar', 'imobiliarias.cadastrar'],
+        'permissions' => ['imobiliarias.cadastrar'],
     ]);
 
     $this
@@ -305,7 +305,7 @@ it('applies the inherited validation rules to administrative registration', func
 
 it('registers the company and its user in the administrative flow', function () {
     $creator = createImobiliariaAdmin([
-        'permissions' => ['imobiliarias.visualizar', 'imobiliarias.cadastrar'],
+        'permissions' => ['imobiliarias.cadastrar'],
     ]);
 
     $tag = LeadLoversTag::query()->create([
@@ -371,10 +371,10 @@ it('shows edit and delete controls only for their respective permissions', funct
         'permissions' => ['imobiliarias.visualizar'],
     ]);
     $editor = createImobiliariaAdmin([
-        'permissions' => ['imobiliarias.visualizar', 'imobiliarias.editar'],
+        'permissions' => ['imobiliarias.editar'],
     ]);
     $remover = createImobiliariaAdmin([
-        'permissions' => ['imobiliarias.visualizar', 'imobiliarias.remover'],
+        'permissions' => ['imobiliarias.remover'],
     ]);
 
     $this
@@ -410,7 +410,7 @@ it('allows an authorized admin to update a company without external requests', f
     Http::fake();
 
     $editor = createImobiliariaAdmin([
-        'permissions' => ['imobiliarias.visualizar', 'imobiliarias.editar'],
+        'permissions' => ['imobiliarias.editar'],
     ]);
     $company = createManagedImobiliaria([
         'name' => 'Imobiliária Horizonte',
@@ -492,7 +492,7 @@ it('denies company updates without permission', function () {
 
 it('rejects invalid update data and reopens the correct modal with submitted values', function () {
     $editor = createImobiliariaAdmin([
-        'permissions' => ['imobiliarias.visualizar', 'imobiliarias.editar'],
+        'permissions' => ['imobiliarias.editar'],
     ]);
     $company = createManagedImobiliaria([
         'name' => 'Imobiliária Válida',
@@ -529,7 +529,7 @@ it('rejects invalid update data and reopens the correct modal with submitted val
 
 it('ignores the company and its primary user in unique rules during update', function () {
     $editor = createImobiliariaAdmin([
-        'permissions' => ['imobiliarias.visualizar', 'imobiliarias.editar'],
+        'permissions' => ['imobiliarias.editar'],
     ]);
     $company = createManagedImobiliaria([
         'name' => 'Imobiliária Sem Alterações',
@@ -556,7 +556,7 @@ it('does not accept sensitive or internal fields during update', function () {
     Http::fake();
 
     $editor = createImobiliariaAdmin([
-        'permissions' => ['imobiliarias.visualizar', 'imobiliarias.editar'],
+        'permissions' => ['imobiliarias.editar'],
     ]);
     $company = createManagedImobiliaria([
         'name' => 'Imobiliária Segura',
@@ -596,7 +596,7 @@ it('does not accept sensitive or internal fields during update', function () {
 
 it('allows an authorized admin to delete a company while preserving related business records', function () {
     $remover = createImobiliariaAdmin([
-        'permissions' => ['imobiliarias.visualizar', 'imobiliarias.remover'],
+        'permissions' => ['imobiliarias.remover'],
     ]);
     $company = createManagedImobiliaria([
         'name' => 'Imobiliária Removível',
