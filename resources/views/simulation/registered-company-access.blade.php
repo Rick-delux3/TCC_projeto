@@ -2,10 +2,10 @@
 
 @section('content')
 
-<div class="container py-5">
-    <div class="card shadow-sm border-0 rounded-4 mx-auto" style="max-width: 520px;">
-        <div class="card-body p-4 p-md-5">
-            <h1 class="h4 fw-bold mb-2">Acesso da imobiliária cadastrada</h1>
+<div class="container simulation-page py-4 py-lg-5">
+    <div class="simulation-panel simulation-panel--compact mx-auto" style="max-width: 520px;">
+        <div class="simulation-panel__body p-4 p-md-5">
+            <h1 class="simulation-panel__title h4 mb-2">Acesso da imobiliária cadastrada</h1>
 
             <p class="text-muted">
                 Digite a chave de acesso fornecida para sua imobiliária.
@@ -17,7 +17,7 @@
                 </div>
             @endif
 
-            <form action="{{ route('simulation.registered-company.verify') }}" method="POST">
+            <form action="{{ route('simulation.registered-company.verify') }}" method="POST" class="simulation-form">
                 @csrf
 
                 <div class="mb-3">
@@ -38,7 +38,7 @@
                     @enderror
                 </div>
 
-                <button type="submit" class="btn btn-primary w-100">
+                <button type="submit" class="btn simulation-btn simulation-btn--primary w-100">
                     Acessar formulário
                 </button>
             </form>

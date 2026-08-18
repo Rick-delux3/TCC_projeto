@@ -68,7 +68,7 @@
 
 @foreach ($expenseFields as $fieldName => $fieldLabel)
     <div 
-        class="col-md-6 expense-field {{ old($fieldName) ? '' : 'd-none' }}"
+        class="col-md-6 expense-field {{ old($fieldName, in_array($fieldName, ['valor_agua', 'valor_luz'], true) ? '__visible__' : null) ? '' : 'd-none' }}"
         data-expense-field="{{ $fieldName }}"
     >
         <label class="form-label">{{ $fieldLabel }}</label>
@@ -259,7 +259,16 @@ document.addEventListener('DOMContentLoaded', function () {
 
         if (fieldWrapper) {
             fieldWrapper.classList.remove('d-none');
+
+            const input = fieldWrapper.querySelector('input');
+
+            if (input) {
+                input.disabled = false;
+                input.focus();
+            }
         }
+
+        syncExpenseSelector();
     }
 
     function hideExpenseField(fieldName) {
@@ -273,9 +282,33 @@ document.addEventListener('DOMContentLoaded', function () {
 
         if (input) {
             input.value = '';
+            input.disabled = true;
         }
 
         fieldWrapper.classList.add('d-none');
+        syncExpenseSelector();
+    }
+
+    function syncExpenseSelector() {
+        if (!selector) {
+            return;
+        }
+
+        selector.querySelectorAll('option[value]').forEach(function (option) {
+            if (!option.value) {
+                return;
+            }
+
+            const fieldWrapper = document.querySelector(`[data-expense-field="${option.value}"]`);
+            const isVisible = fieldWrapper && !fieldWrapper.classList.contains('d-none');
+
+            option.disabled = isVisible;
+            option.hidden = isVisible;
+        });
+
+        if (selector.selectedOptions[0]?.disabled) {
+            selector.value = '';
+        }
     }
 
     if (addButton && selector) {
@@ -290,6 +323,16 @@ document.addEventListener('DOMContentLoaded', function () {
             hideExpenseField(button.dataset.removeExpense);
         });
     });
+
+    document.querySelectorAll('.expense-field').forEach(function (fieldWrapper) {
+        const input = fieldWrapper.querySelector('input');
+
+        if (input) {
+            input.disabled = fieldWrapper.classList.contains('d-none');
+        }
+    });
+
+    syncExpenseSelector();
 
     const cepInput = document.getElementById('cep');
 
@@ -366,4 +409,3 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 </script>
 @endpush
-

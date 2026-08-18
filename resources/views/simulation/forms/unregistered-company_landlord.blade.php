@@ -10,19 +10,19 @@
         ?? route('simulation.unregistered-company.store');
 @endphp
 
-<div class="container py-4 py-lg-5">
+<div class="container simulation-page py-3 py-lg-5">
     <div class="row justify-content-center">
         <div class="col-12 col-xl-10">
-            <div class="card border-0 shadow-sm rounded-4">
-                <div class="card-body p-3 p-md-4 p-lg-5">
+            <div class="simulation-panel simulation-form-panel">
+                <div class="simulation-panel__body p-3 p-md-4 p-lg-5">
 
-            <h2 class="fw-bold mb-4">
+            <h2 class="simulation-panel__title mb-4">
                 Solicitação por imobiliária não cadastrada e Proprietário
             </h2>
 
             @include('simulation.partials.alerts')
 
-            <form action="{{ $formAction }}" method="POST">
+            <form action="{{ $formAction }}" method="POST" class="simulation-form">
                 @csrf
 
                 @include('simulation.partials.honeypot')
@@ -154,7 +154,7 @@
                 @include('simulation.partials.consent-checkbox')
 
                 <div class="d-grid mt-4">
-                    <button type="submit" class="btn btn-danger">
+                    <button type="submit" class="btn simulation-btn simulation-btn--accent">
                         ENVIAR
                     </button>
                 </div>

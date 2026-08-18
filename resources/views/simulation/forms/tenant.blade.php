@@ -10,11 +10,11 @@
 
 @endphp
 
-<div class="container py-5">
-    <div class="card border-0 shadow-sm rounded-4 mx-auto" style="max-width: 950px;">
-        <div class="card-body p-4">
+<div class="container simulation-page py-3 py-lg-5">
+    <div class="simulation-panel simulation-form-panel mx-auto" style="max-width: 950px;">
+        <div class="simulation-panel__body p-3 p-md-4 p-lg-5">
 
-            <h2 class="fw-bold mb-4">
+            <h2 class="simulation-panel__title mb-4">
                 Cadastro exclusivo para pretendente à locação
             </h2>
 
@@ -28,7 +28,7 @@
                 </div>
             @endif
 
-            <form action="{{ $formAction }}" method="POST">
+            <form action="{{ $formAction }}" method="POST" class="simulation-form">
                 @csrf
 
                 @include('simulation.partials.honeypot')
@@ -87,7 +87,7 @@
 
                 @include('simulation.partials.consent-checkbox')
 
-                <button type="submit" class="btn btn-danger w-100 mt-3">
+                <button type="submit" class="btn simulation-btn simulation-btn--accent w-100 mt-4">
                     ENVIAR
                 </button>
             </form>
