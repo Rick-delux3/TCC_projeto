@@ -157,7 +157,7 @@ Route::prefix('/Dashboard')->group(function () {
                 Route::put('/{corretor}', [CorretorEquipeController::class, 'update'])->name('update');
 
                 Route::post('/{corretor}/reenviar-convite', [CorretorEquipeController::class, 'resendInvitation'])
-                    ->middleware('throttle:5,10')
+                    ->middleware('throttle:3,10')
                     ->name('resend-invitation');
 
             });

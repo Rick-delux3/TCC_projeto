@@ -163,9 +163,9 @@
 
         .auth-topbar__link[aria-current="page"] {
             color: #fff;
-            border-color: #fd1e6e;
-            background: #fd1e6e;
-            box-shadow: 0 8px 18px rgba(253, 30, 110, 0.22);
+            border-color: rgba(255, 255, 255, 0.22);
+            background: linear-gradient(135deg, #030133 0%, #146fb6 100%);
+            box-shadow: 0 9px 20px rgba(3, 1, 51, 0.2);
         }
 
         .auth-topbar__link--register:not([aria-current="page"]) {
@@ -286,6 +286,14 @@
                     Entrar
                 </button>
 
+                <button
+                    type="button"
+                    class="auth-topbar__link auth-topbar__link--register"
+                    data-bs-toggle="modal"
+                    data-bs-target="#companyAccessUnavailableModal"
+                >
+                    Cadastrar
+                </button>
             </nav>
         </div>
     </div>
