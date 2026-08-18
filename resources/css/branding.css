@@ -577,6 +577,81 @@
     color: var(--brand-primary-dark) !important;
 }
 
+/* Simulacao publica: replica a experiencia NVS com os tokens do tema Cliente. */
+[data-brand="client"].auth-layout-body .auth-layout-main {
+    background:
+        radial-gradient(circle at 10% 8%, rgba(255, 255, 255, 0.13), transparent 28%),
+        radial-gradient(circle at 84% 14%, rgba(255, 0, 0, 0.24), transparent 20%),
+        radial-gradient(circle at 52% 100%, rgba(144, 144, 255, 0.18), transparent 34%),
+        linear-gradient(180deg, #00005f 0%, #0000b8 54%, #0000ff 100%);
+}
+
+[data-brand="client"] .simulation-journey {
+    border-color: rgba(220, 220, 255, 0.22);
+    background: linear-gradient(145deg, rgba(0, 0, 92, 0.58), rgba(0, 0, 205, 0.32));
+    box-shadow: 0 30px 70px rgba(0, 0, 82, 0.32), inset 0 1px 0 rgba(255,255,255,.14);
+}
+
+[data-brand="client"] .simulation-journey__glow--one { background: rgba(255, 0, 0, 0.25); }
+[data-brand="client"] .simulation-journey__glow--two { background: rgba(168, 168, 255, 0.18); }
+[data-brand="client"] .simulation-journey__header .simulation-eyebrow,
+[data-brand="client"] .simulation-start .simulation-eyebrow { color: #ffd3d3; }
+[data-brand="client"] .simulation-journey__signal i { background: var(--brand-accent); box-shadow: 0 0 0 0 rgba(255,0,0,.55); }
+[data-brand="client"] :is(.simulation-journey__signal i, .simulation-form-panel h5.fw-bold.is-active::before) { animation-name: client-simulation-pulse; }
+[data-brand="client"] .simulation-journey__step i { background: linear-gradient(90deg, var(--brand-accent) 50%, rgba(255,255,255,.24) 50%); }
+
+[data-brand="client"] .simulation-option__card::before { background: linear-gradient(90deg, var(--brand-primary), var(--brand-accent)); }
+[data-brand="client"] .simulation-option input:checked + .simulation-option__card {
+    border-color: var(--brand-accent);
+    box-shadow: 0 0 0 4px rgba(255,0,0,.18), 0 22px 44px rgba(0,0,82,.30);
+}
+[data-brand="client"] .simulation-option input:checked + .simulation-option__card::after,
+[data-brand="client"] .simulation-journey__continue { background: linear-gradient(135deg, var(--brand-accent), var(--brand-accent-dark)); }
+[data-brand="client"] .simulation-option__icon { color: var(--brand-primary); border-color: rgba(0,0,255,.16); background: var(--brand-primary-soft); }
+[data-brand="client"] .simulation-option__icon--pink { color: var(--brand-accent); border-color: rgba(255,0,0,.16); background: var(--brand-accent-soft); }
+[data-brand="client"] .simulation-option__icon--sky { color: var(--brand-primary-dark); background: var(--brand-primary-soft); }
+[data-brand="client"] .simulation-option__copy strong { color: var(--brand-primary-dark); }
+[data-brand="client"] .simulation-option__meta { color: var(--brand-primary); }
+[data-brand="client"] .simulation-option__meta b { color: var(--brand-accent); }
+[data-brand="client"] .simulation-journey__continue { box-shadow: 0 12px 24px rgba(255,0,0,.25); }
+
+[data-brand="client"] .simulation-panel__body::before { background: radial-gradient(circle at top right, rgba(0,0,255,.13), transparent 67%); }
+[data-brand="client"] .simulation-form .form-control:focus,
+[data-brand="client"] .simulation-form .form-select:focus { box-shadow: 0 0 0 .22rem rgba(0,0,255,.16); }
+[data-brand="client"] .simulation-form-progress { border-color: rgba(0,0,255,.13); background: linear-gradient(90deg, #f8f8ff, #eeeeff); }
+[data-brand="client"] .simulation-form-progress__track { background: rgba(0,0,255,.14); }
+[data-brand="client"] .simulation-form-progress__track i { background: linear-gradient(90deg, var(--brand-primary), var(--brand-accent)); }
+[data-brand="client"] .simulation-form-progress strong { color: var(--brand-accent-dark); }
+[data-brand="client"] .simulation-form-panel h5.fw-bold.is-active { color: var(--brand-primary); }
+[data-brand="client"] .simulation-form-panel h5.fw-bold.is-active::before { background: var(--brand-accent); box-shadow: 0 0 0 5px rgba(255,0,0,.13); }
+[data-brand="client"] .simulation-form .is-complete > .form-label::after { background: var(--brand-primary); }
+[data-brand="client"] .simulation-btn--accent { border-color: var(--brand-accent); background: var(--brand-accent); box-shadow: 0 12px 22px rgba(255,0,0,.22); }
+[data-brand="client"] .simulation-btn--accent:hover { border-color: var(--brand-accent-hover); background: var(--brand-accent-hover); }
+[data-brand="client"] .simulation-success::before { box-shadow: 0 10px 22px rgba(0,0,255,.24); }
+
+/* Cabeçalho da simulação no perfil Cliente. */
+[data-brand="client"].auth-layout-body .auth-topbar__surface {
+    border-color: rgba(224, 224, 255, 0.88) !important;
+    background: linear-gradient(115deg, rgba(236, 236, 255, 0.98), rgba(171, 171, 255, 0.96)) !important;
+    box-shadow: 0 16px 36px rgba(0, 0, 102, 0.34) !important;
+}
+
+[data-brand="client"].auth-layout-body .auth-topbar__nav .auth-topbar__link {
+    border-color: var(--brand-accent) !important;
+    background: linear-gradient(135deg, var(--brand-accent), var(--brand-accent-dark)) !important;
+    box-shadow: 0 9px 20px rgba(255, 0, 0, 0.30) !important;
+}
+
+[data-brand="client"].auth-layout-body .auth-topbar__nav .auth-topbar__link:hover {
+    border-color: var(--brand-accent-dark) !important;
+    background: linear-gradient(135deg, var(--brand-accent-hover), var(--brand-accent-dark)) !important;
+}
+
+@keyframes client-simulation-pulse {
+    70% { box-shadow: 0 0 0 7px rgba(255,0,0,0); }
+    100% { box-shadow: 0 0 0 0 rgba(255,0,0,0); }
+}
+
 @media (max-width: 768px) {
     [data-brand="client"] .dashboard-client-brand__logo {
         width: 112px;
