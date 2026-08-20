@@ -561,10 +561,10 @@ class SimulationController extends Controller
 
        
         DashboardActivityChanged::dispatch(
-            resource: 'lead',
-            resourceId: (int) $lead->id,
-            companyId: $companyId,
-            change: $wasRecentlyCreated
+            'lead',
+            (int) $lead->id,
+            $companyId,
+            $wasRecentlyCreated
                 ? 'lead.created'
                 : 'lead.updated',
         );
