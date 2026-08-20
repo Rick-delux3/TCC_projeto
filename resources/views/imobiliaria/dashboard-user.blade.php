@@ -1190,14 +1190,8 @@
 
 <script id="dashboardUserConfig" type="application/json">
     {!! json_encode([
-        'routes' => [
-            'realtimeStatus' => \Illuminate\Support\Facades\Route::has('Dashboard.realtimeStatus')
-                ? route('Dashboard.realtimeStatus')
-                : null,
-        ],
         'leadFormUrl' => $leadFormUrl,
         'leadAccessCode' => $leadAccessCode,
-        'dashboardActivityHash' => $dashboardActivityHash ?? null,
         'leadValidationTargets' => $leadValidationTargets,
     ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) !!}
 </script>

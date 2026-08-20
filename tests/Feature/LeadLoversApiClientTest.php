@@ -255,8 +255,8 @@ it('calls every new endpoint with JSON camelCase payloads and header authenticat
         202,
         ['actionId' => 7001, 'status' => 'pending', 'total' => 1],
     ],
-    'add lead to machine' => [
-        'addLeadToMachine',
+    'copy lead to machine' => [
+        'copyLeadToMachine',
         [[
             'machineFrom' => 0,
             'machineId' => 201,
@@ -275,6 +275,27 @@ it('calls every new endpoint with JSON camelCase payloads and header authenticat
         ],
         202,
         ['actionId' => 7002, 'status' => 'processing', 'total' => 1],
+    ],
+    'move lead to machine' => [
+        'moveLeadsToMachine',
+        [[
+            'machineFrom' => 0,
+            'machineId' => 201,
+            'sequenceId' => 301,
+            'level' => 1,
+            'leadIds' => [501],
+        ]],
+        'POST',
+        '/leads/move',
+        [
+            'machineFrom' => 0,
+            'machineId' => 201,
+            'sequenceId' => 301,
+            'level' => 1,
+            'leadIds' => [501],
+        ],
+        202,
+        ['actionId' => 7003, 'status' => 'pending', 'total' => 1],
     ],
     'list lead machines' => [
         'listLeadMachines',

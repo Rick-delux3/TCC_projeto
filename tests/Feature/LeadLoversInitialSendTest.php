@@ -145,7 +145,7 @@ it('persists leadId before requesting the machine and keeps a 202 pending', func
                 'leadId' => 501,
             ], 200);
         },
-        'https://api.leadlovers.test/leads/machine' => function (Request $request) use ($lead) {
+        'https://api.leadlovers.test/leads/move' => function (Request $request) use ($lead) {
             expect($lead->refresh()->leadlovers_lead_id)->toBe(501)
                 ->and($request->data())->toBe([
                     'machineFrom' => 0,
@@ -185,7 +185,7 @@ it('persists leadId before requesting the machine and keeps a 202 pending', func
     $requests = collect(Http::recorded())->map(fn (array $entry) => $entry[0]);
     expect($requests)->toHaveCount(2)
         ->and(parse_url($requests[0]->url(), PHP_URL_PATH))->toBe('/leads/')
-        ->and(parse_url($requests[1]->url(), PHP_URL_PATH))->toBe('/leads/machine');
+        ->and(parse_url($requests[1]->url(), PHP_URL_PATH))->toBe('/leads/move');
 
     $creation = $requests[0];
     expect($creation->method())->toBe('POST')
@@ -222,7 +222,7 @@ it('claims the send before HTTP so a concurrent old job cannot duplicate creatio
                 'leadId' => 501,
             ], 200);
         },
-        'https://api.leadlovers.test/leads/machine' => Http::response([
+        'https://api.leadlovers.test/leads/move' => Http::response([
             'actionId' => 9001,
             'status' => 'pending',
             'total' => 1,
@@ -465,7 +465,7 @@ it('reconciles EMAIL_EXISTS by exact email and uses leadId instead of record id'
             200
         ),
         'https://api.leadlovers.test/leads/501/machines' => Http::response([], 200),
-        'https://api.leadlovers.test/leads/machine' => Http::response([
+        'https://api.leadlovers.test/leads/move' => Http::response([
             'actionId' => 9002,
             'status' => 'mapping',
             'total' => 1,
@@ -480,7 +480,7 @@ it('reconciles EMAIL_EXISTS by exact email and uses leadId instead of record id'
     Http::assertSent(fn (Request $request): bool => parse_url(
         $request->url(),
         PHP_URL_PATH
-    ) === '/leads/machine' && $request->data()['leadIds'] === [501]);
+    ) === '/leads/move' && $request->data()['leadIds'] === [501]);
     Http::assertSentCount(4);
 });
 
@@ -568,7 +568,7 @@ it('reconciles an ambiguous create on retry without posting another lead', funct
             ]]), 200);
         },
         'https://api.leadlovers.test/leads/501/machines' => Http::response([], 200),
-        'https://api.leadlovers.test/leads/machine' => Http::response([
+        'https://api.leadlovers.test/leads/move' => Http::response([
             'actionId' => 9003,
             'status' => 'processing',
             'total' => 1,
@@ -608,7 +608,7 @@ it('confirms state after ACTIVE_COPY_BETWEEN_MACHINES before completing', functi
         'https://api.leadlovers.test/leads/501/machines' => Http::sequence()
             ->push([], 200)
             ->push([machineAssociationForInitialSend()], 200),
-        'https://api.leadlovers.test/leads/machine' => Http::response([
+        'https://api.leadlovers.test/leads/move' => Http::response([
             'success' => false,
             'error' => [
                 'code' => 'ACTIVE_COPY_BETWEEN_MACHINES',
@@ -634,7 +634,7 @@ it('backs off after ACTIVE_COPY when the expected state is still absent', functi
         'https://api.leadlovers.test/leads/501/machines' => Http::sequence()
             ->push([], 200)
             ->push([], 200),
-        'https://api.leadlovers.test/leads/machine' => Http::response([
+        'https://api.leadlovers.test/leads/move' => Http::response([
             'success' => false,
             'error' => [
                 'code' => 'ACTIVE_COPY_BETWEEN_MACHINES',
