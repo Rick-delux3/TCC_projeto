@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Events\DashboardActivityChanged;
 use App\Exceptions\LeadLoversApiException;
 use App\Exceptions\PermanentLeadTagException;
 use App\Models\Corretor;
@@ -755,6 +756,8 @@ class ApplyManualLeadResultTagJob implements ShouldBeUniqueUntilProcessing, Shou
                 'updated_by_corretor_id' => $this->corretorId,
             ])->save();
 
+            $tagsChanged = $lead->wasChanged('tags_originais');
+
             CorretorActivityLog::query()->create([
                 'corretor_id' => $this->corretorId,
                 'action' => 'lead_tag_update_completed',
@@ -781,6 +784,21 @@ class ApplyManualLeadResultTagJob implements ShouldBeUniqueUntilProcessing, Shou
                 'ip' => $this->normalizedIp(),
                 'user_agent' => $this->normalizedUserAgent(),
             ]);
+
+            if ($tagsChanged) {
+
+                $resourceId = (int) $lead->id;
+
+                $companyId = $lead->company_id !== null ? (int) $lead->company_id : null;
+
+
+                DashboardActivityChanged::dispatch(
+                    'lead',
+                    $resourceId,
+                    $companyId,
+                    'lead.tags.changed',
+                );
+            }
 
             return true;
         });

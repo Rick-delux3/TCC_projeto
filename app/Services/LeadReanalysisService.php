@@ -16,6 +16,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Throwable;
+use App\Events\DashboardActivityChanged;
 
 class LeadReanalysisService
 {
@@ -466,6 +467,28 @@ class LeadReanalysisService
             ];
         });
 
+        if ($result['changed'] === true) {
+
+            $freshLead = Lead::query()
+                ->select(['id', 'company_id'])
+                ->findOrFail($lead->getKey());
+
+            $freshLeadCompany = $freshLead->company_id !== null
+                    ? (int) $freshLead->company_id
+                    : null;
+
+            $freshLeadId = (int) $freshLead->id;
+
+
+            DashboardActivityChanged::dispatch(
+                'lead',
+                $freshLeadId,
+                $freshLeadCompany,
+                'lead.updated',
+            );
+        }
+
+        
         if (! $result['changed']) {
             return [
                 'changed' => false,
@@ -542,6 +565,8 @@ class LeadReanalysisService
             'failed' => 'Dados salvos no sistema, mas a sincronização com a LeadLovers não pôde ser enfileirada.',
             default => 'Dados salvos no sistema.',
         };
+
+        
 
         return [
             'changed' => true,

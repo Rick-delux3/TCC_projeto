@@ -13,6 +13,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     const leadFormUrl = config.leadFormUrl || null;
     const leadAccessCode = config.leadAccessCode || null;
+    const realtimeConfig = config.realtime || null;
 
     const dashboardThemeRoot = document.getElementById('dashboardThemeRoot');
     const dashboardThemeToggle = document.getElementById('dashboardThemeToggle');
@@ -342,5 +343,126 @@ document.addEventListener('DOMContentLoaded', function () {
             document.body.style.removeProperty('padding-right');
         });
     });
+
+        /*
+    |--------------------------------------------------------------------------
+    | Atualização do dashboard em tempo real
+    |--------------------------------------------------------------------------
+    */
+    const realtimeNotice =
+        document.getElementById('dashboardRealtimeNotice');
+
+    const realtimeMessage =
+        document.getElementById('dashboardRealtimeMessage');
+
+    const realtimeReloadButton =
+        document.getElementById('dashboardRealtimeReloadButton');
+
+    let realtimeReloadTimer = null;
+
+    function showRealtimeNotice(message) {
+        if (realtimeMessage) {
+            realtimeMessage.textContent = message;
+        }
+
+        realtimeNotice?.classList.remove('d-none');
+    }
+
+    function dashboardHasUnsavedChanges() {
+        if (document.querySelector('form[data-submitting="true"]')) {
+            return true;
+        }
+
+        if (
+            document.querySelector(
+                '.lead-update-form[data-changed="true"]'
+            )
+        ) {
+            return true;
+        }
+
+        return Array
+            .from(document.querySelectorAll('.manual-lead-result-form'))
+            .some(function (form) {
+                return Array.from(form.elements).some(function (field) {
+                    if (
+                        !field.name
+                        || ['_token', '_method'].includes(field.name)
+                    ) {
+                        return false;
+                    }
+
+                    if (field instanceof HTMLSelectElement) {
+                        return Array.from(field.options).some(
+                            function (option) {
+                                return option.selected
+                                    !== option.defaultSelected;
+                            }
+                        );
+                    }
+
+                    if (
+                        field.type === 'checkbox'
+                        || field.type === 'radio'
+                    ) {
+                        return field.checked !== field.defaultChecked;
+                    }
+
+                    return 'defaultValue' in field
+                        && field.value !== field.defaultValue;
+                });
+            });
+    }
+
+    function reloadDashboard() {
+        if (dashboardHasUnsavedChanges()) {
+            showRealtimeNotice(
+                'Há novos dados no dashboard. Salve suas alterações ou atualize manualmente.'
+            );
+
+            return;
+        }
+
+        window.location.reload();
+    }
+
+    realtimeReloadButton?.addEventListener('click', function () {
+        if (
+            dashboardHasUnsavedChanges()
+            && !window.confirm(
+                'Existem alterações não salvas. Deseja atualizar mesmo assim?'
+            )
+        ) {
+            return;
+        }
+
+        window.location.reload();
+    });
+
+    if (
+        realtimeConfig?.channel
+        && realtimeConfig?.event
+    ) {
+        if (!window.Echo) {
+            console.error(
+                'Laravel Echo não foi inicializado. Verifique echo.js e as variáveis VITE_REVERB_*.',
+            );
+        } else {
+            window.Echo
+                .private(realtimeConfig.channel)
+                .listen(realtimeConfig.event, function () {
+                    window.clearTimeout(realtimeReloadTimer);
+
+                    showRealtimeNotice(
+                        'Novos dados recebidos. Atualizando o dashboard...'
+                    );
+
+                    realtimeReloadTimer = window.setTimeout(
+                        reloadDashboard,
+                        800,
+                    );
+                });
+        }
+    }
 
 });

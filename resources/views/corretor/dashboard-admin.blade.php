@@ -450,6 +450,7 @@
 
 <div id="dashboardThemeRoot" class="dashboard-shell" data-dashboard-theme="light">
     <div class="container-fluid px-3 px-lg-4 py-4">
+        <x-dashboard-realtime-notice />
 
         @if (session('success'))
             <div class="alert alert-success rounded-4 border-0 shadow-sm">
@@ -1870,6 +1871,10 @@
 <script id="dashboardUserConfig" type="application/json">
     {!! json_encode([
         'leadValidationTargets' => $leadValidationTargets,
+         'realtime' => [
+            'channel' => 'admins.dashboard',
+            'event' => '.dashboard.activity.changed',
+        ],
     ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) !!}
 </script>
 

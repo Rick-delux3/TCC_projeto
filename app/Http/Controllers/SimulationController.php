@@ -559,10 +559,11 @@ class SimulationController extends Controller
 
         $companyId = $lead->company_id !== null ? (int) $lead->company_id : null;
 
-       
+        $leadId = (int) $lead->id;
+
         DashboardActivityChanged::dispatch(
             'lead',
-            (int) $lead->id,
+            $leadId,
             $companyId,
             $wasRecentlyCreated
                 ? 'lead.created'

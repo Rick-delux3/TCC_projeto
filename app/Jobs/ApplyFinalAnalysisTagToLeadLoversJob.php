@@ -13,6 +13,7 @@ use App\Models\LeadLoversTagOperation;
 use App\Services\LeadLoversApiClient;
 use App\Services\LeadLoversResultTagService;
 use App\Services\LeadLoversTagOperationCoordinator;
+use App\Events\DashboardActivityChanged;
 use App\Support\ManualLeadResultTags;
 use DateTimeInterface;
 use Illuminate\Contracts\Queue\ShouldBeUniqueUntilProcessing;
@@ -543,6 +544,8 @@ class ApplyFinalAnalysisTagToLeadLoversJob implements ShouldBeUniqueUntilProcess
                 ),
             ])->save();
 
+            $tagsChanged = $lead->wasChanged('tags_originais');
+
             if (! $alreadyApplied) {
                 $this->registerEventForAllAnalyses(
                     batch: $batch,
@@ -555,6 +558,21 @@ class ApplyFinalAnalysisTagToLeadLoversJob implements ShouldBeUniqueUntilProcess
                         'phase' => 'confirmed',
                     ],
                     response: $this->bulkActionOrNull()
+                );
+            }
+
+            if ($tagsChanged) {
+
+                $resourceId = (int) $lead->id;
+
+                $companyId = $lead->company_id !== null ? (int) $lead->company_id : null;
+
+
+                DashboardActivityChanged::dispatch(
+                    'lead',
+                    $resourceId,
+                    $companyId,
+                    'lead.analysis-result.changed',
                 );
             }
 
