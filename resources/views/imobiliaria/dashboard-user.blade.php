@@ -174,6 +174,7 @@
 
 <div id="dashboardThemeRoot" class="dashboard-shell" data-dashboard-theme="light">
     <div class="container-fluid px-3 px-lg-4 py-4">
+        <x-dashboard-realtime-notice />
         @if (session('success'))
             <div class="alert alert-success rounded-4 border-0 shadow-sm">
                 {{ session('success') }}
@@ -1190,15 +1191,13 @@
 
 <script id="dashboardUserConfig" type="application/json">
     {!! json_encode([
-        'routes' => [
-            'realtimeStatus' => \Illuminate\Support\Facades\Route::has('Dashboard.realtimeStatus')
-                ? route('Dashboard.realtimeStatus')
-                : null,
-        ],
         'leadFormUrl' => $leadFormUrl,
-        'leadAccessCode' => $leadAccessCode,
-        'dashboardActivityHash' => $dashboardActivityHash ?? null,
         'leadValidationTargets' => $leadValidationTargets,
+        'realtime' => [
+            'channel' => "companies.{$company->id}.dashboard",
+            'event' => '.dashboard.activity.changed',
+            'hasUnsavedInput' => session()->hasOldInput(),
+        ],
     ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) !!}
 </script>
 

@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Events\DashboardActivityChanged;
 use App\Jobs\CompleteInsuranceAnalysesBatchJob;
 use App\Jobs\RunProviderAnalysisJob;
 use App\Jobs\SendLeadToLeadLoversJob;
@@ -466,6 +467,28 @@ class LeadReanalysisService
             ];
         });
 
+        if ($result['changed'] === true) {
+
+            $freshLead = Lead::query()
+                ->select(['id', 'company_id'])
+                ->findOrFail($lead->getKey());
+
+            $freshLeadCompany = $freshLead->company_id !== null
+                    ? (int) $freshLead->company_id
+                    : null;
+
+            $freshLeadId = (int) $freshLead->id;
+
+
+            DashboardActivityChanged::dispatch(
+                'lead',
+                $freshLeadId,
+                $freshLeadCompany,
+                'lead.updated',
+            );
+        }
+
+        
         if (! $result['changed']) {
             return [
                 'changed' => false,
@@ -524,6 +547,10 @@ class LeadReanalysisService
 
                 if ($updated === 1) {
                     $result['sync_status'] = 'failed';
+                    $this->notifyDashboard(
+                        (int) $dispatch['lead_id'],
+                        'lead.sync.failed',
+                    );
                 }
 
                 Log::warning('Falha ao enfileirar atualização do lead na LeadLovers.', [
@@ -542,6 +569,8 @@ class LeadReanalysisService
             'failed' => 'Dados salvos no sistema, mas a sincronização com a LeadLovers não pôde ser enfileirada.',
             default => 'Dados salvos no sistema.',
         };
+
+        
 
         return [
             'changed' => true,
@@ -699,7 +728,12 @@ class LeadReanalysisService
 
         });
 
-        $jobs = collect($preparedAnalyses['analysis'])
+        $this->notifyDashboard(
+            (int) $lead->id,
+            'lead.reanalysis.requested',
+        );
+
+        $jobs = collect($preparedAnalyses['analyses'])
             ->map(fn (array $item) => new RunProviderAnalysisJob(
                 analysisId: $item['analysis_id'],
                 attemptId: $attemptId,
@@ -1155,5 +1189,25 @@ class LeadReanalysisService
             'observacoes' => $observacoes,
         ];
 
+    }
+
+    private function notifyDashboard(int $leadId, string $change): void
+    {
+        $lead = Lead::query()
+            ->select(['id', 'company_id'])
+            ->find($leadId);
+
+        if ($lead === null) {
+            return;
+        }
+
+        DashboardActivityChanged::dispatch(
+            'lead',
+            (int) $lead->id,
+            $lead->company_id !== null
+                ? (int) $lead->company_id
+                : null,
+            $change,
+        );
     }
 }

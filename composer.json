@@ -15,6 +15,7 @@
         "laravel-lang/lang": "~11.0",
         "laravel/fortify": "^1.32",
         "laravel/framework": "^12.0",
+        "laravel/reverb": "^1.0",
         "laravel/sanctum": "^4.0",
         "laravel/tinker": "^2.10.1",
         "pragmarx/google2fa-laravel": "^2.3",
@@ -58,7 +59,7 @@
         ],
         "dev": [
             "Composer\\Config::disableProcessTimeout",
-            "npx concurrently -c \"#93c5fd,#c4b5fd,#fdba74\" \"php artisan serve\" \"php artisan queue:listen --queue=leadlovers,default --tries=3 --timeout=180\" \"npm run dev\" --names='server,queue,vite'"
+            "npx concurrently -c \"#93c5fd,#f9a8d4,#c4b5fd,#fdba74\" \"php artisan serve\" \"php artisan reverb:start --debug\" \"php artisan queue:listen --queue=broadcasts,leadlovers,default --tries=3 --timeout=180\" \"npm run dev\" --names='server,reverb,queue,vite'"
         ],
         "test": [
             "@php artisan config:clear --ansi",

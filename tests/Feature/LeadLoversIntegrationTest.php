@@ -1,12 +1,19 @@
 <?php
 
+use App\Events\DashboardActivityChanged;
+use App\Jobs\RunProviderAnalysisJob;
 use App\Jobs\UpdateLeadOnLeadLoversJob;
+use App\Models\InsuranceAnalysis;
+use App\Models\InsuranceAnalysisBatch;
 use App\Models\Lead;
 use App\Services\LeadLoversApiClient;
 use App\Services\LeadLoversLeadResolver;
 use App\Services\LeadReanalysisService;
+use Illuminate\Broadcasting\BroadcastEvent;
+use Illuminate\Bus\PendingBatch;
 use Illuminate\Contracts\Queue\Queue as QueueContract;
 use Illuminate\Http\Client\Request;
+use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 
@@ -72,7 +79,24 @@ function runStageFourUpdate(UpdateLeadOnLeadLoversJob $job): void
     );
 }
 
+function stageFourDashboardBroadcastMatches(
+    BroadcastEvent $job,
+    Lead $lead,
+    string $change,
+): bool {
+    $event = $job->event;
+
+    return $event instanceof DashboardActivityChanged
+        && $event->resource === 'lead'
+        && $event->resourceId === (int) $lead->id
+        && $event->companyId === ($lead->company_id !== null
+            ? (int) $lead->company_id
+            : null)
+        && $event->change === $change;
+}
+
 it('updates a lead by authoritative ID with camelCase fields and without tags or email', function () {
+    Queue::fake();
     config([
         'services.leadlovers.dynamic_fields.cpf' => 101,
     ]);
@@ -118,6 +142,16 @@ it('updates a lead by authoritative ID with camelCase fields and without tags or
         ->leadlovers_update_status->toBe('synced')
         ->leadlovers_lead_id->toBe(501)
         ->leadlovers_update_at->not->toBeNull();
+    Queue::assertPushedOn(
+        'broadcasts',
+        BroadcastEvent::class,
+        fn (BroadcastEvent $queued): bool => stageFourDashboardBroadcastMatches(
+            $queued,
+            $lead,
+            'lead.sync.synced',
+        )
+    );
+    Queue::assertPushed(BroadcastEvent::class, 1);
 });
 
 it('sends null when a changed static field was cleared', function () {
@@ -423,6 +457,7 @@ it('retries a malformed 200 response as a protocol failure', function () {
 });
 
 it('marks a transient update failed after the configured attempt budget', function () {
+    Queue::fake();
     $lead = stageFourLead(['leadlovers_update_status' => 'processing']);
     Http::fake([
         'https://api.leadlovers.test/leads/501' => Http::response([
@@ -443,6 +478,16 @@ it('marks a transient update failed after the configured attempt budget', functi
     expect($lead->refresh())
         ->leadlovers_update_status->toBe('failed')
         ->leadlovers_update_error->toContain('tentativas');
+    Queue::assertPushedOn(
+        'broadcasts',
+        BroadcastEvent::class,
+        fn (BroadcastEvent $queued): bool => stageFourDashboardBroadcastMatches(
+            $queued,
+            $lead,
+            'lead.sync.failed',
+        )
+    );
+    Queue::assertPushed(BroadcastEvent::class, 1);
 });
 
 it('marks definitive update errors as failed without changing initial-send state', function (
@@ -589,6 +634,16 @@ it('persists locally and dispatches the ID-based update after commit', function 
             && $queued->queue === 'leadlovers'
             && $queued->afterCommit === true
     );
+    Queue::assertPushedOn(
+        'broadcasts',
+        BroadcastEvent::class,
+        fn (BroadcastEvent $queued): bool => stageFourDashboardBroadcastMatches(
+            $queued,
+            $lead,
+            'lead.updated',
+        )
+    );
+    Queue::assertPushed(BroadcastEvent::class, 1);
     expect($result['message'])->toContain('fila')
         ->and($lead->refresh())
         ->nome->toBe('Nome atualizado')
@@ -596,12 +651,24 @@ it('persists locally and dispatches the ID-based update after commit', function 
 });
 
 it('keeps the local save and marks only the matching version failed when queueing fails', function () {
+    $broadcastJobs = [];
     $queue = Mockery::mock(QueueContract::class);
+    $queue->shouldReceive('pushOn')
+        ->twice()
+        ->withArgs(
+            fn (string $queueName, mixed $job): bool => $queueName === 'broadcasts'
+                && $job instanceof BroadcastEvent
+        )
+        ->andReturnUsing(function (string $queueName, BroadcastEvent $job) use (&$broadcastJobs) {
+            $broadcastJobs[] = $job;
+
+            return null;
+        });
     $queue->shouldReceive('push')
         ->once()
         ->andThrow(new RuntimeException('queue unavailable'));
     Queue::shouldReceive('connection')
-        ->once()
+        ->times(3)
         ->andReturn($queue);
     $lead = stageFourLead([
         'nome' => 'Nome anterior',
@@ -619,7 +686,92 @@ it('keeps the local save and marks only the matching version failed when queuein
         ->nome->toBe('Nome salvo localmente')
         ->leadlovers_update_version->toBe(1)
         ->leadlovers_update_status->toBe('failed')
-        ->leadlovers_status->toBe('sent');
+        ->leadlovers_status->toBe('sent')
+        ->and($broadcastJobs)->toHaveCount(2)
+        ->and(stageFourDashboardBroadcastMatches(
+            $broadcastJobs[0],
+            $lead,
+            'lead.updated',
+        ))->toBeTrue()
+        ->and(stageFourDashboardBroadcastMatches(
+            $broadcastJobs[1],
+            $lead,
+            'lead.sync.failed',
+        ))->toBeTrue();
+    Http::assertNothingSent();
+});
+
+it('starts a general reanalysis with all prepared analyses and one dashboard broadcast', function () {
+    config(['features.insurance_analysis.enabled' => true]);
+    $lead = stageFourLead([
+        'status' => 'qualificado',
+    ]);
+    $lead->forceFill([
+        'analysis_final_status' => 'approved',
+        'reanalysis_unlocked_at' => now(),
+    ])->save();
+    $lead->despesas()->create([
+        'valor_aluguel' => 1500,
+        'valor_total_encargos' => 1750,
+    ]);
+    $batch = InsuranceAnalysisBatch::query()->create([
+        'lead_id' => $lead->id,
+        'status' => 'completed',
+        'total_providers' => 1,
+        'completed_providers' => 1,
+        'finished_at' => now(),
+    ]);
+    $analysis = InsuranceAnalysis::query()->create([
+        'insurance_analysis_batch_id' => $batch->id,
+        'lead_id' => $lead->id,
+        'provider' => 'pottencial',
+        'product' => 'seguro_fianca_residencial',
+        'status' => 'approved',
+        'result' => 'approved',
+        'rent_amount' => 1500,
+        'charges_amount' => 250,
+        'total_monthly_amount' => 1750,
+        'finished_at' => now(),
+    ]);
+    Bus::fake();
+    Queue::fake();
+
+    $total = app(LeadReanalysisService::class)->startGeneralReanalysis(
+        lead: $lead,
+        requestedBy: 'admin',
+    );
+
+    expect($total)->toBe(1)
+        ->and($lead->refresh()->status)->toBe('em-andamento')
+        ->and($lead->reanalysis_unlocked_at)->toBeNull()
+        ->and($analysis->refresh()->status)->toBe('pending')
+        ->and($analysis->result)->toBeNull()
+        ->and($batch->refresh()->status)->toBe('processing')
+        ->and($batch->completed_providers)->toBe(0)
+        ->and($batch->finished_at)->toBeNull();
+
+    Bus::assertBatched(function (PendingBatch $pendingBatch) use ($analysis): bool {
+        if ($pendingBatch->jobs->count() !== 1) {
+            return false;
+        }
+
+        $job = $pendingBatch->jobs->first();
+
+        return $job instanceof RunProviderAnalysisJob
+            && $job->analysisId === (int) $analysis->id
+            && $job->isReanalysis === true;
+    });
+    Bus::assertBatchCount(1);
+    Queue::assertPushedOn(
+        'broadcasts',
+        BroadcastEvent::class,
+        fn (BroadcastEvent $queued): bool => stageFourDashboardBroadcastMatches(
+            $queued,
+            $lead,
+            'lead.reanalysis.requested',
+        )
+    );
+    Queue::assertPushed(BroadcastEvent::class, 1);
     Http::assertNothingSent();
 });
 

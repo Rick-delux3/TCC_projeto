@@ -1,5 +1,6 @@
 <?php
 
+use App\Events\DashboardActivityChanged;
 use App\Exceptions\LeadLoversApiException;
 use App\Exceptions\PermanentLeadTagException;
 use App\Jobs\ApplyManualLeadResultTagJob;
@@ -12,6 +13,7 @@ use App\Services\LeadLoversApiClient;
 use App\Services\LeadLoversResultTagService;
 use App\Services\LeadLoversTagOperationCoordinator;
 use App\Support\ManualLeadResultTags;
+use Illuminate\Broadcasting\BroadcastEvent;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
@@ -59,7 +61,7 @@ function manualLeadTagCorretor(array $overrides = []): Corretor
         'cpf' => null,
         'password' => 'password',
         'role' => Corretor::ROLE_INTEGRANTE,
-        'permissions' => ['tags.gerenciar'],
+        'permissions' => ['tags.visualizar', 'tags.gerenciar'],
         'active' => true,
         'first_login_verified_at' => now(),
     ], $overrides));
@@ -477,6 +479,7 @@ it('fails before HTTP when the final tag catalog has unsafe data', function (str
 ]);
 
 it('does not mutate when the selected result is already confirmed remotely', function () {
+    Queue::fake();
     manualLeadTagCatalog();
     $corretor = manualLeadTagCorretor([
         'role' => Corretor::ROLE_CEO,
@@ -520,6 +523,13 @@ it('does not mutate when the selected result is already confirmed remotely', fun
         'model_type' => Lead::class,
         'model_id' => $lead->id,
     ]);
+    Queue::assertPushedOn(
+        'broadcasts',
+        BroadcastEvent::class,
+        fn (BroadcastEvent $job): bool => $job->event instanceof DashboardActivityChanged
+            && $job->event->resourceId === $lead->id
+            && $job->event->change === 'lead.tags.changed',
+    );
 });
 
 it('does not reapply a selected tag when only another final tag must be removed', function () {

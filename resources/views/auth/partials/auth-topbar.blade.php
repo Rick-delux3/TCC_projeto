@@ -80,6 +80,11 @@
             display: block;
         }
 
+        [data-brand="client"] .auth-topbar__brand-mark .auth-topbar__brand-logo {
+            object-fit: cover;
+            object-position: center;
+        }
+
         .auth-topbar__brand-copy {
             min-width: 0;
             display: grid;
@@ -265,7 +270,11 @@
         <div class="auth-topbar__surface">
             <div class="auth-topbar__brand">
                 <span class="auth-topbar__brand-mark" aria-hidden="true">
-                    <x-brand-logo alt="" />
+                    <img
+                        src="{{ asset('imgs/logo-header.jpg') }}"
+                        alt=""
+                        class="auth-topbar__brand-logo"
+                    >
                 </span>
 
                 <span class="auth-topbar__brand-copy">

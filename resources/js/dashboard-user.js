@@ -11,10 +11,11 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }
 
-    const realtimeUrl = config.routes?.realtimeStatus || null;
-
     const leadFormUrl = config.leadFormUrl || null;
     const leadAccessCode = config.leadAccessCode || null;
+    const realtimeConfig = config.realtime || null;
+    const serverHasUnsavedInput =
+        realtimeConfig?.hasUnsavedInput === true;
 
     const dashboardThemeRoot = document.getElementById('dashboardThemeRoot');
     const dashboardThemeToggle = document.getElementById('dashboardThemeToggle');
@@ -345,120 +346,179 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     });
 
-    /*
+        /*
     |--------------------------------------------------------------------------
-    | Atualização automática do dashboard
-    |--------------------------------------------------------------------------
-    | Só roda se você criar a rota Dashboard.realtimeStatus e enviar a URL.
+    | Atualização do dashboard em tempo real
     |--------------------------------------------------------------------------
     */
-    if (realtimeUrl) {
-        let currentDashboardActivityHash = config.dashboardActivityHash || null;
-        let isReloadScheduled = false;
+    const realtimeNotice =
+        document.getElementById('dashboardRealtimeNotice');
 
-        const realtimeNotice = document.getElementById('dashboardRealtimeNotice');
-        const realtimeRefreshButton = document.getElementById('dashboardRealtimeRefreshButton');
+    const realtimeMessage =
+        document.getElementById('dashboardRealtimeMessage');
 
-        const totalLeadsEl = document.getElementById('dashboardTotalLeads');
-        const newLeadsEl = document.getElementById('dashboardNewLeads');
-        const withPhoneEl = document.getElementById('dashboardWithPhone');
-        const recentLeadsEl = document.getElementById('dashboardRecentLeads');
-        const notificationBadgeEl = document.getElementById('dashboardNotificationBadge');
+    const realtimeReloadButton =
+        document.getElementById('dashboardRealtimeReloadButton');
 
-        function hasOpenLeadModal() {
-            return document.querySelector('.modal.show') !== null;
+    let realtimeReloadTimer = null;
+
+    const manualResultForms = Array.from(
+        document.querySelectorAll('.manual-lead-result-form')
+    );
+
+    manualResultForms.forEach(function (form) {
+        const resultSelect = form.querySelector('select[name="result"]');
+
+        if (resultSelect) {
+            resultSelect.dataset.initialValue = resultSelect.value;
+        }
+    });
+
+    function markFormAsChanged(event) {
+        const field = event.target;
+        const form = field?.closest?.('form');
+
+        if (
+            !form
+            || !field.name
+            || form.matches(
+                '.lead-update-form, .manual-lead-result-form'
+            )
+        ) {
+            return;
         }
 
-        function hasDirtyLeadForm() {
-            return Array.from(document.querySelectorAll('.lead-update-form')).some(function (form) {
-                return form.dataset.changed === 'true';
-            });
-        }
-
-        function showRealtimeNotice() {
-            if (realtimeNotice) {
-                realtimeNotice.classList.remove('d-none');
-            }
-        }
-
-        function updateDashboardCounters(data) {
-            if (totalLeadsEl) {
-                totalLeadsEl.textContent = data.total_leads;
-            }
-
-            if (newLeadsEl) {
-                newLeadsEl.textContent = data.new_leads;
-            }
-
-            if (withPhoneEl) {
-                withPhoneEl.textContent = data.with_phone;
-            }
-
-            if (recentLeadsEl) {
-                recentLeadsEl.textContent = data.recent_leads;
-            }
-
-            if (notificationBadgeEl) {
-                const count = Number(data.new_leads || 0);
-
-                notificationBadgeEl.textContent = count > 99 ? '99+' : count;
-                notificationBadgeEl.classList.toggle('d-none', count <= 0);
-            }
-        }
-
-        async function checkDashboardRealtimeUpdates() {
-            try {
-                const response = await fetch(realtimeUrl, {
-                    method: 'GET',
-                    headers: {
-                        Accept: 'application/json',
-                        'X-Requested-With': 'XMLHttpRequest',
-                    },
-                });
-
-                if (!response.ok) {
-                    return;
-                }
-
-                const data = await response.json();
-
-                if (!data.authenticated) {
-                    return;
-                }
-
-                updateDashboardCounters(data);
-
-                if (!currentDashboardActivityHash) {
-                    currentDashboardActivityHash = data.activity_hash;
-                    return;
-                }
-
-                if (data.activity_hash !== currentDashboardActivityHash) {
-                    currentDashboardActivityHash = data.activity_hash;
-
-                    if (!hasOpenLeadModal() && !hasDirtyLeadForm() && !isReloadScheduled) {
-                        isReloadScheduled = true;
-
-                        setTimeout(function () {
-                            window.location.reload();
-                        }, 900);
-
-                        return;
-                    }
-
-                    showRealtimeNotice();
-                }
-            } catch (error) {
-                console.warn('Não foi possível verificar atualizações em tempo real.', error);
-            }
-        }
-
-        if (realtimeRefreshButton) {
-            realtimeRefreshButton.addEventListener('click', function () {
-                window.location.reload();
-            });
-        }
-
-        setInterval(checkDashboardRealtimeUpdates, 10000);
+        form.dataset.realtimeChanged = 'true';
     }
+
+    document.addEventListener('input', markFormAsChanged, true);
+    document.addEventListener('change', markFormAsChanged, true);
+
+    document.addEventListener('submit', function (event) {
+        const form = event.target;
+
+        if (!form || form.tagName !== 'FORM' || event.defaultPrevented) {
+            return;
+        }
+
+        form.dataset.realtimeSubmitting = 'true';
+
+        window.setTimeout(function () {
+            if (event.defaultPrevented) {
+                delete form.dataset.realtimeSubmitting;
+            }
+        }, 0);
+    });
+
+    window.addEventListener('pageshow', function () {
+        document
+            .querySelectorAll('form[data-realtime-submitting="true"]')
+            .forEach(function (form) {
+                delete form.dataset.realtimeSubmitting;
+            });
+    });
+
+    function showRealtimeNotice(message, showReloadButton = true) {
+        if (realtimeMessage) {
+            realtimeMessage.textContent = message;
+        }
+
+        realtimeReloadButton?.classList.toggle(
+            'd-none',
+            !showReloadButton
+        );
+
+        realtimeNotice?.classList.remove('d-none');
+    }
+
+    function dashboardHasUnsavedChanges() {
+        if (serverHasUnsavedInput) {
+            return true;
+        }
+
+        if (
+            document.querySelector(
+                'form[data-submitting="true"], '
+                + 'form[data-realtime-submitting="true"], '
+                + 'form[data-realtime-changed="true"]'
+            )
+        ) {
+            return true;
+        }
+
+        if (
+            document.querySelector(
+                '.lead-update-form[data-changed="true"]'
+            )
+        ) {
+            return true;
+        }
+
+        return manualResultForms.some(function (form) {
+            const resultSelect = form.querySelector(
+                'select[name="result"]'
+            );
+
+            if (!resultSelect) {
+                return false;
+            }
+
+            return resultSelect.value
+                !== (resultSelect.dataset.initialValue ?? '');
+        });
+    }
+
+    function reloadDashboard() {
+        if (dashboardHasUnsavedChanges()) {
+            showRealtimeNotice(
+                'Há novos dados no dashboard. Salve suas alterações ou atualize manualmente.',
+                true,
+            );
+
+            return;
+        }
+
+        window.location.reload();
+    }
+
+    realtimeReloadButton?.addEventListener('click', function () {
+        if (
+            dashboardHasUnsavedChanges()
+            && !window.confirm(
+                'Existem alterações não salvas. Deseja atualizar mesmo assim?'
+            )
+        ) {
+            return;
+        }
+
+        window.location.reload();
+    });
+
+    if (
+        realtimeConfig?.channel
+        && realtimeConfig?.event
+    ) {
+        if (!window.Echo) {
+            console.error(
+                'Laravel Echo não foi inicializado. Verifique echo.js e as variáveis VITE_REVERB_*.',
+            );
+        } else {
+            window.Echo
+                .private(realtimeConfig.channel)
+                .listen(realtimeConfig.event, function () {
+                    window.clearTimeout(realtimeReloadTimer);
+
+                    showRealtimeNotice(
+                        'Novos dados recebidos. Atualizando o dashboard...',
+                        false,
+                    );
+
+                    realtimeReloadTimer = window.setTimeout(
+                        reloadDashboard,
+                        800,
+                    );
+                });
+        }
+    }
+
 });

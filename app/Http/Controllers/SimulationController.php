@@ -14,6 +14,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
+use App\Events\DashboardActivityChanged;
 
 class SimulationController extends Controller
 {
@@ -458,7 +459,9 @@ class SimulationController extends Controller
             $leadAttributes
         );
 
-        if (! $lead->wasRecentlyCreated) {
+        $wasRecentlyCreated = $lead->wasRecentlyCreated;
+
+        if (! $wasRecentlyCreated) {
             $lead = Lead::query()
                 ->whereKey($lead->getKey())
                 ->lockForUpdate()
@@ -553,6 +556,19 @@ class SimulationController extends Controller
                 $audiColumn => (int) $corretorId,
             ])->saveQuietly();
         }
+
+        $companyId = $lead->company_id !== null ? (int) $lead->company_id : null;
+
+        $leadId = (int) $lead->id;
+
+        DashboardActivityChanged::dispatch(
+            'lead',
+            $leadId,
+            $companyId,
+            $wasRecentlyCreated
+                ? 'lead.created'
+                : 'lead.updated',
+        );
 
         return $lead;
 

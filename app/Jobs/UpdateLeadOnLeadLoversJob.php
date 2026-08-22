@@ -6,6 +6,7 @@ use App\Exceptions\LeadLoversApiException;
 use App\Models\Lead;
 use App\Services\LeadLoversApiClient;
 use App\Services\LeadLoversLeadResolver;
+use App\Events\DashboardActivityChanged;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -473,12 +474,56 @@ class UpdateLeadOnLeadLoversJob implements ShouldQueue
         array $attributes,
         array $allowedStatuses = ['pending', 'processing'],
     ): int {
-        return Lead::query()
+        $updated = Lead::query()
             ->whereKey($this->leadId)
             ->where('leadlovers_update_version', $this->syncVersion)
             ->whereIn('leadlovers_update_status', $allowedStatuses)
             ->update($attributes);
+
+        if ($updated !== 1) {
+        return $updated;
+        }
+
+        $change = match ($attributes['leadlovers_update_status'] ?? null) {
+            'synced' => 'lead.sync.synced',
+            'failed' => 'lead.sync.failed',
+            'disabled' => 'lead.sync.disabled',
+            default => null,
+        };
+
+        if ($change !== null) {
+            $this->notifyDashboard($change);
+        }
+
+        return $updated;
+        
     }
+
+    private function notifyDashboard(string $change): void {
+
+        $lead = Lead::query()
+            ->select(['id', 'company_id'])
+            ->find($this->leadId);
+
+        if ($lead === null) {
+            return;
+        }
+
+        $resourceId = (int) $lead->id;
+
+        $companyId = $lead->company_id !== null
+                ? (int) $lead->company_id
+                : null;
+
+        DashboardActivityChanged::dispatch(
+            'lead',
+            $resourceId,
+            $companyId,
+            $change,
+        );
+    }
+    
+
 
     private function failureSummary(
         string $operation,
@@ -693,6 +738,8 @@ class UpdateLeadOnLeadLoversJob implements ShouldQueue
                     'leadlovers_update_error' => 'Integracao com a LeadLovers desativada.',
                 ])->saveQuietly();
 
+                $this->notifyDashboard('lead.sync.disabled');
+
                 return null;
             }
 
@@ -735,7 +782,7 @@ class UpdateLeadOnLeadLoversJob implements ShouldQueue
             $job->onQueue('leadlovers')->afterCommit();
             Bus::dispatch($job);
         } catch (Throwable $exception) {
-            Lead::query()
+            $updated = Lead::query()
                 ->whereKey($this->leadId)
                 ->where(
                     'leadlovers_update_version',
@@ -746,6 +793,11 @@ class UpdateLeadOnLeadLoversJob implements ShouldQueue
                     'leadlovers_update_status' => 'failed',
                     'leadlovers_update_error' => 'A reconciliacao nao pode ser colocada na fila.',
                 ]);
+            
+            if ($updated === 1) {
+                $this->notifyDashboard('lead.sync.failed');
+            }
+            
 
             Log::warning('Falha ao enfileirar reconciliacao do lead na LeadLovers.', [
                 'lead_id' => $this->leadId,

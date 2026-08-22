@@ -1,5 +1,6 @@
 <?php
 
+use App\Events\DashboardActivityChanged;
 use App\Jobs\SendLeadToLeadLoversJob;
 use App\Jobs\UpdateLeadOnLeadLoversJob;
 use App\Models\Imobiliaria;
@@ -7,6 +8,7 @@ use App\Models\Lead;
 use App\Models\LeadLoversTag;
 use App\Services\LeadLoversApiClient;
 use App\Services\LeadReanalysisService;
+use Illuminate\Broadcasting\BroadcastEvent;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Crypt;
@@ -123,6 +125,22 @@ function initialSendJob(Lead $lead, int $attempts = 1): SendLeadToLeadLoversJob
     return $job;
 }
 
+function initialDashboardBroadcastMatches(
+    BroadcastEvent $job,
+    Lead $lead,
+    string $change,
+): bool {
+    $event = $job->event;
+
+    return $event instanceof DashboardActivityChanged
+        && $event->resource === 'lead'
+        && $event->resourceId === (int) $lead->id
+        && $event->companyId === ($lead->company_id !== null
+            ? (int) $lead->company_id
+            : null)
+        && $event->change === $change;
+}
+
 it('adds and casts the remote lead identifier', function () {
     expect(Schema::hasColumn('leads', 'leadlovers_lead_id'))->toBeTrue();
 
@@ -145,7 +163,7 @@ it('persists leadId before requesting the machine and keeps a 202 pending', func
                 'leadId' => 501,
             ], 200);
         },
-        'https://api.leadlovers.test/leads/machine' => function (Request $request) use ($lead) {
+        'https://api.leadlovers.test/leads/move' => function (Request $request) use ($lead) {
             expect($lead->refresh()->leadlovers_lead_id)->toBe(501)
                 ->and($request->data())->toBe([
                     'machineFrom' => 0,
@@ -185,7 +203,7 @@ it('persists leadId before requesting the machine and keeps a 202 pending', func
     $requests = collect(Http::recorded())->map(fn (array $entry) => $entry[0]);
     expect($requests)->toHaveCount(2)
         ->and(parse_url($requests[0]->url(), PHP_URL_PATH))->toBe('/leads/')
-        ->and(parse_url($requests[1]->url(), PHP_URL_PATH))->toBe('/leads/machine');
+        ->and(parse_url($requests[1]->url(), PHP_URL_PATH))->toBe('/leads/move');
 
     $creation = $requests[0];
     expect($creation->method())->toBe('POST')
@@ -222,7 +240,7 @@ it('claims the send before HTTP so a concurrent old job cannot duplicate creatio
                 'leadId' => 501,
             ], 200);
         },
-        'https://api.leadlovers.test/leads/machine' => Http::response([
+        'https://api.leadlovers.test/leads/move' => Http::response([
             'actionId' => 9001,
             'status' => 'pending',
             'total' => 1,
@@ -333,6 +351,16 @@ it('marks the lead sent only after the expected machine state is confirmed', fun
             && $queued->afterCommit === true
             && ! str_contains(serialize($queued), 'person@example.test')
     );
+    Queue::assertPushedOn(
+        'broadcasts',
+        BroadcastEvent::class,
+        fn (BroadcastEvent $queued): bool => initialDashboardBroadcastMatches(
+            $queued,
+            $lead,
+            'lead.sync.sent',
+        )
+    );
+    Queue::assertPushed(BroadcastEvent::class, 1);
     Http::assertSentCount(1);
 });
 
@@ -465,7 +493,7 @@ it('reconciles EMAIL_EXISTS by exact email and uses leadId instead of record id'
             200
         ),
         'https://api.leadlovers.test/leads/501/machines' => Http::response([], 200),
-        'https://api.leadlovers.test/leads/machine' => Http::response([
+        'https://api.leadlovers.test/leads/move' => Http::response([
             'actionId' => 9002,
             'status' => 'mapping',
             'total' => 1,
@@ -480,7 +508,7 @@ it('reconciles EMAIL_EXISTS by exact email and uses leadId instead of record id'
     Http::assertSent(fn (Request $request): bool => parse_url(
         $request->url(),
         PHP_URL_PATH
-    ) === '/leads/machine' && $request->data()['leadIds'] === [501]);
+    ) === '/leads/move' && $request->data()['leadIds'] === [501]);
     Http::assertSentCount(4);
 });
 
@@ -568,7 +596,7 @@ it('reconciles an ambiguous create on retry without posting another lead', funct
             ]]), 200);
         },
         'https://api.leadlovers.test/leads/501/machines' => Http::response([], 200),
-        'https://api.leadlovers.test/leads/machine' => Http::response([
+        'https://api.leadlovers.test/leads/move' => Http::response([
             'actionId' => 9003,
             'status' => 'processing',
             'total' => 1,
@@ -608,7 +636,7 @@ it('confirms state after ACTIVE_COPY_BETWEEN_MACHINES before completing', functi
         'https://api.leadlovers.test/leads/501/machines' => Http::sequence()
             ->push([], 200)
             ->push([machineAssociationForInitialSend()], 200),
-        'https://api.leadlovers.test/leads/machine' => Http::response([
+        'https://api.leadlovers.test/leads/move' => Http::response([
             'success' => false,
             'error' => [
                 'code' => 'ACTIVE_COPY_BETWEEN_MACHINES',
@@ -634,7 +662,7 @@ it('backs off after ACTIVE_COPY when the expected state is still absent', functi
         'https://api.leadlovers.test/leads/501/machines' => Http::sequence()
             ->push([], 200)
             ->push([], 200),
-        'https://api.leadlovers.test/leads/machine' => Http::response([
+        'https://api.leadlovers.test/leads/move' => Http::response([
             'success' => false,
             'error' => [
                 'code' => 'ACTIVE_COPY_BETWEEN_MACHINES',
@@ -664,6 +692,32 @@ it('does no HTTP while disabled and preserves an already known remote id', funct
     expect($lead->refresh())
         ->leadlovers_status->toBe('disabled')
         ->leadlovers_lead_id->toBe(501);
+    Http::assertNothingSent();
+});
+
+it('does not broadcast disabled twice when the initial send is already disabled', function () {
+    config(['services.leadlovers.enabled' => false]);
+    Queue::fake();
+    $lead = leadForInitialLeadLoversSend();
+
+    initialSendJob($lead)->handle(app(LeadLoversApiClient::class));
+
+    Queue::assertPushedOn(
+        'broadcasts',
+        BroadcastEvent::class,
+        fn (BroadcastEvent $queued): bool => initialDashboardBroadcastMatches(
+            $queued,
+            $lead,
+            'lead.sync.disabled',
+        )
+    );
+    Queue::assertPushed(BroadcastEvent::class, 1);
+
+    Queue::fake();
+
+    initialSendJob($lead->refresh())->handle(app(LeadLoversApiClient::class));
+
+    Queue::assertNotPushed(BroadcastEvent::class);
     Http::assertNothingSent();
 });
 
@@ -701,8 +755,105 @@ it('does not let an old job overwrite a lead that is already sent', function () 
     Http::assertNothingSent();
 });
 
+it('broadcasts a newly created company lead after the database transaction commits', function () {
+    Bus::fake();
+    Queue::fake();
+    config(['features.insurance_analysis.enabled' => false]);
+    $company = Imobiliaria::query()->create([
+        'name' => 'Imobiliaria Formulario',
+        'email' => 'company-create@example.test',
+        'phone' => '11999999999',
+        'password' => bcrypt('password'),
+        'city' => 'Sao Paulo',
+        'state' => 'SP',
+        'lead_access_code' => 'NEW234',
+        'lead_form_active' => true,
+    ]);
+
+    $response = $this->post(
+        route('simulation.registered-company.store', [
+            'code' => $company->lead_access_code,
+        ]),
+        [
+            'aceite_termos' => '1',
+            'nome' => 'Novo lead',
+            'email' => 'new-broadcast@example.test',
+            'tel' => '11988887777',
+            'estado_civil' => 'solteiro',
+            'valor_aluguel' => '1500',
+            'cep' => '01001000',
+            'logradouro' => 'Praca da Se',
+            'numero' => '100',
+            'bairro' => 'Se',
+            'cidade_imovel' => 'Sao Paulo',
+            'estado' => 'SP',
+        ]
+    );
+
+    $response->assertRedirect(route('simulation.success'));
+    $lead = Lead::query()
+        ->where('email', 'new-broadcast@example.test')
+        ->firstOrFail();
+
+    Queue::assertPushedOn(
+        'broadcasts',
+        BroadcastEvent::class,
+        fn (BroadcastEvent $queued): bool => initialDashboardBroadcastMatches(
+            $queued,
+            $lead,
+            'lead.created',
+        )
+    );
+    Queue::assertPushed(BroadcastEvent::class, 1);
+});
+
+it('broadcasts a newly created unlinked lead only to the admin dashboard', function () {
+    Bus::fake();
+    Queue::fake();
+    config(['features.insurance_analysis.enabled' => false]);
+
+    $response = $this->post(route('simulation.tenant.store'), [
+        'aceite_termos' => '1',
+        'nome' => 'Lead sem imobiliaria',
+        'email' => 'unlinked-broadcast@example.test',
+        'tel' => '11988886666',
+        'estado_civil' => 'solteiro',
+        'valor_aluguel' => '1500',
+        'cep' => '01001000',
+        'logradouro' => 'Praca da Se',
+        'numero' => '100',
+        'bairro' => 'Se',
+        'cidade_imovel' => 'Sao Paulo',
+        'estado' => 'SP',
+    ]);
+
+    $response->assertRedirect(route('simulation.success'));
+    $lead = Lead::query()
+        ->where('email', 'unlinked-broadcast@example.test')
+        ->firstOrFail();
+
+    Queue::assertPushedOn(
+        'broadcasts',
+        BroadcastEvent::class,
+        function (BroadcastEvent $queued) use ($lead): bool {
+            if (! initialDashboardBroadcastMatches($queued, $lead, 'lead.created')) {
+                return false;
+            }
+
+            $channels = array_map(
+                static fn ($channel): string => $channel->name,
+                $queued->event->broadcastOn(),
+            );
+
+            return $channels === ['private-admins.dashboard'];
+        }
+    );
+    Queue::assertPushed(BroadcastEvent::class, 1);
+});
+
 it('does not reset a confirmed remote identity when the form is submitted again', function () {
     Bus::fake();
+    Queue::fake();
     config(['features.insurance_analysis.enabled' => false]);
     $company = Imobiliaria::query()->create([
         'name' => 'Imobiliaria Formulario',
@@ -751,4 +902,14 @@ it('does not reset a confirmed remote identity when the form is submitted again'
         ->leadlovers_status->toBe('sent')
         ->leadlovers_lead_id->toBe(501)
         ->sent_to_leadlovers_at->not->toBeNull();
+    Queue::assertPushedOn(
+        'broadcasts',
+        BroadcastEvent::class,
+        fn (BroadcastEvent $queued): bool => initialDashboardBroadcastMatches(
+            $queued,
+            $lead,
+            'lead.updated',
+        )
+    );
+    Queue::assertPushed(BroadcastEvent::class, 1);
 });

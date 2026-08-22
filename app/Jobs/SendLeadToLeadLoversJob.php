@@ -5,6 +5,7 @@ namespace App\Jobs;
 use App\Exceptions\LeadLoversApiException;
 use App\Models\Lead;
 use App\Models\LeadLoversTag;
+use App\Events\DashboardActivityChanged;
 use App\Services\LeadLoversApiClient;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -594,7 +595,7 @@ class SendLeadToLeadLoversJob implements ShouldQueue
                 )));
             Bus::dispatch($job);
         } catch (Throwable $exception) {
-            Lead::query()
+            $updated = Lead::query()
                 ->whereKey($pendingUpdate['lead_id'])
                 ->where(
                     'leadlovers_update_version',
@@ -605,6 +606,16 @@ class SendLeadToLeadLoversJob implements ShouldQueue
                     'leadlovers_update_status' => 'failed',
                     'leadlovers_update_error' => 'A atualizacao apos o envio inicial nao pode ser colocada na fila.',
                 ]);
+
+            if ($updated === 1) {
+                $lead = Lead::query()
+                    ->select(['id', 'company_id'])
+                    ->find($pendingUpdate['lead_id']);
+
+                if($lead !== null) {
+                    $this->notifyDashboard($lead, 'lead.sync.failed');
+                }
+            }
 
             Log::warning('Falha ao enfileirar atualizacao apos o envio inicial.', [
                 'lead_id' => $pendingUpdate['lead_id'],
@@ -671,8 +682,18 @@ class SendLeadToLeadLoversJob implements ShouldQueue
                 'sent_to_leadlovers_at' => now(),
             ]);
 
+            $resourceId = (int) $lead->id;
+
+            $companyId = $lead->company_id !== null
+                ? (int) $lead->company_id
+                : null;
+
+            
+
             if ($requestedFields === []) {
                 $lead->save();
+
+                $this->notifyDashboard($lead, 'lead.sync.sent');
 
                 return null;
             }
@@ -688,6 +709,8 @@ class SendLeadToLeadLoversJob implements ShouldQueue
                 ],
                 'leadlovers_update_requested_at' => now(),
             ])->save();
+
+            $this->notifyDashboard($lead, 'lead.sync.sent');
 
             return [
                 'lead_id' => (int) $lead->id,
@@ -1142,8 +1165,18 @@ class SendLeadToLeadLoversJob implements ShouldQueue
                     : 'A integracao com a LeadLovers esta desativada.';
             }
 
-            $lead->forceFill($attributes)->save();
+            $lead->forceFill($attributes);
+
+            if (! $lead->isDirty()) {
+                return;
+            }
+
+            $lead->save();
+
+            $this->notifyDashboard($lead, $wasProcessing ? 'lead.sync.failed' : 'lead.sync.disabled', );
         });
+
+        
     }
 
     private function failInitialSend(
@@ -1188,7 +1221,25 @@ class SendLeadToLeadLoversJob implements ShouldQueue
             }
 
             $lead->forceFill($attributes)->save();
+
+            $this->notifyDashboard($lead, 'lead.sync.failed');
         });
+    }
+
+    private function notifyDashboard(Lead $lead, string $change): void {
+
+        $resourceId = (int) $lead->id;
+
+        $companyId = $lead->company_id !== null
+                ? (int) $lead->company_id
+                : null;
+
+        DashboardActivityChanged::dispatch(
+            'lead',
+            $resourceId,
+            $companyId,
+            $change,
+        );
     }
 
     private function mainTagIdForLead(Lead $lead): ?int
@@ -1215,6 +1266,7 @@ class SendLeadToLeadLoversJob implements ShouldQueue
                 ->value('leadlovers_tag_id')
         );
     }
+
 
     private function companyTagId(Lead $lead): ?int
     {
