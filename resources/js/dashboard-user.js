@@ -14,6 +14,8 @@ document.addEventListener('DOMContentLoaded', function () {
     const leadFormUrl = config.leadFormUrl || null;
     const leadAccessCode = config.leadAccessCode || null;
     const realtimeConfig = config.realtime || null;
+    const serverHasUnsavedInput =
+        realtimeConfig?.hasUnsavedInput === true;
 
     const dashboardThemeRoot = document.getElementById('dashboardThemeRoot');
     const dashboardThemeToggle = document.getElementById('dashboardThemeToggle');
@@ -360,16 +362,87 @@ document.addEventListener('DOMContentLoaded', function () {
 
     let realtimeReloadTimer = null;
 
-    function showRealtimeNotice(message) {
+    const manualResultForms = Array.from(
+        document.querySelectorAll('.manual-lead-result-form')
+    );
+
+    manualResultForms.forEach(function (form) {
+        const resultSelect = form.querySelector('select[name="result"]');
+
+        if (resultSelect) {
+            resultSelect.dataset.initialValue = resultSelect.value;
+        }
+    });
+
+    function markFormAsChanged(event) {
+        const field = event.target;
+        const form = field?.closest?.('form');
+
+        if (
+            !form
+            || !field.name
+            || form.matches(
+                '.lead-update-form, .manual-lead-result-form'
+            )
+        ) {
+            return;
+        }
+
+        form.dataset.realtimeChanged = 'true';
+    }
+
+    document.addEventListener('input', markFormAsChanged, true);
+    document.addEventListener('change', markFormAsChanged, true);
+
+    document.addEventListener('submit', function (event) {
+        const form = event.target;
+
+        if (!form || form.tagName !== 'FORM' || event.defaultPrevented) {
+            return;
+        }
+
+        form.dataset.realtimeSubmitting = 'true';
+
+        window.setTimeout(function () {
+            if (event.defaultPrevented) {
+                delete form.dataset.realtimeSubmitting;
+            }
+        }, 0);
+    });
+
+    window.addEventListener('pageshow', function () {
+        document
+            .querySelectorAll('form[data-realtime-submitting="true"]')
+            .forEach(function (form) {
+                delete form.dataset.realtimeSubmitting;
+            });
+    });
+
+    function showRealtimeNotice(message, showReloadButton = true) {
         if (realtimeMessage) {
             realtimeMessage.textContent = message;
         }
+
+        realtimeReloadButton?.classList.toggle(
+            'd-none',
+            !showReloadButton
+        );
 
         realtimeNotice?.classList.remove('d-none');
     }
 
     function dashboardHasUnsavedChanges() {
-        if (document.querySelector('form[data-submitting="true"]')) {
+        if (serverHasUnsavedInput) {
+            return true;
+        }
+
+        if (
+            document.querySelector(
+                'form[data-submitting="true"], '
+                + 'form[data-realtime-submitting="true"], '
+                + 'form[data-realtime-changed="true"]'
+            )
+        ) {
             return true;
         }
 
@@ -381,43 +454,25 @@ document.addEventListener('DOMContentLoaded', function () {
             return true;
         }
 
-        return Array
-            .from(document.querySelectorAll('.manual-lead-result-form'))
-            .some(function (form) {
-                return Array.from(form.elements).some(function (field) {
-                    if (
-                        !field.name
-                        || ['_token', '_method'].includes(field.name)
-                    ) {
-                        return false;
-                    }
+        return manualResultForms.some(function (form) {
+            const resultSelect = form.querySelector(
+                'select[name="result"]'
+            );
 
-                    if (field instanceof HTMLSelectElement) {
-                        return Array.from(field.options).some(
-                            function (option) {
-                                return option.selected
-                                    !== option.defaultSelected;
-                            }
-                        );
-                    }
+            if (!resultSelect) {
+                return false;
+            }
 
-                    if (
-                        field.type === 'checkbox'
-                        || field.type === 'radio'
-                    ) {
-                        return field.checked !== field.defaultChecked;
-                    }
-
-                    return 'defaultValue' in field
-                        && field.value !== field.defaultValue;
-                });
-            });
+            return resultSelect.value
+                !== (resultSelect.dataset.initialValue ?? '');
+        });
     }
 
     function reloadDashboard() {
         if (dashboardHasUnsavedChanges()) {
             showRealtimeNotice(
-                'Há novos dados no dashboard. Salve suas alterações ou atualize manualmente.'
+                'Há novos dados no dashboard. Salve suas alterações ou atualize manualmente.',
+                true,
             );
 
             return;
@@ -454,7 +509,8 @@ document.addEventListener('DOMContentLoaded', function () {
                     window.clearTimeout(realtimeReloadTimer);
 
                     showRealtimeNotice(
-                        'Novos dados recebidos. Atualizando o dashboard...'
+                        'Novos dados recebidos. Atualizando o dashboard...',
+                        false,
                     );
 
                     realtimeReloadTimer = window.setTimeout(

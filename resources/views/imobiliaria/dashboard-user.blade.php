@@ -1192,11 +1192,11 @@
 <script id="dashboardUserConfig" type="application/json">
     {!! json_encode([
         'leadFormUrl' => $leadFormUrl,
-        'leadAccessCode' => $leadAccessCode,
         'leadValidationTargets' => $leadValidationTargets,
         'realtime' => [
             'channel' => "companies.{$company->id}.dashboard",
             'event' => '.dashboard.activity.changed',
+            'hasUnsavedInput' => session()->hasOldInput(),
         ],
     ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) !!}
 </script>

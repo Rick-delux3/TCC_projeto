@@ -1165,7 +1165,13 @@ class SendLeadToLeadLoversJob implements ShouldQueue
                     : 'A integracao com a LeadLovers esta desativada.';
             }
 
-            $lead->forceFill($attributes)->save();
+            $lead->forceFill($attributes);
+
+            if (! $lead->isDirty()) {
+                return;
+            }
+
+            $lead->save();
 
             $this->notifyDashboard($lead, $wasProcessing ? 'lead.sync.failed' : 'lead.sync.disabled', );
         });

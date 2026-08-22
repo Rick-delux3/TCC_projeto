@@ -1,5 +1,6 @@
 <?php
 
+use App\Events\DashboardActivityChanged;
 use App\Exceptions\PermanentLeadTagException;
 use App\Jobs\ApplyFinalAnalysisTagToLeadLoversJob;
 use App\Models\InsuranceAnalysis;
@@ -10,6 +11,7 @@ use App\Models\LeadLoversTagOperation;
 use App\Services\LeadLoversApiClient;
 use App\Services\LeadLoversResultTagService;
 use App\Services\LeadLoversTagOperationCoordinator;
+use Illuminate\Broadcasting\BroadcastEvent;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
@@ -296,7 +298,14 @@ it('normalizes reordered bulk action properties before persisting a confirmed re
             && $request->url() === FINAL_ANALYSIS_TAG_API_URL.'/leads/501/tags'
     );
     Http::assertSentCount(1);
-    Queue::assertNothingPushed();
+    Queue::assertPushedOn(
+        'broadcasts',
+        BroadcastEvent::class,
+        fn (BroadcastEvent $job): bool => $job->event instanceof DashboardActivityChanged
+            && $job->event->resourceId === $lead->id
+            && $job->event->change === 'lead.analysis-result.changed',
+    );
+    Queue::assertNotPushed(ApplyFinalAnalysisTagToLeadLoversJob::class);
 });
 
 it('releases a stale confirmation without repeating mutation or changing local tags', function () {

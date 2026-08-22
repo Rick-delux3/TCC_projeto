@@ -29,7 +29,7 @@ window.Echo = new Echo({
     key: import.meta.env.VITE_REVERB_APP_KEY,
     wsHost:
         import.meta.env.VITE_REVERB_HOST
-        ?? window.location.hostname,
+        || window.location.hostname,
     wsPort: reverbPort,
     wssPort: reverbPort,
     forceTLS: reverbScheme === 'https',

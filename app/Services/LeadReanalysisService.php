@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Events\DashboardActivityChanged;
 use App\Jobs\CompleteInsuranceAnalysesBatchJob;
 use App\Jobs\RunProviderAnalysisJob;
 use App\Jobs\SendLeadToLeadLoversJob;
@@ -16,7 +17,6 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Throwable;
-use App\Events\DashboardActivityChanged;
 
 class LeadReanalysisService
 {
@@ -547,6 +547,10 @@ class LeadReanalysisService
 
                 if ($updated === 1) {
                     $result['sync_status'] = 'failed';
+                    $this->notifyDashboard(
+                        (int) $dispatch['lead_id'],
+                        'lead.sync.failed',
+                    );
                 }
 
                 Log::warning('Falha ao enfileirar atualização do lead na LeadLovers.', [
@@ -724,7 +728,12 @@ class LeadReanalysisService
 
         });
 
-        $jobs = collect($preparedAnalyses['analysis'])
+        $this->notifyDashboard(
+            (int) $lead->id,
+            'lead.reanalysis.requested',
+        );
+
+        $jobs = collect($preparedAnalyses['analyses'])
             ->map(fn (array $item) => new RunProviderAnalysisJob(
                 analysisId: $item['analysis_id'],
                 attemptId: $attemptId,
@@ -1180,5 +1189,25 @@ class LeadReanalysisService
             'observacoes' => $observacoes,
         ];
 
+    }
+
+    private function notifyDashboard(int $leadId, string $change): void
+    {
+        $lead = Lead::query()
+            ->select(['id', 'company_id'])
+            ->find($leadId);
+
+        if ($lead === null) {
+            return;
+        }
+
+        DashboardActivityChanged::dispatch(
+            'lead',
+            (int) $lead->id,
+            $lead->company_id !== null
+                ? (int) $lead->company_id
+                : null,
+            $change,
+        );
     }
 }
