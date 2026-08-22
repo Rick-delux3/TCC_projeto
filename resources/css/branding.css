@@ -23,20 +23,20 @@
 }
 
 [data-brand="client"] {
-    --brand-primary: #0000ff;
-    --brand-primary-hover: #0000cc;
-    --brand-primary-dark: #000099;
-    --brand-primary-soft: #eeeeff;
-    --brand-accent: #ff0000;
-    --brand-accent-hover: #cc0000;
-    --brand-accent-dark: #990000;
-    --brand-accent-soft: #fff0f0;
-    --brand-background: #f7f8fc;
+    --brand-primary: #146fb6;
+    --brand-primary-hover: #0f5d99;
+    --brand-primary-dark: #030133;
+    --brand-primary-soft: #eef6ff;
+    --brand-accent: #fd1e6e;
+    --brand-accent-hover: #d9185d;
+    --brand-accent-dark: #a80f45;
+    --brand-accent-soft: #fff0f6;
+    --brand-background: #f0f5fb;
     --brand-surface: #ffffff;
-    --brand-text: #17172b;
-    --brand-text-muted: #667085;
-    --brand-border: #d9d9ee;
-    --brand-focus-ring: rgba(0, 0, 255, 0.24);
+    --brand-text: #1f2937;
+    --brand-text-muted: #55658c;
+    --brand-border: #d8e1ec;
+    --brand-focus-ring: rgba(20, 111, 182, 0.28);
 
     /* Compatibilidade com os tokens já consumidos pelo frontend atual. */
     --primary-color: var(--brand-primary-dark);
@@ -349,22 +349,23 @@
 /* Páginas públicas, simulação e autenticação. */
 [data-brand="client"].auth-layout-body {
     color: var(--brand-text);
-    background: linear-gradient(180deg, var(--brand-primary-dark), var(--brand-primary));
+    background: linear-gradient(180deg, #030133 0%, #091a46 46%, #0c2b55 100%);
 }
 
 [data-brand="client"] .auth-layout-main,
 [data-brand="client"] .standalone-auth-main {
     color: var(--brand-text);
     background:
-        radial-gradient(circle at 14% 10%, rgba(255, 0, 0, 0.09), transparent 23%),
-        radial-gradient(circle at 86% 18%, rgba(0, 0, 255, 0.14), transparent 30%),
-        linear-gradient(180deg, #ffffff 0%, var(--brand-background) 58%, var(--brand-primary-soft) 100%);
+        radial-gradient(circle at 14% 10%, rgba(253, 30, 110, 0.14), transparent 24%),
+        radial-gradient(circle at 84% 18%, rgba(20, 111, 182, 0.34), transparent 34%),
+        radial-gradient(circle at 50% 100%, rgba(3, 1, 51, 0.38), transparent 54%),
+        linear-gradient(180deg, #f0f5fb 0%, #dbe8f4 17%, #a5bdd4 40%, #47729b 69%, #0f3458 100%);
 }
 
 [data-brand="client"] .auth-topbar__surface {
-    border-color: rgba(0, 0, 255, 0.16);
-    background: rgba(255, 255, 255, 0.94);
-    box-shadow: 0 16px 36px rgba(0, 0, 153, 0.13);
+    border-color: rgba(210, 239, 255, 0.84);
+    background: linear-gradient(115deg, rgba(229, 246, 255, 0.97), rgba(166, 218, 250, 0.95));
+    box-shadow: 0 16px 36px rgba(3, 1, 51, 0.32);
 }
 
 [data-brand="client"] .auth-topbar__brand {
@@ -461,9 +462,7 @@
     .admin-register-page,
     .password-reset-page
 ) {
-    background:
-        radial-gradient(circle at 84% 10%, rgba(255, 0, 0, 0.08), transparent 22%),
-        linear-gradient(180deg, #ffffff 0%, var(--brand-background) 100%);
+    background: transparent;
 }
 
 [data-brand="client"] :is(
@@ -473,7 +472,7 @@
     .admin-register-overlay,
     .password-reset-overlay
 ) {
-    background: linear-gradient(180deg, rgba(0, 0, 153, 0.20), rgba(0, 0, 153, 0.92));
+    background: linear-gradient(180deg, rgba(3, 1, 51, 0.20), rgba(3, 1, 51, 0.92));
 }
 
 [data-brand="client"] .auth-media-logo {
@@ -481,7 +480,7 @@
     max-width: calc(100% - 40px);
     height: auto;
     padding: 5px 10px;
-    border: 1px solid rgba(0, 0, 255, 0.16);
+    border: 1px solid rgba(20, 111, 182, 0.16);
     border-radius: 14px;
     background: #ffffff;
     object-fit: contain;
@@ -491,7 +490,7 @@
 [data-brand="client"] :is(.client-submit, .admin-submit) {
     border-color: var(--brand-primary);
     background: linear-gradient(125deg, var(--brand-primary-dark), var(--brand-primary));
-    box-shadow: 0 14px 26px rgba(0, 0, 255, 0.20);
+    box-shadow: 0 14px 26px rgba(3, 1, 51, 0.20);
 }
 
 [data-brand="client"] :is(.client-submit, .admin-submit):hover {

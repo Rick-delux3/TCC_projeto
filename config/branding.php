@@ -22,7 +22,7 @@ return [
             'key' => 'client',
             'name' => 'Aki Aluga',
             'short_name' => 'Aki Aluga',
-            'logo' => 'imgs/logo-principal-real.jpg',
+            'logo' => 'imgs/logo-akialuga.jpg',
         ],
     ],
 ];
