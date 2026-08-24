@@ -680,6 +680,12 @@ class SendLeadToLeadLoversJob implements ShouldQueue
                 'leadlovers_status' => 'sent',
                 'leadlovers_response' => $summary,
                 'sent_to_leadlovers_at' => now(),
+                
+                'leadlovers_initial_error_status' => null,
+                'leadlovers_initial_error_code' => null,
+                'leadlovers_initial_error_operation' => null,
+                'leadlovers_initial_error_detail' => null,
+                'leadlovers_initial_failed_at' => null,
             ]);
 
             $resourceId = (int) $lead->id;
@@ -1090,6 +1096,10 @@ class SendLeadToLeadLoversJob implements ShouldQueue
             $summary['error_code'] = $exception->errorCode;
         }
 
+        if(filled($exception?->safeReason)) {
+            $summary['safe_reason'] = $exception->safeReason;
+        }
+
         return $summary;
     }
 
@@ -1201,9 +1211,77 @@ class SendLeadToLeadLoversJob implements ShouldQueue
                 return;
             }
 
+            $previousResponse = is_array($lead->leadlovers_response) 
+                ? $lead->leadlovers_response
+                : [];
+            
+            $errorStatus = $response['status_code']
+            ?? $previousResponse['status_code']
+            ?? null;
+
+            $errorStatus = is_numeric($errorStatus)
+                ? (int) $errorStatus
+                : null;
+
+            if (
+                $errorStatus !== null
+                && ($errorStatus < 100 || $errorStatus > 599)
+            ) {
+                $errorStatus = null;
+            }
+
+            $errorCode = $response['error_code']
+                ?? $previousResponse['error_code']
+                ?? null;
+
+            $errorCode = is_string($errorCode)
+                ? mb_strtoupper(trim($errorCode))
+                : null;
+
+            if (
+                $errorCode !== null
+                && preg_match(
+                    '/\A[A-Z0-9_.-]{1,100}\z/',
+                    $errorCode
+                ) !== 1
+            ) {
+                $errorCode = null;
+            }
+
+            $operation = $response['operation']
+                ?? $previousResponse['operation']
+                ?? null;
+
+            $operation = is_string($operation)
+                ? mb_strcut(
+                    trim($operation),
+                    0,
+                    64,
+                    'UTF-8'
+                )
+                : null;
+
+        $errorDetail = $response['safe_reason']
+            ?? $previousResponse['safe_reason']
+            ?? $updateError;
+
+        $errorDetail = is_string($errorDetail)
+            ? mb_strcut(
+                trim(strip_tags($errorDetail)),
+                0,
+                1000,
+                'UTF-8'
+            )
+            : null;
+
             $attributes = [
                 'leadlovers_status' => $status,
                 'leadlovers_response' => $response,
+                'leadlovers_initial_error_status' => $errorStatus,
+                'leadlovers_initial_error_code' => $errorCode,
+                'leadlovers_initial_error_operation' => $operation,
+                'leadlovers_initial_error_detail' => $errorDetail,
+                'leadlovers_initial_failed_at' => now(),
             ];
 
             if (

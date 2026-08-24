@@ -50,6 +50,11 @@ class Lead extends Model
         'leadlovers_update_error',
         'leadlovers_update_requested_at',
         'leadlovers_update_at',
+        'leadlovers_initial_error_status',
+        'leadlovers_initial_error_code',
+        'leadlovers_initial_error_operation',
+        'leadlovers_initial_error_detail',
+        'leadlovers_initial_failed_at',
     ];
 
     protected $casts = [
@@ -61,6 +66,8 @@ class Lead extends Model
         'leadlovers_update_response' => 'array',
         'leadlovers_update_requested_at' => 'datetime',
         'leadlovers_update_at' => 'datetime',
+        'leadlovers_initial_error_status' => 'integer',
+        'leadlovers_initial_failed_at' => 'datetime',
     ];
 
     public function scopeCreatedThroughSystem(Builder $query): Builder
@@ -223,5 +230,18 @@ class Lead extends Model
     {
         return $this->hasFinalInsuranceResultForReanalysis()
             && filled($this->reanalysis_unlocked_at);
+    }
+
+
+    // Leads cujo envio inicial foi recusado pela LeadLovers devido a um erro HTTP 400 e que ainda não possuem identificação remota.
+    
+    public function scopeNotSentToLeadLoversBecauseOfInvalidData(
+        Builder $query
+    ): Builder {
+        return $query
+            ->where('leadlovers_status', 'failed')
+            ->whereNull('leadlovers_lead_id')
+            ->whereNull('sent_to_leadlovers_at')
+            ->where('leadlovers_initial_error_status', 400);
     }
 }
