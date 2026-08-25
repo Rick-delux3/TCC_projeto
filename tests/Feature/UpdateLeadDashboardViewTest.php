@@ -6,6 +6,7 @@ use App\Models\Lead;
 use App\Models\User;
 use App\Support\CorretorPermissions;
 use App\Support\LeadLoversInitialFailureCatalog;
+use App\Support\ManualLeadResultTags;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\MessageBag;
 use Illuminate\Support\ViewErrorBag;
@@ -248,6 +249,66 @@ it('renders the editable admin lead dashboard without tag-management permission 
         ->assertDontSee('Visualizar análises')
         ->assertDontSee('Solicitar reanálise');
 });
+
+it('does not render the current commercial result as a selectable option', function (
+    string $currentResult,
+    string $currentTag,
+) {
+    $corretor = updateLeadDashboardAdmin([
+        'permissions' => [
+            CorretorPermissions::VIEW_LEADS,
+            CorretorPermissions::EDIT_LEADS,
+            CorretorPermissions::VIEW_TAGS,
+            CorretorPermissions::MANAGE_LEAD_TAGS,
+        ],
+    ]);
+    $lead = updateLeadDashboardLead([
+        'tags_originais' => "Imobiliária Azul, {$currentTag}, Origem X",
+        'leadlovers_status' => 'sent',
+        'leadlovers_lead_id' => 71002,
+        'sent_to_leadlovers_at' => now(),
+    ]);
+
+    $html = $this
+        ->actingAs($corretor, 'admin')
+        ->get(route('Dashboard-Admin'))
+        ->assertOk()
+        ->getContent();
+    $dom = updateLeadDashboardDom($html);
+    $select = $dom['xpath']->query(sprintf(
+        '//*[@id=%s]',
+        updateLeadDashboardXpathLiteral('adminLeadResultSelect'.$lead->id),
+    ))->item(0);
+
+    expect($select)->not->toBeNull();
+
+    $optionValues = [];
+
+    foreach ($dom['xpath']->query('.//option[@value != ""]', $select) as $option) {
+        $optionValues[] = $option->getAttribute('value');
+    }
+
+    $expectedResults = array_values(array_diff(
+        ManualLeadResultTags::keys(),
+        [$currentResult],
+    ));
+
+    sort($optionValues);
+    sort($expectedResults);
+
+    expect($optionValues)
+        ->not->toContain($currentResult)
+        ->toBe($expectedResults);
+})->with([
+    'Aprovado' => [ManualLeadResultTags::APPROVED, 'Aprovados'],
+    'Recusado' => [ManualLeadResultTags::REJECTED, 'Ruim'],
+    'Em negociação' => [ManualLeadResultTags::IN_NEGOTIATION, 'Em negociação'],
+    'Fechado aluguel' => [ManualLeadResultTags::RENTAL_CONFIRMED, 'Fechado aluguel'],
+    'Não aluguei nem seguro' => [
+        ManualLeadResultTags::NO_RENT_OR_INSURANCE,
+        'Não aluguei nem seguro',
+    ],
+]);
 
 it('isolates UpdateLead old input and validation feedback by lead context', function () {
     $firstLead = Lead::query()->create([

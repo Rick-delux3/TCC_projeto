@@ -2,6 +2,7 @@
 
 @section('content_a')
 @php
+    use App\Support\ManualLeadResultTags;
     use Illuminate\Support\Facades\Gate;
     use Illuminate\Support\Facades\Route;
     use Illuminate\Support\Str;
@@ -1588,6 +1589,12 @@
                 ->map(fn ($tag) => trim($tag));
 
             $resultTone = $getLeadResultTone($allTags);
+            $currentManualResult = ManualLeadResultTags::currentFromTags(
+                $allTags
+            );
+            $availableManualResultOptions = $currentManualResult
+                ? $manualResultOptions->except([$currentManualResult])
+                : $manualResultOptions;
 
             $lastAnalysis = $insuranceAnalysisEnabled
                 ? $lead->insuranceAnalyses
@@ -1922,7 +1929,7 @@
                                                                     Selecione o novo status
                                                                 </option>
 
-                                                                @foreach ($manualResultOptions as $result => $label)
+                                                                @foreach ($availableManualResultOptions as $result => $label)
                                                                     <option
                                                                         value="{{ $result }}"
                                                                         @selected($isResultContextLead && old('result') === $result)
@@ -1977,7 +1984,7 @@
                                                             disabled
                                                         >
                                                             <option>Selecione o novo status</option>
-                                                            @foreach ($manualResultOptions as $label)
+                                                            @foreach ($availableManualResultOptions as $label)
                                                                 <option>{{ $label }}</option>
                                                             @endforeach
                                                         </select>

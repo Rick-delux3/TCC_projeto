@@ -69,6 +69,14 @@ class AdminLeadTagController extends Controller
                 ->withInput();
         }
 
+
+        if (
+            ManualLeadResultTags::currentFromTags($lead->tags_originais)
+            === $result
+        ) {
+            return $this->repeatedResultResponse($resultLabel);
+        }
+
         /*
          * Confirma se as cinco tags finais estão cadastradas.
          */
@@ -125,7 +133,7 @@ class AdminLeadTagController extends Controller
          * A solicitação e o agendamento do Job pertencem
          * à mesma transação lógica.
          */
-        DB::transaction(function () use (
+        $resultChangeQueued = DB::transaction(function () use (
             $request,
             $lead,
             $corretor,
@@ -133,10 +141,18 @@ class AdminLeadTagController extends Controller
             $resultLabel,
             $selectedTagKey,
             $selectedTag
-        ): void {
+        ): bool {
             $lockedLead = Lead::query()
                 ->lockForUpdate()
                 ->findOrFail($lead->id);
+
+            if (
+                ManualLeadResultTags::currentFromTags(
+                    $lockedLead->tags_originais
+                ) === $result
+            ) {
+                return false;
+            }
 
             $requestLog = CorretorActivityLog::create([
                 'corretor_id' => $corretor->id,
@@ -189,7 +205,13 @@ class AdminLeadTagController extends Controller
                 $requestLog->id,
                 version: $syncState->version,
             )->afterCommit();
+
+            return true;
         });
+
+        if (! $resultChangeQueued) {
+            return $this->repeatedResultResponse($resultLabel);
+        }
 
         return back()->with(
             'success',
@@ -198,6 +220,19 @@ class AdminLeadTagController extends Controller
                 $resultLabel
             )
         );
+    }
+
+    private function repeatedResultResponse(
+        string $resultLabel
+    ): RedirectResponse {
+        return back()
+            ->withErrors([
+                'result' => sprintf(
+                    'O lead já possui o status "%s". Selecione outro status.',
+                    $resultLabel
+                ),
+            ])
+            ->withInput();
     }
 
     private function normalizedIp(
