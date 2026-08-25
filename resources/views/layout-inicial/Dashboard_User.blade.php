@@ -10,6 +10,7 @@
     @vite(['resources/css/header-dashboard-user.css', 'resources/js/app.js'])
     @vite([
         'resources/css/dashboard-user.css',
+        'resources/css/lead-filters.css',
         'resources/css/leadlovers-correction.css',
         'resources/js/dashboard-user.js',
     ])

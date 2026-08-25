@@ -5,6 +5,7 @@ use App\Models\Imobiliaria;
 use App\Models\Lead;
 use App\Models\User;
 use App\Support\CorretorPermissions;
+use App\Support\LeadLoversInitialFailureCatalog;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\MessageBag;
 use Illuminate\Support\ViewErrorBag;
@@ -703,7 +704,7 @@ it('renders the visual sync filter with its count and preserves it in pagination
         ->assertOk()
         ->assertSee('name="leadlovers_sync"', false)
         ->assertSee('value="not_sent_invalid_data"', false)
-        ->assertSee('Não enviados à LeadLovers — dados a corrigir')
+        ->assertSee('Não enviados à LeadLovers')
         ->assertSee('leadlovers_sync=not_sent_invalid_data', false)
         ->assertDontSee('Lead excluded from invalid data filter');
 
@@ -712,9 +713,196 @@ it('renders the visual sync filter with its count and preserves it in pagination
         '//select[@name="leadlovers_sync"]'
         .'//option[@value="not_sent_invalid_data" and @selected]',
     )->item(0);
+    $quickFilter = $dom['xpath']->query(
+        '//*[@data-leadlovers-quick-filter and @aria-current="true"]',
+    )->item(0);
+    $expectedLabel = app(LeadLoversInitialFailureCatalog::class)
+        ->dashboardSyncOptions()[LeadLoversInitialFailureCatalog::DASHBOARD_FILTER_NOT_SENT];
 
     expect($option)->not->toBeNull()
-        ->and(trim((string) $option?->textContent))->toContain('(7)');
+        ->and(trim((string) $option?->textContent))->toBe($expectedLabel.' (7)')
+        ->and($quickFilter)->not->toBeNull()
+        ->and($quickFilter?->getAttribute('aria-label'))->toContain('7 lead(s)')
+        ->and($quickFilter?->getAttribute('href'))->not->toContain('leadlovers_sync=');
+});
+
+it('keeps the admin LeadLovers sync option available and selectable when its count is zero', function () {
+    $admin = updateLeadDashboardAdmin();
+
+    updateLeadDashboardLead([
+        'nome' => 'Lead pending outside the initial failure filter',
+    ]);
+
+    $response = $this
+        ->actingAs($admin, 'admin')
+        ->get(route('Dashboard-Admin'));
+
+    $response->assertOk();
+
+    $dom = updateLeadDashboardDom($response->getContent());
+    $select = $dom['xpath']->query(
+        '//select[@name="leadlovers_sync"]',
+    )->item(0);
+    $option = $dom['xpath']->query(
+        './/option[@value="not_sent_invalid_data"]',
+        $select,
+    )->item(0);
+    $quickFilter = $dom['xpath']->query(
+        '//*[@data-leadlovers-quick-filter]',
+    )->item(0);
+    $quickFilterCount = $dom['xpath']->query(
+        './/*[contains(concat(" ", normalize-space(@class), " "), " lead-filter-chip__count ")]',
+        $quickFilter,
+    )->item(0);
+    $label = $dom['xpath']->query(sprintf(
+        '//label[@for=%s]',
+        updateLeadDashboardXpathLiteral((string) $select?->getAttribute('id')),
+    ))->item(0);
+    $form = $dom['xpath']->query('ancestor::form', $select)->item(0);
+    $panel = $dom['xpath']->query(
+        'ancestor::*[@data-lead-filter-panel]',
+        $select,
+    )->item(0);
+    $submit = $dom['xpath']->query(
+        './/button[@type="submit"] | .//input[@type="submit"]',
+        $form,
+    )->item(0);
+
+    expect($select)->not->toBeNull()
+        ->and($option)->not->toBeNull()
+        ->and(trim((string) $option?->textContent))->toBe('Não enviados à LeadLovers (0)')
+        ->and($option?->hasAttribute('disabled'))->toBeFalse()
+        ->and($label)->not->toBeNull()
+        ->and(trim((string) $label?->textContent))->toBe('Envio à LeadLovers')
+        ->and($panel)->not->toBeNull()
+        ->and($form?->hasAttribute('data-lead-filter-form'))->toBeTrue()
+        ->and($form?->getAttribute('aria-labelledby'))->not->toBe('')
+        ->and($form?->getAttribute('method'))->toBe('GET')
+        ->and($submit)->not->toBeNull()
+        ->and(trim((string) $submit?->textContent))->not->toBe('')
+        ->and($quickFilter)->not->toBeNull()
+        ->and(trim((string) $quickFilterCount?->textContent))->toBe('0')
+        ->and($quickFilter?->getAttribute('href'))
+        ->toContain('leadlovers_sync=not_sent_invalid_data')
+        ->and($response->viewData('notSentToLeadLoversCount'))->toBe(0);
+
+    $filteredResponse = $this
+        ->actingAs($admin, 'admin')
+        ->get(route('Dashboard-Admin', [
+            'leadlovers_sync' => 'not_sent_invalid_data',
+        ]));
+
+    $filteredResponse->assertOk();
+
+    $filteredDom = updateLeadDashboardDom($filteredResponse->getContent());
+    $selectedOption = $filteredDom['xpath']->query(
+        '//select[@name="leadlovers_sync"]'
+        .'//option[@value="not_sent_invalid_data" and @selected]',
+    )->item(0);
+    $selectedQuickFilter = $filteredDom['xpath']->query(
+        '//*[@data-leadlovers-quick-filter and @aria-current="true"]',
+    )->item(0);
+
+    expect($selectedOption)->not->toBeNull()
+        ->and($selectedQuickFilter)->not->toBeNull()
+        ->and($selectedQuickFilter?->getAttribute('aria-label'))
+        ->toContain('Remover filtro')
+        ->and($selectedQuickFilter?->getAttribute('href'))
+        ->not->toContain('leadlovers_sync=')
+        ->and($filteredResponse->viewData('selectedLeadLoversSync'))
+        ->toBe('not_sent_invalid_data')
+        ->and($filteredResponse->viewData('leads')->total())->toBe(0);
+});
+
+it('keeps the company LeadLovers sync option available and selectable when its count is zero', function () {
+    $company = updateLeadDashboardCompany();
+    $user = updateLeadDashboardCompanyUser($company);
+
+    updateLeadDashboardLead([
+        'company_id' => $company->id,
+        'nome' => 'Company lead pending outside the initial failure filter',
+    ]);
+
+    $test = $this
+        ->actingAs($user)
+        ->withSession([
+            'company_id' => $company->id,
+            '2fa_passed' => true,
+        ]);
+
+    $response = $test->get(route('company.dashboard'));
+    $response->assertOk();
+
+    $dom = updateLeadDashboardDom($response->getContent());
+    $select = $dom['xpath']->query(
+        '//select[@name="leadlovers_sync"]',
+    )->item(0);
+    $option = $dom['xpath']->query(
+        './/option[@value="not_sent_invalid_data"]',
+        $select,
+    )->item(0);
+    $quickFilter = $dom['xpath']->query(
+        '//*[@data-leadlovers-quick-filter]',
+    )->item(0);
+    $quickFilterCount = $dom['xpath']->query(
+        './/*[contains(concat(" ", normalize-space(@class), " "), " lead-filter-chip__count ")]',
+        $quickFilter,
+    )->item(0);
+    $label = $dom['xpath']->query(sprintf(
+        '//label[@for=%s]',
+        updateLeadDashboardXpathLiteral((string) $select?->getAttribute('id')),
+    ))->item(0);
+    $form = $dom['xpath']->query('ancestor::form', $select)->item(0);
+    $panel = $dom['xpath']->query(
+        'ancestor::*[@data-lead-filter-panel]',
+        $select,
+    )->item(0);
+    $submit = $dom['xpath']->query(
+        './/button[@type="submit"] | .//input[@type="submit"]',
+        $form,
+    )->item(0);
+
+    expect($select)->not->toBeNull()
+        ->and($option)->not->toBeNull()
+        ->and(trim((string) $option?->textContent))->toBe('Não enviados à LeadLovers (0)')
+        ->and($option?->hasAttribute('disabled'))->toBeFalse()
+        ->and($label)->not->toBeNull()
+        ->and(trim((string) $label?->textContent))->toBe('Envio à LeadLovers')
+        ->and($panel)->not->toBeNull()
+        ->and($form?->hasAttribute('data-lead-filter-form'))->toBeTrue()
+        ->and($form?->getAttribute('aria-labelledby'))->not->toBe('')
+        ->and($form?->getAttribute('method'))->toBe('GET')
+        ->and($submit)->not->toBeNull()
+        ->and(trim((string) $submit?->textContent))->not->toBe('')
+        ->and($quickFilter)->not->toBeNull()
+        ->and(trim((string) $quickFilterCount?->textContent))->toBe('0')
+        ->and($quickFilter?->getAttribute('href'))
+        ->toContain('leadlovers_sync=not_sent_invalid_data')
+        ->and($response->viewData('notSentToLeadLoversCount'))->toBe(0);
+
+    $filteredResponse = $test->get(route('company.dashboard', [
+        'leadlovers_sync' => 'not_sent_invalid_data',
+    ]));
+    $filteredResponse->assertOk();
+
+    $filteredDom = updateLeadDashboardDom($filteredResponse->getContent());
+    $selectedOption = $filteredDom['xpath']->query(
+        '//select[@name="leadlovers_sync"]'
+        .'//option[@value="not_sent_invalid_data" and @selected]',
+    )->item(0);
+    $selectedQuickFilter = $filteredDom['xpath']->query(
+        '//*[@data-leadlovers-quick-filter and @aria-current="true"]',
+    )->item(0);
+
+    expect($selectedOption)->not->toBeNull()
+        ->and($selectedQuickFilter)->not->toBeNull()
+        ->and($selectedQuickFilter?->getAttribute('aria-label'))
+        ->toContain('Remover filtro')
+        ->and($selectedQuickFilter?->getAttribute('href'))
+        ->not->toContain('leadlovers_sync=')
+        ->and($filteredResponse->viewData('selectedLeadLoversSync'))
+        ->toBe('not_sent_invalid_data')
+        ->and($filteredResponse->viewData('leads')->total())->toBe(0);
 });
 
 it('returns to the normal synchronized presentation after the resend succeeds', function () {
@@ -815,4 +1003,30 @@ it('shares the correction stylesheet and preserves dark, mobile, and reduced-mot
             '/@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.leadlovers-correction-trigger:hover\s*\{[\s\S]*?transform:\s*none;/',
         )
         ->not->toContain('order: -1;');
+});
+
+it('loads the shared lead filter design with responsive and accessible interaction states', function () {
+    $adminLayout = file_get_contents(
+        resource_path('views/layout-inicial/Dashboard_Admin.blade.php'),
+    );
+    $companyLayout = file_get_contents(
+        resource_path('views/layout-inicial/Dashboard_User.blade.php'),
+    );
+    $viteConfig = file_get_contents(base_path('vite.config.js'));
+    $stylesheet = file_get_contents(resource_path('css/lead-filters.css'));
+
+    expect($adminLayout)
+        ->toContain("'resources/css/lead-filters.css'")
+        ->and($companyLayout)
+        ->toContain("'resources/css/lead-filters.css'")
+        ->and($viteConfig)
+        ->toContain("'resources/css/lead-filters.css'")
+        ->and($stylesheet)
+        ->toContain('.lead-filter-panel')
+        ->toContain('.lead-filter-chip--sync[aria-current="true"]')
+        ->toContain('min-height: 44px;')
+        ->toContain('.dashboard-shell[data-dashboard-theme="dark"] .lead-filter-chip__count')
+        ->toContain('@media (max-width: 767.98px)')
+        ->toContain('@media (prefers-reduced-motion: reduce)')
+        ->toContain('@media (forced-colors: active)');
 });

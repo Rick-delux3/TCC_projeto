@@ -68,9 +68,8 @@ class DashboardController extends Controller
         $companyTagName = mb_strtolower(trim((string) $company->name));
         $selectedTag = trim((string) $request->query('tag', ''));
         $leadSearch = trim(preg_replace('/\s+/', ' ', (string) $request->query('lead_name', '')));
-        $leadLoversSyncOptions = [
-            'not_sent_invalid_data' => 'Não enviados à LeadLovers — dados a corrigir',
-        ];
+        $leadLoversSyncOptions = $this->leadLoversFailureCatalog
+            ->dashboardSyncOptions();
         $selectedLeadLoversSync = trim(
             (string) $request->query('leadlovers_sync', '')
         );
@@ -137,7 +136,10 @@ class DashboardController extends Controller
             }
         }
 
-        if ($selectedLeadLoversSync === 'not_sent_invalid_data') {
+        if (
+            $selectedLeadLoversSync
+            === LeadLoversInitialFailureCatalog::DASHBOARD_FILTER_NOT_SENT
+        ) {
             $leadsQuery->notSentToLeadLoversBecauseOfInvalidData();
         }
 

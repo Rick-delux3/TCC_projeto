@@ -47,7 +47,12 @@
     $leads = $leads ?? collect();
     $imobiliarias = $imobiliarias ?? collect();
     $leadLoversFailures = $leadLoversFailures ?? [];
-    $leadLoversSyncOptions = $leadLoversSyncOptions ?? [];
+    $leadLoversSyncOptions = ! empty($leadLoversSyncOptions)
+        ? $leadLoversSyncOptions
+        : app(\App\Support\LeadLoversInitialFailureCatalog::class)
+            ->dashboardSyncOptions();
+    $leadLoversNotSentFilter =
+        \App\Support\LeadLoversInitialFailureCatalog::DASHBOARD_FILTER_NOT_SENT;
     $notSentToLeadLoversCount = $notSentToLeadLoversCount ?? 0;
 
     $resultadoOptions = collect(
@@ -559,7 +564,7 @@
                     {{ $isCeo ? 'Dashboard do CEO' : 'Dashboard do corretor' }}
                 </span>
 
-                <h1 class="h2 fw-bold mb-1">
+                <h1 class="h2 fw-bold mb-1" >
                     Central de leads
                 </h1>
 
@@ -779,46 +784,54 @@
         </div>
 
         {{-- Filtros --}}
-        <div class="card border-0 shadow-sm rounded-5 mb-4" id="leads-section">
-            <div class="card-body p-4">
-                <div class="d-flex flex-column flex-xl-row justify-content-between align-items-xl-start gap-3 mb-4">
-                    <div>
-                        <span class="badge text-bg-secondary mb-2">
-                            Filtros
+        <section
+            class="lead-filter-panel"
+            id="leads-section"
+            aria-labelledby="admin-lead-filter-title"
+            data-lead-filter-panel
+        >
+            <div class="lead-filter-panel__inner">
+                <header class="lead-filter-panel__header">
+                    <div class="lead-filter-panel__copy">
+                        <span class="lead-filter-panel__eyebrow">
+                            <i class="bi bi-sliders2" aria-hidden="true"></i>
+                            Central de filtros
                         </span>
 
-                        <h2 class="h4 fw-bold mb-1">
+                        <h2 id="admin-lead-filter-title" class="lead-filter-panel__title">
                             Lista de leads
                         </h2>
 
-                        <p class="text-muted mb-0">
-                            Combine busca, vínculo com imobiliária, perfil do solicitante e resultado.
+                        <p class="lead-filter-panel__description">
+                            Cruze origem, perfil, resultado e envio sem perder o contexto da fila.
                         </p>
                     </div>
 
-                    <div class="text-xl-end">
-                        <div class="fw-bold">
-                            {{ $filteredLeads }} lead(s)
-                        </div>
-
-                        <div class="small text-muted">
-                            {{ $isFiltering ? 'Resultado filtrado' : 'Base geral' }}
-                        </div>
+                    <div class="lead-filter-panel__result" role="status" aria-live="polite">
+                        <span class="lead-filter-panel__result-value">{{ $filteredLeads }}</span>
+                        <span class="lead-filter-panel__result-label">lead(s)</span>
+                        <small>{{ $isFiltering ? 'na seleção atual' : 'na base geral' }}</small>
                     </div>
-                </div>
+                </header>
 
                 @can('view-leads')
-                    <form method="GET" action="{{ $dashboardRoute }}#leads-section">
-                        <div class="row g-3 align-items-end">
+                    <form
+                        method="GET"
+                        action="{{ $dashboardRoute }}#leads-section"
+                        class="lead-filter-form"
+                        aria-labelledby="admin-lead-filter-title"
+                        data-lead-filter-form
+                    >
+                        <div class="lead-filter-form__grid lead-filter-form__grid--admin">
 
                             {{-- Busca --}}
-                            <div class="col-12 col-md-6 col-xl-2">
-                                <label for="admin-lead-search" class="form-label small text-muted">
+                            <div class="lead-filter-field lead-filter-field--search">
+                                <label for="admin-lead-search" class="lead-filter-field__label">
                                     Buscar lead
                                 </label>
 
-                                <div class="input-group">
-                                    <span class="input-group-text bg-white">
+                                <div class="lead-filter-control-shell">
+                                    <span class="lead-filter-control-shell__icon">
                                         <i class="bi bi-search" aria-hidden="true"></i>
                                     </span>
 
@@ -826,7 +839,7 @@
                                         type="text"
                                         id="admin-lead-search"
                                         name="lead_name"
-                                        class="form-control"
+                                        class="lead-filter-control lead-filter-control--search"
                                         value="{{ $leadSearch }}"
                                         placeholder="Nome, e-mail, CPF ou telefone"
                                         autocomplete="off"
@@ -835,12 +848,12 @@
                             </div>
 
                             {{-- Vínculo com imobiliária --}}
-                            <div class="col-12 col-md-6 col-xl-2">
-                                <label for="admin-imobiliaria-filter" class="form-label small text-muted">
+                            <div class="lead-filter-field">
+                                <label for="admin-imobiliaria-filter" class="lead-filter-field__label">
                                     Vínculo com imobiliária
                                 </label>
 
-                                <select id="admin-imobiliaria-filter" name="imobiliaria" class="form-select">
+                                <select id="admin-imobiliaria-filter" name="imobiliaria" class="lead-filter-control">
                                     <option value="">Todos os vínculos</option>
 
                                     <option
@@ -868,15 +881,15 @@
                             </div>
 
                             {{-- Perfil do solicitante --}}
-                            <div class="col-12 col-md-6 col-xl-3">
-                                <label for="admin-tipo-solicitante-filter" class="form-label small text-muted">
+                            <div class="lead-filter-field">
+                                <label for="admin-tipo-solicitante-filter" class="lead-filter-field__label">
                                     Perfil do solicitante
                                 </label>
 
                                 <select
                                     id="admin-tipo-solicitante-filter"
                                     name="tipo_solicitante"
-                                    class="form-select"
+                                    class="lead-filter-control"
                                 >
                                     <option value="">Todos os perfis</option>
 
@@ -892,17 +905,17 @@
                             </div>
 
                             {{-- Resultado --}}
-                            <div class="col-12 col-md-6 col-xl-2">
-                                <label for="admin-resultado-filter" class="form-label small text-muted">
+                            <div class="lead-filter-field">
+                                <label for="admin-resultado-filter" class="lead-filter-field__label">
                                     Resultado/tag
                                 </label>
 
                                 <select
                                     id="admin-resultado-filter"
                                     name="resultado"
-                                    class="form-select"
+                                    class="lead-filter-control"
                                 >
-                                    <option value="">Todos</option>
+                                    <option value="">Todos os resultados</option>
 
                                     @foreach ($manualResultOptions as $result => $label)
                                         <option
@@ -916,17 +929,17 @@
                             </div>
 
                             {{-- Envio inicial para a LeadLovers --}}
-                            <div class="col-12 col-md-6 col-xl-2">
-                                <label for="admin-leadlovers-sync-filter" class="form-label small text-muted">
+                            <div class="lead-filter-field lead-filter-field--sync">
+                                <label for="admin-leadlovers-sync-filter" class="lead-filter-field__label">
                                     Envio à LeadLovers
                                 </label>
 
                                 <select
                                     id="admin-leadlovers-sync-filter"
                                     name="leadlovers_sync"
-                                    class="form-select"
+                                    class="lead-filter-control"
                                 >
-                                    <option value="">Todos</option>
+                                    <option value="">Todos os envios</option>
 
                                     @foreach ($leadLoversSyncOptions as $value => $label)
                                         <option
@@ -940,10 +953,10 @@
                             </div>
 
                             {{-- Botão --}}
-                            <div class="col-12 col-md-6 col-xl-1 d-grid">
-                                <button type="submit" class="btn btn-primary" title="Filtrar">
+                            <div class="lead-filter-actions">
+                                <button type="submit" class="lead-filter-submit">
                                     <i class="bi bi-funnel" aria-hidden="true"></i>
-                                    <span class="visually-hidden">Aplicar filtros</span>
+                                    <span>Aplicar filtros</span>
                                 </button>
                             </div>
                         </div>
@@ -951,38 +964,52 @@
 
                     {{-- Filtros ativos --}}
                     @if ($isFiltering)
-                        <div class="d-flex flex-wrap gap-2 mt-4">
-                            <span class="badge rounded-pill text-bg-light border text-muted px-3 py-2">
-                                Filtros ativos:
-                            </span>
+                        <div class="lead-filter-active" role="group" aria-label="Filtros ativos">
+                            <div class="lead-filter-active__header">
+                                <span>
+                                    <i class="bi bi-check2-circle" aria-hidden="true"></i>
+                                    Filtros ativos
+                                </span>
+                                <a href="{{ $dashboardRoute }}#leads-section" class="lead-filter-clear">
+                                    Limpar todos
+                                </a>
+                            </div>
+
+                            <div class="lead-filter-chip-list">
 
                             @if (filled($leadSearch))
                                 <a
                                     href="{{ request()->fullUrlWithQuery(['lead_name' => null, 'page' => 1]) }}#leads-section"
-                                    class="badge rounded-pill text-bg-primary text-decoration-none px-3 py-2"
+                                    class="lead-filter-chip lead-filter-chip--removable"
+                                    aria-label="Remover busca por {{ $leadSearch }}"
                                 >
+                                    <i class="bi bi-search" aria-hidden="true"></i>
                                     Busca: {{ $leadSearch }}
-                                    <i class="bi bi-x ms-1" aria-hidden="true"></i>
+                                    <i class="bi bi-x-lg" aria-hidden="true"></i>
                                 </a>
                             @endif
 
                             @if (filled($selectedImobiliaria))
                                 <a
                                     href="{{ request()->fullUrlWithQuery(['imobiliaria' => null, 'page' => 1]) }}#leads-section"
-                                    class="badge rounded-pill text-bg-success text-decoration-none px-3 py-2"
+                                    class="lead-filter-chip lead-filter-chip--removable"
+                                    aria-label="Remover filtro de vínculo {{ $selectedImobiliariaName ?? 'selecionado' }}"
                                 >
+                                    <i class="bi bi-buildings" aria-hidden="true"></i>
                                     Vínculo: {{ $selectedImobiliariaName ?? 'Selecionado' }}
-                                    <i class="bi bi-x ms-1" aria-hidden="true"></i>
+                                    <i class="bi bi-x-lg" aria-hidden="true"></i>
                                 </a>
                             @endif
 
                             @if (filled($selectedTipoSolicitante))
                                 <a
                                     href="{{ request()->fullUrlWithQuery(['tipo_solicitante' => null, 'page' => 1]) }}#leads-section"
-                                    class="badge rounded-pill text-bg-info text-decoration-none px-3 py-2"
+                                    class="lead-filter-chip lead-filter-chip--removable"
+                                    aria-label="Remover filtro de perfil {{ $tipoSolicitantesOptions[$selectedTipoSolicitante] ?? $selectedTipoSolicitante }}"
                                 >
+                                    <i class="bi bi-person-vcard" aria-hidden="true"></i>
                                     Perfil: {{ $tipoSolicitantesOptions[$selectedTipoSolicitante] ?? $selectedTipoSolicitante }}
-                                    <i class="bi bi-x ms-1" aria-hidden="true"></i>
+                                    <i class="bi bi-x-lg" aria-hidden="true"></i>
                                 </a>
                             @endif
 
@@ -994,46 +1021,46 @@
                                 @endphp
                                 <a
                                     href="{{ request()->fullUrlWithQuery(['resultado' => null, 'page' => 1]) }}#leads-section"
-                                    class="badge rounded-pill {{ $selectedResultVisual['active'] }} text-decoration-none px-3 py-2"
+                                    class="lead-filter-chip lead-filter-chip--removable"
                                     aria-label="Remover filtro de resultado {{ $selectedResultLabel }}"
                                 >
-                                    <i class="bi {{ $selectedResultVisual['icon'] }} me-1" aria-hidden="true"></i>
+                                    <i class="bi {{ $selectedResultVisual['icon'] }}" aria-hidden="true"></i>
                                     Resultado: {{ $selectedResultLabel }}
-                                    <i class="bi bi-x ms-1" aria-hidden="true"></i>
+                                    <i class="bi bi-x-lg" aria-hidden="true"></i>
                                 </a>
                             @endif
 
                             @if (filled($selectedLeadLoversSync))
                                 <a
                                     href="{{ request()->fullUrlWithQuery(['leadlovers_sync' => null, 'page' => 1]) }}#leads-section"
-                                    class="badge rounded-pill text-bg-danger text-decoration-none px-3 py-2"
+                                    class="lead-filter-chip lead-filter-chip--removable lead-filter-chip--sync"
                                     aria-label="Remover filtro de envio à LeadLovers {{ $leadLoversSyncOptions[$selectedLeadLoversSync] ?? $selectedLeadLoversSync }}"
                                 >
-                                    LeadLovers: {{ $leadLoversSyncOptions[$selectedLeadLoversSync] ?? $selectedLeadLoversSync }}
-                                    <i class="bi bi-x ms-1" aria-hidden="true"></i>
+                                    <i class="bi bi-cloud-slash" aria-hidden="true"></i>
+                                    {{ $leadLoversSyncOptions[$selectedLeadLoversSync] ?? $selectedLeadLoversSync }}
+                                    <i class="bi bi-x-lg" aria-hidden="true"></i>
                                 </a>
                             @endif
-                        </div>
-
-                        <div class="mt-3">
-                            <a href="{{ $dashboardRoute }}#leads-section" class="btn btn-sm btn-outline-secondary">
-                                Limpar todos os filtros
-                            </a>
+                            </div>
                         </div>
                     @endif
 
                     {{-- Atalhos rápidos que preservam busca, vínculo e perfil --}}
-                    <div class="d-flex flex-wrap gap-2 mt-4 pt-3 border-top">
-                        <span class="small text-muted me-1">
-                            Refinar rapidamente:
-                        </span>
+                    <nav class="lead-filter-quick" aria-label="Filtros rápidos de leads">
+                        <div class="lead-filter-quick__copy">
+                            <span>Acesso rápido</span>
+                            <small>Resultado comercial e pendências de integração</small>
+                        </div>
+
+                        <div class="lead-filter-chip-list lead-filter-chip-list--quick">
 
                         <a
                             href="{{ request()->fullUrlWithQuery(['resultado' => null, 'page' => 1]) }}#leads-section"
-                            class="badge rounded-pill text-decoration-none px-3 py-2 {{ blank($selectedResultado) ? 'text-bg-dark' : 'text-bg-light border text-muted' }}"
+                            class="lead-filter-chip lead-filter-chip--all"
                             @if (blank($selectedResultado)) aria-current="true" @endif
                         >
-                            Todos
+                            <i class="bi bi-grid-3x3-gap" aria-hidden="true"></i>
+                            Todos os resultados
                             @if (blank($selectedResultado))
                                 <span class="visually-hidden"> (selecionado)</span>
                             @endif
@@ -1046,8 +1073,11 @@
                                 $resultIsSelected = $selectedResultado === $result;
                             @endphp
                             <a
-                                href="{{ request()->fullUrlWithQuery(['resultado' => $result, 'page' => 1]) }}#leads-section"
-                                class="badge rounded-pill text-decoration-none px-3 py-2 d-inline-flex align-items-center gap-1 {{ $resultIsSelected ? $resultVisual['active'] : $resultVisual['inactive'] }}"
+                                href="{{ request()->fullUrlWithQuery([
+                                    'resultado' => $resultIsSelected ? null : $result,
+                                    'page' => 1,
+                                ]) }}#leads-section"
+                                class="lead-filter-chip lead-filter-chip--{{ str_replace('_', '-', $result) }}"
                                 @if ($resultIsSelected) aria-current="true" @endif
                             >
                                 <i class="bi {{ $resultVisual['icon'] }}" aria-hidden="true"></i>
@@ -1057,14 +1087,36 @@
                                 @endif
                             </a>
                         @endforeach
-                    </div>
+
+                            <span class="lead-filter-quick__divider" aria-hidden="true"></span>
+
+                            <a
+                                href="{{ request()->fullUrlWithQuery([
+                                    'leadlovers_sync' => $selectedLeadLoversSync === $leadLoversNotSentFilter
+                                        ? null
+                                        : $leadLoversNotSentFilter,
+                                    'page' => 1,
+                                ]) }}#leads-section"
+                                class="lead-filter-chip lead-filter-chip--sync lead-filter-chip--priority"
+                                aria-label="{{ $selectedLeadLoversSync === $leadLoversNotSentFilter
+                                    ? 'Remover filtro de não enviados à LeadLovers; '.$notSentToLeadLoversCount.' lead(s) na seleção'
+                                    : 'Mostrar não enviados à LeadLovers; '.$notSentToLeadLoversCount.' lead(s) pendente(s)' }}"
+                                @if ($selectedLeadLoversSync === $leadLoversNotSentFilter) aria-current="true" @endif
+                                data-leadlovers-quick-filter
+                            >
+                                <i class="bi bi-cloud-slash" aria-hidden="true"></i>
+                                <span>Não enviados à LeadLovers</span>
+                                <strong class="lead-filter-chip__count">{{ $notSentToLeadLoversCount }}</strong>
+                            </a>
+                        </div>
+                    </nav>
                 @else
-                    <div class="alert alert-warning rounded-4 mb-0">
+                    <div class="lead-filter-panel__warning" role="alert">
                         Você não possui permissão para visualizar leads.
                     </div>
                 @endcan
             </div>
-        </div>
+        </section>
 
         {{-- Lista de leads --}}
         @can('view-leads')

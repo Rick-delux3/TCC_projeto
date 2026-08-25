@@ -7,12 +7,27 @@ use App\Models\Lead;
 final class LeadLoversInitialFailureCatalog
 {
     /**
+     * Mantém compatibilidade com URLs já compartilhadas e salvas.
+     */
+    public const DASHBOARD_FILTER_NOT_SENT = 'not_sent_invalid_data';
+
+    /**
      * Create a new class instance.
      */
     private const CORRECTABLE_FIELDS = [
         'PHONE_EXISTS' => ['tel'],
         'EMAIL_EXISTS' => ['email'],
     ];
+
+    /**
+     * @return array<string, string>
+     */
+    public function dashboardSyncOptions(): array
+    {
+        return [
+            self::DASHBOARD_FILTER_NOT_SENT => 'Não enviados à LeadLovers',
+        ];
+    }
 
     public function describe(Lead $lead): array
     {

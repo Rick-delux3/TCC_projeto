@@ -46,9 +46,8 @@ class CorretorDashboardController extends Controller
 
         $selectedResultado = $legacyResultadoAliases[$requestResultado] ?? $requestResultado;
 
-        $leadLoversSyncOptions = [
-            'not_sent_invalid_data' => 'Não enviados à LeadLovers — dados a corrigir',
-        ];
+        $leadLoversSyncOptions = $this->leadLoversFailureCatalog
+            ->dashboardSyncOptions();
         $selectedLeadLoversSync = trim(
             (string) $request->input('leadlovers_sync', '')
         );
@@ -162,7 +161,10 @@ class CorretorDashboardController extends Controller
             }
         }
 
-        if ($selectedLeadLoversSync === 'not_sent_invalid_data') {
+        if (
+            $selectedLeadLoversSync
+            === LeadLoversInitialFailureCatalog::DASHBOARD_FILTER_NOT_SENT
+        ) {
             $leadsQuery->notSentToLeadLoversBecauseOfInvalidData();
         }
 
