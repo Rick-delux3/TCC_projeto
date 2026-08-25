@@ -2,9 +2,8 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\DB;
-
+use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
@@ -52,7 +51,7 @@ return new class extends Migration
             ])->whereIn('leadlovers_status', [
                 'failed',
                 'tag_failed',
-                'sequence_failed'
+                'sequence_failed',
             ])
             ->whereNotNull('leadlovers_response')
             ->orderBy('id')
@@ -108,18 +107,11 @@ return new class extends Migration
                         )
                         : null;
 
-                    $detail = $response['safe_reason'] ?? null;
+                    $detail = $this->sanitizeHistoricalDetail(
+                        $response['safe_reason'] ?? null
+                    );
 
-                    $detail = is_string($detail)
-                        ? mb_strcut(
-                            trim(strip_tags($detail)),
-                            0,
-                            1000,
-                            'UTF-8'
-                        )
-                        : null;
-
-                        DB::table('leads')
+                    DB::table('leads')
                         ->where('id', $lead->id)
                         ->update([
                             'leadlovers_initial_error_status' => $statusCode,
@@ -131,6 +123,45 @@ return new class extends Migration
                         ]);
                 }
             });
+    }
+
+    private function sanitizeHistoricalDetail(mixed $value): ?string
+    {
+        if (! is_string($value)) {
+            return null;
+        }
+
+        $value = preg_replace(
+            '/<script\b[^>]*>.*?<\/script>/is',
+            ' ',
+            html_entity_decode($value, ENT_QUOTES | ENT_HTML5, 'UTF-8')
+        ) ?? '';
+        $value = strip_tags($value);
+        $value = preg_replace(
+            '/\b([A-Z0-9._%+\-]+)@([A-Z0-9.\-]+\.[A-Z]{2,})\b/iu',
+            '[redacted-email]',
+            $value
+        ) ?? '';
+        $value = preg_replace(
+            '/(?<!\d)(?:\+?55[\s.\-]*)?(?:\(?\d{2}\)?[\s.\-]*)?9?\d{4}[\s.\-]*\d{4}(?!\d)/',
+            '[redacted-phone]',
+            $value
+        ) ?? '';
+        $value = preg_replace(
+            '/\b(token|authorization|api[\s_-]*key)\s*[:=]\s*[^\s,;]+/iu',
+            '$1=[redacted]',
+            $value
+        ) ?? '';
+        $value = preg_replace(
+            '/\b(?:sk|pk)-[A-Za-z0-9_-]{8,}\b/u',
+            '[redacted-credential]',
+            $value
+        ) ?? '';
+        $value = trim(preg_replace('/\s+/u', ' ', $value) ?? '');
+
+        return $value === ''
+            ? null
+            : mb_strcut($value, 0, 1000, 'UTF-8');
     }
 
     /**

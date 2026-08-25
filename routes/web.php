@@ -49,6 +49,10 @@ Route::prefix('/Dashboard')->group(function () {
         Route::put('/leads/{lead}', [DashboardLeadController::class, 'update'])
             ->name('dashboard.leads.update');
 
+        Route::post('/leads/{lead}/leadlovers/corrigir', [DashboardLeadController::class, 'correctLeadLoversFailure'])
+            ->middleware('throttle:5,1')
+            ->name('dashboard.leads.leadlovers.correct');
+
         Route::post('/leads/{lead}/reanalisar', [DashboardLeadController::class, 'reanalyze'])
             ->middleware('analysis.enabled')
             ->name('dashboard.leads.reanalyze');
@@ -117,6 +121,10 @@ Route::prefix('/Dashboard')->group(function () {
         Route::post('/leads/{lead}', [DashboardLeadController::class, 'adminUpdate'])
             ->middleware('can:edit-leads')
             ->name('admin.leads.update');
+
+        Route::post('/leads/{lead}/leadlovers/corrigir', [DashboardLeadController::class, 'adminCorrectLeadLoversFailure'])
+            ->middleware(['can:edit-leads', 'throttle:5,1'])
+            ->name('admin.leads.leadlovers.correct');
 
         Route::post('/leads/{lead}/reanalisar', [DashboardLeadController::class, 'adminReanalyze'])
             ->middleware(['can:create-analysis', 'analysis.enabled'])

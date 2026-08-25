@@ -295,6 +295,116 @@ document.addEventListener('DOMContentLoaded', function () {
         leadUpdateForms.forEach(resetLeadUpdateForm);
     });
 
+    const leadLoversCorrectionForms = document.querySelectorAll(
+        '.leadlovers-correction-form'
+    );
+
+    function resetLeadLoversCorrectionForm(form) {
+        const submitButton = form.querySelector(
+            '[data-leadlovers-correction-submit]'
+        );
+        const spinner = form.querySelector(
+            '[data-leadlovers-correction-spinner]'
+        );
+        const label = form.querySelector(
+            '[data-leadlovers-correction-label]'
+        );
+        const status = form.closest('.leadlovers-correction-modal')
+            ?.querySelector('[data-leadlovers-correction-status]');
+
+        delete form.dataset.submitting;
+        form.setAttribute('aria-busy', 'false');
+
+        if (submitButton) {
+            submitButton.disabled = false;
+        }
+
+        spinner?.classList.add('d-none');
+
+        if (label) {
+            label.textContent = label.dataset.defaultLabel
+                || 'Salvar e reenviar';
+        }
+
+        if (status) {
+            status.textContent = '';
+        }
+    }
+
+    leadLoversCorrectionForms.forEach(function (form) {
+        form.addEventListener('submit', function (event) {
+            if (form.dataset.submitting === 'true') {
+                event.preventDefault();
+                return;
+            }
+
+            if (!form.checkValidity()) {
+                return;
+            }
+
+            const submitButton = form.querySelector(
+                '[data-leadlovers-correction-submit]'
+            );
+            const spinner = form.querySelector(
+                '[data-leadlovers-correction-spinner]'
+            );
+            const label = form.querySelector(
+                '[data-leadlovers-correction-label]'
+            );
+            const status = form.closest('.leadlovers-correction-modal')
+                ?.querySelector('[data-leadlovers-correction-status]');
+
+            form.dataset.submitting = 'true';
+            form.setAttribute('aria-busy', 'true');
+
+            if (submitButton) {
+                submitButton.disabled = true;
+            }
+
+            spinner?.classList.remove('d-none');
+
+            if (label) {
+                label.dataset.defaultLabel ||= label.textContent.trim();
+                label.textContent = 'Salvando e reenviando...';
+            }
+
+            if (status) {
+                status.textContent = 'Salvando e reenviando...';
+            }
+
+            window.setTimeout(function () {
+                if (event.defaultPrevented) {
+                    resetLeadLoversCorrectionForm(form);
+                }
+            }, 0);
+        });
+    });
+
+    window.addEventListener('pageshow', function () {
+        leadLoversCorrectionForms.forEach(
+            resetLeadLoversCorrectionForm
+        );
+    });
+
+    document.querySelectorAll(
+        '.leadlovers-correction-modal'
+    ).forEach(function (modalElement) {
+        modalElement.addEventListener('shown.bs.modal', function () {
+            const preferredField = modalElement.querySelector(
+                '[data-leadlovers-correction-input].is-invalid, '
+                + '[data-leadlovers-correction-input]'
+            );
+
+            if (!preferredField) {
+                return;
+            }
+
+            window.setTimeout(function () {
+                preferredField.focus({ preventScroll: true });
+            }, 0);
+        });
+    });
+
     const leadValidationTargets = config.leadValidationTargets || null;
 
     if (
@@ -329,12 +439,51 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }
 
+    const leadLoversCorrectionValidationTargets =
+        config.leadLoversCorrectionValidationTargets || null;
+
+    if (
+        leadLoversCorrectionValidationTargets
+        && window.bootstrap?.Modal
+    ) {
+        const modalElement = document.getElementById(
+            leadLoversCorrectionValidationTargets.modal
+        );
+        const fieldElement = document.getElementById(
+            leadLoversCorrectionValidationTargets.field
+        );
+
+        if (modalElement && fieldElement) {
+            const revealLeadLoversCorrectionError = function () {
+                window.setTimeout(function () {
+                    fieldElement.focus();
+                }, 0);
+            };
+
+            if (modalElement.classList.contains('show')) {
+                revealLeadLoversCorrectionError();
+            } else {
+                modalElement.addEventListener(
+                    'shown.bs.modal',
+                    revealLeadLoversCorrectionError,
+                    { once: true }
+                );
+
+                window.bootstrap.Modal
+                    .getOrCreateInstance(modalElement)
+                    .show();
+            }
+        }
+    }
+
     /*
     |--------------------------------------------------------------------------
     | Limpeza de backdrop dos modais
     |--------------------------------------------------------------------------
     */
-    document.querySelectorAll('.lead-details-modal').forEach(function (modalEl) {
+    document.querySelectorAll(
+        '.lead-details-modal, .leadlovers-correction-modal'
+    ).forEach(function (modalEl) {
         modalEl.addEventListener('hidden.bs.modal', function () {
             document.querySelectorAll('.modal-backdrop').forEach(function (backdrop) {
                 backdrop.remove();
@@ -419,20 +568,38 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 
     function showRealtimeNotice(message, showReloadButton = true) {
-        if (realtimeMessage) {
-            realtimeMessage.textContent = message;
+        if (!realtimeNotice) {
+            return;
         }
 
-        realtimeReloadButton?.classList.toggle(
-            'd-none',
-            !showReloadButton
-        );
+        const wasHidden = realtimeNotice.classList.contains('d-none');
+        realtimeNotice.classList.remove('d-none');
 
-        realtimeNotice?.classList.remove('d-none');
+        const updateNotice = function () {
+            if (realtimeMessage) {
+                realtimeMessage.textContent = message;
+            }
+
+            realtimeReloadButton?.classList.toggle(
+                'd-none',
+                !showReloadButton
+            );
+        };
+
+        if (wasHidden) {
+            window.requestAnimationFrame(updateNotice);
+            return;
+        }
+
+        updateNotice();
     }
 
     function dashboardHasUnsavedChanges() {
         if (serverHasUnsavedInput) {
+            return true;
+        }
+
+        if (document.querySelector('.leadlovers-correction-modal.show')) {
             return true;
         }
 

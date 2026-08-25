@@ -3,10 +3,16 @@
 namespace App\Http\Controllers;
 
 use App\Models\Imobiliaria;
+use App\Models\Lead;
+use App\Support\LeadLoversInitialFailureCatalog;
 use Illuminate\Http\Request;
 
 class DashboardController extends Controller
 {
+    public function __construct(
+        private LeadLoversInitialFailureCatalog $leadLoversFailureCatalog,
+    ) {}
+
     private function ensureLeadAccessCode(Imobiliaria $company): void
     {
         if (filled($company->lead_access_code)) {
@@ -62,6 +68,19 @@ class DashboardController extends Controller
         $companyTagName = mb_strtolower(trim((string) $company->name));
         $selectedTag = trim((string) $request->query('tag', ''));
         $leadSearch = trim(preg_replace('/\s+/', ' ', (string) $request->query('lead_name', '')));
+        $leadLoversSyncOptions = [
+            'not_sent_invalid_data' => 'Não enviados à LeadLovers — dados a corrigir',
+        ];
+        $selectedLeadLoversSync = trim(
+            (string) $request->query('leadlovers_sync', '')
+        );
+
+        if (! array_key_exists(
+            $selectedLeadLoversSync,
+            $leadLoversSyncOptions
+        )) {
+            $selectedLeadLoversSync = '';
+        }
 
         if (mb_strtolower(trim($selectedTag)) === $companyTagName) {
             $selectedTag = '';
@@ -118,9 +137,23 @@ class DashboardController extends Controller
             }
         }
 
+        if ($selectedLeadLoversSync === 'not_sent_invalid_data') {
+            $leadsQuery->notSentToLeadLoversBecauseOfInvalidData();
+        }
+
         $leads = $leadsQuery
             ->paginate(6)
             ->withQueryString();
+
+        $notSentToLeadLoversCount = $company->leads()
+            ->notSentToLeadLoversBecauseOfInvalidData()
+            ->count();
+
+        $leadLoversFailures = $leads->getCollection()
+            ->mapWithKeys(fn (Lead $lead): array => [
+                (int) $lead->id => $this->leadLoversFailureCatalog->describe($lead),
+            ])
+            ->all();
 
         $totalLeads = $company->leads()
             ->createdThroughSystem()
@@ -175,6 +208,10 @@ class DashboardController extends Controller
                 : null,
             'leadAccessCode' => $company->lead_access_code,
             'leadFormActive' => (bool) $company->lead_form_active,
+            'selectedLeadLoversSync' => $selectedLeadLoversSync,
+            'leadLoversSyncOptions' => $leadLoversSyncOptions,
+            'notSentToLeadLoversCount' => $notSentToLeadLoversCount,
+            'leadLoversFailures' => $leadLoversFailures,
         ]);
     }
 }

@@ -46,6 +46,9 @@
 
     $leads = $leads ?? collect();
     $imobiliarias = $imobiliarias ?? collect();
+    $leadLoversFailures = $leadLoversFailures ?? [];
+    $leadLoversSyncOptions = $leadLoversSyncOptions ?? [];
+    $notSentToLeadLoversCount = $notSentToLeadLoversCount ?? 0;
 
     $resultadoOptions = collect(
         $resultadoOptions ?? []
@@ -137,10 +140,28 @@
         : collect($leads);
 
     $leadContextId = (string) old('lead_context_id', '');
-    $firstInvalidLeadField = collect($leadValidationFields)->first(
-        fn (string $field): bool => $errors->has($field)
-    );
+    $firstInvalidLeadField = filled($leadContextId)
+        ? collect($leadValidationFields)->first(
+            fn (string $field): bool => $errors->has($field)
+        )
+        : null;
     $leadValidationTargets = null;
+    $leadLoversCorrectionErrors = $errors->getBag(
+        'leadloversCorrection'
+    );
+    $leadLoversCorrectionContextId = (string) old(
+        'leadlovers_correction_context_id',
+        ''
+    );
+    $firstInvalidLeadLoversCorrectionField = collect([
+        'tel',
+        'email',
+        'leadlovers',
+    ])->first(
+        fn (string $field): bool =>
+            $leadLoversCorrectionErrors->has($field)
+    );
+    $leadLoversCorrectionValidationTargets = null;
 
     if (filled($leadContextId) && filled($firstInvalidLeadField)) {
         $leadContextLead = $visibleLeads->first(
@@ -153,6 +174,41 @@
                 'tab' => 'admin-lead-data-tab-'.$leadContextLead->id,
                 'field' => 'admin-lead-'.$leadContextLead->id.'-'.str_replace('_', '-', $firstInvalidLeadField),
             ];
+        }
+    }
+
+    if (
+        filled($leadLoversCorrectionContextId)
+        && filled($firstInvalidLeadLoversCorrectionField)
+    ) {
+        $correctionContextLead = $visibleLeads->first(
+            fn ($lead): bool =>
+                (string) $lead->id === $leadLoversCorrectionContextId
+        );
+
+        if ($correctionContextLead) {
+            $correctionFailure = $leadLoversFailures[
+                (int) $correctionContextLead->id
+            ] ?? null;
+            $correctionField = in_array(
+                $firstInvalidLeadLoversCorrectionField,
+                ['tel', 'email'],
+                true
+            )
+                ? $firstInvalidLeadLoversCorrectionField
+                : null;
+
+            if (($correctionFailure['correctable'] ?? false) === true) {
+                $leadLoversCorrectionValidationTargets = [
+                    'modal' => 'adminLeadLoversCorrectionModal'
+                        .$correctionContextLead->id,
+                    'field' => $correctionField
+                        ? 'admin-leadlovers-correction-'
+                            .$correctionContextLead->id.'-'.$correctionField
+                        : 'adminLeadLoversCorrectionModal'
+                            .$correctionContextLead->id.'GenericError',
+                ];
+            }
         }
     }
 
@@ -219,6 +275,8 @@
     $selectedResultado = $selectedResultado ?? request('resultado', '');
     $selectedTipoSolicitante = $selectedTipoSolicitante
         ?? request('tipo_solicitante', '');
+    $selectedLeadLoversSync = $selectedLeadLoversSync
+        ?? request('leadlovers_sync', '');
 
     $tipoSolicitantesOptions = $tipoSolicitantesOptions ?? [
         'imobiliaria_cadastrada' => 'Imobiliária cadastrada',
@@ -242,7 +300,8 @@
     $isFiltering = filled($leadSearch)
         || filled($selectedImobiliaria)
         || filled($selectedResultado)
-        || filled($selectedTipoSolicitante);
+        || filled($selectedTipoSolicitante)
+        || filled($selectedLeadLoversSync);
 
     /*
     |--------------------------------------------------------------------------
@@ -256,6 +315,12 @@
 
     $adminUpdateLeadRoute = function($lead) {
         return Route::has('admin.leads.update') ? route('admin.leads.update', $lead) : '#';
+    };
+
+    $adminLeadLoversCorrectionRoute = function ($lead) {
+        return Route::has('admin.leads.leadlovers.correct')
+            ? route('admin.leads.leadlovers.correct', $lead)
+            : '#';
     };
 
     /*
@@ -453,13 +518,13 @@
         <x-dashboard-realtime-notice />
 
         @if (session('success'))
-            <div class="alert alert-success rounded-4 border-0 shadow-sm">
+            <div class="alert alert-success rounded-4 border-0 shadow-sm" role="status" aria-live="polite">
                 {{ session('success') }}
             </div>
         @endif
 
         @if (session('error'))
-            <div class="alert alert-warning rounded-4 border-0 shadow-sm">
+            <div class="alert alert-warning rounded-4 border-0 shadow-sm" role="alert">
                 {{ session('error') }}
             </div>
         @endif
@@ -467,6 +532,17 @@
         @if (filled($firstInvalidLeadField) && $leadValidationTargets === null)
             <div class="alert alert-danger rounded-4 border-0 shadow-sm" role="alert">
                 Não foi possível associar os erros ao lead exibido nesta página.
+            </div>
+        @endif
+
+        @if (
+            filled($firstInvalidLeadLoversCorrectionField)
+            && $leadLoversCorrectionValidationTargets === null
+        )
+            <div class="alert alert-danger rounded-4 border-0 shadow-sm" role="alert">
+                {{ $leadLoversCorrectionErrors->first(
+                    $firstInvalidLeadLoversCorrectionField
+                ) }}
             </div>
         @endif
 
@@ -736,7 +812,7 @@
                         <div class="row g-3 align-items-end">
 
                             {{-- Busca --}}
-                            <div class="col-12 col-xl-3">
+                            <div class="col-12 col-md-6 col-xl-2">
                                 <label for="admin-lead-search" class="form-label small text-muted">
                                     Buscar lead
                                 </label>
@@ -759,7 +835,7 @@
                             </div>
 
                             {{-- Vínculo com imobiliária --}}
-                            <div class="col-12 col-md-6 col-xl-3">
+                            <div class="col-12 col-md-6 col-xl-2">
                                 <label for="admin-imobiliaria-filter" class="form-label small text-muted">
                                     Vínculo com imobiliária
                                 </label>
@@ -839,6 +915,30 @@
                                 </select>
                             </div>
 
+                            {{-- Envio inicial para a LeadLovers --}}
+                            <div class="col-12 col-md-6 col-xl-2">
+                                <label for="admin-leadlovers-sync-filter" class="form-label small text-muted">
+                                    Envio à LeadLovers
+                                </label>
+
+                                <select
+                                    id="admin-leadlovers-sync-filter"
+                                    name="leadlovers_sync"
+                                    class="form-select"
+                                >
+                                    <option value="">Todos</option>
+
+                                    @foreach ($leadLoversSyncOptions as $value => $label)
+                                        <option
+                                            value="{{ $value }}"
+                                            @selected($selectedLeadLoversSync === $value)
+                                        >
+                                            {{ $label }} ({{ $notSentToLeadLoversCount }})
+                                        </option>
+                                    @endforeach
+                                </select>
+                            </div>
+
                             {{-- Botão --}}
                             <div class="col-12 col-md-6 col-xl-1 d-grid">
                                 <button type="submit" class="btn btn-primary" title="Filtrar">
@@ -899,6 +999,17 @@
                                 >
                                     <i class="bi {{ $selectedResultVisual['icon'] }} me-1" aria-hidden="true"></i>
                                     Resultado: {{ $selectedResultLabel }}
+                                    <i class="bi bi-x ms-1" aria-hidden="true"></i>
+                                </a>
+                            @endif
+
+                            @if (filled($selectedLeadLoversSync))
+                                <a
+                                    href="{{ request()->fullUrlWithQuery(['leadlovers_sync' => null, 'page' => 1]) }}#leads-section"
+                                    class="badge rounded-pill text-bg-danger text-decoration-none px-3 py-2"
+                                    aria-label="Remover filtro de envio à LeadLovers {{ $leadLoversSyncOptions[$selectedLeadLoversSync] ?? $selectedLeadLoversSync }}"
+                                >
+                                    LeadLovers: {{ $leadLoversSyncOptions[$selectedLeadLoversSync] ?? $selectedLeadLoversSync }}
                                     <i class="bi bi-x ms-1" aria-hidden="true"></i>
                                 </a>
                             @endif
@@ -986,6 +1097,14 @@
 
                             $imobiliariaName = $getImobiliariaName($lead);
                             $tipoSolicitanteLabel = $getTipoSolicitanteLabel($lead);
+                            $leadLoversFailure = $leadLoversFailures[
+                                (int) $lead->id
+                            ] ?? app(
+                                \App\Support\LeadLoversInitialFailureCatalog::class
+                            )->describe($lead);
+                            $leadLoversFailureIsCorrectable =
+                                $leadLoversFailure['correctable']
+                                && $leadLoversFailure['fields'] !== [];
                         @endphp
 
                         <article class="card border-0 shadow-sm rounded-5 lead-card lead-list-item {{ $resultTone['card'] }}">
@@ -1093,14 +1212,32 @@
 
                                     {{-- Botões --}}
                                     <div class="col-12 col-md-4 col-xl-1">
-                                        <button
-                                            type="button"
-                                            class="btn btn-sm btn-outline-primary w-100 text-nowrap mb-2"
-                                            data-bs-toggle="modal"
-                                            data-bs-target="#adminLeadModal{{ $lead->id }}"
-                                        >
-                                            Visualizar
-                                        </button>
+                                        @can('edit-leads')
+                                            <button
+                                                type="button"
+                                                class="btn btn-sm {{ $leadLoversFailureIsCorrectable ? 'btn-danger leadlovers-correction-trigger' : 'btn-outline-primary' }} w-100 text-nowrap mb-2"
+                                                data-bs-toggle="modal"
+                                                data-bs-target="{{ $leadLoversFailureIsCorrectable ? '#adminLeadLoversCorrectionModal'.$lead->id : '#adminLeadModal'.$lead->id }}"
+                                                aria-controls="{{ $leadLoversFailureIsCorrectable ? 'adminLeadLoversCorrectionModal'.$lead->id : 'adminLeadModal'.$lead->id }}"
+                                                aria-haspopup="dialog"
+                                                aria-label="{{ $leadLoversFailureIsCorrectable ? 'Corrigir dados de '.$leadName.' para reenvio à LeadLovers' : 'Editar lead '.$leadName }}"
+                                            >
+                                                <i
+                                                    class="bi {{ $leadLoversFailureIsCorrectable ? 'bi-wrench-adjustable-circle' : 'bi-pencil-square' }} me-1"
+                                                    aria-hidden="true"
+                                                ></i>
+                                                {{ $leadLoversFailureIsCorrectable ? 'Corrigir' : 'Editar' }}
+                                            </button>
+                                        @else
+                                            <button
+                                                type="button"
+                                                class="btn btn-sm btn-outline-primary w-100 text-nowrap mb-2"
+                                                data-bs-toggle="modal"
+                                                data-bs-target="#adminLeadModal{{ $lead->id }}"
+                                            >
+                                                Visualizar
+                                            </button>
+                                        @endcan
 
                                         @if ($insuranceAnalysisEnabled)
                                             @can('create-analysis')
@@ -1126,7 +1263,10 @@
                                     <span class="small text-muted">
                                         LeadLovers:
                                     </span>
-                                    @include('partials.leadlovers-sync-status', ['lead' => $lead])
+                                    @include('partials.leadlovers-sync-status', [
+                                        'lead' => $lead,
+                                        'failure' => $leadLoversFailure,
+                                    ])
 
                                     @if ($visibleTags->isNotEmpty())
                                         @foreach ($visibleTags as $tag)
@@ -1439,6 +1579,18 @@
 
             $isLeadValidationContext = filled($firstInvalidLeadField)
                 && $leadContextId === (string) $lead->id;
+            $leadLoversFailure = $leadLoversFailures[(int) $lead->id]
+                ?? app(
+                    \App\Support\LeadLoversInitialFailureCatalog::class
+                )->describe($lead);
+            $leadLoversFailureIsCorrectable =
+                $leadLoversFailure['correctable']
+                && $leadLoversFailure['fields'] !== [];
+            $isLeadLoversCorrectionValidationContext =
+                filled($firstInvalidLeadLoversCorrectionField)
+                && $leadLoversCorrectionContextId === (string) $lead->id;
+            $leadCanBeGenerallyEdited = Gate::allows('edit-leads')
+                && ! $leadLoversFailureIsCorrectable;
         @endphp
 
         <div
@@ -1463,7 +1615,10 @@
                                     {{ $tipoSolicitanteLabel }}
                                 </span>
 
-                                @include('partials.leadlovers-sync-status', ['lead' => $lead])
+                                @include('partials.leadlovers-sync-status', [
+                                    'lead' => $lead,
+                                    'failure' => $leadLoversFailure,
+                                ])
                             </div>
 
                             <h5 class="modal-title fw-bold" id="adminLeadModalLabel{{ $lead->id }}">
@@ -1560,7 +1715,7 @@
                                 aria-labelledby="admin-lead-data-tab-{{ $lead->id }}"
                             >
                             {{-- Dados do cliente --}}
-                                @can('edit-leads')
+                                @if ($leadCanBeGenerallyEdited)
                                     <form
                                         method="POST"
                                         action="{{ $adminUpdateLeadRoute($lead) }}"
@@ -1575,7 +1730,11 @@
                                         <i class="bi bi-eye mt-1" aria-hidden="true"></i>
                                         <div>
                                             <strong>Visualização somente leitura.</strong>
-                                            Você pode consultar todos os dados deste lead, mas não possui permissão para editá-los.
+                                            @if ($leadLoversFailureIsCorrectable)
+                                                Use o botão <strong>Corrigir</strong> para alterar somente o campo recusado pela LeadLovers.
+                                            @else
+                                                Você pode consultar todos os dados deste lead, mas não possui permissão para editá-los.
+                                            @endif
                                         </div>
                                     </div>
 
@@ -1584,8 +1743,10 @@
 
                                         @include('partials.leadlovers-sync-status', [
                                             'lead' => $lead,
+                                            'failure' => $leadLoversFailure,
                                             'showLeadLoversBadge' => false,
                                             'showLeadLoversFailureMessage' => true,
+                                            'leadLoversFailureMessageMode' => 'full',
                                         ])
 
                                         <div class="mt-3">
@@ -1595,11 +1756,11 @@
                                                 'isLeadValidationContext' => $isLeadValidationContext,
                                             ])
                                         </div>
-                                @can('edit-leads')
+                                @if ($leadCanBeGenerallyEdited)
                                     </form>
                                 @else
                                     </fieldset>
-                                @endcan
+                                @endif
                             </div>
 
                             {{-- Tags --}}
@@ -1841,7 +2002,7 @@
                     </div>
 
                     <div class="modal-footer border-0 pt-0">
-                        @can('edit-leads')
+                        @if ($leadCanBeGenerallyEdited)
                             <button
                                 type="submit"
                                 form="adminLeadUpdateForm{{ $lead->id }}"
@@ -1856,7 +2017,7 @@
                                 ></span>
                                 <span data-lead-submit-label>Salvar alterações</span>
                             </button>
-                        @endcan
+                        @endif
 
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
                             Fechar
@@ -1865,12 +2026,25 @@
                 </div>
             </div>
         </div>
+
+        @can('edit-leads')
+            @include('partials.leadlovers-correction-modal', [
+                'lead' => $lead,
+                'failure' => $leadLoversFailure,
+                'correctionRoute' => $adminLeadLoversCorrectionRoute($lead),
+                'correctionModalIdPrefix' => 'adminLeadLoversCorrectionModal',
+                'correctionFieldIdPrefix' => 'admin-leadlovers-correction',
+                'isCorrectionValidationContext' => $isLeadLoversCorrectionValidationContext,
+                'correctionErrors' => $leadLoversCorrectionErrors,
+            ])
+        @endcan
     @endforeach
 @endcan
 
 <script id="dashboardUserConfig" type="application/json">
     {!! json_encode([
         'leadValidationTargets' => $leadValidationTargets,
+        'leadLoversCorrectionValidationTargets' => $leadLoversCorrectionValidationTargets,
          'realtime' => [
             'channel' => 'admins.dashboard',
             'event' => '.dashboard.activity.changed',

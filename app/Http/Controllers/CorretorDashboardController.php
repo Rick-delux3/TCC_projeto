@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Imobiliaria;
 use App\Models\Lead;
 use App\Models\LeadLoversTag;
+use App\Support\LeadLoversInitialFailureCatalog;
 use App\Support\ManualLeadResultTags;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -12,6 +13,10 @@ use Illuminate\Support\Facades\Gate;
 
 class CorretorDashboardController extends Controller
 {
+    public function __construct(
+        private LeadLoversInitialFailureCatalog $leadLoversFailureCatalog,
+    ) {}
+
     public function index(Request $request)
     {
         $corretor = Auth::guard('admin')->user();
@@ -25,7 +30,7 @@ class CorretorDashboardController extends Controller
 
         $canAcessSimulationForms = Gate::forUser($corretor)
             ->allows('access-simulation-forms');
-            
+
         $canStartInsuranceAnalysis = Gate::forUser($corretor)->allows('create-analysis');
 
         $leadSearch = $request->input('lead_name', '');
@@ -41,11 +46,25 @@ class CorretorDashboardController extends Controller
 
         $selectedResultado = $legacyResultadoAliases[$requestResultado] ?? $requestResultado;
 
+        $leadLoversSyncOptions = [
+            'not_sent_invalid_data' => 'Não enviados à LeadLovers — dados a corrigir',
+        ];
+        $selectedLeadLoversSync = trim(
+            (string) $request->input('leadlovers_sync', '')
+        );
+
+        if (! array_key_exists(
+            $selectedLeadLoversSync,
+            $leadLoversSyncOptions
+        )) {
+            $selectedLeadLoversSync = '';
+        }
+
         $resultadoOptions = collect(
             ManualLeadResultTags::all()
         );
 
-        if(
+        if (
             $selectedResultado !== ''
             && ! $resultadoOptions->has($selectedResultado)
         ) {
@@ -57,11 +76,8 @@ class CorretorDashboardController extends Controller
                 ->whereIn(
                     'key',
                     ManualLeadResultTags::leadloversKeys()
-                )->pluck('title', 'key') 
+                )->pluck('title', 'key')
             : collect();
-
-
-
 
         $leadsQuery = Lead::query()
             ->createdThroughSystem()
@@ -146,9 +162,27 @@ class CorretorDashboardController extends Controller
             }
         }
 
+        if ($selectedLeadLoversSync === 'not_sent_invalid_data') {
+            $leadsQuery->notSentToLeadLoversBecauseOfInvalidData();
+        }
+
+        $notSentToLeadLoversCount = $canViewLeads
+            ? Lead::query()
+                ->notSentToLeadLoversBecauseOfInvalidData()
+                ->count()
+            : 0;
+
         $leads = $canViewLeads
             ? $leadsQuery->paginate(6)->withQueryString()
             : collect();
+
+        $leadLoversFailures = $canViewLeads
+            ? $leads->getCollection()
+                ->mapWithKeys(fn (Lead $lead): array => [
+                    (int) $lead->id => $this->leadLoversFailureCatalog->describe($lead),
+                ])
+                ->all()
+            : [];
 
         $dashboardStats = [
             'totalLeads' => $canViewLeads ? Lead::query()->createdThroughSystem()->count() : 0,
@@ -214,6 +248,10 @@ class CorretorDashboardController extends Controller
             'simulationCompanies',
             'canAcessSimulationForms',
             'canStartInsuranceAnalysis',
+            'selectedLeadLoversSync',
+            'leadLoversSyncOptions',
+            'notSentToLeadLoversCount',
+            'leadLoversFailures',
         ));
 
     }

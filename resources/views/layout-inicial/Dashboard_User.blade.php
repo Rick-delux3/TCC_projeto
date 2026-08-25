@@ -8,7 +8,11 @@
     <link rel="icon" type="image/jpeg" href="{{ asset(config('branding.profiles.'.config('branding.active', 'tcc').'.logo', 'imgs/Logo_NVS.png')) }}">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
     @vite(['resources/css/header-dashboard-user.css', 'resources/js/app.js'])
-    @vite(['resources/css/dashboard-user.css', 'resources/js/dashboard-user.js'])
+    @vite([
+        'resources/css/dashboard-user.css',
+        'resources/css/leadlovers-correction.css',
+        'resources/js/dashboard-user.js',
+    ])
     @vite(['resources/css/branding.css'])
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>

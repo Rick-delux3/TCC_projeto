@@ -10,7 +10,10 @@ use Illuminate\Support\Facades\Broadcast;
 use Illuminate\Support\Facades\Hash;
 
 beforeEach(function () {
+    $this->withoutVite();
+
     config([
+        'features.insurance_analysis.enabled' => false,
         'broadcasting.default' => 'reverb',
         'broadcasting.connections.reverb' => [
             'driver' => 'reverb',
@@ -82,6 +85,32 @@ function dashboardBroadcastingAuthPayload(string $channel): array
     ];
 }
 
+function dashboardBroadcastingViewConfig(string $html): array
+{
+    $document = new DOMDocument;
+    $previous = libxml_use_internal_errors(true);
+
+    $document->loadHTML($html);
+    libxml_clear_errors();
+    libxml_use_internal_errors($previous);
+
+    $xpath = new DOMXPath($document);
+    $node = $xpath->query(
+        '//*[@id="dashboardUserConfig"]',
+    )->item(0);
+
+    if (! $node) {
+        throw new RuntimeException('Dashboard realtime config was not rendered.');
+    }
+
+    return json_decode(
+        (string) $node->textContent,
+        true,
+        512,
+        JSON_THROW_ON_ERROR,
+    );
+}
+
 it('broadcasts a company event on both private dashboards with a minimal payload', function () {
     $event = new DashboardActivityChanged(
         resource: 'lead',
@@ -125,6 +154,136 @@ it('broadcasts an unlinked event only on the private admin dashboard', function 
     ))->toBe([
         'private-admins.dashboard',
     ]);
+});
+
+it('keeps every initial resend state in the minimal Reverb payload', function (string $change) {
+    $event = new DashboardActivityChanged(
+        resource: 'lead',
+        resourceId: 91,
+        companyId: 17,
+        change: $change,
+    );
+
+    expect($event->broadcastAs())->toBe('dashboard.activity.changed')
+        ->and($event->broadcastQueue())->toBe('broadcasts')
+        ->and($event->broadcastWith())
+        ->toMatchArray([
+            'resource' => 'lead',
+            'resource_id' => 91,
+            'company_id' => 17,
+            'change' => $change,
+        ])
+        ->and(array_map(
+            static fn ($channel): string => (string) $channel,
+            $event->broadcastOn(),
+        ))->toBe([
+            'private-companies.17.dashboard',
+            'private-admins.dashboard',
+        ]);
+})->with([
+    'retrying' => 'lead.sync.retrying',
+    'failed' => 'lead.sync.failed',
+    'sent' => 'lead.sync.sent',
+]);
+
+it('publishes the private channel contract and preserves server-side dirty input', function () {
+    $admin = dashboardBroadcastingCorretor();
+    $company = dashboardBroadcastingCompany();
+    $user = dashboardBroadcastingUser($company);
+
+    $adminResponse = $this
+        ->actingAs($admin, 'admin')
+        ->withSession([
+            '_old_input' => [
+                'leadlovers_correction_context_id' => '91',
+                'tel' => '11999999999',
+            ],
+        ])
+        ->get(route('Dashboard-Admin'));
+
+    $adminResponse->assertOk();
+
+    $companyResponse = $this
+        ->actingAs($user, 'web')
+        ->withSession([
+            '_old_input' => [],
+            'company_id' => $company->id,
+            '2fa_passed' => true,
+        ])
+        ->get(route('company.dashboard'));
+
+    $companyResponse->assertOk();
+
+    $adminConfig = dashboardBroadcastingViewConfig(
+        $adminResponse->getContent(),
+    );
+    $companyConfig = dashboardBroadcastingViewConfig(
+        $companyResponse->getContent(),
+    );
+
+    expect($adminConfig['realtime'] ?? null)->toBe([
+        'channel' => 'admins.dashboard',
+        'event' => '.dashboard.activity.changed',
+        'hasUnsavedInput' => true,
+    ])->and($companyConfig['realtime'] ?? null)->toBe([
+        'channel' => "companies.{$company->id}.dashboard",
+        'event' => '.dashboard.activity.changed',
+        'hasUnsavedInput' => false,
+    ]);
+});
+
+it('keeps realtime reload event-driven and guarded by dirty correction forms', function () {
+    $script = file_get_contents(
+        resource_path('js/dashboard-user.js'),
+    );
+
+    expect($script)
+        ->toMatch(
+            '/querySelectorAll\(\s*[\'\"]\.leadlovers-correction-form'
+            .'[\'\"]\s*\)/',
+        )
+        ->toContain('function dashboardHasUnsavedChanges()')
+        ->toContain('serverHasUnsavedInput')
+        ->toContain("document.querySelector('.leadlovers-correction-modal.show')")
+        ->toMatch(
+            '/function dashboardHasUnsavedChanges\(\)[\s\S]*?'
+            .'document\.querySelector\(\s*[\'"]\.leadlovers-correction-modal\.show[\'"]\s*\)'
+            .'[\s\S]*?return true;/',
+        )
+        ->toContain('form[data-submitting="true"]')
+        ->toContain('form[data-realtime-submitting="true"]')
+        ->toContain('form[data-realtime-changed="true"]')
+        ->toContain('window.Echo')
+        ->toContain('.private(realtimeConfig.channel)')
+        ->toContain('.listen(realtimeConfig.event')
+        ->toMatch(
+            '/function reloadDashboard\(\)[\s\S]*?dashboardHasUnsavedChanges\(\)'
+            .'[\s\S]*?return;[\s\S]*?window\.location\.reload\(\);/',
+        )
+        ->not->toContain('setInterval(');
+});
+
+it('manages correction busy state and focuses the invalid or first field only after the modal is shown', function () {
+    $script = file_get_contents(
+        resource_path('js/dashboard-user.js'),
+    );
+
+    expect($script)
+        ->toContain("form.setAttribute('aria-busy', 'true');")
+        ->toContain("form.setAttribute('aria-busy', 'false');")
+        ->toContain("label.textContent = 'Salvando e reenviando...';")
+        ->toContain("modalElement.addEventListener('shown.bs.modal', function () {")
+        ->toMatch(
+            '/modalElement\.querySelector\(\s*'
+            .'[\'"]\[data-leadlovers-correction-input\]\.is-invalid, '
+            .'[\'"]\s*\+\s*'
+            .'[\'"]\[data-leadlovers-correction-input\][\'"]\s*\)/',
+        )
+        ->toContain('preferredField.focus({ preventScroll: true });')
+        ->toMatch(
+            '/shown\.bs\.modal[\s\S]*?window\.setTimeout\(function \(\) \{'
+            .'[\s\S]*?preferredField\.focus\(\{ preventScroll: true \}\);/',
+        );
 });
 
 it('authorizes the matching company user after two factor authentication', function () {

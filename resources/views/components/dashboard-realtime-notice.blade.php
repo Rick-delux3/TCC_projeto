@@ -4,6 +4,7 @@
     style="z-index: 1090; max-width: min(32rem, calc(100vw - 2rem));"
     role="status"
     aria-live="polite"
+    aria-atomic="true"
 >
     <div class="d-flex flex-column flex-sm-row align-items-sm-center gap-3">
         <div class="flex-grow-1">

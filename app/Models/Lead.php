@@ -232,13 +232,13 @@ class Lead extends Model
             && filled($this->reanalysis_unlocked_at);
     }
 
-
     // Leads cujo envio inicial foi recusado pela LeadLovers devido a um erro HTTP 400 e que ainda não possuem identificação remota.
-    
+
     public function scopeNotSentToLeadLoversBecauseOfInvalidData(
         Builder $query
     ): Builder {
         return $query
+            ->createdThroughSystem()
             ->where('leadlovers_status', 'failed')
             ->whereNull('leadlovers_lead_id')
             ->whereNull('sent_to_leadlovers_at')

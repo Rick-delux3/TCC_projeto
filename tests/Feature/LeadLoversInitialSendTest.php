@@ -8,16 +8,20 @@ use App\Models\Lead;
 use App\Models\LeadLoversTag;
 use App\Services\LeadLoversApiClient;
 use App\Services\LeadReanalysisService;
+use App\Support\LeadLoversInitialFailureCatalog;
 use Illuminate\Broadcasting\BroadcastEvent;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Schema;
 
 beforeEach(function () {
+    $this->withoutVite();
+
     Http::preventStrayRequests();
     Http::fake([]);
 
@@ -303,6 +307,11 @@ it('marks the lead sent only after the expected machine state is confirmed', fun
         'leadlovers_update_response' => [
             'requested_fields' => ['name'],
         ],
+        'leadlovers_initial_error_status' => 400,
+        'leadlovers_initial_error_code' => 'PHONE_EXISTS',
+        'leadlovers_initial_error_operation' => 'lead_creation',
+        'leadlovers_initial_error_detail' => 'Old safe failure.',
+        'leadlovers_initial_failed_at' => now()->subHour(),
         'leadlovers_response' => [
             'success' => false,
             'phase' => 'machine_confirmation_pending',
@@ -333,6 +342,11 @@ it('marks the lead sent only after the expected machine state is confirmed', fun
         ->sent_to_leadlovers_at->not->toBeNull()
         ->leadlovers_update_status->toBe('pending')
         ->leadlovers_update_version->toBe(1)
+        ->leadlovers_initial_error_status->toBeNull()
+        ->leadlovers_initial_error_code->toBeNull()
+        ->leadlovers_initial_error_operation->toBeNull()
+        ->leadlovers_initial_error_detail->toBeNull()
+        ->leadlovers_initial_failed_at->toBeNull()
         ->and($lead->leadlovers_response)->toMatchArray([
             'success' => true,
             'phase' => 'machine_confirmed',
@@ -474,6 +488,143 @@ it('preserves the accepted action when confirmation attempts are exhausted', fun
         ]);
 });
 
+it('persists PHONE_EXISTS initial failure metadata without logging exhausted attempts', function () {
+    Queue::fake();
+    Log::spy();
+
+    $lead = leadForInitialLeadLoversSend();
+    Http::fake([
+        'https://api.leadlovers.test/leads/' => Http::response([
+            'success' => false,
+            'error' => [
+                'code' => 'PHONE_EXISTS',
+                'reason' => 'The submitted phone already exists.',
+            ],
+        ], 400),
+    ]);
+
+    $job = initialSendJob($lead);
+    $job->handle(app(LeadLoversApiClient::class));
+
+    $job->assertFailed();
+    $lead->refresh();
+    $failure = app(LeadLoversInitialFailureCatalog::class)->describe($lead);
+
+    expect($lead)
+        ->leadlovers_status->toBe('failed')
+        ->leadlovers_lead_id->toBeNull()
+        ->sent_to_leadlovers_at->toBeNull()
+        ->leadlovers_initial_error_status->toBe(400)
+        ->leadlovers_initial_error_code->toBe('PHONE_EXISTS')
+        ->leadlovers_initial_error_operation->toBe('lead_creation')
+        ->leadlovers_initial_failed_at->not->toBeNull()
+        ->and($failure)->toMatchArray([
+            'failed' => true,
+            'not_sent' => true,
+            'http_status' => 400,
+            'error_code' => 'PHONE_EXISTS',
+            'correctable' => true,
+            'fields' => ['tel'],
+        ]);
+
+    Log::shouldHaveReceived('warning')->withArgs(
+        fn (string $message, array $context): bool => $message === 'Envio inicial do lead falhou de forma segura.'
+            && $context['lead_id'] === $lead->id
+            && $context['attempt'] === 1
+            && $context['status_code'] === 400
+            && $context['error_code'] === 'PHONE_EXISTS'
+    )->once();
+    Log::shouldNotHaveReceived('warning', [
+        'Envio inicial do lead esgotou as tentativas.',
+        \Mockery::any(),
+    ]);
+});
+
+it('sanitizes an unknown remote failure before persisting and presenting it', function () {
+    Queue::fake();
+
+    $lead = leadForInitialLeadLoversSend();
+    Http::fake([
+        'https://api.leadlovers.test/leads/' => Http::response([
+            'success' => false,
+            'error' => [
+                'code' => 'NEW_REMOTE_RULE',
+                'reason' => '<script>initial-send-xss()</script> '
+                    .'stage-three-test-token person@example.test 11999999999',
+                'payload' => [
+                    'authorization' => 'Bearer raw-initial-secret',
+                ],
+            ],
+        ], 400),
+    ]);
+
+    $job = initialSendJob($lead);
+    $job->handle(app(LeadLoversApiClient::class));
+
+    $job->assertFailed();
+    $lead->refresh();
+    $failure = app(LeadLoversInitialFailureCatalog::class)->describe($lead);
+    $persistedSummary = json_encode($lead->leadlovers_response);
+
+    expect($failure)->toMatchArray([
+        'failed' => true,
+        'http_status' => 400,
+        'error_code' => 'NEW_REMOTE_RULE',
+        'correctable' => false,
+        'fields' => [],
+    ])->and($failure['message'])
+        ->not->toContain('<script')
+        ->not->toContain('initial-send-xss')
+        ->not->toContain('stage-three-test-token')
+        ->not->toContain('person@example.test')
+        ->not->toContain('11999999999')
+        ->not->toContain('raw-initial-secret')
+        ->and($persistedSummary)
+        ->not->toContain('<script')
+        ->not->toContain('stage-three-test-token')
+        ->not->toContain('person@example.test')
+        ->not->toContain('11999999999')
+        ->not->toContain('raw-initial-secret');
+});
+
+it('keeps 422 TIMEOUT on the automatic retry path without data correction', function () {
+    Queue::fake();
+
+    $lead = leadForInitialLeadLoversSend();
+    Http::fake([
+        'https://api.leadlovers.test/leads/' => Http::response([
+            'success' => false,
+            'error' => [
+                'code' => 'TIMEOUT',
+                'reason' => 'The transaction timed out.',
+            ],
+        ], 422),
+    ]);
+
+    $job = initialSendJob($lead);
+    $job->handle(app(LeadLoversApiClient::class));
+
+    $job->assertReleased(15);
+    $lead->refresh();
+
+    expect($lead)
+        ->leadlovers_status->toBe('processing')
+        ->leadlovers_lead_id->toBeNull()
+        ->sent_to_leadlovers_at->toBeNull()
+        ->leadlovers_initial_error_status->toBeNull()
+        ->leadlovers_initial_error_code->toBeNull()
+        ->leadlovers_initial_failed_at->toBeNull()
+        ->and($lead->leadlovers_response)->toMatchArray([
+            'success' => false,
+            'phase' => 'lead_reconciliation_pending',
+            'status_code' => 422,
+            'error_code' => 'TIMEOUT',
+        ])
+        ->and(app(LeadLoversInitialFailureCatalog::class)
+            ->describe($lead)['correctable'])->toBeFalse();
+    Http::assertSentCount(1);
+});
+
 it('reconciles EMAIL_EXISTS by exact email and uses leadId instead of record id', function () {
     $lead = leadForInitialLeadLoversSend();
     Http::fake([
@@ -534,7 +685,19 @@ it('fails closed when EMAIL_EXISTS search is not uniquely identifiable', functio
     expect($lead->refresh())
         ->leadlovers_status->toBe('failed')
         ->leadlovers_lead_id->toBeNull()
-        ->sent_to_leadlovers_at->toBeNull();
+        ->sent_to_leadlovers_at->toBeNull()
+        ->leadlovers_initial_error_status->toBe(400)
+        ->leadlovers_initial_error_code->toBe('EMAIL_EXISTS')
+        ->leadlovers_initial_error_operation->toBe('lead_search')
+        ->leadlovers_initial_failed_at->not->toBeNull()
+        ->and(app(LeadLoversInitialFailureCatalog::class)
+            ->describe($lead))->toMatchArray([
+                'failed' => true,
+                'http_status' => 400,
+                'error_code' => 'EMAIL_EXISTS',
+                'correctable' => true,
+                'fields' => ['email'],
+            ]);
     Http::assertSentCount(2);
 })->with([
     'two exact records' => [[
