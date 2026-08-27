@@ -205,6 +205,87 @@ function updateLeadDashboardConfig(string $html): array
     );
 }
 
+/** @return list<string> */
+function updateLeadDashboardListedNames(string $html): array
+{
+    $dom = updateLeadDashboardDom($html);
+    $nodes = $dom['xpath']->query(
+        '//div[contains(concat(" ", normalize-space(@class), " "), " lead-list ")]'
+        .'//article//h3',
+    );
+    $names = [];
+
+    foreach ($nodes as $node) {
+        $names[] = trim((string) $node->textContent);
+    }
+
+    return $names;
+}
+
+it('lists approved leads first across pagination and keeps each group chronological', function () {
+    $corretor = updateLeadDashboardAdmin();
+    $baseTime = now()->startOfMinute();
+
+    $legacyApproved = updateLeadDashboardLead([
+        'nome' => 'Aprovado legado',
+        'tags_originais' => 'Origem X, Aprovados',
+    ]);
+    $confirmedApproved = updateLeadDashboardLead([
+        'nome' => 'Aprovado confirmado',
+        'tags_originais' => 'Origem X, Aprovados',
+        'leadlovers_confirmed_final_tag_key' => 'aprovados',
+    ]);
+
+    $regularNames = [];
+
+    foreach (range(1, 6) as $position) {
+        $name = "Lead comum {$position}";
+        $regularNames[] = $name;
+
+        $lead = updateLeadDashboardLead([
+            'nome' => $name,
+            'tags_originais' => 'Origem X',
+        ]);
+
+        Lead::query()->whereKey($lead->id)->update([
+            'created_at' => $baseTime->copy()->subHours($position),
+            'updated_at' => $baseTime->copy()->subHours($position),
+        ]);
+    }
+
+    Lead::query()->whereKey($legacyApproved->id)->update([
+        'created_at' => $baseTime->copy()->subDays(7),
+        'updated_at' => $baseTime->copy()->subDays(7),
+    ]);
+    Lead::query()->whereKey($confirmedApproved->id)->update([
+        'created_at' => $baseTime->copy()->subDays(8),
+        'updated_at' => $baseTime->copy()->subDays(8),
+    ]);
+
+    $firstPageNames = updateLeadDashboardListedNames(
+        $this
+            ->actingAs($corretor, 'admin')
+            ->get(route('Dashboard-Admin'))
+            ->assertOk()
+            ->getContent(),
+    );
+
+    expect($firstPageNames)->toBe([
+        'Aprovado legado',
+        'Aprovado confirmado',
+        ...array_slice($regularNames, 0, 4),
+    ]);
+
+    $secondPageNames = updateLeadDashboardListedNames(
+        $this
+            ->get(route('Dashboard-Admin', ['page' => 2]))
+            ->assertOk()
+            ->getContent(),
+    );
+
+    expect($secondPageNames)->toBe(array_slice($regularNames, 4));
+});
+
 it('renders the editable admin lead dashboard without tag-management permission or analysis controls', function () {
     config(['features.insurance_analysis.enabled' => false]);
 

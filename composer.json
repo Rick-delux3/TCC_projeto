@@ -59,6 +59,7 @@
         ],
         "dev": [
             "Composer\\Config::disableProcessTimeout",
+            "@php artisan leadlovers:sync-tags",
             "npx concurrently -c \"#93c5fd,#f9a8d4,#c4b5fd,#fdba74\" \"php artisan serve\" \"php artisan reverb:start --debug\" \"php artisan queue:listen --queue=broadcasts,leadlovers,default --tries=3 --timeout=180\" \"npm run dev\" --names='server,reverb,queue,vite'"
         ],
         "test": [

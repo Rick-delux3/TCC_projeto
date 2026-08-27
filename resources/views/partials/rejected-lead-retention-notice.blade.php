@@ -41,11 +41,11 @@
         ></i>
         <span>
             @if ($resultChangeInProgress)
-                AlteraÃ§Ã£o em processamento. A exclusÃ£o serÃ¡ cancelada apÃ³s confirmaÃ§Ã£o da LeadLovers.
+                Alteração em processamento. A exclusão será cancelada após confirmação da LeadLovers.
             @elseif ($showExactDeletionDate)
-                ExclusÃ£o automÃ¡tica em {{ $displayDeletionDueAt->format('d/m/Y') }} Ã s {{ $displayDeletionDueAt->format('H:i') }}.
+                Exclusão automática em {{ $displayDeletionDueAt->format('d/m/Y') }} ás {{ $displayDeletionDueAt->format('H:i') }}.
             @else
-                SerÃ¡ excluÃ­do automaticamente em {{ $remainingDays }} dias se continuar recusado.
+                Será excluido automaticamente em {{ $remainingDays }} dias se continuar recusado.
             @endif
         </span>
     </aside>

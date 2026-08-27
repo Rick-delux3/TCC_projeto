@@ -38,6 +38,14 @@
             <form action="{{ $formAction }}" method="POST" class="simulation-form">
                 @csrf
 
+                @if ($isAdminSimulation && filled($adminSimulationChannel ?? null))
+                    <input
+                        type="hidden"
+                        name="admin_simulation_channel"
+                        value="{{ $adminSimulationChannel }}"
+                    >
+                @endif
+
                 @include('simulation.partials.honeypot')
 
                 <div class="row g-3">

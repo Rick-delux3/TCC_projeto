@@ -791,6 +791,13 @@
             aria-labelledby="admin-lead-filter-title"
             data-lead-filter-panel
         >
+            <div
+                id="adminSimulationSuccessAlert"
+                class="alert alert-success rounded-4 border-0 shadow-sm d-none"
+                role="status"
+                aria-live="polite"
+            ></div>
+
             <div class="lead-filter-panel__inner">
                 <header class="lead-filter-panel__header">
                     <div class="lead-filter-panel__copy">
@@ -1407,9 +1414,15 @@
                 <form
                     method="GET"
                     action="{{ $adminSimulationOpenRoute }}"
-                    target="_blank"
+                    target="adminSimulationForm"
                     id="adminSimulationSelectionForm"
                 >
+                    <input
+                        type="hidden"
+                        name="admin_simulation_channel"
+                        id="adminSimulationChannel"
+                    >
+
                     <div class="modal-header border-0 pb-0">
                         <div>
                             <h2 class="modal-title h5 fw-bold" id="adminSimulationModalLabel">
@@ -1541,41 +1554,189 @@
     </div>
 
     <script>
-        document.addEventListener('DOMContentLoaded', function () {
-            const linkType = document.getElementById('adminSimulationLinkType');
-            const companyGroup = document.getElementById('adminSimulationCompanyGroup');
-            const company = document.getElementById('adminSimulationCompany');
-            const typeGroup = document.getElementById('adminSimulationTypeGroup');
-            const type = document.getElementById('adminSimulationType');
+        (function () {
+            const activeChannelStorageKey = 'adminSimulationActiveChannel';
+            const completionStorageKey = 'adminSimulationCompletion';
+            const dashboardUrl = @json($dashboardRoute.'#leads-section');
+            const expectedOrigin = window.location.origin;
+            const simulationWindowName = 'adminSimulationForm';
+            let simulationWindow = null;
 
-            if (!linkType || !companyGroup || !company || !typeGroup || !type) {
-                return;
-            }
-
-            const updateSimulationFields = function () {
-                const usesRegisteredCompany = linkType.value === 'imobiliaria_cadastrada';
-                const hasNoCompanyLink = linkType.value === 'sem_vinculo';
-
-                companyGroup.classList.toggle('d-none', !usesRegisteredCompany);
-                company.disabled = !usesRegisteredCompany;
-                company.required = usesRegisteredCompany;
-
-                typeGroup.classList.toggle('d-none', !hasNoCompanyLink);
-                type.disabled = !hasNoCompanyLink;
-                type.required = hasNoCompanyLink;
+            const readSessionStorage = function (key) {
+                try {
+                    return window.sessionStorage.getItem(key);
+                } catch (error) {
+                    return null;
+                }
             };
 
-            updateSimulationFields();
-            linkType.addEventListener('change', updateSimulationFields);
-
-            @if ($errors->adminSimulation->any())
-                const modalElement = document.getElementById('adminSimulationModal');
-
-                if (modalElement && window.bootstrap?.Modal) {
-                    window.bootstrap.Modal.getOrCreateInstance(modalElement).show();
+            const writeSessionStorage = function (key, value) {
+                try {
+                    window.sessionStorage.setItem(key, value);
+                    return true;
+                } catch (error) {
+                    return false;
                 }
-            @endif
-        });
+            };
+
+            const removeSessionStorage = function (key) {
+                try {
+                    window.sessionStorage.removeItem(key);
+                } catch (error) {
+                    // O fluxo continua com a validação de origem e referência da guia.
+                }
+            };
+
+            const createChannelId = function () {
+                if (window.crypto?.randomUUID) {
+                    return window.crypto.randomUUID();
+                }
+
+                return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(
+                    /[xy]/g,
+                    function (character) {
+                        const random = Math.floor(Math.random() * 16);
+                        const value = character === 'x'
+                            ? random
+                            : (random & 0x3) | 0x8;
+
+                        return value.toString(16);
+                    }
+                );
+            };
+
+            const reloadDashboard = function () {
+                const targetUrl = new URL(dashboardUrl, window.location.href);
+                const currentUrl = new URL(window.location.href);
+
+                if (
+                    currentUrl.origin === targetUrl.origin
+                    && currentUrl.pathname === targetUrl.pathname
+                    && currentUrl.search === targetUrl.search
+                ) {
+                    window.history.replaceState(null, '', targetUrl.href);
+                    window.location.reload();
+                    return;
+                }
+
+                window.location.assign(targetUrl.href);
+            };
+
+            window.addEventListener('message', function (event) {
+                if (event.origin !== expectedOrigin) {
+                    return;
+                }
+
+                const data = event.data;
+
+                if (
+                    !data
+                    || typeof data !== 'object'
+                    || data.type !== 'admin-simulation:completed'
+                    || typeof data.channel !== 'string'
+                    || data.channel !== readSessionStorage(activeChannelStorageKey)
+                    || typeof data.message !== 'string'
+                    || data.message.length === 0
+                    || !Number.isInteger(data.leadId)
+                ) {
+                    return;
+                }
+
+                if (simulationWindow && event.source !== simulationWindow) {
+                    return;
+                }
+
+                if (!writeSessionStorage(
+                    completionStorageKey,
+                    JSON.stringify(data)
+                )) {
+                    return;
+                }
+
+                removeSessionStorage(activeChannelStorageKey);
+                reloadDashboard();
+            });
+
+            document.addEventListener('DOMContentLoaded', function () {
+                const successAlert = document.getElementById('adminSimulationSuccessAlert');
+                const storedCompletion = readSessionStorage(completionStorageKey);
+
+                if (successAlert && storedCompletion) {
+                    try {
+                        const completion = JSON.parse(storedCompletion);
+
+                        if (
+                            completion?.type === 'admin-simulation:completed'
+                            && typeof completion.message === 'string'
+                            && completion.message.length > 0
+                        ) {
+                            successAlert.textContent = completion.message;
+                            successAlert.classList.remove('d-none');
+                        }
+                    } catch (error) {
+                        // Descarta confirmações inválidas sem interromper o dashboard.
+                    }
+
+                    removeSessionStorage(completionStorageKey);
+                }
+
+                const selectionForm = document.getElementById('adminSimulationSelectionForm');
+                const channelInput = document.getElementById('adminSimulationChannel');
+                const linkType = document.getElementById('adminSimulationLinkType');
+                const companyGroup = document.getElementById('adminSimulationCompanyGroup');
+                const company = document.getElementById('adminSimulationCompany');
+                const typeGroup = document.getElementById('adminSimulationTypeGroup');
+                const type = document.getElementById('adminSimulationType');
+
+                if (!linkType || !companyGroup || !company || !typeGroup || !type) {
+                    return;
+                }
+
+                const updateSimulationFields = function () {
+                    const usesRegisteredCompany = linkType.value === 'imobiliaria_cadastrada';
+                    const hasNoCompanyLink = linkType.value === 'sem_vinculo';
+
+                    companyGroup.classList.toggle('d-none', !usesRegisteredCompany);
+                    company.disabled = !usesRegisteredCompany;
+                    company.required = usesRegisteredCompany;
+
+                    typeGroup.classList.toggle('d-none', !hasNoCompanyLink);
+                    type.disabled = !hasNoCompanyLink;
+                    type.required = hasNoCompanyLink;
+                };
+
+                updateSimulationFields();
+                linkType.addEventListener('change', updateSimulationFields);
+
+                selectionForm?.addEventListener('submit', function () {
+                    const channel = createChannelId();
+
+                    if (channelInput) {
+                        channelInput.value = channel;
+                    }
+
+                    writeSessionStorage(activeChannelStorageKey, channel);
+
+                    simulationWindow = window.open('', simulationWindowName);
+
+                    if (!simulationWindow) {
+                        selectionForm.removeAttribute('target');
+                        return;
+                    }
+
+                    selectionForm.target = simulationWindowName;
+                    simulationWindow.focus();
+                });
+
+                @if ($errors->adminSimulation->any())
+                    const modalElement = document.getElementById('adminSimulationModal');
+
+                    if (modalElement && window.bootstrap?.Modal) {
+                        window.bootstrap.Modal.getOrCreateInstance(modalElement).show();
+                    }
+                @endif
+            });
+        })();
     </script>
 @endif
 

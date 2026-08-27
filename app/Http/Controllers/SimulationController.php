@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Events\DashboardActivityChanged;
 use App\Http\Requests\StoreSimulationLeadRequest;
 use App\Jobs\SendLeadToLeadLoversJob;
 use App\Jobs\StartInsuranceAnalysesBatchJob;
@@ -12,9 +13,9 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
-use App\Events\DashboardActivityChanged;
 
 class SimulationController extends Controller
 {
@@ -106,8 +107,10 @@ class SimulationController extends Controller
         return view('simulation.forms.registered-company', compact('company'));
     }
 
-    public function adminRegisteredCompanyForm(Imobiliaria $company)
-    {
+    public function adminRegisteredCompanyForm(
+        Request $request,
+        Imobiliaria $company
+    ) {
         abort_unless(
             (bool) $company->lead_form_active,
             404,
@@ -122,6 +125,8 @@ class SimulationController extends Controller
             ),
 
             'isAdminSimulation' => true,
+
+            'adminSimulationChannel' => $this->adminSimulationChannel($request),
         ]);
     }
 
@@ -163,12 +168,14 @@ class SimulationController extends Controller
 
         $this->dispatchLeadFlow($lead);
 
-        return redirect()->route('Dashboard-Admin')
-            ->with('success', "Solicitação do lead #{$lead->id} adicionada à fila de análises.");
+        return redirect()->route('admin.simulations.complete', [
+            'lead' => $lead,
+            'admin_simulation_channel' => $this->adminSimulationChannel($request),
+        ]);
 
     }
 
-    public function adminUnlinkedForm(string $tipo)
+    public function adminUnlinkedForm(Request $request, string $tipo)
     {
         abort_unless(
             in_array($tipo, self::ADMIN_UNLINKED_TYPES, true),
@@ -183,6 +190,7 @@ class SimulationController extends Controller
         $commonData = [
             'formAction' => $formAction,
             'isAdminSimulation' => true,
+            'adminSimulationChannel' => $this->adminSimulationChannel($request),
         ];
 
         if ($tipo === 'locatario') {
@@ -244,8 +252,10 @@ class SimulationController extends Controller
 
         $this->dispatchLeadFlow($lead);
 
-        return redirect()->route('Dashboard-Admin')
-            ->with('success', "Solicitação do lead #{$lead->id} adicionada à fila de análises.");
+        return redirect()->route('admin.simulations.complete', [
+            'lead' => $lead,
+            'admin_simulation_channel' => $this->adminSimulationChannel($request),
+        ]);
 
     }
 
@@ -341,6 +351,8 @@ class SimulationController extends Controller
     public function adminResolveForm(Request $request)
     {
         $data = $request->validateWithBag('adminSimulation', [
+            'admin_simulation_channel' => ['nullable', 'uuid'],
+
             'vinculo' => [
                 'required',
                 Rule::in([
@@ -371,10 +383,26 @@ class SimulationController extends Controller
         ]);
 
         if ($data['vinculo'] === 'imobiliaria_cadastrada') {
-            return redirect()->route('admin.simulations.registered-company.form', ['company' => (int) $data['company_id']]);
+            return redirect()->route('admin.simulations.registered-company.form', [
+                'company' => (int) $data['company_id'],
+                'admin_simulation_channel' => $data['admin_simulation_channel'] ?? null,
+            ]);
         }
 
-        return redirect()->route('admin.simulations.unlinked.form', ['tipo' => $data['tipo_solicitante']]);
+        return redirect()->route('admin.simulations.unlinked.form', [
+            'tipo' => $data['tipo_solicitante'],
+            'admin_simulation_channel' => $data['admin_simulation_channel'] ?? null,
+        ]);
+    }
+
+    public function adminCompletion(Request $request, Lead $lead)
+    {
+        return view('simulation.admin-completion', [
+            'adminSimulationChannel' => $this->adminSimulationChannel($request),
+            'dashboardUrl' => route('Dashboard-Admin').'#leads-section',
+            'leadId' => (int) $lead->id,
+            'message' => "Solicitação do lead #{$lead->id} adicionada à fila de análises.",
+        ]);
     }
 
     /**
@@ -389,6 +417,17 @@ class SimulationController extends Controller
         return Imobiliaria::where('lead_access_code', $code)
             ->where('lead_form_active', true)
             ->firstOrFail();
+    }
+
+    private function adminSimulationChannel(Request $request): ?string
+    {
+        $channel = $request->input('admin_simulation_channel');
+
+        if (! is_string($channel) || ! Str::isUuid($channel)) {
+            return null;
+        }
+
+        return strtolower($channel);
     }
 
     /**

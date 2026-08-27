@@ -110,6 +110,10 @@ Route::prefix('/Dashboard')->group(function () {
                     ->middleware('throttle:simulation-submit')
                     ->name('unlinked.store');
 
+                Route::get('/concluida/{lead}', [SimulationController::class, 'adminCompletion'])
+                    ->whereNumber('lead')
+                    ->name('complete');
+
             });
 
         Route::get('/leads', function () {

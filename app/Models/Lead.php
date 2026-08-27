@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\ManualLeadResultTags;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -80,6 +81,25 @@ class Lead extends Model
     public function scopeCreatedThroughSystem(Builder $query): Builder
     {
         return $query->whereIn('origem', self::SYSTEM_ORIGINS);
+    }
+
+    public function scopeApprovedFirst(Builder $query): Builder
+    {
+        $approvedTagKey = ManualLeadResultTags::leadloversKey(
+            ManualLeadResultTags::APPROVED
+        );
+
+        return $query->orderByRaw(
+            <<<'SQL'
+                CASE
+                    WHEN leadlovers_confirmed_final_tag_key = ? THEN 0
+                    WHEN leadlovers_confirmed_final_tag_key IS NULL
+                        AND LOWER(COALESCE(tags_originais, '')) LIKE ? THEN 0
+                    ELSE 1
+                END
+            SQL,
+            [$approvedTagKey, '%aprovad%']
+        );
     }
 
     /**
@@ -263,5 +283,4 @@ class Lead extends Model
                 now()->utc()
             );
     }
-
 }

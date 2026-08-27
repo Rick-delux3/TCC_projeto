@@ -89,7 +89,7 @@ class CorretorDashboardController extends Controller
                 'locador',
                 'insuranceAnalyses',
                 'leadLoversTagOperation',
-            ])->latest();
+            ]);
 
         $leadsQuery->when($leadSearch, function ($query) use ($leadSearch) {
             $query->where(function ($subQuery) use ($leadSearch) {
@@ -176,7 +176,12 @@ class CorretorDashboardController extends Controller
             : 0;
 
         $leads = $canViewLeads
-            ? $leadsQuery->paginate(6)->withQueryString()
+            ? $leadsQuery
+                ->approvedFirst()
+                ->latest('created_at')
+                ->latest('id')
+                ->paginate(6)
+                ->withQueryString()
             : collect();
 
         $leadLoversFailures = $canViewLeads
