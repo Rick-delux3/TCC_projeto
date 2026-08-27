@@ -12,6 +12,7 @@ use App\Models\LeadLoversTagOperation;
 use App\Services\LeadLoversApiClient;
 use App\Services\LeadLoversResultTagService;
 use App\Services\LeadLoversTagOperationCoordinator;
+use App\Services\RejectedLeadRetentionService;
 use App\Support\ManualLeadResultTags;
 use Illuminate\Broadcasting\BroadcastEvent;
 use Illuminate\Http\Client\Request;
@@ -163,6 +164,7 @@ function handleManualLeadTagJob(ApplyManualLeadResultTagJob $job): void
         app(LeadLoversApiClient::class),
         app(LeadLoversResultTagService::class),
         app(LeadLoversTagOperationCoordinator::class),
+        app(RejectedLeadRetentionService::class),
     );
 }
 
@@ -171,7 +173,9 @@ it('allows an active member with permission to request each commercial result', 
     manualLeadTagCatalog();
 
     $corretor = manualLeadTagCorretor();
-    $lead = manualLeadTagLead();
+    $lead = manualLeadTagLead([
+        'tags_originais' => 'Imobiliária Azul, Origem X',
+    ]);
 
     $this
         ->actingAs($corretor, 'admin')
@@ -204,6 +208,51 @@ it('allows an active member with permission to request each commercial result', 
     'Em negociação' => [ManualLeadResultTags::IN_NEGOTIATION],
     'Fechado aluguel' => [ManualLeadResultTags::RENTAL_CONFIRMED],
     'Não aluguei nem seguro' => [ManualLeadResultTags::NO_RENT_OR_INSURANCE],
+]);
+
+it('rejects a request that repeats the current commercial result', function (
+    string $result,
+    string $currentTag,
+) {
+    Queue::fake();
+
+    $corretor = manualLeadTagCorretor();
+    $lead = manualLeadTagLead([
+        'tags_originais' => "Imobiliária Azul, {$currentTag}, Origem X",
+    ]);
+    $resultLabel = ManualLeadResultTags::label($result);
+
+    $this
+        ->actingAs($corretor, 'admin')
+        ->from('/Dashboard/Admin')
+        ->patch(route('admin.leads.result-tag.update', $lead), [
+            'result' => $result,
+            'result_context_lead_id' => $lead->id,
+        ])
+        ->assertRedirect('/Dashboard/Admin')
+        ->assertSessionHasErrors([
+            'result' => sprintf(
+                'O lead já possui o status "%s". Selecione outro status.',
+                $resultLabel
+            ),
+        ]);
+
+    Queue::assertNothingPushed();
+    Http::assertNothingSent();
+    $this->assertDatabaseMissing('logs_atividades_corretores', [
+        'action' => 'lead_tag_update_requested',
+        'model_type' => Lead::class,
+        'model_id' => $lead->id,
+    ]);
+})->with([
+    'Aprovado' => [ManualLeadResultTags::APPROVED, 'Aprovados'],
+    'Recusado' => [ManualLeadResultTags::REJECTED, 'Ruim'],
+    'Em negociação' => [ManualLeadResultTags::IN_NEGOTIATION, 'Em negociação'],
+    'Fechado aluguel' => [ManualLeadResultTags::RENTAL_CONFIRMED, 'Fechado aluguel'],
+    'Não aluguei nem seguro' => [
+        ManualLeadResultTags::NO_RENT_OR_INSURANCE,
+        'Não aluguei nem seguro',
+    ],
 ]);
 
 it('rejects unauthenticated inactive unverified and unauthorized members', function (string $state) {

@@ -21,7 +21,7 @@ it('keeps the legacy index visually isolated from the active brand', function (s
         ->assertOk()
         ->assertViewIs('index')
         ->assertSee('imgs/Logo_NVS.png', false)
-        ->assertDontSee('imgs/logo-principal-real.jpg', false)
+        ->assertDontSee('imgs/logo-akialuga.jpg', false)
         ->assertDontSee('data-brand=', false);
 })->with(['tcc', 'client']);
 
@@ -45,9 +45,44 @@ it('renders the new public page with the selected brand', function (
         ->assertDontSee($unexpectedLogo, false)
         ->assertSee('name="tipo_solicitante"', false);
 })->with([
-    'tcc profile' => ['tcc', 'imgs/Logo_NVS.png', 'imgs/logo-principal-real.jpg'],
-    'client profile' => ['client', 'imgs/logo-principal-real.jpg', 'imgs/Logo_NVS.png'],
+    'tcc profile' => ['tcc', 'imgs/Logo_NVS.png', 'imgs/logo-akialuga.jpg'],
+    'client profile' => ['client', 'imgs/logo-akialuga.jpg', 'imgs/Logo_NVS.png'],
 ]);
+
+it('isolates the client logo palette and preserves the original tcc tokens', function () {
+    $css = file_get_contents(resource_path('css/branding.css'));
+    $clientStart = strpos($css, '[data-brand="client"]');
+    $clientOverrideStart = strrpos(substr($css, 0, strpos($css, 'Perfil Client | identidade Aki Aluga / Neves')), '/*');
+    $clientStyles = substr($css, $clientStart, $clientOverrideStart - $clientStart);
+
+    expect(preg_match('/\[data-brand="tcc"\]\s*\{(?<tokens>.*?)\}/s', $css, $tccMatch))->toBe(1)
+        ->and(preg_match('/\[data-brand="client"\]\s*\{(?<tokens>.*?)\}/s', $css, $clientMatch))->toBe(1);
+
+    expect($tccMatch['tokens'])
+        ->toContain('--brand-primary: #030133;')
+        ->toContain('--brand-primary-hover: #146fb6;')
+        ->toContain('--brand-accent: #fd1e6e;')
+        ->not->toContain('#00288f')
+        ->not->toContain('#e6000b')
+        ->and($clientMatch['tokens'])
+        ->toContain('--brand-primary: #00288f;')
+        ->toContain('--brand-primary-dark: #001650;')
+        ->toContain('--brand-accent: #e6000b;')
+        ->toContain('--brand-background: #f3f6fc;')
+        ->not->toContain('#030133')
+        ->not->toContain('#146fb6')
+        ->not->toContain('#fd1e6e')
+        ->and($clientStyles)
+        ->not->toContain('#0000ff')
+        ->not->toContain('#0000b8')
+        ->not->toContain('#8a8aff')
+        ->not->toContain('rgba(255, 0, 0')
+        ->not->toContain('rgba(253, 30, 110')
+        ->and($css)
+        ->toContain('[data-brand="client"] .lead-filter-submit')
+        ->toContain('[data-brand="client"] .simulation-btn--accent')
+        ->toMatch('/\[data-brand="client"\] \.btn-primary\s*\{.*?--bs-btn-bg: #00288f;.*?background-image: none !important;/s');
+});
 
 it('keeps the public header visual and opens one accessible unavailable-access modal', function () {
     config([
@@ -68,7 +103,7 @@ it('keeps the public header visual and opens one accessible unavailable-access m
         ->toMatch('/<div class="auth-topbar__brand">.*data-brand-logo="client"/s')
         ->not->toMatch('/<a[^>]*class="auth-topbar__brand"/s')
         ->and(substr_count($html, 'id="companyAccessUnavailableModal"'))->toBe(1)
-        ->and(substr_count($html, 'data-bs-target="#companyAccessUnavailableModal"'))->toBe(2);
+        ->and(substr_count($html, 'data-bs-target="#companyAccessUnavailableModal"'))->toBe(1);
 });
 
 it('uses the fictitious logo as the safe component fallback', function () {
@@ -78,7 +113,7 @@ it('uses the fictitious logo as the safe component fallback', function () {
 
     expect($html)
         ->toContain('imgs/Logo_NVS.png')
-        ->not->toContain('imgs/logo-principal-real.jpg')
+        ->not->toContain('imgs/logo-akialuga.jpg')
         ->toContain('data-brand-logo="tcc"');
 });
 
@@ -110,12 +145,12 @@ it('uses the framed client logo in both dashboard headers and sidebars', functio
 
         if ($profile === 'client') {
             expect(substr_count($html, 'imgs/logo-header.jpg'))->toBe(2)
-                ->and($html)->not->toContain('imgs/logo-principal-real.jpg')
+                ->and($html)->not->toContain('imgs/logo-akialuga.jpg')
                 ->and($html)->not->toContain('imgs/Logo_NVS.png');
         } else {
             expect(substr_count($html, 'imgs/Logo_NVS.png'))->toBe(2)
                 ->and($html)->not->toContain('imgs/logo-header.jpg')
-                ->and($html)->not->toContain('imgs/logo-principal-real.jpg');
+                ->and($html)->not->toContain('imgs/logo-akialuga.jpg');
         }
     }
 })->with(['tcc', 'client']);

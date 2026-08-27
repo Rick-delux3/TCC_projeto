@@ -10,6 +10,8 @@ export default defineConfig({
                 'resources/css/header-dashboard-admin.css',
                 'resources/css/dashboard-user.css',
                 'resources/css/dashboard-admin.css',
+                'resources/css/lead-filters.css',
+                'resources/css/leadlovers-correction.css',
                 'resources/js/dashboard-user.js', 'resources/css/simulation.css',
                 'resources/css/branding.css',
                 'resources/js/simulation.js',

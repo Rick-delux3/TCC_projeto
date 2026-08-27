@@ -11,9 +11,9 @@
 }
 
 [data-brand="client"] .team-motion-page {
-    --team-primary-rgb: 0, 0, 255;
-    --team-dark-rgb: 0, 0, 153;
-    --team-accent-rgb: 255, 0, 0;
+    --team-primary-rgb: 0, 40, 143;
+    --team-dark-rgb: 0, 22, 80;
+    --team-accent-rgb: 230, 0, 11;
 }
 
 .team-motion-enabled .team-motion-page [data-team-reveal] {

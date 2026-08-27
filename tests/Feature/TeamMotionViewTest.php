@@ -60,6 +60,9 @@ it('keeps team motion accessible and compatible with both brand profiles', funct
 
     expect($css)
         ->toContain('[data-brand="client"] .team-motion-page')
+        ->toContain('--team-primary-rgb: 0, 40, 143;')
+        ->toContain('--team-dark-rgb: 0, 22, 80;')
+        ->toContain('--team-accent-rgb: 230, 0, 11;')
         ->toContain('@media (prefers-reduced-motion: reduce)')
         ->toContain('.team-permission-option.is-selected')
         ->and($javascript)

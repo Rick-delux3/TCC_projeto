@@ -11,6 +11,7 @@ use App\Models\LeadLoversTagOperation;
 use App\Services\LeadLoversApiClient;
 use App\Services\LeadLoversResultTagService;
 use App\Services\LeadLoversTagOperationCoordinator;
+use App\Services\RejectedLeadRetentionService;
 use Illuminate\Broadcasting\BroadcastEvent;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
@@ -87,6 +88,7 @@ function handleFinalAnalysisTagJob(ApplyFinalAnalysisTagToLeadLoversJob $job): v
         app(LeadLoversApiClient::class),
         app(LeadLoversResultTagService::class),
         app(LeadLoversTagOperationCoordinator::class),
+        app(RejectedLeadRetentionService::class),
     );
 }
 
@@ -129,6 +131,7 @@ it('does not access LeadLovers or dispatch confirmation while analyses are disab
         app(LeadLoversApiClient::class),
         app(LeadLoversResultTagService::class),
         app(LeadLoversTagOperationCoordinator::class),
+        app(RejectedLeadRetentionService::class),
     );
 
     Http::assertNothingSent();
@@ -160,6 +163,7 @@ it('submits one exact bulk mutation and schedules confirmation without changing 
         app(LeadLoversApiClient::class),
         app(LeadLoversResultTagService::class),
         app(LeadLoversTagOperationCoordinator::class),
+        app(RejectedLeadRetentionService::class),
     );
 
     expect($lead->fresh()->tags_originais)
@@ -272,6 +276,7 @@ it('normalizes reordered bulk action properties before persisting a confirmed re
         app(LeadLoversApiClient::class),
         app(LeadLoversResultTagService::class),
         app(LeadLoversTagOperationCoordinator::class),
+        app(RejectedLeadRetentionService::class),
     );
 
     $appliedEvent = $analysis->events()

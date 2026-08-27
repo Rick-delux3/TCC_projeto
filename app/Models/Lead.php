@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\ManualLeadResultTags;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -50,6 +51,15 @@ class Lead extends Model
         'leadlovers_update_error',
         'leadlovers_update_requested_at',
         'leadlovers_update_at',
+        'leadlovers_initial_error_status',
+        'leadlovers_initial_error_code',
+        'leadlovers_initial_error_operation',
+        'leadlovers_initial_error_detail',
+        'leadlovers_initial_failed_at',
+        'leadlovers_confirmed_final_tag_key',
+        'leadlovers_final_tag_confirmed_at',
+        'leadlovers_confirmed_tag_version',
+        'rejected_deletion_due_at',
     ];
 
     protected $casts = [
@@ -61,11 +71,35 @@ class Lead extends Model
         'leadlovers_update_response' => 'array',
         'leadlovers_update_requested_at' => 'datetime',
         'leadlovers_update_at' => 'datetime',
+        'leadlovers_initial_error_status' => 'integer',
+        'leadlovers_initial_failed_at' => 'datetime',
+        'leadlovers_final_tag_confirmed_at' => 'datetime',
+        'leadlovers_confirmed_tag_version' => 'integer',
+        'rejected_deletion_due_at' => 'datetime',
     ];
 
     public function scopeCreatedThroughSystem(Builder $query): Builder
     {
         return $query->whereIn('origem', self::SYSTEM_ORIGINS);
+    }
+
+    public function scopeApprovedFirst(Builder $query): Builder
+    {
+        $approvedTagKey = ManualLeadResultTags::leadloversKey(
+            ManualLeadResultTags::APPROVED
+        );
+
+        return $query->orderByRaw(
+            <<<'SQL'
+                CASE
+                    WHEN leadlovers_confirmed_final_tag_key = ? THEN 0
+                    WHEN leadlovers_confirmed_final_tag_key IS NULL
+                        AND LOWER(COALESCE(tags_originais, '')) LIKE ? THEN 0
+                    ELSE 1
+                END
+            SQL,
+            [$approvedTagKey, '%aprovad%']
+        );
     }
 
     /**
@@ -223,5 +257,30 @@ class Lead extends Model
     {
         return $this->hasFinalInsuranceResultForReanalysis()
             && filled($this->reanalysis_unlocked_at);
+    }
+
+    // Leads cujo envio inicial foi recusado pela LeadLovers devido a um erro HTTP 400 e que ainda não possuem identificação remota.
+
+    public function scopeNotSentToLeadLoversBecauseOfInvalidData(
+        Builder $query
+    ): Builder {
+        return $query
+            ->createdThroughSystem()
+            ->where('leadlovers_status', 'failed')
+            ->whereNull('leadlovers_lead_id')
+            ->whereNull('sent_to_leadlovers_at')
+            ->where('leadlovers_initial_error_status', 400);
+    }
+
+    public function scopeExpiredRejectedRetention(Builder $query): Builder
+    {
+        return $query
+            ->where('leadlovers_confirmed_final_tag_key', 'ruim')
+            ->whereNotNull('rejected_deletion_due_at')
+            ->where(
+                'rejected_deletion_due_at',
+                '<=',
+                now()->utc()
+            );
     }
 }

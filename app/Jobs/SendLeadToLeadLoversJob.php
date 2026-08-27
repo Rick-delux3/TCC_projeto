@@ -2,10 +2,10 @@
 
 namespace App\Jobs;
 
+use App\Events\DashboardActivityChanged;
 use App\Exceptions\LeadLoversApiException;
 use App\Models\Lead;
 use App\Models\LeadLoversTag;
-use App\Events\DashboardActivityChanged;
 use App\Services\LeadLoversApiClient;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -312,7 +312,8 @@ class SendLeadToLeadLoversJob implements ShouldQueue
                 $this->retryOrFail(
                     'lead_search',
                     $exception,
-                    'A conciliacao do lead remoto excedeu as tentativas configuradas.'
+                    'A conciliacao do lead remoto excedeu as tentativas configuradas.',
+                    preservePreviousInitialFailure: $reason === self::RECONCILIATION_EMAIL_EXISTS,
                 );
 
                 return null;
@@ -321,7 +322,8 @@ class SendLeadToLeadLoversJob implements ShouldQueue
             $this->permanentlyFail(
                 'lead_search',
                 $exception,
-                'Nao foi possivel conciliar o lead remoto por e-mail.'
+                'Nao foi possivel conciliar o lead remoto por e-mail.',
+                preservePreviousInitialFailure: $reason === self::RECONCILIATION_EMAIL_EXISTS,
             );
 
             return null;
@@ -346,7 +348,8 @@ class SendLeadToLeadLoversJob implements ShouldQueue
             $this->permanentlyFail(
                 'lead_search',
                 null,
-                'A busca remota nao retornou uma correspondencia unica e exata.'
+                'A busca remota nao retornou uma correspondencia unica e exata.',
+                preservePreviousInitialFailure: $reason === self::RECONCILIATION_EMAIL_EXISTS,
             );
 
             return null;
@@ -612,7 +615,7 @@ class SendLeadToLeadLoversJob implements ShouldQueue
                     ->select(['id', 'company_id'])
                     ->find($pendingUpdate['lead_id']);
 
-                if($lead !== null) {
+                if ($lead !== null) {
                     $this->notifyDashboard($lead, 'lead.sync.failed');
                 }
             }
@@ -680,6 +683,12 @@ class SendLeadToLeadLoversJob implements ShouldQueue
                 'leadlovers_status' => 'sent',
                 'leadlovers_response' => $summary,
                 'sent_to_leadlovers_at' => now(),
+
+                'leadlovers_initial_error_status' => null,
+                'leadlovers_initial_error_code' => null,
+                'leadlovers_initial_error_operation' => null,
+                'leadlovers_initial_error_detail' => null,
+                'leadlovers_initial_failed_at' => null,
             ]);
 
             $resourceId = (int) $lead->id;
@@ -687,8 +696,6 @@ class SendLeadToLeadLoversJob implements ShouldQueue
             $companyId = $lead->company_id !== null
                 ? (int) $lead->company_id
                 : null;
-
-            
 
             if ($requestedFields === []) {
                 $lead->save();
@@ -1016,13 +1023,15 @@ class SendLeadToLeadLoversJob implements ShouldQueue
         string $operation,
         ?LeadLoversApiException $exception,
         string $exhaustedMessage,
-        array $diagnosticContext = []
+        array $diagnosticContext = [],
+        bool $preservePreviousInitialFailure = false,
     ): void {
         if ($this->attempts() >= $this->tries) {
             $this->permanentlyFail(
                 $operation,
                 $exception,
-                $exhaustedMessage
+                $exhaustedMessage,
+                preservePreviousInitialFailure: $preservePreviousInitialFailure,
             );
 
             return;
@@ -1042,7 +1051,7 @@ class SendLeadToLeadLoversJob implements ShouldQueue
                     'status_code' => $exception?->statusCode,
                     'error_code' => $exception?->errorCode,
                 ]
-            ) 
+            )
         );
 
         $this->release($delay);
@@ -1052,15 +1061,26 @@ class SendLeadToLeadLoversJob implements ShouldQueue
         string $operation,
         ?LeadLoversApiException $exception,
         string $updateError,
-        array $extra = []
+        array $extra = [],
+        bool $preservePreviousInitialFailure = false,
     ): void {
+        $failure = array_merge(
+            $this->failureSummary($operation, $exception),
+            $extra
+        );
+
+        if ($preservePreviousInitialFailure) {
+            unset(
+                $failure['status_code'],
+                $failure['error_code'],
+                $failure['safe_reason']
+            );
+        }
+
         $this->failInitialSend(
             $this->leadId,
             'failed',
-            array_merge(
-                $this->failureSummary($operation, $exception),
-                $extra
-            ),
+            $failure,
             $updateError
         );
 
@@ -1090,6 +1110,10 @@ class SendLeadToLeadLoversJob implements ShouldQueue
             $summary['error_code'] = $exception->errorCode;
         }
 
+        if (filled($exception?->safeReason)) {
+            $summary['safe_reason'] = $exception->safeReason;
+        }
+
         return $summary;
     }
 
@@ -1102,7 +1126,7 @@ class SendLeadToLeadLoversJob implements ShouldQueue
             'O envio inicial falhou apos as tentativas configuradas.'
         );
 
-        Log::warning('Envio inicial do lead esgotou as tentativas.', [
+        Log::warning('Job de envio inicial do lead terminou com falha.', [
             'lead_id' => $this->leadId,
             'exception' => $exception ? $exception::class : null,
         ]);
@@ -1173,10 +1197,9 @@ class SendLeadToLeadLoversJob implements ShouldQueue
 
             $lead->save();
 
-            $this->notifyDashboard($lead, $wasProcessing ? 'lead.sync.failed' : 'lead.sync.disabled', );
+            $this->notifyDashboard($lead, $wasProcessing ? 'lead.sync.failed' : 'lead.sync.disabled');
         });
 
-        
     }
 
     private function failInitialSend(
@@ -1201,9 +1224,77 @@ class SendLeadToLeadLoversJob implements ShouldQueue
                 return;
             }
 
+            $previousResponse = is_array($lead->leadlovers_response)
+                ? $lead->leadlovers_response
+                : [];
+
+            $errorStatus = $response['status_code']
+            ?? $previousResponse['status_code']
+            ?? null;
+
+            $errorStatus = is_numeric($errorStatus)
+                ? (int) $errorStatus
+                : null;
+
+            if (
+                $errorStatus !== null
+                && ($errorStatus < 100 || $errorStatus > 599)
+            ) {
+                $errorStatus = null;
+            }
+
+            $errorCode = $response['error_code']
+                ?? $previousResponse['error_code']
+                ?? null;
+
+            $errorCode = is_string($errorCode)
+                ? mb_strtoupper(trim($errorCode))
+                : null;
+
+            if (
+                $errorCode !== null
+                && preg_match(
+                    '/\A[A-Z0-9_.-]{1,100}\z/',
+                    $errorCode
+                ) !== 1
+            ) {
+                $errorCode = null;
+            }
+
+            $operation = $response['operation']
+                ?? $previousResponse['operation']
+                ?? null;
+
+            $operation = is_string($operation)
+                ? mb_strcut(
+                    trim($operation),
+                    0,
+                    64,
+                    'UTF-8'
+                )
+                : null;
+
+            $errorDetail = $response['safe_reason']
+                ?? $previousResponse['safe_reason']
+                ?? $updateError;
+
+            $errorDetail = is_string($errorDetail)
+                ? mb_strcut(
+                    trim(strip_tags($errorDetail)),
+                    0,
+                    1000,
+                    'UTF-8'
+                )
+                : null;
+
             $attributes = [
                 'leadlovers_status' => $status,
                 'leadlovers_response' => $response,
+                'leadlovers_initial_error_status' => $errorStatus,
+                'leadlovers_initial_error_code' => $errorCode,
+                'leadlovers_initial_error_operation' => $operation,
+                'leadlovers_initial_error_detail' => $errorDetail,
+                'leadlovers_initial_failed_at' => now(),
             ];
 
             if (
@@ -1226,7 +1317,8 @@ class SendLeadToLeadLoversJob implements ShouldQueue
         });
     }
 
-    private function notifyDashboard(Lead $lead, string $change): void {
+    private function notifyDashboard(Lead $lead, string $change): void
+    {
 
         $resourceId = (int) $lead->id;
 
@@ -1266,7 +1358,6 @@ class SendLeadToLeadLoversJob implements ShouldQueue
                 ->value('leadlovers_tag_id')
         );
     }
-
 
     private function companyTagId(Lead $lead): ?int
     {

@@ -13,6 +13,8 @@
     min-height: calc(100vh - 106px);
 }
 
+.company-back-link
+
 .real-estate-admin .min-w-0 {
     min-width: 0;
 }
@@ -113,8 +115,11 @@
 .company-breadcrumb .breadcrumb-item,
 .company-breadcrumb .breadcrumb-item::before,
 .company-breadcrumb a {
-    color: rgba(255, 255, 255, 0.72);
+    color: rgba(255, 255, 255, 0.72) !important;
+    text-decoration: none;
 }
+
+
 
 .company-breadcrumb a:hover {
     color: #fff;
@@ -740,10 +745,13 @@
     display: inline-flex;
     gap: 0.45rem;
     align-items: center;
-    color: rgba(255, 255, 255, 0.82);
+    color: #edf3ff !important;
     font-size: 0.85rem;
     font-weight: 700;
     text-decoration: none;
+}
+.breadcrumb-item a {
+    outline: none !important;
 }
 
 .company-back-link:hover {

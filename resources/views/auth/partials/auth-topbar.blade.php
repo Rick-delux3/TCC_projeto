@@ -274,6 +274,7 @@
                         src="{{ asset('imgs/logo-header.jpg') }}"
                         alt=""
                         class="auth-topbar__brand-logo"
+                        data-brand-logo="{{ config('branding.active', 'tcc') }}"
                     >
                 </span>
 

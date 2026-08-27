@@ -8,7 +8,12 @@
     <link rel="icon" type="image/jpeg" href="{{ asset(config('branding.profiles.'.config('branding.active', 'tcc').'.logo', 'imgs/Logo_NVS.png')) }}">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
     @vite(['resources/css/header-dashboard-admin.css', 'resources/js/app.js'])
-    @vite(['resources/css/dashboard-admin.css', 'resources/js/dashboard-user.js'])
+    @vite([
+        'resources/css/dashboard-admin.css',
+        'resources/css/lead-filters.css',
+        'resources/css/leadlovers-correction.css',
+        'resources/js/dashboard-user.js',
+    ])
     @vite(['resources/css/branding.css'])
     @stack('styles')
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -19,14 +24,23 @@
 </head>
 <body class="dashboard-admin-body" data-brand="{{ config('branding.active', 'tcc') }}">
     @if (session('success'))
-            <div class="modal fade" id="ModalSucess" tabindex="-1">
+            <div
+                class="modal fade"
+                id="ModalSucess"
+                tabindex="-1"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="dashboardSuccessModalLabel"
+                aria-describedby="dashboardSuccessModalMessage"
+                aria-hidden="true"
+            >
                 <div class="modal-dialog modal-dialog-centered">
                     <div class="modal-content">
                     <div class="modal-header">
-                        <h1 class="modal-title fs-5" id="staticBackdropLabel">Sucesso</h1>
+                        <h2 class="modal-title fs-5" id="dashboardSuccessModalLabel">Sucesso</h2>
                         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
                     </div>
-                    <div class="modal-body">
+                    <div class="modal-body" id="dashboardSuccessModalMessage" role="status">
                        {{ session('success') }}
                     </div>
                     <div class="modal-footer">
