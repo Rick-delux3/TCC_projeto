@@ -55,6 +55,10 @@ class Lead extends Model
         'leadlovers_initial_error_operation',
         'leadlovers_initial_error_detail',
         'leadlovers_initial_failed_at',
+        'leadlovers_confirmed_final_tag_key',
+        'leadlovers_final_tag_confirmed_at',
+        'leadlovers_confirmed_tag_version',
+        'rejected_deletion_due_at',
     ];
 
     protected $casts = [
@@ -68,6 +72,9 @@ class Lead extends Model
         'leadlovers_update_at' => 'datetime',
         'leadlovers_initial_error_status' => 'integer',
         'leadlovers_initial_failed_at' => 'datetime',
+        'leadlovers_final_tag_confirmed_at' => 'datetime',
+        'leadlovers_confirmed_tag_version' => 'integer',
+        'rejected_deletion_due_at' => 'datetime',
     ];
 
     public function scopeCreatedThroughSystem(Builder $query): Builder
@@ -244,4 +251,17 @@ class Lead extends Model
             ->whereNull('sent_to_leadlovers_at')
             ->where('leadlovers_initial_error_status', 400);
     }
+
+    public function scopeExpiredRejectedRetention(Builder $query): Builder
+    {
+        return $query
+            ->where('leadlovers_confirmed_final_tag_key', 'ruim')
+            ->whereNotNull('rejected_deletion_due_at')
+            ->where(
+                'rejected_deletion_due_at',
+                '<=',
+                now()->utc()
+            );
+    }
+
 }

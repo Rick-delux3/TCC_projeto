@@ -13,6 +13,7 @@ use App\Models\LeadLoversTagOperation;
 use App\Services\LeadLoversApiClient;
 use App\Services\LeadLoversResultTagService;
 use App\Services\LeadLoversTagOperationCoordinator;
+use App\Services\RejectedLeadRetentionService;
 use App\Events\DashboardActivityChanged;
 use App\Support\ManualLeadResultTags;
 use DateTimeInterface;
@@ -120,7 +121,8 @@ class ApplyFinalAnalysisTagToLeadLoversJob implements ShouldBeUniqueUntilProcess
     public function handle(
         LeadLoversApiClient $leadLovers,
         LeadLoversResultTagService $resultTags,
-        LeadLoversTagOperationCoordinator $coordinator
+        LeadLoversTagOperationCoordinator $coordinator,
+        RejectedLeadRetentionService $retention
     ): void {
         if (
             ! config('features.insurance_analysis.enabled', false)
@@ -135,7 +137,7 @@ class ApplyFinalAnalysisTagToLeadLoversJob implements ShouldBeUniqueUntilProcess
         }
 
         try {
-            $this->process($leadLovers, $resultTags, $coordinator);
+            $this->process($leadLovers, $resultTags, $coordinator, $retention);
         } catch (PermanentLeadTagException $exception) {
             $this->blockInflightAfterTerminalFailure(
                 $coordinator,
@@ -198,7 +200,8 @@ class ApplyFinalAnalysisTagToLeadLoversJob implements ShouldBeUniqueUntilProcess
     private function process(
         LeadLoversApiClient $leadLovers,
         LeadLoversResultTagService $resultTags,
-        LeadLoversTagOperationCoordinator $coordinator
+        LeadLoversTagOperationCoordinator $coordinator,
+        RejectedLeadRetentionService $retention
     ): void {
         $batch = InsuranceAnalysisBatch::with([
             'lead',
@@ -410,13 +413,17 @@ class ApplyFinalAnalysisTagToLeadLoversJob implements ShouldBeUniqueUntilProcess
             $coordinator->completeCurrent(
                 $lead->id,
                 $state->version,
-                fn (): bool => $this->persistConfirmedTag(
-                    $batch,
-                    $resultTags,
-                    $catalog,
-                    $selectedTag,
-                    $operationTagKey
-                )
+                fn (LeadLoversTagOperation $lockedState): bool =>
+                    $this->persistConfirmedTag(
+                        batch: $batch,
+                        resultTags: $resultTags,
+                        catalog: $catalog,
+                        selectedTag: $selectedTag,
+                        tagKey: $operationTagKey,
+                        retention: $retention,
+                        remoteTags: $remoteTags,
+                        operationVersion: $lockedState->version,
+                    )
             );
 
             return;
@@ -517,6 +524,9 @@ class ApplyFinalAnalysisTagToLeadLoversJob implements ShouldBeUniqueUntilProcess
         LeadLoversResultTagService $resultTags,
         Collection $catalog,
         LeadLoversTag $selectedTag,
+        RejectedLeadRetentionService $retention,
+        array $remoteTags,
+        int $operationVersion,
         string $tagKey
     ): bool {
         return DB::transaction(function () use (
@@ -524,7 +534,10 @@ class ApplyFinalAnalysisTagToLeadLoversJob implements ShouldBeUniqueUntilProcess
             $resultTags,
             $catalog,
             $selectedTag,
-            $tagKey
+            $tagKey,
+            $retention,
+            $remoteTags,
+            $operationVersion,
         ): bool {
             $lead = Lead::query()
                 ->lockForUpdate()
@@ -542,7 +555,15 @@ class ApplyFinalAnalysisTagToLeadLoversJob implements ShouldBeUniqueUntilProcess
                     catalog: $catalog,
                     selectedTag: $selectedTag,
                 ),
-            ])->save();
+            ]);
+
+            $retention->applyConfirmedFinalTag(
+                lead: $lead,
+                tagKey: $tagKey,
+                remoteTagId: (int) $selectedTag->leadlovers_tag_id,
+                remoteTags: $remoteTags,
+                operationVersion: $operationVersion,
+            );
 
             $tagsChanged = $lead->wasChanged('tags_originais');
 

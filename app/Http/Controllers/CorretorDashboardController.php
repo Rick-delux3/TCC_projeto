@@ -88,6 +88,7 @@ class CorretorDashboardController extends Controller
                 'imobiliariaInformada',
                 'locador',
                 'insuranceAnalyses',
+                'leadLoversTagOperation',
             ])->latest();
 
         $leadsQuery->when($leadSearch, function ($query) use ($leadSearch) {

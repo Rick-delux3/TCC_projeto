@@ -1335,6 +1335,10 @@
                                         @endif
                                     @endif
                                 </div>
+
+                                @include('partials.rejected-lead-retention-notice', [
+                                    'lead' => $lead,
+                                ])
                             </div>
                         </article>
                     @endforeach

@@ -108,6 +108,7 @@ class DashboardController extends Controller
                 'conjuge',
                 'imobiliariaInformada',
                 'locador',
+                'leadLoversTagOperation',
             ])
             ->orderBy('created_at', 'desc');
 

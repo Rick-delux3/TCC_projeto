@@ -12,6 +12,7 @@ use App\Models\LeadLoversTagOperation;
 use App\Services\LeadLoversApiClient;
 use App\Services\LeadLoversResultTagService;
 use App\Services\LeadLoversTagOperationCoordinator;
+use App\Services\RejectedLeadRetentionService;
 use App\Support\ManualLeadResultTags;
 use Illuminate\Broadcasting\BroadcastEvent;
 use Illuminate\Http\Client\Request;
@@ -163,6 +164,7 @@ function handleManualLeadTagJob(ApplyManualLeadResultTagJob $job): void
         app(LeadLoversApiClient::class),
         app(LeadLoversResultTagService::class),
         app(LeadLoversTagOperationCoordinator::class),
+        app(RejectedLeadRetentionService::class),
     );
 }
 
