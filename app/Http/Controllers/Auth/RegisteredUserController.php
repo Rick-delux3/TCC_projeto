@@ -9,8 +9,10 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rules;
 use Illuminate\View\View;
+use Throwable;
 
 class RegisteredUserController extends Controller
 {
@@ -41,9 +43,29 @@ class RegisteredUserController extends Controller
             'password' => Hash::make($request->password),
         ]);
 
-        event(new Registered($user));
+        $verificationEmailFailed = false;
+
+        try {
+            event(new Registered($user));
+        } catch (Throwable $exception) {
+            $verificationEmailFailed = true;
+
+            Log::error('Usuário cadastrado, mas a verificação de e-mail não foi enviada.', [
+                'user_id' => $user->id,
+                'exception' => $exception::class,
+                'mailer' => config('mail.default'),
+            ]);
+        }
 
         Auth::login($user);
+
+        if ($verificationEmailFailed) {
+            return redirect()
+                ->route('verification.notice')
+                ->withErrors([
+                    'email' => 'Seu cadastro foi concluído, mas não foi possível enviar a verificação. Tente reenviar o link.',
+                ]);
+        }
 
         return redirect(route('company.dashboard', absolute: false));
     }

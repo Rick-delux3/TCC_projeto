@@ -2,23 +2,18 @@
 
 namespace App\Notifications;
 
-use Illuminate\Bus\Queueable;
-use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 
 class CorretorFirstLoginCodeNotification extends Notification
 {
-    use Queueable;
-
     /**
      * Create a new notification instance.
      */
     public function __construct(
         private string $code,
         private string $expiresAt,
-    )
-    {}
+    ) {}
 
     /**
      * Get the notification's delivery channels.
@@ -36,6 +31,7 @@ class CorretorFirstLoginCodeNotification extends Notification
     public function toMail(object $notifiable): MailMessage
     {
         $nome = $notifiable->name ?? $notifiable->nome ?? 'Corretor';
+
         return (new MailMessage)
             ->subject('Código de verificação - Painel da Corretora')
             ->greeting("Olá, {$nome}!")

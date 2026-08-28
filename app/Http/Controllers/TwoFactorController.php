@@ -3,11 +3,11 @@
 namespace App\Http\Controllers;
 
 use App\Models\TwoFactorCode;
+use App\Services\CompanyTwoFactorMailService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\RateLimiter;
 
 class TwoFactorController extends Controller
@@ -21,6 +21,10 @@ class TwoFactorController extends Controller
     private const RESEND_DECAY_SECONDS = 600; // 10 min
 
     private const RESEND_COOLDOWN_SECONDS = 60; // 1 min
+
+    public function __construct(
+        private CompanyTwoFactorMailService $twoFactorMail
+    ) {}
 
     public function index()
     {
@@ -116,20 +120,18 @@ class TwoFactorController extends Controller
         // Invalidate older codes and send a fresh one.
 
         $plainCode = (string) random_int(100000, 999999);
+        $expiresAt = now()->addMinutes(10);
 
         TwoFactorCode::where('user_id', $user->id)->delete();
 
         TwoFactorCode::create([
             'user_id' => $user->id,
             'code' => Hash::make($plainCode),
-            'expires_at' => now()->addMinutes(10),
+            'expires_at' => $expiresAt,
         ]);
 
         try {
-            Mail::send('emails.2fa-code', ['code' => $plainCode], function ($message) use ($companyEmail) {
-                $message->to($companyEmail)->subject('Seu novo codigo de verificacao');
-            });
-
+            $this->twoFactorMail->sendCode($companyEmail, $plainCode, $expiresAt);
         } catch (\Throwable $e) {
             TwoFactorCode::where('user_id', $user->id)->delete();
 

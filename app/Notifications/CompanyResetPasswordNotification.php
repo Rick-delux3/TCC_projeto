@@ -9,8 +9,7 @@ class CompanyResetPasswordNotification extends Notification
 {
     public function __construct(
         public string $token
-    ) {
-    }
+    ) {}
 
     public function via(object $notifiable): array
     {
@@ -19,6 +18,7 @@ class CompanyResetPasswordNotification extends Notification
 
     public function toMail(object $notifiable): MailMessage
     {
+        $expiresInMinutes = (int) config('auth.passwords.companies.expire', 60);
         $url = url(route('company.password.reset', [
             'token' => $this->token,
             'email' => $notifiable->getEmailForPasswordReset(),
@@ -28,6 +28,7 @@ class CompanyResetPasswordNotification extends Notification
             ->subject('Redefinição de senha - AkiAluga')
             ->line('Você solicitou a redefinição da senha da sua imobiliária.')
             ->action('Redefinir senha', $url)
+            ->line("Este link expira em {$expiresInMinutes} minutos.")
             ->line('Se você não solicitou, ignore este e-mail.');
     }
 }

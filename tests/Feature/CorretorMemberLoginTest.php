@@ -67,6 +67,7 @@ it('queues encrypted invitation email after commit with bounded retries', functi
                 $member,
                 $notification,
             );
+            $mail = $notification->toMail($member);
 
             expect($notification)
                 ->toBeInstanceOf(ShouldQueue::class)
@@ -78,7 +79,8 @@ it('queues encrypted invitation email after commit with bounded retries', functi
                 ->and($queuedNotification->afterCommit)->toBeTrue()
                 ->and($queuedNotification->tries)->toBe(3)
                 ->and($queuedNotification->timeout)->toBe(30)
-                ->and($notification->backoff())->toBe([60, 300]);
+                ->and($notification->backoff())->toBe([60, 300])
+                ->and(implode(' ', $mail->outroLines))->toContain('UTC');
 
             return true;
         },

@@ -37,7 +37,7 @@ class CorretorFirstLoginCodeService
         $corretor->notify(
             new CorretorFirstLoginCodeNotification(
                 code: $code,
-                expiresAt: $expiresAt->format('H:i')
+                expiresAt: $expiresAt->format('H:i T')
             )
         );
     }

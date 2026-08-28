@@ -38,7 +38,13 @@ it('sends a company reset link using the companies broker', function () {
     Notification::assertSentTo(
         $company,
         CompanyResetPasswordNotification::class,
-        fn (CompanyResetPasswordNotification $notification) => filled($notification->token)
+        function (CompanyResetPasswordNotification $notification) use ($company): bool {
+            $mail = $notification->toMail($company);
+
+            return filled($notification->token)
+                && $mail->subject === 'Redefinição de senha - AkiAluga'
+                && in_array('Este link expira em 60 minutos.', $mail->outroLines, true);
+        }
     );
 });
 
@@ -98,7 +104,7 @@ it('resets a company password with a valid token', function () {
 
     $this->post(route('company.password.store'), [
         'token' => $token,
-        'email' => $company->email,
+        'email' => '  '.strtoupper($company->email).'  ',
         'password' => 'new-secure-password',
         'password_confirmation' => 'new-secure-password',
     ])->assertRedirect(route('empresa.login'));

@@ -5,16 +5,20 @@ namespace App\Http\Controllers;
 use App\Models\Imobiliaria;
 use App\Models\TwoFactorCode;
 use App\Models\User;
+use App\Services\CompanyTwoFactorMailService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
 
 class ImobiliariaAuthController extends Controller
 {
+    public function __construct(
+        private CompanyTwoFactorMailService $twoFactorMail
+    ) {}
+
     public function showLoginForm()
     {
         return view('imobiliaria.company-login');
@@ -64,20 +68,17 @@ class ImobiliariaAuthController extends Controller
         // Keep only one active code per user.
         TwoFactorCode::where('user_id', $user->id)->delete();
 
-        $code = random_int(100000, 999999);
+        $code = (string) random_int(100000, 999999);
+        $expiresAt = now()->addMinutes(10);
 
         TwoFactorCode::create([
             'user_id' => $user->id,
-            'code' => Hash::make((string) $code),
-            'expires_at' => now()->addMinutes(10),
+            'code' => Hash::make($code),
+            'expires_at' => $expiresAt,
         ]);
 
         try {
-
-            Mail::send('emails.2fa-code', ['code' => $code], function ($message) use ($company) {
-                $message->to($company->email)->subject('Seu codigo de verificacao');
-            });
-
+            $this->twoFactorMail->sendCode($company->email, $code, $expiresAt);
         } catch (\Throwable $e) {
             TwoFactorCode::where('user_id', $user->id)->delete();
 

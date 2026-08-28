@@ -74,7 +74,7 @@ class CorretorIntegranteLoginNotification extends Notification implements Should
             ->action('Acessar convite', $this->invitationUrl)
             ->line(
                 'Este convite expira em '
-                .$this->expiresAt->format('d/m/Y \à\s H:i')
+                .$this->expiresAt->format('d/m/Y \à\s H:i T')
                 .'.'
             )
             ->line(

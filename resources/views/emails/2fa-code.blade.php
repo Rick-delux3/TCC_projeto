@@ -1,5 +1,10 @@
 <!DOCTYPE html>
-<html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Seu código de verificação</title>
+</head>
 <body>
     <h2>Seu código de verificação</h2>
 
@@ -9,6 +14,8 @@
         {{ $code }}
     </h1>
 
-    <p>Este código expira em 10 minutos.</p>
+    <p>Este código expira às {{ $expiresAt }}.</p>
+
+    <p>Se você não tentou acessar o sistema, ignore este e-mail.</p>
 </body>
 </html>
