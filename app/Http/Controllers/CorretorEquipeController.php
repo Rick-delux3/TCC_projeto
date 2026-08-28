@@ -2,27 +2,22 @@
 
 namespace App\Http\Controllers;
 
-use Illuminate\Http\Request;
-use App\Support\CorretorPermissions;
-
 use App\Models\Corretor;
+use App\Services\CorretorInvitationService;
+use App\Support\CorretorPermissions;
+use DomainException;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Validation\Rule;
-use App\Services\CorretorInvitationService;
-use DomainException;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
-
-
 
 class CorretorEquipeController extends Controller
 {
-
     public function __construct(
         private CorretorInvitationService $invitationService
-    )
-    {}
+    ) {}
 
     public function index()
     {
@@ -73,19 +68,18 @@ class CorretorEquipeController extends Controller
             'active' => ['nullable', 'boolean'],
 
         ],
-        [   
-            'nome.required' => 'Informe o nome!',
-            'email.required' => 'Informe o email!',
-            'email.email' => 'Informe um email válido',
-            'email.unique' => 'Já existe um cadastro com esse email!',
-            'password.required' => 'Informe uma senha!',
-            'password.min' => 'A senha deve ter pelo menos 8 caracteres!',
-            'password.confirmed' => 'As senhas não conferem!',
-            'permissions.*.in' => 'Uma das permissões selecionadas é inválida!',
-            'permissions.*.distinct' => 'Uma permissão não pode ser selecionada mais de uma vez!',
-        ]
-        
-        
+            [
+                'nome.required' => 'Informe o nome!',
+                'email.required' => 'Informe o email!',
+                'email.email' => 'Informe um email válido',
+                'email.unique' => 'Já existe um cadastro com esse email!',
+                'password.required' => 'Informe uma senha!',
+                'password.min' => 'A senha deve ter pelo menos 8 caracteres!',
+                'password.confirmed' => 'As senhas não conferem!',
+                'permissions.*.in' => 'Uma das permissões selecionadas é inválida!',
+                'permissions.*.distinct' => 'Uma permissão não pode ser selecionada mais de uma vez!',
+            ]
+
         );
 
         $validated['permissions'] = $this->normalizeAndValidatePermissions(
@@ -97,7 +91,7 @@ class CorretorEquipeController extends Controller
             'email' => mb_strtolower($validated['email']),
             'password' => Hash::make($validated['password']),
             'password_set_at' => now(),
- 
+
             'role' => Corretor::ROLE_INTEGRANTE,
 
             'permissions' => array_values($validated['permissions'] ?? []),
@@ -117,7 +111,7 @@ class CorretorEquipeController extends Controller
 
             return redirect($routeIndex)->with(
                 'success',
-                'Integrante Cadastrado e convite enviado com sucesso!'
+                'Integrante cadastrado e convite adicionado à fila de envio.'
             );
 
         } catch (DomainException $exception) {
@@ -126,18 +120,18 @@ class CorretorEquipeController extends Controller
         } catch (\Throwable $exception) {
             Log::error('Falha no envio do convite do integrante', [
                 'corretor_id' => $integrante->id,
-                'message' => $exception->getMessage(),
+                'exception' => $exception::class,
+                'mailer' => config('mail.default'),
             ]);
 
-           return redirect($routeIndex)
-            ->with(
-                'error',
-                'O integrante foi cadastrado, mas o convite não pôde ser enviado. Utilize o botão de reenvio.'
-            ); 
+            return redirect($routeIndex)
+                ->with(
+                    'error',
+                    'O integrante foi cadastrado, mas o convite não pôde ser enviado. Utilize o botão de reenvio.'
+                );
         }
 
     }
-
 
     public function edit(Corretor $corretor)
     {
@@ -170,7 +164,7 @@ class CorretorEquipeController extends Controller
             ],
 
             'active' => ['nullable', 'boolean'],
- 
+
         ],
             [
                 'nome.required' => 'Informe o nome.',
@@ -182,7 +176,7 @@ class CorretorEquipeController extends Controller
                 'permissions.*.in' => 'Uma das permissões selecionadas é inválida.',
                 'permissions.*.distinct' => 'Uma permissão não pode ser selecionada mais de uma vez.',
             ]
-        
+
         );
 
         $validated['permissions'] = $this->normalizeAndValidatePermissions(
@@ -199,16 +193,15 @@ class CorretorEquipeController extends Controller
             'active' => $request->boolean('active'),
         ];
 
-        if(filled($validated['password'] ?? null))
-        {
+        if (filled($validated['password'] ?? null)) {
             $data['password'] = Hash::make($validated['password']);
         }
 
         $corretor->update($data);
 
         return redirect()->route('admin.config-equipe.index')
-        ->with('success', 'Dados do integrante atualizados com sucesso!');
-        
+            ->with('success', 'Dados do integrante atualizados com sucesso!');
+
     }
 
     public function resendInvitation(
@@ -238,7 +231,7 @@ class CorretorEquipeController extends Controller
 
             return back()->with(
                 'success',
-                "Novo convite enviado para {$corretor->email}."
+                "Novo convite adicionado à fila de envio para {$corretor->email}."
             );
         } catch (DomainException $exception) {
             return back()->with(
@@ -248,7 +241,8 @@ class CorretorEquipeController extends Controller
         } catch (\Throwable $exception) {
             Log::error('Falha ao reenviar convite.', [
                 'corretor_id' => $corretor->id,
-                'message' => $exception->getMessage(),
+                'exception' => $exception::class,
+                'mailer' => config('mail.default'),
             ]);
 
             return back()->with(

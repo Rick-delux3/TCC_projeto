@@ -133,3 +133,25 @@ it('rejects invalid reset tokens without changing the password', function () {
 
     expect($company->fresh()->password)->toBe($previousPassword);
 });
+
+it('isolates company password reset tokens from user reset tokens', function () {
+    $sharedEmail = 'shared-reset-address@example.test';
+    $company = companyForPasswordRecovery(['email' => $sharedEmail]);
+    $user = User::factory()->create(['email' => $sharedEmail]);
+
+    $companyToken = Password::broker('companies')->createToken($company);
+
+    expect(config('auth.passwords.companies.table'))
+        ->toBe('company_password_reset_tokens')
+        ->not->toBe(config('auth.passwords.users.table'))
+        ->and(Password::broker('companies')->tokenExists($company, $companyToken))->toBeTrue()
+        ->and(Password::broker('users')->tokenExists($user, $companyToken))->toBeFalse();
+
+    $userToken = Password::broker('users')->createToken($user);
+
+    expect(Password::broker('users')->tokenExists($user, $userToken))->toBeTrue()
+        ->and(Password::broker('companies')->tokenExists($company, $userToken))->toBeFalse();
+
+    $this->assertDatabaseHas('company_password_reset_tokens', ['email' => $sharedEmail]);
+    $this->assertDatabaseHas('password_reset_tokens', ['email' => $sharedEmail]);
+});
