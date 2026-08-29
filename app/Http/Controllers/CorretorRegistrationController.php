@@ -2,20 +2,44 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Middleware\EnsureCeoRegistrationIsAuthorized;
+use App\Http\Requests\AuthorizeCeoRegistrationRequest;
 use App\Models\Corretor;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rules\Password;
+use Illuminate\View\View;
 
 class CorretorRegistrationController extends Controller
 {
-    public function showCeoRegistrationForm()
+    public function showCeoRegistrationAccessForm(Request $request): View|RedirectResponse
+    {
+        if ($request->query->has('key')) {
+            return redirect()->route('admin.ceo.register.access');
+        }
+
+        return view('corretor.admin-ceo-register-access');
+    }
+
+    public function authorizeCeoRegistration(AuthorizeCeoRegistrationRequest $request): RedirectResponse
+    {
+        $request->session()->regenerate();
+        $request->session()->put(
+            EnsureCeoRegistrationIsAuthorized::SESSION_KEY,
+            now()->getTimestamp()
+        );
+
+        return redirect()->route('admin.ceo.register.form');
+    }
+
+    public function showCeoRegistrationForm(): View
     {
         return view('corretor.admin-ceo-register');
     }
 
-    public function storeCeo(Request $request)
+    public function storeCeo(Request $request): RedirectResponse
     {
         $request->merge([
             'name' => trim(preg_replace('/\s+/', ' ', (string) $request->name)),
@@ -95,6 +119,8 @@ class CorretorRegistrationController extends Controller
                 'last_login_at' => null,
             ]);
         });
+
+        $request->session()->forget(EnsureCeoRegistrationIsAuthorized::SESSION_KEY);
 
         return redirect()->route('admin.ceo.login')->with(
             'success',

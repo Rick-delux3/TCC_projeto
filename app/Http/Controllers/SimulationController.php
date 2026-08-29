@@ -158,12 +158,16 @@ class SimulationController extends Controller
         }
 
         $lead = DB::transaction(function () use ($request, $company) {
-            return $this->saveLead($request, [
-                'tipo_solicitante' => 'imobiliaria_cadastrada',
-                'company' => $company,
-                'origem' => 'imobiliaria_cadastrada',
-                'corretor_id' => (int) auth('admin')->id(),
-            ]);
+            return $this->saveLead(
+                $request,
+                [
+                    'tipo_solicitante' => 'imobiliaria_cadastrada',
+                    'company' => $company,
+                    'origem' => 'imobiliaria_cadastrada',
+                    'corretor_id' => (int) auth('admin')->id(),
+                ],
+                allowExistingUpdate: true
+            );
         });
 
         $this->dispatchLeadFlow($lead);
@@ -242,12 +246,16 @@ class SimulationController extends Controller
         }
 
         $lead = DB::transaction(function () use ($request, $tipo) {
-            return $this->saveLead($request, [
-                'tipo_solicitante' => $tipo,
-                'company' => null,
-                'origem' => $tipo,
-                'corretor_id' => (int) auth('admin')->id(),
-            ]);
+            return $this->saveLead(
+                $request,
+                [
+                    'tipo_solicitante' => $tipo,
+                    'company' => null,
+                    'origem' => $tipo,
+                    'corretor_id' => (int) auth('admin')->id(),
+                ],
+                allowExistingUpdate: true
+            );
         });
 
         $this->dispatchLeadFlow($lead);
@@ -274,7 +282,9 @@ class SimulationController extends Controller
             ]);
         });
 
-        $this->dispatchLeadFlow($lead);
+        if ($lead->wasRecentlyCreated) {
+            $this->dispatchLeadFlow($lead);
+        }
 
         return redirect()->route('simulation.success')->with('success', 'Solicitação enviada com sucesso.');
     }
@@ -319,7 +329,9 @@ class SimulationController extends Controller
             ]);
         });
 
-        $this->dispatchLeadFlow($lead);
+        if ($lead->wasRecentlyCreated) {
+            $this->dispatchLeadFlow($lead);
+        }
 
         return redirect()
             ->route('simulation.success')
@@ -341,7 +353,9 @@ class SimulationController extends Controller
             ]);
         });
 
-        $this->dispatchLeadFlow($lead);
+        if ($lead->wasRecentlyCreated) {
+            $this->dispatchLeadFlow($lead);
+        }
 
         return redirect()
             ->route('simulation.success')
@@ -434,8 +448,11 @@ class SimulationController extends Controller
      * Salva o lead de forma centralizada.
      * Essa função evita repetir código nos quatro formulários.
      */
-    private function saveLead(StoreSimulationLeadRequest $request, array $context): Lead
-    {
+    private function saveLead(
+        StoreSimulationLeadRequest $request,
+        array $context,
+        bool $allowExistingUpdate = false
+    ): Lead {
         $data = $request->validated();
 
         $company = $context['company'] ?? null;
@@ -499,6 +516,10 @@ class SimulationController extends Controller
         );
 
         $wasRecentlyCreated = $lead->wasRecentlyCreated;
+
+        if (! $wasRecentlyCreated && ! $allowExistingUpdate) {
+            return $lead;
+        }
 
         if (! $wasRecentlyCreated) {
             $lead = Lead::query()

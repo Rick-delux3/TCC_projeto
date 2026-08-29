@@ -16,27 +16,17 @@ class EnsureCeoRegistrationIsOpen
      */
     public function handle(Request $request, Closure $next): Response
     {
-        if(! config('admin.ceo_registration_enabled'))
-        {
+        if (! config('admin.ceo_registration_enabled')) {
             abort(403, 'Cadastro do CEO está desativado.');
         }
 
         $secret = config('admin.ceo_registration_secret');
 
-        if(! $secret)
-        {
+        if (! is_string($secret) || $secret === '') {
             abort(403, 'Cadastro do CEO não está configurado corretamente.');
         }
 
-        $requestKey = $request->query('key') ?? $request->input('key');
-
-        if(! hash_equals((string) $secret, (string) $requestKey))
-        {
-            abort(403, 'Chave de acesso inválida para cadastro do CEO.');
-        }
-
-        if(Corretor::where('role', Corretor::ROLE_CEO)->exists())
-        {
+        if (Corretor::query()->where('role', Corretor::ROLE_CEO)->exists()) {
             abort(403, 'O CEO já foi cadastrado. O cadastro do CEO não pode ser realizado novamente.');
         }
 

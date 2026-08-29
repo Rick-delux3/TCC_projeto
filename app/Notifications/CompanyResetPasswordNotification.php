@@ -19,10 +19,10 @@ class CompanyResetPasswordNotification extends Notification
     public function toMail(object $notifiable): MailMessage
     {
         $expiresInMinutes = (int) config('auth.passwords.companies.expire', 60);
-        $url = url(route('company.password.reset', [
+        $url = rtrim((string) config('app.url'), '/').route('company.password.reset', [
             'token' => $this->token,
             'email' => $notifiable->getEmailForPasswordReset(),
-        ], false));
+        ], false);
 
         return (new MailMessage)
             ->subject('Redefinição de senha - AkiAluga')

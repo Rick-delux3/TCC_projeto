@@ -1,47 +1,40 @@
 <?php
 
 use App\Models\User;
-use Illuminate\Contracts\Notifications\Dispatcher;
-use Symfony\Component\Mailer\Exception\TransportException;
+use Illuminate\Support\Facades\Notification;
+use Laravel\Fortify\Features;
 
-test('registration screen can be rendered', function () {
-    $response = $this->get('/register');
-
-    $response->assertStatus(200);
+test('generic registration entry redirects to company registration', function () {
+    $this->get('/register')
+        ->assertRedirect(route('empresa.register.form'));
 });
 
-test('new users can register', function () {
-    config(['features.insurance_analysis.enabled' => false]);
-
-    $response = $this->post('/register', [
+test('generic user registration is not available', function () {
+    $this->post('/register', [
         'name' => 'Test User',
         'email' => 'test@example.com',
         'password' => 'password',
         'password_confirmation' => 'password',
-    ]);
+    ])->assertMethodNotAllowed();
 
-    $this->assertAuthenticated();
-    $response->assertRedirect(route('company.dashboard', absolute: false));
+    $this->assertGuest();
+    $this->assertDatabaseMissing('users', [
+        'email' => 'test@example.com',
+    ]);
 });
 
-test('registration completes safely when verification email delivery fails', function () {
-    $this->mock(Dispatcher::class, function ($dispatcher): void {
-        $dispatcher->shouldReceive('send')
-            ->once()
-            ->andThrow(new TransportException('Resend transport unavailable.'));
-    });
+test('generic registration cannot send verification email', function () {
+    Notification::fake();
 
-    $response = $this->post('/register', [
+    $this->post('/register', [
         'name' => 'Test User',
         'email' => 'test@example.com',
         'password' => 'password',
         'password_confirmation' => 'password',
-    ]);
+    ])->assertMethodNotAllowed();
 
-    $this->assertAuthenticated();
-    $response
-        ->assertRedirect(route('verification.notice'))
-        ->assertSessionHasErrors('email');
+    Notification::assertNothingSent();
 
-    expect(User::query()->where('email', 'test@example.com')->exists())->toBeTrue();
+    expect(User::query()->where('email', 'test@example.com')->exists())->toBeFalse()
+        ->and(config('fortify.features'))->not->toContain(Features::registration());
 });
