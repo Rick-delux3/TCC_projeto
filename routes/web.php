@@ -282,11 +282,11 @@ Route::prefix('simulacao')
             ->name('registered-company.verify');
 
         // Formulário da imobiliária cadastrada após chave validada.
-        Route::get('/imobiliaria-cadastrada/{code}', [SimulationController::class, 'registeredCompanyForm'])
+        Route::get('/imobiliaria-cadastrada/formulario', [SimulationController::class, 'registeredCompanyForm'])
             ->middleware('throttle:simulation-page')
             ->name('registered-company.form');
 
-        Route::post('/imobiliaria-cadastrada/{code}', [SimulationController::class, 'storeRegisteredCompanyLead'])
+        Route::post('/imobiliaria-cadastrada/formulario', [SimulationController::class, 'storeRegisteredCompanyLead'])
             ->middleware('throttle:simulation-submit')
             ->name('registered-company.store');
 

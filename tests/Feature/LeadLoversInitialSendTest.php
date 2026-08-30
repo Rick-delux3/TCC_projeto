@@ -933,11 +933,14 @@ it('broadcasts a newly created company lead after the database transaction commi
         'lead_form_active' => true,
     ]);
 
+    $this->post(route('simulation.registered-company.verify'), [
+        'lead_access_code' => $company->lead_access_code,
+    ])->assertRedirect(route('simulation.registered-company.form'));
+
     $response = $this->post(
-        route('simulation.registered-company.store', [
-            'code' => $company->lead_access_code,
-        ]),
+        route('simulation.registered-company.store'),
         [
+            'registered_company_context' => $company->id,
             'aceite_termos' => '1',
             'nome' => 'Novo lead',
             'email' => 'new-broadcast@example.test',
@@ -1039,11 +1042,14 @@ it('does not change or redispatch a confirmed lead when the public form is submi
         'sent_to_leadlovers_at' => now(),
     ]);
 
+    $this->post(route('simulation.registered-company.verify'), [
+        'lead_access_code' => $company->lead_access_code,
+    ])->assertRedirect(route('simulation.registered-company.form'));
+
     $response = $this->post(
-        route('simulation.registered-company.store', [
-            'code' => $company->lead_access_code,
-        ]),
+        route('simulation.registered-company.store'),
         [
+            'registered_company_context' => $company->id,
             'aceite_termos' => '1',
             'nome' => 'Nome reenviado',
             'email' => 'resubmission@example.test',

@@ -64,18 +64,27 @@ it('sends the initial and resent codes to the company canonical email', function
         'password' => 'company-password',
     ])->assertRedirect(route('2fa'));
 
+    $initialChallenge = TwoFactorCode::query()->sole();
+
     expect(companyTwoFactorRecipientAddresses())->toBe([$company->email])
         ->and(companyTwoFactorMessage()->getSubject())->toBe('Seu código de verificação')
-        ->and(companyTwoFactorMessage()->getHtmlBody())->toContain('Este código expira às 14:40 UTC.');
+        ->and(companyTwoFactorMessage()->getHtmlBody())->toContain('Este código expira às 14:40 UTC.')
+        ->and($initialChallenge->attempts)->toBe(0);
+
+    $initialChallenge->forceFill(['attempts' => 4])->save();
 
     $this->post(route('2fa.resend'))
         ->assertRedirect()
         ->assertSessionHas('success');
 
+    $resentChallenge = TwoFactorCode::query()->sole();
+
     expect(companyTwoFactorRecipientAddresses())->toBe([$company->email])
         ->and(companyTwoFactorMessage()->getSubject())->toBe('Seu código de verificação')
         ->and(companyTwoFactorMessage()->getHtmlBody())->toContain('Este código expira às 14:40 UTC.')
-        ->and(Mail::mailer()->getSymfonyTransport()->messages())->toHaveCount(2);
+        ->and(Mail::mailer()->getSymfonyTransport()->messages())->toHaveCount(2)
+        ->and($resentChallenge->id)->not->toBe($initialChallenge->id)
+        ->and($resentChallenge->attempts)->toBe(0);
 });
 
 it('fails safely when the authenticated user is not linked to a company', function () {

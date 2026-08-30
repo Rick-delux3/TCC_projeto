@@ -5,7 +5,7 @@
 @php
     $isAdminSimulation = $isAdminSimulation ?? false;
     
-    $formAction = $formAction ?? route('simulation.registered-company.store', $company->lead_access_code);
+    $formAction = $formAction ?? route('simulation.registered-company.store');
 
 
 @endphp
@@ -37,6 +37,14 @@
 
             <form action="{{ $formAction }}" method="POST" class="simulation-form">
                 @csrf
+
+                @unless ($isAdminSimulation)
+                    <input
+                        type="hidden"
+                        name="registered_company_context"
+                        value="{{ $company->getKey() }}"
+                    >
+                @endunless
 
                 @if ($isAdminSimulation && filled($adminSimulationChannel ?? null))
                     <input

@@ -322,53 +322,93 @@ class CorretorAuthController extends Controller
             ]);
         }
 
-        $verification = CorretorLoginVerificacaoCode::where('corretor_id', $corretorId)
-            ->whereNull('used_at')
-            ->latest()
-            ->first();
+        $verificationResult = DB::transaction(function () use ($corretor, $corretorId, $request): string {
+            $verification = CorretorLoginVerificacaoCode::query()
+                ->where('corretor_id', $corretorId)
+                ->whereNull('used_at')
+                ->latest()
+                ->lockForUpdate()
+                ->first();
 
-        if (! $verification) {
-            return back()->withErrors([
-                'code' => 'Nenhum código ativo foi encontrado. Solicite um novo código.',
-            ]);
-        }
+            if (! $verification) {
+                return 'missing';
+            }
 
-        if ($verification->isExpired()) {
-            $verification->update([
-                'used_at' => now(),
-            ]);
+            if ($verification->isExpired()) {
+                $verification->forceFill(['used_at' => now()])->save();
 
-            return back()->withErrors([
-                'code' => 'Este código expirou. Solicite um novo código.',
-            ]);
-        }
+                return 'expired';
+            }
 
-        if ($verification->reachedMaxAttempts()) {
-            return back()->withErrors([
-                'code' => 'Este código atingiu o limite de tentativas. Solicite um novo código.',
-            ]);
-        }
+            if ($verification->reachedMaxAttempts()) {
+                $verification->forceFill(['used_at' => now()])->save();
 
-        if (! Hash::check($request->code, $verification->code_hash)) {
-            $verification->increment('attempts');
+                return 'locked';
+            }
 
-            RateLimiter::hit($verifyKey, self::VERIFY_DECAY_SECONDS);
+            if (! Hash::check($request->code, $verification->code_hash)) {
+                $incremented = CorretorLoginVerificacaoCode::query()
+                    ->whereKey($verification->id)
+                    ->whereNull('used_at')
+                    ->where('attempts', '<', self::VERIFY_MAX_ATTEMPTS)
+                    ->increment('attempts');
 
-            return back()->withErrors([
-                'code' => 'Código inválido.',
-            ]);
-        }
+                if ($incremented !== 1) {
+                    CorretorLoginVerificacaoCode::query()
+                        ->whereKey($verification->id)
+                        ->whereNull('used_at')
+                        ->update(['used_at' => now()]);
 
-        DB::transaction(function () use ($corretor, $verification) {
-            $verification->update([
-                'used_at' => now(),
-            ]);
+                    return 'locked';
+                }
+
+                CorretorLoginVerificacaoCode::query()
+                    ->whereKey($verification->id)
+                    ->whereNull('used_at')
+                    ->where('attempts', '>=', self::VERIFY_MAX_ATTEMPTS)
+                    ->update(['used_at' => now()]);
+
+                return 'invalid';
+            }
+
+            $verifiedAt = now();
+            $claimed = CorretorLoginVerificacaoCode::query()
+                ->whereKey($verification->id)
+                ->whereNull('used_at')
+                ->where('attempts', '<', self::VERIFY_MAX_ATTEMPTS)
+                ->update(['used_at' => $verifiedAt]);
+
+            if ($claimed !== 1) {
+                CorretorLoginVerificacaoCode::query()
+                    ->whereKey($verification->id)
+                    ->whereNull('used_at')
+                    ->update(['used_at' => $verifiedAt]);
+
+                return 'locked';
+            }
 
             $corretor->forceFill([
-                'first_login_verified_at' => now(),
-                'last_login_at' => now(),
+                'first_login_verified_at' => $verifiedAt,
+                'last_login_at' => $verifiedAt,
             ])->save();
+
+            return 'verified';
         });
+
+        if ($verificationResult !== 'verified') {
+            if ($verificationResult === 'invalid') {
+                RateLimiter::hit($verifyKey, self::VERIFY_DECAY_SECONDS);
+            }
+
+            $message = match ($verificationResult) {
+                'missing' => 'Nenhum código ativo foi encontrado. Solicite um novo código.',
+                'expired' => 'Este código expirou. Solicite um novo código.',
+                'locked' => 'Este código atingiu o limite de tentativas. Solicite um novo código.',
+                default => 'Código inválido.',
+            };
+
+            return back()->withErrors(['code' => $message]);
+        }
 
         session(['admin_2fa_passed' => true]);
 

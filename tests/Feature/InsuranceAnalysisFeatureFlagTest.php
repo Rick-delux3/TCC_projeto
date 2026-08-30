@@ -44,9 +44,14 @@ it('creates a company lead and sends it to LeadLovers without starting analyses'
         'lead_form_active' => true,
     ]);
 
+    $this->post(route('simulation.registered-company.verify'), [
+        'lead_access_code' => $company->lead_access_code,
+    ])->assertRedirect(route('simulation.registered-company.form'));
+
     $response = $this->post(
-        route('simulation.registered-company.store', ['code' => $company->lead_access_code]),
+        route('simulation.registered-company.store'),
         [
+            'registered_company_context' => $company->id,
             'aceite_termos' => '1',
             'nome' => 'Pessoa do Formulário',
             'email' => 'new-lead@example.test',

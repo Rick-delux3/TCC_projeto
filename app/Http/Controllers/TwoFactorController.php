@@ -6,12 +6,15 @@ use App\Models\TwoFactorCode;
 use App\Services\CompanyTwoFactorMailService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\RateLimiter;
 
 class TwoFactorController extends Controller
 {
+    private const CHALLENGE_MAX_ATTEMPTS = 5;
+
     private const VERIFY_MAX_ATTEMPTS = 5;
 
     private const VERIFY_DECAY_SECONDS = 600; // 10 min
@@ -54,27 +57,59 @@ class TwoFactorController extends Controller
             ]);
         }
 
-        $twoFactorCode = TwoFactorCode::where('user_id', $user->id)
-            ->where('expires_at', '>=', now())
-            ->latest('id')
-            ->first();
+        $verificationResult = DB::transaction(function () use ($request, $user): string {
+            $twoFactorCode = TwoFactorCode::query()
+                ->where('user_id', $user->id)
+                ->where('expires_at', '>=', now())
+                ->latest('id')
+                ->lockForUpdate()
+                ->first();
 
-        if (
-            ! $twoFactorCode ||
-            ! Hash::check($request->code, $twoFactorCode->code)
-        ) {
+            if (! $twoFactorCode) {
+                return 'invalid';
+            }
+
+            if ((int) $twoFactorCode->attempts >= self::CHALLENGE_MAX_ATTEMPTS) {
+                $twoFactorCode->delete();
+
+                return 'locked';
+            }
+
+            if (! Hash::check($request->code, $twoFactorCode->code)) {
+                $attempts = (int) $twoFactorCode->attempts + 1;
+
+                if ($attempts >= self::CHALLENGE_MAX_ATTEMPTS) {
+                    $twoFactorCode->delete();
+
+                    return 'locked';
+                }
+
+                $twoFactorCode->forceFill([
+                    'attempts' => $attempts,
+                ])->save();
+
+                return 'invalid';
+            }
+
+            TwoFactorCode::query()
+                ->where('user_id', $user->id)
+                ->delete();
+
+            return 'verified';
+        });
+
+        if ($verificationResult !== 'verified') {
             RateLimiter::hit($verifyKey, self::VERIFY_DECAY_SECONDS);
 
             return back()->withErrors([
-                'code' => 'Código inválido ou expirado.',
+                'code' => $verificationResult === 'locked'
+                    ? 'Este código atingiu o limite de tentativas. Solicite um novo código.'
+                    : 'Código inválido ou expirado.',
             ]);
         }
 
         session(['2fa_passed' => true]);
         RateLimiter::clear($verifyKey);
-
-        // Cleanup all codes so the challenge cannot be replayed.
-        TwoFactorCode::where('user_id', $user->id)->delete();
 
         return redirect()->route('company.dashboard')->with('success', 'Bem vindo!');
     }

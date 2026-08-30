@@ -124,11 +124,15 @@ it('does not let a public registered-company form overwrite an existing lead', f
         $company
     );
 
+    $this->post(route('simulation.registered-company.verify'), [
+        'lead_access_code' => $company->lead_access_code,
+    ])->assertRedirect(route('simulation.registered-company.form'));
+
     $response = $this->post(
-        route('simulation.registered-company.store', [
-            'code' => $company->lead_access_code,
-        ]),
-        publicOverwritePayload(' LINKED-VICTIM@EXAMPLE.TEST ')
+        route('simulation.registered-company.store'),
+        publicOverwritePayload(' LINKED-VICTIM@EXAMPLE.TEST ', [
+            'registered_company_context' => $company->id,
+        ])
     );
 
     $response

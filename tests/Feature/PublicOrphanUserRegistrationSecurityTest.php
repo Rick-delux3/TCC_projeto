@@ -1,6 +1,5 @@
 <?php
 
-use App\Models\User;
 use Illuminate\Support\Facades\Notification;
 use Laravel\Fortify\Features;
 
@@ -27,3 +26,24 @@ it('does not allow unauthenticated creation of an orphan user account', function
 
     expect(config('fortify.features'))->not->toContain(Features::registration());
 });
+
+it('does not allow orphan registration through alternate URL forms', function (string $url) {
+    Notification::fake();
+
+    $response = $this->post($url, [
+        'name' => 'Alternate Orphan Account',
+        'email' => 'alternate-orphan@example.test',
+        'password' => 'secure-password',
+        'password_confirmation' => 'secure-password',
+    ]);
+
+    expect($response->status())->toBeIn([404, 405]);
+    $this->assertGuest();
+    $this->assertDatabaseMissing('users', [
+        'email' => 'alternate-orphan@example.test',
+    ]);
+    Notification::assertNothingSent();
+})->with([
+    'trailing slash' => '/register/',
+    'query string' => '/register?source=external',
+]);
