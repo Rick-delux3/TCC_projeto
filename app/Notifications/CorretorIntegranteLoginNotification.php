@@ -58,28 +58,20 @@ class CorretorIntegranteLoginNotification extends Notification implements Should
      */
     public function toMail(object $notifiable): MailMessage
     {
+        $subject = $this->isResend
+            ? 'Novo convite para acessar o painel'
+            : 'Convite para acessar o painel';
 
         return (new MailMessage)
-            ->subject(
-                $this->isResend
-                    ? 'Novo convite para acessar o painel'
-                    : 'Convite para acessar o painel'
-            )
-            ->greeting("Olá, {$notifiable->name}!")
-            ->line(
-                $this->isResend
-                    ? 'Um novo convite foi gerado. Qualquer link anterior deixou de ser válido.'
-                    : 'Você foi convidado para integrar a equipe da corretora.'
-            )
+            ->subject($subject)
             ->action('Acessar convite', $this->invitationUrl)
-            ->line(
-                'Este convite expira em '
-                .$this->expiresAt->format('d/m/Y \à\s H:i T')
-                .'.'
-            )
-            ->line(
-                'Caso expire, solicite ao CEO um novo envio.'
-            );
+            ->view('emails.notifications.corretor-integrante-invitation', [
+                'subject' => $subject,
+                'recipientName' => $notifiable->name ?? null,
+                'invitationUrl' => $this->invitationUrl,
+                'expirationValue' => $this->expiresAt->format('d/m/Y \à\s H:i T'),
+                'isResend' => $this->isResend,
+            ]);
     }
 
     public function failed(Throwable $exception): void

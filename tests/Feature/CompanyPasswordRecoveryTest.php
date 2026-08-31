@@ -42,8 +42,11 @@ it('sends a company reset link using the companies broker', function () {
             $mail = $notification->toMail($company);
 
             return filled($notification->token)
-                && $mail->subject === 'Redefinição de senha - AkiAluga'
-                && in_array('Este link expira em 60 minutos.', $mail->outroLines, true);
+                && $mail->subject === 'Redefinição de senha - '.config(
+                    'branding.profiles.'.config('branding.active', 'tcc').'.name'
+                )
+                && $mail->view === 'emails.notifications.company-reset-password'
+                && $mail->viewData['expiresInMinutes'] === 60;
         }
     );
 });

@@ -11,6 +11,7 @@ use Symfony\Component\Mime\Email;
 
 beforeEach(function () {
     config(['mail.default' => 'array']);
+    config(['branding.active' => 'tcc']);
     Mail::forgetMailers();
 });
 
@@ -85,6 +86,37 @@ it('sends the initial and resent codes to the company canonical email', function
         ->and(Mail::mailer()->getSymfonyTransport()->messages())->toHaveCount(2)
         ->and($resentChallenge->id)->not->toBe($initialChallenge->id)
         ->and($resentChallenge->attempts)->toBe(0);
+});
+
+it('renders branded and responsive two-factor email views', function () {
+    $companyHtml = view('emails.2fa-code', [
+        'code' => '482917',
+        'expiresAt' => '14:40 UTC',
+    ])->render();
+
+    expect($companyHtml)
+        ->toContain('data-email-template="two-factor"')
+        ->toContain('Verificação em duas etapas')
+        ->toContain('482 917')
+        ->toContain('Este código expira às 14:40 UTC.')
+        ->toContain(asset('imgs/Logo_NVS.png'))
+        ->toContain('@media only screen and (max-width: 680px)');
+
+    config(['branding.active' => 'client']);
+
+    $adminHtml = view('emails.admin-2fa-code', [
+        'code' => '731204',
+        'expiresAt' => '15:10 UTC',
+        'admin' => (object) ['name' => 'Ricardo Neves'],
+    ])->render();
+
+    expect($adminHtml)
+        ->toContain('Confirme seu acesso')
+        ->toContain('Olá, Ricardo Neves.')
+        ->toContain('731 204')
+        ->toContain('Este código expira às 15:10 UTC.')
+        ->toContain(asset('imgs/logo-akialuga.jpg'))
+        ->toContain('Este código é pessoal e intransferível.');
 });
 
 it('fails safely when the authenticated user is not linked to a company', function () {

@@ -80,7 +80,8 @@ it('queues encrypted invitation email after commit with bounded retries', functi
                 ->and($queuedNotification->tries)->toBe(3)
                 ->and($queuedNotification->timeout)->toBe(30)
                 ->and($notification->backoff())->toBe([60, 300])
-                ->and(implode(' ', $mail->outroLines))->toContain('UTC');
+                ->and($mail->view)->toBe('emails.notifications.corretor-integrante-invitation')
+                ->and($mail->viewData['expirationValue'])->toContain('UTC');
 
             return true;
         },

@@ -30,16 +30,13 @@ class CorretorFirstLoginCodeNotification extends Notification
      */
     public function toMail(object $notifiable): MailMessage
     {
-        $nome = $notifiable->name ?? $notifiable->nome ?? 'Corretor';
-
         return (new MailMessage)
             ->subject('Código de verificação - Painel da Corretora')
-            ->greeting("Olá, {$nome}!")
-            ->line('Recebemos uma tentativa de primeiro acesso ao painel interno da corretora.')
-            ->line('Use o código abaixo para confirmar sua identidade:')
-            ->line("Código: {$this->code}")
-            ->line("Este código expira às {$this->expiresAt}.")
-            ->line('Se você não tentou acessar o sistema, ignore este e-mail e avise o administrador.');
+            ->view('emails.notifications.corretor-first-login-code', [
+                'admin' => $notifiable,
+                'code' => $this->code,
+                'expiresAt' => $this->expiresAt,
+            ]);
     }
 
     /**
