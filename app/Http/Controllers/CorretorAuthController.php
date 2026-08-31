@@ -2,40 +2,43 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Corretor;
 use App\Models\CorretorLoginVerificacaoCode;
+use App\Services\CorretorInvitationService;
+use DomainException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\RateLimiter;
-use App\Models\Corretor;
-use App\Services\CorretorInvitationService;
-use DomainException;
 
 class CorretorAuthController extends Controller
 {
     public function __construct(
         private CorretorInvitationService $invitationService
-    )
-    {}
+    ) {}
 
     private const LOGIN_MAX_ATTEMPTS = 5;
+
     private const LOGIN_DECAY_SECONDS = 300;
 
     private const VERIFY_MAX_ATTEMPTS = 5;
+
     private const VERIFY_DECAY_SECONDS = 600;
 
     private const RESEND_MAX_ATTEMPTS = 3;
+
     private const RESEND_DECAY_SECONDS = 600;
+
     private const RESEND_COOLDOWN_SECONDS = 60;
 
     public function memberShowLoginForm()
     {
         return view('corretor.admin-member-login');
     }
-    
+
     public function ceoShowLoginForm()
     {
         return view('corretor.admin-ceo-login');
@@ -57,7 +60,7 @@ class CorretorAuthController extends Controller
             'password.max' => 'A senha deve ter no máximo 72 caracteres.',
         ]);
 
-        $loginKey = $this->loginThrottleKey('ceo:' . $data['cpf'], $request->ip());
+        $loginKey = $this->loginThrottleKey('ceo:'.$data['cpf'], $request->ip());
 
         if (RateLimiter::tooManyAttempts($loginKey, self::LOGIN_MAX_ATTEMPTS)) {
             $seconds = RateLimiter::availableIn($loginKey);
@@ -88,7 +91,7 @@ class CorretorAuthController extends Controller
 
         $corretor = Auth::guard('admin')->user();
 
-        if (!$corretor) {
+        if (! $corretor) {
             return redirect()
                 ->route('admin.ceo.login')
                 ->withErrors([
@@ -96,11 +99,8 @@ class CorretorAuthController extends Controller
                 ]);
         }
 
-
-        if(!$corretor->isCeo())
-        {
+        if (! $corretor->isCeo()) {
             $this->logoutCurrentAdminSession($request);
-
 
             return redirect()->route('admin.ceo.login')->withErrors([
                 'cpf' => 'Acesso negado. Apenas o CEO pode acessar esta área.',
@@ -108,7 +108,7 @@ class CorretorAuthController extends Controller
         }
 
         return $this->finishSuccessfulLogin($corretor, $request, 'admin.ceo.login');
- 
+
     }
 
     public function memberLogin(Request $request)
@@ -121,15 +121,15 @@ class CorretorAuthController extends Controller
             'email' => ['required', 'email', 'max:255'],
             'password' => ['required', 'string', 'max:72'],
         ],
-        [
-            'email.required' => 'Informe o e-mail.',
-            'email.email' => 'Informe um e-mail válido.',
-            'password.required' => 'Informe a senha.',
-            'password.max' => 'A senha deve ter no máximo 72 caracteres.',
-        ]
+            [
+                'email.required' => 'Informe o e-mail.',
+                'email.email' => 'Informe um e-mail válido.',
+                'password.required' => 'Informe a senha.',
+                'password.max' => 'A senha deve ter no máximo 72 caracteres.',
+            ]
         );
 
-        $loginKey = $this->loginThrottleKey('member:' . $data['email'], $request->ip());
+        $loginKey = $this->loginThrottleKey('member:'.$data['email'], $request->ip());
 
         if (RateLimiter::tooManyAttempts($loginKey, self::LOGIN_MAX_ATTEMPTS)) {
             $seconds = RateLimiter::availableIn($loginKey);
@@ -141,18 +141,17 @@ class CorretorAuthController extends Controller
                 ]);
         }
 
-        if(! Auth::guard('admin')->attempt([
+        if (! Auth::guard('admin')->attempt([
             'email' => $data['email'],
             'password' => $data['password'],
-        ]))
-        {
+        ])) {
             RateLimiter::hit($loginKey, self::LOGIN_DECAY_SECONDS);
 
             return back()
                 ->withInput($request->only('email'))
                 ->withErrors([
                     'email' => 'E-mail ou senha incorretos.',
-            ]);
+                ]);
         }
 
         RateLimiter::clear($loginKey);
@@ -169,9 +168,8 @@ class CorretorAuthController extends Controller
                 ]);
         }
 
-        if(! $corretor->isIntegrante())
-        {
-           $this->logoutCurrentAdminSession($request);
+        if (! $corretor->isIntegrante()) {
+            $this->logoutCurrentAdminSession($request);
 
             return redirect()->route('admin.login')->withErrors([
                 'email' => 'Acesso negado. Esta área é exclusiva para Integrantes',
@@ -324,53 +322,93 @@ class CorretorAuthController extends Controller
             ]);
         }
 
-        $verification = CorretorLoginVerificacaoCode::where('corretor_id', $corretorId)
-            ->whereNull('used_at')
-            ->latest()
-            ->first();
+        $verificationResult = DB::transaction(function () use ($corretor, $corretorId, $request): string {
+            $verification = CorretorLoginVerificacaoCode::query()
+                ->where('corretor_id', $corretorId)
+                ->whereNull('used_at')
+                ->latest()
+                ->lockForUpdate()
+                ->first();
 
-        if (! $verification) {
-            return back()->withErrors([
-                'code' => 'Nenhum código ativo foi encontrado. Solicite um novo código.',
-            ]);
-        }
+            if (! $verification) {
+                return 'missing';
+            }
 
-        if ($verification->isExpired()) {
-            $verification->update([
-                'used_at' => now(),
-            ]);
+            if ($verification->isExpired()) {
+                $verification->forceFill(['used_at' => now()])->save();
 
-            return back()->withErrors([
-                'code' => 'Este código expirou. Solicite um novo código.',
-            ]);
-        }
+                return 'expired';
+            }
 
-        if ($verification->reachedMaxAttempts()) {
-            return back()->withErrors([
-                'code' => 'Este código atingiu o limite de tentativas. Solicite um novo código.',
-            ]);
-        }
+            if ($verification->reachedMaxAttempts()) {
+                $verification->forceFill(['used_at' => now()])->save();
 
-        if (! Hash::check($request->code, $verification->code_hash)) {
-            $verification->increment('attempts');
+                return 'locked';
+            }
 
-            RateLimiter::hit($verifyKey, self::VERIFY_DECAY_SECONDS);
+            if (! Hash::check($request->code, $verification->code_hash)) {
+                $incremented = CorretorLoginVerificacaoCode::query()
+                    ->whereKey($verification->id)
+                    ->whereNull('used_at')
+                    ->where('attempts', '<', self::VERIFY_MAX_ATTEMPTS)
+                    ->increment('attempts');
 
-            return back()->withErrors([
-                'code' => 'Código inválido.',
-            ]);
-        }
+                if ($incremented !== 1) {
+                    CorretorLoginVerificacaoCode::query()
+                        ->whereKey($verification->id)
+                        ->whereNull('used_at')
+                        ->update(['used_at' => now()]);
 
-        DB::transaction(function () use ($corretor, $verification) {
-            $verification->update([
-                'used_at' => now(),
-            ]);
+                    return 'locked';
+                }
+
+                CorretorLoginVerificacaoCode::query()
+                    ->whereKey($verification->id)
+                    ->whereNull('used_at')
+                    ->where('attempts', '>=', self::VERIFY_MAX_ATTEMPTS)
+                    ->update(['used_at' => now()]);
+
+                return 'invalid';
+            }
+
+            $verifiedAt = now();
+            $claimed = CorretorLoginVerificacaoCode::query()
+                ->whereKey($verification->id)
+                ->whereNull('used_at')
+                ->where('attempts', '<', self::VERIFY_MAX_ATTEMPTS)
+                ->update(['used_at' => $verifiedAt]);
+
+            if ($claimed !== 1) {
+                CorretorLoginVerificacaoCode::query()
+                    ->whereKey($verification->id)
+                    ->whereNull('used_at')
+                    ->update(['used_at' => $verifiedAt]);
+
+                return 'locked';
+            }
 
             $corretor->forceFill([
-                'first_login_verified_at' => now(),
-                'last_login_at' => now(),
+                'first_login_verified_at' => $verifiedAt,
+                'last_login_at' => $verifiedAt,
             ])->save();
+
+            return 'verified';
         });
+
+        if ($verificationResult !== 'verified') {
+            if ($verificationResult === 'invalid') {
+                RateLimiter::hit($verifyKey, self::VERIFY_DECAY_SECONDS);
+            }
+
+            $message = match ($verificationResult) {
+                'missing' => 'Nenhum código ativo foi encontrado. Solicite um novo código.',
+                'expired' => 'Este código expirou. Solicite um novo código.',
+                'locked' => 'Este código atingiu o limite de tentativas. Solicite um novo código.',
+                default => 'Código inválido.',
+            };
+
+            return back()->withErrors(['code' => $message]);
+        }
 
         session(['admin_2fa_passed' => true]);
 
@@ -476,7 +514,7 @@ class CorretorAuthController extends Controller
         try {
             Mail::send('emails.admin-2fa-code', [
                 'code' => $code,
-                'expiresAt' => $expiresAt->format('H:i'),
+                'expiresAt' => $expiresAt->format('H:i T'),
                 'admin' => $corretor,
             ], function ($message) use ($corretor) {
                 $message
@@ -498,7 +536,7 @@ class CorretorAuthController extends Controller
     ) {
         $routeLogin = route('admin.login');
 
-        if(! $request->hasValidSignature()) {
+        if (! $request->hasValidSignature()) {
             $expires = (int) $request->query('expires');
 
             $message = $expires > 0 && now()->timestamp > $expires
@@ -522,10 +560,10 @@ class CorretorAuthController extends Controller
             );
 
             return redirect()->route('admin.login', ['email' => $corretor->email])
-            ->with(
-                'success',
-                'Convite validado. Informe seu email e senha para continuar.'
-            );
+                ->with(
+                    'success',
+                    'Convite validado. Informe seu email e senha para continuar.'
+                );
 
         } catch (DomainException $exception) {
             return redirect($routeLogin)->withErrors([
@@ -544,21 +582,21 @@ class CorretorAuthController extends Controller
 
     private function loginThrottleKey(string $cpf, string $ip): string
     {
-        return 'admin:login:' . $cpf . ':' . $ip;
+        return 'admin:login:'.$cpf.':'.$ip;
     }
 
     private function verifyThrottleKey(int $corretorId, string $ip): string
     {
-        return 'admin:2fa:verify:' . $corretorId . ':' . $ip;
+        return 'admin:2fa:verify:'.$corretorId.':'.$ip;
     }
 
     private function resendThrottleKey(int $corretorId, string $ip): string
     {
-        return 'admin:2fa:resend:' . $corretorId . ':' . $ip;
+        return 'admin:2fa:resend:'.$corretorId.':'.$ip;
     }
 
     private function resendCooldownKey(int $corretorId, string $ip): string
     {
-        return 'admin:2fa:resend-cooldown:' . $corretorId . ':' . $ip;
+        return 'admin:2fa:resend-cooldown:'.$corretorId.':'.$ip;
     }
 }

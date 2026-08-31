@@ -2,15 +2,14 @@
 
 namespace App\Jobs;
 
+use App\Models\InsuranceAnalysis;
 use App\Models\InsuranceAnalysisBatch;
+use App\Models\InsuranceAnalysisEvent;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
-use App\Jobs\SendAnalysisResultsEmailJob;
-use App\Jobs\ApplyFinalAnalysisTagToLeadLoversJob;
-use App\Models\InsuranceAnalysis;
 use Illuminate\Support\Facades\DB;
 
 class CompleteInsuranceAnalysesBatchJob implements ShouldQueue
@@ -76,78 +75,84 @@ class CompleteInsuranceAnalysesBatchJob implements ShouldQueue
         | Este Job pode ser disparado pelo RunProviderAnalysisJob e pelo finally()
         | do Bus::batch. O evento email_queued funciona como trava da rodada.
         */
-        if (!$this->markEmailAsQueued($batch)) {
-            return;
-        }
-
-        ApplyFinalAnalysisTagToLeadLoversJob::dispatch(
-            batchId: $batch->id,
-            attemptId: $this->attemptId,
-            isReanalysis: $this->isReanalysis
-        );
-
-        /*
-        |--------------------------------------------------------------------------
-        | ATENÇÃO
-        |--------------------------------------------------------------------------
-        | Atualize o construtor do SendAnalysisResultsEmailJob para receber:
-        | - int $batchId
-        | - ?string $attemptId = null
-        | - bool $isReanalysis = false
-        |
-        | O e-mail deve buscar eventos com payload->attempt_id para gerar os PDFs
-        | corretos da análise/reanálise atual.
-        */
-        SendAnalysisResultsEmailJob::dispatch(
-            batchId: $batch->id,
-            attemptId: $this->attemptId,
-            isReanalysis: $this->isReanalysis
-        );
+        $this->queueCompletionJobs($batch);
     }
 
-    private function markEmailAsQueued(InsuranceAnalysisBatch $batch): bool
+    /**
+     * Persiste a trava e os jobs da fila database na mesma transação.
+     */
+    private function queueCompletionJobs(InsuranceAnalysisBatch $batch): bool
     {
-       return DB::transaction(function () use ($batch) {
+        return DB::transaction(function () use ($batch) {
             $controlAnalysis = InsuranceAnalysis::query()
-            ->where(
-                'insurance_analysis_batch_id',
-                $batch->id
-            )
-            ->orderBy('id')
-            ->lockForUpdate()
-            ->first();
+                ->where('insurance_analysis_batch_id', $batch->id)
+                ->orderBy('id')
+                ->lockForUpdate()
+                ->first();
 
-            if(! $controlAnalysis) {
+            if (! $controlAnalysis) {
                 return false;
             }
 
-            $alreadyQueued = $controlAnalysis->events()
-            ->where('event_type', 'email_queued')
-            ->where(
-                'payload->attempt_id',
-                $this->attemptId
-            )->exists();
+            $attemptEvents = InsuranceAnalysisEvent::query()
+                ->whereHas('analysis', function ($query) use ($batch) {
+                    $query->where('insurance_analysis_batch_id', $batch->id);
+                })
+                ->where('payload->attempt_id', $this->attemptId);
 
-
-            if($alreadyQueued){
+            if ((clone $attemptEvents)->where('event_type', 'email_sent')->exists()) {
                 return false;
             }
-            
-           $controlAnalysis->events()->create([
-               'event_type' => 'email_queued',
-               'status' => 'queued',
-               'message' => $this->isReanalysis
-                   ? 'E-mail com PDFs da reanálise foi colocado na fila.'
-                   : 'E-mail com PDFs da análise foi colocado na fila.',
-               'payload' => [
-                   'attempt_id' => $this->attemptId,
-                   'is_reanalysis' => $this->isReanalysis,
-                   'batch_id' => $batch->id,
-                   'queued_at' => now()->toDateTimeString(),
-               ],
-           ]);
-   
-           return true;
-       });
+
+            $latestQueuedId = (clone $attemptEvents)
+                ->where('event_type', 'email_queued')
+                ->max('id');
+
+            $latestReleasedId = (clone $attemptEvents)
+                ->whereIn('event_type', ['email_failed', 'email_deferred'])
+                ->max('id');
+
+            if ($latestQueuedId && (! $latestReleasedId || $latestQueuedId > $latestReleasedId)) {
+                return false;
+            }
+
+            $isFirstQueueForAttempt = ! $latestQueuedId;
+
+            $controlAnalysis->events()->create([
+                'event_type' => 'email_queued',
+                'status' => 'queued',
+                'message' => $this->isReanalysis
+                    ? 'E-mail com PDFs da reanálise foi colocado na fila.'
+                    : 'E-mail com PDFs da análise foi colocado na fila.',
+                'payload' => [
+                    'attempt_id' => $this->attemptId,
+                    'is_reanalysis' => $this->isReanalysis,
+                    'batch_id' => $batch->id,
+                    'queued_at' => now()->toDateTimeString(),
+                ],
+            ]);
+
+            $batch->update([
+                'email_status' => 'queued',
+                'email_failed_at' => null,
+                'email_error' => null,
+            ]);
+
+            if ($isFirstQueueForAttempt) {
+                ApplyFinalAnalysisTagToLeadLoversJob::dispatch(
+                    batchId: $batch->id,
+                    attemptId: $this->attemptId,
+                    isReanalysis: $this->isReanalysis
+                )->beforeCommit();
+            }
+
+            SendAnalysisResultsEmailJob::dispatch(
+                batchId: $batch->id,
+                attemptId: $this->attemptId,
+                isReanalysis: $this->isReanalysis
+            )->beforeCommit();
+
+            return true;
+        });
     }
 }

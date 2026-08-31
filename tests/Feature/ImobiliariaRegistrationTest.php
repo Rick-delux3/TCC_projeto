@@ -2,7 +2,9 @@
 
 use App\Models\Imobiliaria;
 use App\Models\LeadLoversTag;
+use App\Models\User;
 use App\Services\CepService;
+use Illuminate\Auth\Notifications\VerifyEmail;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Notification;
 use Mockery\MockInterface;
@@ -61,6 +63,12 @@ it('registers an imobiliaria using an available local tag', function () {
         ->name->toBe('Imobiliária Auditada')
         ->cep->toBe('01001000')
         ->leadlovers_tag_id->toBe(777);
+
+    $user = User::query()
+        ->where('company_id', $company->id)
+        ->firstOrFail();
+
+    Notification::assertSentTo($user, VerifyEmail::class);
 
     Http::assertNothingSent();
 });

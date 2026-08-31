@@ -1,0 +1,17 @@
+@include('emails.partials.action-message', [
+    'subject' => $subject,
+    'preheader' => "Use o link seguro para redefinir sua senha. Ele expira em {$expiresInMinutes} minutos.",
+    'eyebrow' => 'Segurança da conta',
+    'heading' => 'Crie uma nova senha',
+    'greeting' => filled($company->name ?? null) ? 'Olá, '.$company->name.'!' : 'Olá!',
+    'introduction' => 'Recebemos uma solicitação para redefinir a senha de acesso da sua imobiliária.',
+    'badgeLabel' => 'SENHA',
+    'panelKicker' => 'Conta da imobiliária',
+    'panelTitle' => 'Proteja o acesso ao portal',
+    'actionText' => 'Redefinir senha',
+    'actionUrl' => $resetUrl,
+    'expirationLabel' => 'Este link expira em',
+    'expirationValue' => "{$expiresInMinutes} minutos",
+    'helperText' => 'Não solicitou esta alteração? Ignore esta mensagem. Sua senha atual continuará válida.',
+    'footerLabel' => 'Portal imobiliário',
+])

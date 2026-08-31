@@ -55,8 +55,6 @@
             >
                 @csrf
 
-                <input type="hidden" name="key" value="{{ request('key') }}">
-
                 <div class="client-honeypot" aria-hidden="true">
                     <label for="website">Não preencha este campo</label>
                     <input

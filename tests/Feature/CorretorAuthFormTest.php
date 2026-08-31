@@ -10,9 +10,16 @@ beforeEach(function () {
 });
 
 it('renders contextual icons and accessible password controls on the CEO registration form', function () {
+    $this
+        ->withServerVariables(['REMOTE_ADDR' => '10.0.0.11'])
+        ->post(route('admin.ceo.register.authorize'), [
+            'key' => 'test-secret',
+        ])
+        ->assertRedirect(route('admin.ceo.register.form'));
+
     $response = $this
         ->withServerVariables(['REMOTE_ADDR' => '10.0.0.11'])
-        ->get(route('admin.ceo.register.form', ['key' => 'test-secret']));
+        ->get(route('admin.ceo.register.form'));
 
     $response->assertOk()
         ->assertSee('admin-input-icon', false)
@@ -58,11 +65,17 @@ it('renders the email icon and accessible password control on the member login f
 });
 
 it('rejects an invalid CPF, weak password, and a filled honeypot on CEO registration', function () {
+    $this
+        ->withServerVariables(['REMOTE_ADDR' => '10.0.0.14'])
+        ->post(route('admin.ceo.register.authorize'), [
+            'key' => 'test-secret',
+        ])
+        ->assertRedirect(route('admin.ceo.register.form'));
+
     $response = $this
         ->withServerVariables(['REMOTE_ADDR' => '10.0.0.14'])
-        ->from(route('admin.ceo.register.form', ['key' => 'test-secret']))
+        ->from(route('admin.ceo.register.form'))
         ->post(route('admin.ceo.register.post'), [
-            'key' => 'test-secret',
             'website' => 'https://spam.example',
             'name' => 'CEO Teste',
             'email' => 'ceo@example.test',
@@ -80,10 +93,16 @@ it('rejects an invalid CPF, weak password, and a filled honeypot on CEO registra
 });
 
 it('registers one CEO with normalized and validated credentials', function () {
+    $this
+        ->withServerVariables(['REMOTE_ADDR' => '10.0.0.15'])
+        ->post(route('admin.ceo.register.authorize'), [
+            'key' => 'test-secret',
+        ])
+        ->assertRedirect(route('admin.ceo.register.form'));
+
     $response = $this
         ->withServerVariables(['REMOTE_ADDR' => '10.0.0.15'])
         ->post(route('admin.ceo.register.post'), [
-            'key' => 'test-secret',
             'website' => '',
             'name' => '  CEO   Teste  ',
             'email' => ' CEO@EXAMPLE.TEST ',
@@ -103,4 +122,11 @@ it('registers one CEO with normalized and validated credentials', function () {
         'role' => Corretor::ROLE_CEO,
         'active' => true,
     ]);
+
+    expect(Corretor::query()->where('role', Corretor::ROLE_CEO)->count())->toBe(1);
+
+    $this
+        ->withServerVariables(['REMOTE_ADDR' => '10.0.0.15'])
+        ->get(route('admin.ceo.register.access'))
+        ->assertForbidden();
 });

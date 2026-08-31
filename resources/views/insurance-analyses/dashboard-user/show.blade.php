@@ -101,6 +101,7 @@
     $communicationEventTypes = [
         'pdf_generated',
         'email_queued',
+        'email_deferred',
         'email_sent',
         'email_failed',
     ];
@@ -131,6 +132,7 @@
 
         'pdf_generated' => 'PDF gerado',
         'email_queued' => 'E-mail na fila',
+        'email_deferred' => 'E-mail adiado',
         'email_sent' => 'E-mail enviado',
         'email_failed' => 'Falha no e-mail',
     ];
@@ -161,6 +163,7 @@
 
         'pdf_generated' => 'text-bg-dark',
         'email_queued' => 'text-bg-secondary',
+        'email_deferred' => 'text-bg-warning',
         'email_sent' => 'text-bg-success',
         'email_failed' => 'text-bg-danger',
     ];

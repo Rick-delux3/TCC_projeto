@@ -4,6 +4,7 @@ namespace App\Providers;
 
 use App\Models\Corretor;
 use App\Support\CorretorPermissions;
+use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -25,6 +26,13 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        ResetPassword::createUrlUsing(function (object $notifiable, string $token): string {
+            return rtrim((string) config('app.url'), '/').route('password.reset', [
+                'token' => $token,
+                'email' => $notifiable->getEmailForPasswordReset(),
+            ], false);
+        });
+
         /*
         * Limite para abrir páginas de simulação.
         * Pode ser mais alto, porque o usuário/imobiliária pode acessar várias vezes.
@@ -42,7 +50,7 @@ class AppServiceProvider extends ServiceProvider
         });
 
         Gate::before(function ($user, string $ability) {
-            if ( 
+            if (
                 $ability === 'create-analysis'
                 && ! config('features.insurance_analysis.enabled', false)
             ) {
@@ -56,12 +64,11 @@ class AppServiceProvider extends ServiceProvider
             return null;
         });
 
-    
         Gate::define('access-dashboard', function (Corretor $corretor) {
             return $corretor->isActive();
         });
 
-        Gate::define('access-simulation-forms', function (Corretor $corretor){
+        Gate::define('access-simulation-forms', function (Corretor $corretor) {
             return $corretor->isActive();
         });
 

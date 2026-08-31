@@ -933,11 +933,14 @@ it('broadcasts a newly created company lead after the database transaction commi
         'lead_form_active' => true,
     ]);
 
+    $this->post(route('simulation.registered-company.verify'), [
+        'lead_access_code' => $company->lead_access_code,
+    ])->assertRedirect(route('simulation.registered-company.form'));
+
     $response = $this->post(
-        route('simulation.registered-company.store', [
-            'code' => $company->lead_access_code,
-        ]),
+        route('simulation.registered-company.store'),
         [
+            'registered_company_context' => $company->id,
             'aceite_termos' => '1',
             'nome' => 'Novo lead',
             'email' => 'new-broadcast@example.test',
@@ -1014,7 +1017,7 @@ it('broadcasts a newly created unlinked lead only to the admin dashboard', funct
     Queue::assertPushed(BroadcastEvent::class, 1);
 });
 
-it('does not reset a confirmed remote identity when the form is submitted again', function () {
+it('does not change or redispatch a confirmed lead when the public form is submitted again', function () {
     Bus::fake();
     Queue::fake();
     config(['features.insurance_analysis.enabled' => false]);
@@ -1039,11 +1042,14 @@ it('does not reset a confirmed remote identity when the form is submitted again'
         'sent_to_leadlovers_at' => now(),
     ]);
 
+    $this->post(route('simulation.registered-company.verify'), [
+        'lead_access_code' => $company->lead_access_code,
+    ])->assertRedirect(route('simulation.registered-company.form'));
+
     $response = $this->post(
-        route('simulation.registered-company.store', [
-            'code' => $company->lead_access_code,
-        ]),
+        route('simulation.registered-company.store'),
         [
+            'registered_company_context' => $company->id,
             'aceite_termos' => '1',
             'nome' => 'Nome reenviado',
             'email' => 'resubmission@example.test',
@@ -1060,19 +1066,15 @@ it('does not reset a confirmed remote identity when the form is submitted again'
     );
 
     $response->assertRedirect(route('simulation.success'));
-    expect($lead->refresh())
-        ->nome->toBe('Nome reenviado')
+    $lead->refresh()->load(['endereco', 'despesas']);
+
+    expect($lead)
+        ->nome->toBe('Nome anterior')
         ->leadlovers_status->toBe('sent')
         ->leadlovers_lead_id->toBe(501)
-        ->sent_to_leadlovers_at->not->toBeNull();
-    Queue::assertPushedOn(
-        'broadcasts',
-        BroadcastEvent::class,
-        fn (BroadcastEvent $queued): bool => initialDashboardBroadcastMatches(
-            $queued,
-            $lead,
-            'lead.updated',
-        )
-    );
-    Queue::assertPushed(BroadcastEvent::class, 1);
+        ->sent_to_leadlovers_at->not->toBeNull()
+        ->and($lead->endereco)->toBeNull()
+        ->and($lead->despesas)->toBeNull();
+    Bus::assertNotDispatched(SendLeadToLeadLoversJob::class);
+    Queue::assertNotPushed(BroadcastEvent::class);
 });

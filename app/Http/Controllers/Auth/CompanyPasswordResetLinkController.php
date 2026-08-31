@@ -25,7 +25,7 @@ class CompanyPasswordResetLinkController extends Controller
         ]);
 
         $request->validate([
-            'email' => ['required', 'email'],
+            'email' => ['required', 'string', 'email:rfc', 'max:255'],
         ]);
 
         $broker = Password::broker('companies');

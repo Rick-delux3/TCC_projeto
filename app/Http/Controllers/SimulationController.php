@@ -9,6 +9,7 @@ use App\Jobs\StartInsuranceAnalysesBatchJob;
 use App\Models\Imobiliaria;
 use App\Models\InsuranceAnalysisBatch;
 use App\Models\Lead;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\DB;
@@ -16,9 +17,12 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
+use Illuminate\View\View;
 
 class SimulationController extends Controller
 {
+    private const REGISTERED_COMPANY_SESSION_KEY = 'simulation.registered_company_access';
+
     private const ADMIN_UNLINKED_TYPES = [
         'imobiliaria_nao_cadastrada',
         'locatario',
@@ -70,7 +74,7 @@ class SimulationController extends Controller
     /**
      * Valida a chave da imobiliária.
      */
-    public function verifyCompanyCode(Request $request)
+    public function verifyCompanyCode(Request $request): RedirectResponse
     {
         $data = $request->validate([
             'lead_access_code' => ['required', 'string', 'max:20'],
@@ -85,6 +89,8 @@ class SimulationController extends Controller
             ->first();
 
         if (! $company) {
+            $request->session()->forget(self::REGISTERED_COMPANY_SESSION_KEY);
+
             return back()
                 ->withInput()
                 ->withErrors([
@@ -92,17 +98,25 @@ class SimulationController extends Controller
                 ]);
         }
 
-        return redirect()->route('simulation.registered-company.form', [
-            'code' => $company->lead_access_code,
+        $request->session()->regenerate();
+        $request->session()->put(self::REGISTERED_COMPANY_SESSION_KEY, [
+            'company_id' => (int) $company->getKey(),
+            'code_fingerprint' => $this->companyCodeFingerprint($company->lead_access_code),
         ]);
+
+        return redirect()->route('simulation.registered-company.form');
     }
 
     /**
      * Formulário vinculado à imobiliária cadastrada.
      */
-    public function registeredCompanyForm(string $code)
+    public function registeredCompanyForm(Request $request): RedirectResponse|View
     {
-        $company = $this->findCompanyByCode($code);
+        $company = $this->registeredCompanyFromSession($request);
+
+        if (! $company) {
+            return $this->redirectToRegisteredCompanyAccess();
+        }
 
         return view('simulation.forms.registered-company', compact('company'));
     }
@@ -158,12 +172,16 @@ class SimulationController extends Controller
         }
 
         $lead = DB::transaction(function () use ($request, $company) {
-            return $this->saveLead($request, [
-                'tipo_solicitante' => 'imobiliaria_cadastrada',
-                'company' => $company,
-                'origem' => 'imobiliaria_cadastrada',
-                'corretor_id' => (int) auth('admin')->id(),
-            ]);
+            return $this->saveLead(
+                $request,
+                [
+                    'tipo_solicitante' => 'imobiliaria_cadastrada',
+                    'company' => $company,
+                    'origem' => 'imobiliaria_cadastrada',
+                    'corretor_id' => (int) auth('admin')->id(),
+                ],
+                allowExistingUpdate: true
+            );
         });
 
         $this->dispatchLeadFlow($lead);
@@ -242,12 +260,16 @@ class SimulationController extends Controller
         }
 
         $lead = DB::transaction(function () use ($request, $tipo) {
-            return $this->saveLead($request, [
-                'tipo_solicitante' => $tipo,
-                'company' => null,
-                'origem' => $tipo,
-                'corretor_id' => (int) auth('admin')->id(),
-            ]);
+            return $this->saveLead(
+                $request,
+                [
+                    'tipo_solicitante' => $tipo,
+                    'company' => null,
+                    'origem' => $tipo,
+                    'corretor_id' => (int) auth('admin')->id(),
+                ],
+                allowExistingUpdate: true
+            );
         });
 
         $this->dispatchLeadFlow($lead);
@@ -262,9 +284,16 @@ class SimulationController extends Controller
     /**
      * Salva lead de imobiliária cadastrada.
      */
-    public function storeRegisteredCompanyLead(StoreSimulationLeadRequest $request, string $code)
+    public function storeRegisteredCompanyLead(StoreSimulationLeadRequest $request): RedirectResponse
     {
-        $company = $this->findCompanyByCode($code);
+        $company = $this->registeredCompanyFromSession($request);
+
+        if (
+            ! $company
+            || $request->integer('registered_company_context') !== (int) $company->getKey()
+        ) {
+            return $this->redirectToRegisteredCompanyAccess();
+        }
 
         $lead = DB::transaction(function () use ($request, $company) {
             return $this->saveLead($request, [
@@ -274,7 +303,9 @@ class SimulationController extends Controller
             ]);
         });
 
-        $this->dispatchLeadFlow($lead);
+        if ($lead->wasRecentlyCreated) {
+            $this->dispatchLeadFlow($lead);
+        }
 
         return redirect()->route('simulation.success')->with('success', 'Solicitação enviada com sucesso.');
     }
@@ -319,7 +350,9 @@ class SimulationController extends Controller
             ]);
         });
 
-        $this->dispatchLeadFlow($lead);
+        if ($lead->wasRecentlyCreated) {
+            $this->dispatchLeadFlow($lead);
+        }
 
         return redirect()
             ->route('simulation.success')
@@ -341,7 +374,9 @@ class SimulationController extends Controller
             ]);
         });
 
-        $this->dispatchLeadFlow($lead);
+        if ($lead->wasRecentlyCreated) {
+            $this->dispatchLeadFlow($lead);
+        }
 
         return redirect()
             ->route('simulation.success')
@@ -406,17 +441,58 @@ class SimulationController extends Controller
     }
 
     /**
-     * Busca imobiliária por código de acesso.
-     * Nunca confie em company_id vindo do formulário.
+     * Resolve somente a imobiliária concedida pela sessão após validar a chave.
      */
-    private function findCompanyByCode(string $code): Imobiliaria
+    private function registeredCompanyFromSession(Request $request): ?Imobiliaria
     {
-        $code = mb_strtoupper(trim($code));
-        $code = str_replace([' ', '-'], '', $code);
+        $grant = $request->session()->get(self::REGISTERED_COMPANY_SESSION_KEY);
 
-        return Imobiliaria::where('lead_access_code', $code)
+        if (
+            ! is_array($grant)
+            || ! isset($grant['company_id'], $grant['code_fingerprint'])
+            || ! is_int($grant['company_id'])
+            || $grant['company_id'] < 1
+            || ! is_string($grant['code_fingerprint'])
+            || strlen($grant['code_fingerprint']) !== 64
+            || ! ctype_xdigit($grant['code_fingerprint'])
+        ) {
+            $request->session()->forget(self::REGISTERED_COMPANY_SESSION_KEY);
+
+            return null;
+        }
+
+        $company = Imobiliaria::query()
+            ->whereKey($grant['company_id'])
             ->where('lead_form_active', true)
-            ->firstOrFail();
+            ->first();
+
+        if (
+            ! $company
+            || ! hash_equals(
+                $grant['code_fingerprint'],
+                $this->companyCodeFingerprint($company->lead_access_code)
+            )
+        ) {
+            $request->session()->forget(self::REGISTERED_COMPANY_SESSION_KEY);
+
+            return null;
+        }
+
+        return $company;
+    }
+
+    private function companyCodeFingerprint(string $code): string
+    {
+        return hash_hmac('sha256', $code, (string) config('app.key'));
+    }
+
+    private function redirectToRegisteredCompanyAccess(): RedirectResponse
+    {
+        return redirect()
+            ->route('simulation.registered-company.access')
+            ->withErrors([
+                'lead_access_code' => 'Informe novamente o código da imobiliária para acessar o formulário.',
+            ]);
     }
 
     private function adminSimulationChannel(Request $request): ?string
@@ -434,8 +510,11 @@ class SimulationController extends Controller
      * Salva o lead de forma centralizada.
      * Essa função evita repetir código nos quatro formulários.
      */
-    private function saveLead(StoreSimulationLeadRequest $request, array $context): Lead
-    {
+    private function saveLead(
+        StoreSimulationLeadRequest $request,
+        array $context,
+        bool $allowExistingUpdate = false
+    ): Lead {
         $data = $request->validated();
 
         $company = $context['company'] ?? null;
@@ -499,6 +578,10 @@ class SimulationController extends Controller
         );
 
         $wasRecentlyCreated = $lead->wasRecentlyCreated;
+
+        if (! $wasRecentlyCreated && ! $allowExistingUpdate) {
+            return $lead;
+        }
 
         if (! $wasRecentlyCreated) {
             $lead = Lead::query()

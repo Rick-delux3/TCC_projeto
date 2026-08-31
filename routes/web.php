@@ -18,16 +18,8 @@ use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\PublicHomeController;
 use App\Http\Controllers\SimulationController;
 use App\Http\Controllers\TwoFactorController;
-use App\Services\PottencialService;
-use App\Services\TooService;
+use App\Http\Middleware\EnsureCeoRegistrationIsAuthorized;
 use Illuminate\Support\Facades\Route;
-
-Route::get('/debug/too/auth', function (TooService $tooService) {
-    return response()->json($tooService->testAuthentication());
-})->middleware('analysis.enabled');
-
-Route::get('/teste/token_acesso', [PottencialService::class, 'testAuthentication'])
-    ->middleware('analysis.enabled');
 
 Route::get('/', PublicHomeController::class)->name('index');
 
@@ -221,12 +213,24 @@ Route::middleware('auth')->group(function () {
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 });
 
-Route::middleware(['auth.unframed', 'ceo.registration.open', 'throttle:5,1'])->group(function () {
-    Route::get(config('admin.ceo_registration_path'), [CorretorRegistrationController::class, 'showCeoRegistrationForm'])
-        ->name('admin.ceo.register.form');
+Route::middleware(['auth.unframed', 'ceo.registration.open'])->group(function () {
+    $ceoRegistrationPath = rtrim((string) config('admin.ceo_registration_path'), '/');
 
-    Route::post(config('admin.ceo_registration_path'), [CorretorRegistrationController::class, 'storeCeo'])
-        ->name('admin.ceo.register.post');
+    Route::get($ceoRegistrationPath.'/access', [CorretorRegistrationController::class, 'showCeoRegistrationAccessForm'])
+        ->name('admin.ceo.register.access');
+
+    Route::post($ceoRegistrationPath.'/access', [CorretorRegistrationController::class, 'authorizeCeoRegistration'])
+        ->middleware('throttle:5,1')
+        ->name('admin.ceo.register.authorize');
+
+    Route::middleware(EnsureCeoRegistrationIsAuthorized::class)->group(function () use ($ceoRegistrationPath) {
+        Route::get($ceoRegistrationPath, [CorretorRegistrationController::class, 'showCeoRegistrationForm'])
+            ->name('admin.ceo.register.form');
+
+        Route::post($ceoRegistrationPath, [CorretorRegistrationController::class, 'storeCeo'])
+            ->middleware('throttle:5,1')
+            ->name('admin.ceo.register.post');
+    });
 });
 
 Route::middleware(['auth.unframed', 'guest:admin', 'throttle:5,1'])->group(function () {
@@ -278,11 +282,11 @@ Route::prefix('simulacao')
             ->name('registered-company.verify');
 
         // Formulário da imobiliária cadastrada após chave validada.
-        Route::get('/imobiliaria-cadastrada/{code}', [SimulationController::class, 'registeredCompanyForm'])
+        Route::get('/imobiliaria-cadastrada/formulario', [SimulationController::class, 'registeredCompanyForm'])
             ->middleware('throttle:simulation-page')
             ->name('registered-company.form');
 
-        Route::post('/imobiliaria-cadastrada/{code}', [SimulationController::class, 'storeRegisteredCompanyLead'])
+        Route::post('/imobiliaria-cadastrada/formulario', [SimulationController::class, 'storeRegisteredCompanyLead'])
             ->middleware('throttle:simulation-submit')
             ->name('registered-company.store');
 

@@ -64,6 +64,12 @@ class CorretorInvitationService
                 );
             }
 
+            if (! filter_var($lockedIntegrante->email, FILTER_VALIDATE_EMAIL)) {
+                throw new DomainException(
+                    'Cadastre um e-mail válido antes de enviar o convite.'
+                );
+            }
+
             if ($lockedIntegrante->hasAcceptedInvitation()) {
                 throw new DomainException(
                     'Este integrante já aceitou o convite.'
@@ -118,8 +124,7 @@ class CorretorInvitationService
                 */
                 'invited_at' => $lockedIntegrante->invited_at ?? now(),
 
-                'invited_by_corretor_id' =>
-                    $lockedIntegrante->invited_by_corretor_id
+                'invited_by_corretor_id' => $lockedIntegrante->invited_by_corretor_id
                     ?? $sentBy->id,
 
                 /*
@@ -149,8 +154,8 @@ class CorretorInvitationService
                     ? 'integrante_convite_reenviado'
                     : 'integrante_convite_enviado',
                 description: $isResend
-                    ? 'Convite do integrante reenviado.'
-                    : 'Primeiro convite do integrante enviado.',
+                    ? 'Reenvio do convite adicionado à fila.'
+                    : 'Primeiro convite adicionado à fila.',
                 oldValues: $previousValues,
                 newValues: $newValues,
                 request: $request
@@ -184,7 +189,10 @@ class CorretorInvitationService
                 new CorretorIntegranteLoginNotification(
                     invitationUrl: $invitationUrl,
                     expiresAt: $result['expires_at'],
-                    isResend: $result['is_resend']
+                    isResend: $result['is_resend'],
+                    corretorId: $result['integrante']->id,
+                    inviteVersion: $result['version'],
+                    sentByCorretorId: $sentBy->id,
                 )
             );
         } catch (Throwable $exception) {
@@ -209,7 +217,7 @@ class CorretorInvitationService
                 description: 'Falha ao enfileirar o convite do integrante.',
                 oldValues: [],
                 newValues: [
-                    'message' => $exception->getMessage(),
+                    'exception' => $exception::class,
                 ],
                 request: $request
             );
