@@ -9,6 +9,7 @@
     --brand-primary-hover: #146fb6;
     --brand-primary-dark: #030133;
     --brand-primary-soft: #eef6ff;
+    --brand-primary-rgb: 3, 1, 51;
     --brand-accent: #fd1e6e;
     --brand-accent-hover: #d9185d;
     --brand-accent-dark: #a80f45;
@@ -530,6 +531,10 @@
 
 [data-brand="client"] .verify-overlay {
     background: linear-gradient(180deg, rgba(0, 22, 80, 0.16), rgba(0, 22, 80, 0.90));
+}
+
+[data-brand="client"] .verify-aside > img {
+    display: none;
 }
 
 [data-brand="client"] .verify-badge {
@@ -1331,19 +1336,6 @@
 [data-brand="client"] .auth-layout-main [style*="linear-gradient(125deg, #030133, #146FB6)"] {
     border-color: #00288f !important;
     background: #00288f !important;
-}
-
-[data-brand="client"] .page-loader-card {
-    border-color: rgba(0, 40, 143, 0.18);
-}
-
-[data-brand="client"] .page-loader-spinner {
-    border-color: rgba(0, 40, 143, 0.20);
-    border-top-color: #e6000b;
-}
-
-[data-brand="client"] .page-loader-text {
-    color: #001650;
 }
 
 @media (prefers-reduced-motion: reduce) {

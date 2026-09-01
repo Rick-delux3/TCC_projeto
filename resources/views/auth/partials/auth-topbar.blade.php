@@ -81,7 +81,7 @@
         }
 
         [data-brand="client"] .auth-topbar__brand-mark .auth-topbar__brand-logo {
-            object-fit: cover;
+            object-fit: contain;
             object-position: center;
         }
 
@@ -270,12 +270,11 @@
         <div class="auth-topbar__surface">
             <div class="auth-topbar__brand">
                 <span class="auth-topbar__brand-mark" aria-hidden="true">
-                    <img
-                        src="{{ asset('imgs/logo-header.jpg') }}"
+                    <x-brand-logo
+                        variant="logo_header"
                         alt=""
                         class="auth-topbar__brand-logo"
-                        data-brand-logo="{{ config('branding.active', 'tcc') }}"
-                    >
+                    />
                 </span>
 
                 <span class="auth-topbar__brand-copy">

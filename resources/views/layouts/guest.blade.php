@@ -4,7 +4,7 @@
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta name="csrf-token" content="{{ csrf_token() }}">
-        <link rel="icon" type="image/jpeg" href="{{ asset(config('branding.profiles.'.config('branding.active', 'tcc').'.logo', 'imgs/Logo_NVS.png')) }}">
+        <x-brand-favicon />
 
         <title>{{ config('branding.profiles.'.config('branding.active', 'tcc').'.name', config('app.name', 'Laravel')) }}</title>
 

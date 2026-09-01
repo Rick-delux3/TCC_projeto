@@ -1,16 +1,20 @@
 @props([
     'alt' => null,
+    'profile' => null,
+    'variant' => 'logo',
 ])
 
 @php
-    $brandKey = config('branding.active', 'tcc');
+    $brandKey = $profile ?? config('branding.active', 'tcc');
     $brand = config("branding.profiles.{$brandKey}", config('branding.profiles.tcc'));
-    $resolvedAlt = $alt ?? $brand['name'];
+    $resolvedBrandKey = $brand['key'] ?? 'tcc';
+    $resolvedLogo = $brand[$variant] ?? $brand['logo'] ?? config('branding.profiles.tcc.logo');
+    $resolvedAlt = $alt ?? ($brand['name'] ?? config('branding.profiles.tcc.name'));
 @endphp
 
 <img
-    src="{{ asset($brand['logo']) }}"
+    src="{{ asset($resolvedLogo) }}"
     alt="{{ $resolvedAlt }}"
-    data-brand-logo="{{ $brand['key'] }}"
+    data-brand-logo="{{ $resolvedBrandKey }}"
     {{ $attributes }}
 >

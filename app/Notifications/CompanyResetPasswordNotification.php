@@ -22,7 +22,7 @@ class CompanyResetPasswordNotification extends Notification
         $activeBrandKey = config('branding.active', 'tcc');
         $brandName = config(
             "branding.profiles.{$activeBrandKey}.name",
-            config('app.name', 'NVS Seguros')
+            config('branding.profiles.tcc.name', config('app.name'))
         );
         $url = rtrim((string) config('app.url'), '/').route('company.password.reset', [
             'token' => $this->token,
