@@ -119,6 +119,67 @@ it('renders branded and responsive two-factor email views', function () {
         ->toContain('Este código é pessoal e intransferível.');
 });
 
+it('resolves the two-factor email identity from branding configuration', function () {
+    config([
+        'branding.profiles.tcc.logo_email' => 'imgs/email-tcc-configured.png',
+        'branding.profiles.tcc.colors.blue' => '#125CA0',
+    ]);
+
+    $html = view('emails.2fa-code', [
+        'code' => '482917',
+        'expiresAt' => '14:40 UTC',
+    ])->render();
+
+    expect($html)
+        ->toContain(asset('imgs/email-tcc-configured.png'))
+        ->toContain('#125CA0');
+});
+
+it('isolates both direct two-factor views to the selected brand', function (
+    string $profile,
+    string $expectedLogo,
+    string $unexpectedLogo,
+    string $expectedPrimaryColor,
+    string $unexpectedPrimaryColor,
+) {
+    config(['branding.active' => $profile]);
+
+    $companyHtml = view('emails.2fa-code', [
+        'code' => '482917',
+        'expiresAt' => '14:40 UTC',
+    ])->render();
+
+    $adminHtml = view('emails.admin-2fa-code', [
+        'code' => '731204',
+        'expiresAt' => '15:10 UTC',
+        'admin' => (object) ['name' => 'Ricardo Neves'],
+    ])->render();
+
+    foreach ([$companyHtml, $adminHtml] as $html) {
+        expect($html)
+            ->toContain(asset($expectedLogo))
+            ->toContain($expectedPrimaryColor)
+            ->not->toContain(asset($unexpectedLogo))
+            ->not->toContain($unexpectedPrimaryColor)
+            ->toContain('@media only screen and (max-width: 680px)');
+    }
+})->with([
+    'tcc / NVS' => [
+        'tcc',
+        'imgs/Logo_NVS.png',
+        'imgs/logo-akialuga.jpg',
+        '#146FB6',
+        '#00288F',
+    ],
+    'client / Aki Aluga' => [
+        'client',
+        'imgs/logo-akialuga.jpg',
+        'imgs/Logo_NVS.png',
+        '#00288F',
+        '#146FB6',
+    ],
+]);
+
 it('fails safely when the authenticated user is not linked to a company', function () {
     $user = User::factory()->create(['company_id' => null]);
 

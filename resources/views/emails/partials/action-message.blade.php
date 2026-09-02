@@ -2,17 +2,19 @@
     $activeBrandKey = config('branding.active', 'tcc');
     $brand = config("branding.profiles.{$activeBrandKey}", config('branding.profiles.tcc'));
     $isClientBrand = ($brand['key'] ?? 'tcc') === 'client';
-    $brandName = $brand['name'] ?? config('app.name', 'NVS Seguros');
+    $brandName = $brand['name'] ?? config('branding.profiles.tcc.name', config('app.name'));
     $brandShortName = $brand['short_name'] ?? $brandName;
-    $logoUrl = asset($brand['logo'] ?? 'imgs/Logo_NVS.png');
+    $logoUrl = asset($brand['logo_email'] ?? $brand['logo'] ?? config('branding.profiles.tcc.logo_email'));
+    $colors = $brand['colors'] ?? config('branding.profiles.tcc.colors');
 
-    $primaryColor = $isClientBrand ? '#00288f' : '#146fb6';
-    $primaryDarkColor = $isClientBrand ? '#001650' : '#030133';
-    $accentColor = $isClientBrand ? '#e6000b' : '#fd1e6e';
-    $softColor = $isClientBrand ? '#edf3ff' : '#eef6ff';
-    $borderColor = $isClientBrand ? '#c8d8f2' : '#c8def1';
-    $textColor = $isClientBrand ? '#14213d' : '#172033';
-    $mutedColor = $isClientBrand ? '#53617a' : '#55658c';
+    $primaryColor = $colors['blue'];
+    $primaryDarkColor = $colors['primary_dark'];
+    $accentColor = $colors['accent'];
+    $softColor = $colors['primary_soft'];
+    $borderColor = $colors['border'];
+    $textColor = $colors['text'];
+    $mutedColor = $colors['text_muted'];
+    $backgroundColor = $colors['background'];
 @endphp
 <!DOCTYPE html>
 <html lang="pt-BR">
@@ -39,12 +41,12 @@
         }
     </style>
 </head>
-<body style="margin: 0; padding: 0; background-color: #f3f6fb; color: {{ $textColor }}; font-family: 'Segoe UI', Arial, Helvetica, sans-serif; -webkit-font-smoothing: antialiased;">
+<body style="margin: 0; padding: 0; background-color: {{ $backgroundColor }}; color: {{ $textColor }}; font-family: Arial, Helvetica, sans-serif; -webkit-font-smoothing: antialiased;">
     <div style="display: none; max-height: 0; overflow: hidden; opacity: 0; color: transparent; line-height: 1px; font-size: 1px;">
         {{ $preheader }}
     </div>
 
-    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width: 100%; background-color: #f3f6fb;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width: 100%; background-color: {{ $backgroundColor }};">
         <tr>
             <td align="center" style="padding: 32px 12px;">
                 <table role="presentation" class="email-shell" width="640" cellspacing="0" cellpadding="0" border="0" data-email-template="notification-action" style="width: 640px; max-width: 640px; overflow: hidden; background-color: #ffffff; border: 1px solid {{ $borderColor }}; border-radius: 12px; box-shadow: 0 18px 44px rgba(15, 35, 70, 0.10);">

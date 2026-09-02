@@ -7,6 +7,8 @@ use App\Jobs\CompleteInsuranceAnalysesBatchJob;
 use App\Jobs\RunProviderAnalysisJob;
 use App\Jobs\SendLeadToLeadLoversJob;
 use App\Jobs\UpdateLeadOnLeadLoversJob;
+use App\Models\Corretor;
+use App\Models\CorretorActivityLog;
 use App\Models\InsuranceAnalysis;
 use App\Models\InsuranceAnalysisBatch;
 use App\Models\Lead;
@@ -38,8 +40,13 @@ class LeadReanalysisService
         'outras_despesas',
     ];
 
-    public function updateLeadDataAndMaybeUnlock(Lead $lead, array $data): array
-    {
+    public function updateLeadDataAndMaybeUnlock(
+        Lead $lead,
+        array $data,
+        ?Corretor $corretor = null,
+        ?string $ip = null,
+        ?string $userAgent = null,
+    ): array {
         $analysisEnabled = (bool) config(
             'features.insurance_analysis.enabled',
             false
@@ -48,12 +55,18 @@ class LeadReanalysisService
             $lead,
             $data,
             $analysisEnabled,
+            $corretor,
+            $ip,
+            $userAgent,
         ): array {
             $lead = Lead::query()
                 ->with(['endereco', 'despesas', 'conjuge'])
                 ->whereKey($lead->getKey())
                 ->lockForUpdate()
                 ->firstOrFail();
+
+            $previousLeadLoversUpdateStatus = $lead->leadlovers_update_status;
+            $previousLeadLoversUpdateVersion = (int) $lead->leadlovers_update_version;
 
             $submittedValue = static fn (string $field, mixed $current): mixed => array_key_exists($field, $data) ? $data[$field] : $current;
             $normalizeNullableString = static function (mixed $value): ?string {
@@ -319,6 +332,11 @@ class LeadReanalysisService
                 ];
             }
 
+            if ($corretor !== null) {
+                $lead->updated_by_corretor_id = $corretor->id;
+                $leadChanged = true;
+            }
+
             if ($leadChanged) {
                 $lead->save();
             }
@@ -437,6 +455,27 @@ class LeadReanalysisService
                     'leadlovers_update_requested_at' => now(),
                 ])->saveQuietly();
 
+                if ($corretor !== null) {
+                    CorretorActivityLog::query()->create([
+                        'corretor_id' => $corretor->id,
+                        'action' => 'lead_data_update_requested',
+                        'model_type' => Lead::class,
+                        'model_id' => $lead->id,
+                        'old_values' => [
+                            'leadlovers_update_status' => $previousLeadLoversUpdateStatus,
+                            'leadlovers_update_version' => $previousLeadLoversUpdateVersion,
+                        ],
+                        'new_values' => [
+                            'leadlovers_update_status' => $syncStatus,
+                            'leadlovers_update_version' => $syncVersion,
+                            'requested_fields' => $requestedLeadLoversFields,
+                        ],
+                        'description' => 'Solicitou a alteração dos dados do lead e a sincronização com a LeadLovers.',
+                        'ip' => $this->normalizedActivityIp($ip),
+                        'user_agent' => $this->normalizedActivityUserAgent($userAgent),
+                    ]);
+                }
+
                 $dispatch = [
                     'job_type' => 'update',
                     'lead_id' => (int) $lead->id,
@@ -479,16 +518,16 @@ class LeadReanalysisService
 
             $freshLeadId = (int) $freshLead->id;
 
-
             DashboardActivityChanged::dispatch(
                 'lead',
                 $freshLeadId,
                 $freshLeadCompany,
-                'lead.updated',
+                $result['sync_status'] === 'pending'
+                    ? 'lead.sync.processing'
+                    : 'lead.updated',
             );
         }
 
-        
         if (! $result['changed']) {
             return [
                 'changed' => false,
@@ -570,8 +609,6 @@ class LeadReanalysisService
             default => 'Dados salvos no sistema.',
         };
 
-        
-
         return [
             'changed' => true,
             'unlocked' => $result['unlocked'],
@@ -590,6 +627,24 @@ class LeadReanalysisService
             self::LEADLOVERS_UPDATE_FIELDS,
             static fn (string $field): bool => isset($requested[$field])
         ));
+    }
+
+    private function normalizedActivityIp(?string $ip): ?string
+    {
+        if (blank($ip)) {
+            return null;
+        }
+
+        return mb_substr(trim($ip), 0, 45);
+    }
+
+    private function normalizedActivityUserAgent(?string $userAgent): ?string
+    {
+        if (blank($userAgent)) {
+            return null;
+        }
+
+        return mb_substr(trim($userAgent), 0, 2000);
     }
 
     private function pendingLeadLoversUpdateFields(Lead $lead): array

@@ -48,6 +48,8 @@
     $leads = $leads ?? collect();
     $imobiliarias = $imobiliarias ?? collect();
     $leadLoversFailures = $leadLoversFailures ?? [];
+    $manualLeadTagProcessingStates = $manualLeadTagProcessingStates ?? [];
+    $leadDataSyncProcessingStates = $leadDataSyncProcessingStates ?? [];
     $leadLoversSyncOptions = ! empty($leadLoversSyncOptions)
         ? $leadLoversSyncOptions
         : app(\App\Support\LeadLoversInitialFailureCatalog::class)
@@ -1342,6 +1344,16 @@
                                         @endif
                                     @endif
                                 </div>
+
+                                @include('partials.manual-lead-result-tag-processing', [
+                                    'lead' => $lead,
+                                    'processingState' => $manualLeadTagProcessingStates[(int) $lead->id] ?? null,
+                                ])
+
+                                @include('partials.lead-data-sync-processing', [
+                                    'lead' => $lead,
+                                    'processingState' => $leadDataSyncProcessingStates[(int) $lead->id] ?? null,
+                                ])
 
                                 @include('partials.rejected-lead-retention-notice', [
                                     'lead' => $lead,

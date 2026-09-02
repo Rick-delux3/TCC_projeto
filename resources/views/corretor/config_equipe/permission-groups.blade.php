@@ -4,6 +4,24 @@
         static fn ($permission) => is_string($permission),
     ));
 
+    $availablePermissionKeys = collect($permissionGroups ?? [])
+        ->flatMap(
+            static fn (array $group): array => array_keys($group['permissions'] ?? []),
+        )
+        ->filter(static fn ($permission): bool => is_string($permission))
+        ->values()
+        ->all();
+    $selectedAvailablePermissionCount = count(array_intersect(
+        $availablePermissionKeys,
+        $selectedPermissions,
+    ));
+    $allPermissionsSelected = $availablePermissionKeys !== []
+        && $selectedAvailablePermissionCount === count($availablePermissionKeys);
+    $permissionControlIds = array_map(
+        static fn (string $permission): string => 'permission-' . \Illuminate\Support\Str::slug($permission),
+        $availablePermissionKeys,
+    );
+
     $permissionDependencies = \App\Support\CorretorPermissions::dependencies();
 
     $groupIcons = [
@@ -28,6 +46,54 @@
 @endphp
 
 <input type="hidden" name="permissions_submitted" value="1">
+
+@if ($availablePermissionKeys !== [])
+    <label
+        class="team-permission-select-all"
+        for="permission-toggle-all"
+        data-team-permission-toggle-all-card
+    >
+        <span class="team-permission-select-all-control">
+            <input
+                class="form-check-input"
+                type="checkbox"
+                id="permission-toggle-all"
+                data-team-permission-toggle-all
+                aria-controls="{{ implode(' ', $permissionControlIds) }}"
+                aria-describedby="permission-toggle-all-description"
+                @checked($allPermissionsSelected)
+            >
+        </span>
+
+        <span class="team-permission-select-all-icon" aria-hidden="true">
+            <i class="bi bi-check2-all"></i>
+        </span>
+
+        <span class="team-permission-select-all-copy">
+            <span class="team-permission-select-all-title">
+                Ativar todas as permissões
+            </span>
+            <span class="team-permission-select-all-description" id="permission-toggle-all-description">
+                Conceda acesso a todas as áreas e operações disponíveis.
+            </span>
+        </span>
+
+        <span
+            class="team-permission-select-all-status"
+            data-team-permission-toggle-all-status
+            aria-live="polite"
+            aria-atomic="true"
+        >
+            @if ($allPermissionsSelected)
+                Todas selecionadas
+            @elseif ($selectedAvailablePermissionCount > 0)
+                Seleção parcial
+            @else
+                Nenhuma selecionada
+            @endif
+        </span>
+    </label>
+@endif
 
 <div class="row g-3 team-permission-groups" data-team-permission-groups>
     @forelse ($permissionGroups ?? [] as $groupKey => $group)

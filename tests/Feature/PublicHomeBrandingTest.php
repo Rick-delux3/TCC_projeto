@@ -28,6 +28,7 @@ it('keeps the legacy index visually isolated from the active brand', function (s
 it('renders the new public page with the selected brand', function (
     string $profile,
     string $expectedLogo,
+    string $expectedHeaderLogo,
     string $unexpectedLogo,
 ) {
     config([
@@ -42,12 +43,55 @@ it('renders the new public page with the selected brand', function (
         ->assertViewIs('simulation.start')
         ->assertSee('data-brand="'.$profile.'"', false)
         ->assertSee($expectedLogo, false)
+        ->assertSee($expectedHeaderLogo, false)
         ->assertDontSee($unexpectedLogo, false)
         ->assertSee('name="tipo_solicitante"', false);
 })->with([
-    'tcc profile' => ['tcc', 'imgs/Logo_NVS.png', 'imgs/logo-akialuga.jpg'],
-    'client profile' => ['client', 'imgs/logo-akialuga.jpg', 'imgs/Logo_NVS.png'],
+    'tcc profile' => ['tcc', 'imgs/Logo_NVS.png', 'imgs/Logo_NVS.png', 'imgs/logo-header.jpg'],
+    'client profile' => ['client', 'imgs/logo-akialuga.jpg', 'imgs/logo-header.jpg', 'imgs/Logo_NVS.png'],
 ]);
+
+it('centralizes the complete visual identity for both brand profiles', function () {
+    expect(config('branding.profiles.tcc'))
+        ->toMatchArray([
+            'logo' => 'imgs/Logo_NVS.png',
+            'logo_header' => 'imgs/Logo_NVS.png',
+            'logo_email' => 'imgs/Logo_NVS.png',
+            'favicon' => 'imgs/Logo_NVS.png',
+            'favicon_type' => 'image/png',
+        ])
+        ->and(config('branding.profiles.tcc.colors'))
+        ->toMatchArray([
+            'primary' => '#030133',
+            'blue' => '#146FB6',
+            'accent' => '#FD1E6E',
+            'background' => '#F0F5FB',
+            'surface' => '#FFFFFF',
+            'text' => '#1F2937',
+            'text_muted' => '#55658C',
+            'border' => '#D8E1EC',
+        ])
+        ->and(config('branding.profiles.client'))
+        ->toMatchArray([
+            'logo' => 'imgs/logo-akialuga.jpg',
+            'logo_header' => 'imgs/logo-header.jpg',
+            'logo_email' => 'imgs/logo-akialuga.jpg',
+            'favicon' => 'imgs/logo-akialuga.jpg',
+            'favicon_type' => 'image/jpeg',
+        ])
+        ->and(config('branding.profiles.client.colors'))
+        ->toMatchArray([
+            'primary' => '#00288F',
+            'primary_dark' => '#001650',
+            'primary_hover' => '#001F73',
+            'accent' => '#E6000B',
+            'background' => '#F3F6FC',
+            'surface' => '#FFFFFF',
+            'text' => '#14213D',
+            'text_muted' => '#53617A',
+            'border' => '#D5DEEB',
+        ]);
+});
 
 it('isolates the client logo palette and preserves the original tcc tokens', function () {
     $css = file_get_contents(resource_path('css/branding.css'));
@@ -102,8 +146,61 @@ it('keeps the public header visual and opens one accessible unavailable-access m
     expect($html)
         ->toMatch('/<div class="auth-topbar__brand">.*data-brand-logo="client"/s')
         ->not->toMatch('/<a[^>]*class="auth-topbar__brand"/s')
+        ->toContain('Seguro fiança locatícia')
+        ->toContain('Precisa de ajuda?')
+        ->toContain('auth-topbar__access')
+        ->toContain('border-bottom: 1px solid var(--brand-border')
+        ->toContain('background: #ffffff !important;')
         ->and(substr_count($html, 'id="companyAccessUnavailableModal"'))->toBe(1)
         ->and(substr_count($html, 'data-bs-target="#companyAccessUnavailableModal"'))->toBe(1);
+});
+
+it('renders the public simulation gateway with the reference composition', function (string $profile) {
+    config(['branding.active' => $profile]);
+
+    $response = $this->get(route('simulation.start'));
+    $html = $response->getContent();
+
+    $response
+        ->assertOk()
+        ->assertViewIs('simulation.start')
+        ->assertSeeText('Escolha seu perfil')
+        ->assertSeeText('Dados da solicitação')
+        ->assertSeeText('Como podemos ajudar?')
+        ->assertSeeText('Qual opção descreve você?')
+        ->assertSeeText('Leva menos de 1 minuto')
+        ->assertSeeText('Ambiente seguro')
+        ->assertSeeText('Você poderá revisar os dados antes de enviar.');
+
+    expect($html)
+        ->toContain('data-simulation-start')
+        ->toContain('simulation-progress')
+        ->toContain('simulation-journey__aside')
+        ->toContain('simulation-journey__city')
+        ->toContain('simulation-option__indicator')
+        ->toContain('aria-live="polite"')
+        ->toContain('name="_token"')
+        ->and(substr_count($html, 'name="tipo_solicitante"'))->toBe(3);
+})->with(['tcc', 'client']);
+
+it('keeps the refactored simulation frontend free from unsafe dynamic html and browser storage', function () {
+    $startView = file_get_contents(resource_path('views/simulation/start.blade.php'));
+    $topbarView = file_get_contents(resource_path('views/auth/partials/auth-topbar.blade.php'));
+    $javascript = file_get_contents(resource_path('js/simulation.js'));
+
+    expect($startView)
+        ->not->toContain('{!!')
+        ->toContain('@csrf')
+        ->and($topbarView)
+        ->not->toContain('{!!')
+        ->not->toContain('env(')
+        ->not->toContain('target="_blank"')
+        ->and($javascript)
+        ->toContain('textContent')
+        ->not->toContain('innerHTML')
+        ->not->toContain('eval(')
+        ->not->toContain('localStorage')
+        ->not->toContain('sessionStorage');
 });
 
 it('uses the fictitious logo as the safe component fallback', function () {
@@ -116,6 +213,126 @@ it('uses the fictitious logo as the safe component fallback', function () {
         ->not->toContain('imgs/logo-akialuga.jpg')
         ->toContain('data-brand-logo="tcc"');
 });
+
+it('resolves configured logo variants without leaking assets between brands', function () {
+    config(['branding.active' => 'tcc']);
+
+    $tccHeader = Blade::render('<x-brand-logo variant="logo_header" />');
+    $tccApplicationLogo = Blade::render('<x-application-logo class="application-mark" />');
+    $tccFavicon = Blade::render('<x-brand-favicon />');
+
+    expect($tccHeader)
+        ->toContain('imgs/Logo_NVS.png')
+        ->not->toContain('imgs/logo-header.jpg')
+        ->and($tccApplicationLogo)
+        ->toContain('imgs/Logo_NVS.png')
+        ->toContain('class="application-mark"')
+        ->not->toContain('<svg')
+        ->and($tccFavicon)
+        ->toContain('type="image/png"')
+        ->toContain('imgs/Logo_NVS.png');
+
+    config(['branding.active' => 'client']);
+
+    $clientHeader = Blade::render('<x-brand-logo variant="logo_header" />');
+    $clientApplicationLogo = Blade::render('<x-application-logo />');
+    $clientFavicon = Blade::render('<x-brand-favicon />');
+
+    expect($clientHeader)
+        ->toContain('imgs/logo-header.jpg')
+        ->not->toContain('imgs/Logo_NVS.png')
+        ->and($clientApplicationLogo)
+        ->toContain('imgs/logo-akialuga.jpg')
+        ->not->toContain('<svg')
+        ->and($clientFavicon)
+        ->toContain('type="image/jpeg"')
+        ->toContain('imgs/logo-akialuga.jpg');
+});
+
+it('uses the configured header logo in the shared authentication topbar', function (
+    string $profile,
+    string $expectedLogo,
+    string $unexpectedLogo,
+) {
+    config(['branding.active' => $profile]);
+
+    $html = view('auth.partials.auth-topbar')->render();
+
+    expect($html)
+        ->toContain($expectedLogo)
+        ->not->toContain($unexpectedLogo)
+        ->toContain('object-fit: contain;');
+})->with([
+    'tcc topbar' => ['tcc', 'imgs/Logo_NVS.png', 'imgs/logo-header.jpg'],
+    'client topbar' => ['client', 'imgs/logo-header.jpg', 'imgs/Logo_NVS.png'],
+]);
+
+it('uses active brand tokens in the shared loader without legacy palette leakage', function () {
+    $loader = file_get_contents(resource_path('views/partials/page-loader.blade.php'));
+    $css = file_get_contents(resource_path('css/branding.css'));
+
+    expect($loader)
+        ->toContain('var(--brand-primary-rgb, 3, 1, 51)')
+        ->toContain('var(--brand-accent, #FD1E6E)')
+        ->toContain('var(--brand-primary, #030133)')
+        ->not->toContain('#EE1D23')
+        ->not->toContain('#1F1D59')
+        ->and($css)
+        ->toMatch('/\[data-brand="tcc"\]\s*\{.*?--brand-primary-rgb:\s*3,\s*1,\s*51;/s');
+});
+
+it('hides the NVS-only two-factor illustration from the client profile', function () {
+    $css = file_get_contents(resource_path('css/branding.css'));
+
+    expect($css)
+        ->toMatch('/\[data-brand="client"\] \.verify-aside > img\s*\{\s*display:\s*none;\s*\}/s');
+});
+
+it('keeps both web two-factor views isolated to the active brand', function (
+    string $profile,
+    string $brandName,
+    string $expectedPrimaryLogo,
+    string $expectedHeaderLogo,
+    string $unexpectedLogo,
+    string $faviconType,
+) {
+    config(['branding.active' => $profile]);
+
+    $viewData = ['errors' => new Illuminate\Support\ViewErrorBag];
+    $companyHtml = view('auth.2fa', $viewData)->render();
+    $adminHtml = view('auth.admin-2fa', $viewData)->render();
+
+    expect($companyHtml)
+        ->toContain('data-brand="'.$profile.'"')
+        ->toContain($brandName)
+        ->toContain($expectedPrimaryLogo)
+        ->toContain($expectedHeaderLogo)
+        ->toContain('type="'.$faviconType.'"')
+        ->not->toContain($unexpectedLogo)
+        ->and($adminHtml)
+        ->toContain('data-brand="'.$profile.'"')
+        ->toContain($brandName)
+        ->toContain($expectedHeaderLogo)
+        ->toContain('type="'.$faviconType.'"')
+        ->not->toContain($unexpectedLogo);
+})->with([
+    'tcc / NVS' => [
+        'tcc',
+        'NVS Seguros',
+        'imgs/Logo_NVS.png',
+        'imgs/Logo_NVS.png',
+        'imgs/logo-header.jpg',
+        'image/png',
+    ],
+    'client / Aki Aluga' => [
+        'client',
+        'Aki Aluga',
+        'imgs/logo-akialuga.jpg',
+        'imgs/logo-header.jpg',
+        'imgs/Logo_NVS.png',
+        'image/jpeg',
+    ],
+]);
 
 it('uses the framed client logo in both dashboard headers and sidebars', function (string $profile) {
     $corretor = Corretor::query()->create([
@@ -154,6 +371,95 @@ it('uses the framed client logo in both dashboard headers and sidebars', functio
         }
     }
 })->with(['tcc', 'client']);
+
+it('renders the dashboard header composition for each brand profile', function (
+    string $profile,
+    string $operationLabel,
+    string $expectedLogo,
+) {
+    config(['branding.active' => $profile]);
+    $corretor = Corretor::query()->create([
+        'name' => 'Carlos Alves',
+        'email' => "header-{$profile}@example.test",
+        'password' => 'password',
+        'role' => Corretor::ROLE_CEO,
+        'permissions' => [],
+        'active' => true,
+        'first_login_verified_at' => now(),
+    ]);
+
+    $this->actingAs($corretor, 'admin');
+    $adminHeader = view('layout-inicial.partials.header_admin', [
+        'dashboardStats' => ['newLeads' => 3],
+    ])->render();
+
+    $this->actingAs(User::factory()->create());
+    $companyHeader = view('layout-inicial.partials.header_imob', [
+        'dashboardStats' => ['newLeads' => 3],
+    ])->render();
+
+    foreach ([$adminHeader, $companyHeader] as $html) {
+        expect($html)
+            ->toContain('data-dashboard-header="'.$profile.'"')
+            ->toContain('x-data="{ isCompact: window.scrollY > 24 }"')
+            ->toContain('x-on:scroll.window.throttle.100ms="isCompact = window.scrollY > 24"')
+            ->toContain('x-bind:class="{ \'is-compact\': isCompact }"')
+            ->toContain('dashboard-client-header__rail')
+            ->toContain('dashboard-client-header__primary')
+            ->toContain('dashboard-client-header__secondary')
+            ->toContain('dashboard-header-nav')
+            ->toContain('dashboard-header-status')
+            ->toContain($operationLabel)
+            ->toContain('dashboard-notification-count')
+            ->toContain('aria-label="Localização atual"')
+            ->toContain($expectedLogo);
+    }
+
+    expect($adminHeader)
+        ->toContain('Painel do CEO')
+        ->toContain('Carlos Alves')
+        ->toContain('Central de leads')
+        ->and($companyHeader)
+        ->toContain('Painel da imobiliária')
+        ->toContain('Simulação');
+})->with([
+    'NVS' => ['tcc', 'Sistema operacional', 'imgs/Logo_NVS.png'],
+    'Aki Aluga' => ['client', 'Operação ativa', 'imgs/logo-header.jpg'],
+]);
+
+it('keeps the branded dashboard header responsive and accessible', function () {
+    $adminEntry = file_get_contents(
+        resource_path('css/header-dashboard-admin.css'),
+    );
+    $companyEntry = file_get_contents(
+        resource_path('css/header-dashboard-user.css'),
+    );
+    $stylesheet = file_get_contents(
+        resource_path('css/dashboard-header.css'),
+    );
+
+    expect($adminEntry)
+        ->toContain('@import "./dashboard-header.css";')
+        ->and($companyEntry)
+        ->toContain('@import "./dashboard-header.css";')
+        ->and($stylesheet)
+        ->toContain('.dashboard-client-header[data-dashboard-header="tcc"]')
+        ->toContain('.dashboard-client-header[data-dashboard-header="client"]')
+        ->toContain('linear-gradient(108deg, #030133 0%, #020127 100%)')
+        ->toContain('background: #ffffff;')
+        ->toContain('background: #e6000b;')
+        ->toContain('min-height: 48px;')
+        ->toContain('.dashboard-client-header.is-compact')
+        ->toContain('@keyframes dashboard-header-enter')
+        ->toContain('@keyframes dashboard-status-pulse')
+        ->toContain('.dashboard-notification-menu.show')
+        ->toContain(':focus-visible')
+        ->toContain('@media (min-width: 992px)')
+        ->toContain('@media (max-width: 991.98px)')
+        ->toContain('@media (max-width: 575.98px)')
+        ->toContain('@media (prefers-reduced-motion: reduce)')
+        ->toContain('@media (forced-colors: active)');
+});
 
 it('hides analysis navigation and keeps lead simulation available when analyses are disabled', function () {
     $this->actingAs(User::factory()->create());

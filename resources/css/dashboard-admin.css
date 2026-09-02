@@ -395,6 +395,78 @@
     justify-content: center;
 }
 
+.manual-tag-processing-notice {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    min-height: 58px;
+    margin-top: 1rem;
+    padding: 0.75rem 1rem 0.75rem 1.35rem;
+    overflow: hidden;
+    color: #172554;
+    background: linear-gradient(90deg, rgba(255, 251, 235, 0.98), rgba(255, 253, 245, 0.96));
+    border: 1px solid rgba(245, 158, 11, 0.72);
+    border-radius: 12px;
+}
+
+.manual-tag-processing-notice::before {
+    content: "";
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 6px;
+    background: linear-gradient(180deg, #146fb6 0 50%, #fd1e6e 50% 100%);
+}
+
+.manual-tag-processing-notice__state {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 0.65rem;
+    padding-right: 1rem;
+    border-right: 1px solid rgba(180, 83, 9, 0.22);
+    font-size: 0.85rem;
+    letter-spacing: 0.01em;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.manual-tag-processing-notice__icon {
+    color: #f59e0b;
+    font-size: 1.45rem;
+    line-height: 1;
+    animation: manual-tag-processing-spin 1.4s linear infinite;
+}
+
+.manual-tag-processing-notice__message {
+    min-width: 0;
+    margin: 0;
+    font-size: 0.92rem;
+    line-height: 1.4;
+}
+
+.dashboard-shell[data-dashboard-theme="dark"] .manual-tag-processing-notice {
+    color: #fef3c7;
+    background: linear-gradient(90deg, rgba(69, 46, 5, 0.88), rgba(51, 36, 8, 0.82));
+    border-color: rgba(251, 191, 36, 0.66);
+}
+
+.dashboard-shell[data-dashboard-theme="dark"] .manual-tag-processing-notice__state {
+    border-right-color: rgba(254, 243, 199, 0.24);
+}
+
+@keyframes manual-tag-processing-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .manual-tag-processing-notice__icon {
+        animation: none;
+    }
+}
+
 .lead-details-modal {
     z-index: 2060 !important;
 }
@@ -543,5 +615,19 @@
         width: 48px;
         height: 48px;
         flex-basis: 48px;
+    }
+
+    .manual-tag-processing-notice {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 0.65rem;
+        padding: 0.85rem 0.9rem 0.85rem 1.2rem;
+    }
+
+    .manual-tag-processing-notice__state {
+        width: 100%;
+        padding: 0 0 0.6rem;
+        border-right: 0;
+        border-bottom: 1px solid rgba(180, 83, 9, 0.22);
     }
 }

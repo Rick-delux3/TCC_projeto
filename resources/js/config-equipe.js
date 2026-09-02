@@ -71,6 +71,9 @@ document.querySelectorAll('[data-team-form]').forEach((form) => {
             .map((input) => [input.dataset.teamPermissionKey, input]),
     );
     const permissionCount = form.querySelector('[data-team-permission-count]');
+    const permissionToggleAll = form.querySelector('[data-team-permission-toggle-all]');
+    const permissionToggleAllCard = form.querySelector('[data-team-permission-toggle-all-card]');
+    const permissionToggleAllStatus = form.querySelector('[data-team-permission-toggle-all-status]');
     const submitButton = form.querySelector('[data-team-submit]');
     const originalSubmitContent = submitButton?.innerHTML;
 
@@ -113,6 +116,30 @@ document.querySelectorAll('[data-team-form]').forEach((form) => {
         });
     };
 
+    const syncPermissionToggleAll = (selectedCount) => {
+        if (!permissionToggleAll) {
+            return;
+        }
+
+        const hasSelectedPermissions = selectedCount > 0;
+        const hasAllPermissions = permissionInputs.length > 0
+            && selectedCount === permissionInputs.length;
+
+        permissionToggleAll.checked = hasAllPermissions;
+        permissionToggleAll.indeterminate = hasSelectedPermissions && !hasAllPermissions;
+        permissionToggleAllCard?.classList.toggle('is-selected', hasAllPermissions);
+        permissionToggleAllCard?.classList.toggle(
+            'is-partial',
+            hasSelectedPermissions && !hasAllPermissions,
+        );
+
+        if (permissionToggleAllStatus) {
+            permissionToggleAllStatus.textContent = hasAllPermissions
+                ? 'Todas selecionadas'
+                : (hasSelectedPermissions ? 'Seleção parcial' : 'Nenhuma selecionada');
+        }
+    };
+
     const updatePermissions = () => {
         permissionInputs.forEach((input) => {
             const option = input.closest('.team-permission-option');
@@ -121,11 +148,13 @@ document.querySelectorAll('[data-team-form]').forEach((form) => {
             option?.classList.toggle('is-disabled', input.disabled);
         });
 
+        const selectedCount = permissionInputs.filter((input) => input.checked).length;
+        syncPermissionToggleAll(selectedCount);
+
         if (!permissionCount) {
             return;
         }
 
-        const selectedCount = permissionInputs.filter((input) => input.checked).length;
         permissionCount.hidden = false;
         permissionCount.textContent = selectedCount === 1
             ? '1 selecionada'
@@ -139,8 +168,24 @@ document.querySelectorAll('[data-team-form]').forEach((form) => {
         updatePermissions();
     };
 
+    const handlePermissionToggleAllChange = () => {
+        if (!permissionToggleAll) {
+            return;
+        }
+
+        const shouldSelectAll = permissionToggleAll.checked;
+
+        permissionInputs.forEach((input) => {
+            input.checked = shouldSelectAll;
+        });
+
+        syncPermissionDependencies();
+        updatePermissions();
+    };
+
     activeInput?.addEventListener('change', updateActiveState);
     permissionInputs.forEach((input) => input.addEventListener('change', handlePermissionChange));
+    permissionToggleAll?.addEventListener('change', handlePermissionToggleAllChange);
     updateActiveState();
     syncPermissionDependencies();
     updatePermissions();

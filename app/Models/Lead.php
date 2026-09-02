@@ -6,6 +6,7 @@ use App\Support\ManualLeadResultTags;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\MorphOne;
 
 class Lead extends Model
 {
@@ -189,6 +190,18 @@ class Lead extends Model
     public function leadLoversTagOperation()
     {
         return $this->hasOne(LeadLoversTagOperation::class);
+    }
+
+    public function latestDataUpdateRequestLog(): MorphOne
+    {
+        return $this->morphOne(
+            CorretorActivityLog::class,
+            'subject',
+            'model_type',
+            'model_id'
+        )
+            ->where('action', 'lead_data_update_requested')
+            ->latestOfMany();
     }
 
     public function createdByAdmin()

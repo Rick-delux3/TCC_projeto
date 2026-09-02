@@ -87,3 +87,68 @@ it('renders the company password reset with the active client brand', function (
         ->toContain('60 minutos')
         ->toContain(asset('imgs/logo-akialuga.jpg'));
 });
+
+it('keeps every notification email isolated to the active brand', function (
+    string $profile,
+    string $brandName,
+    string $expectedLogo,
+    string $unexpectedLogo,
+    string $expectedPrimaryColor,
+    string $unexpectedPrimaryColor,
+) {
+    config(['branding.active' => $profile]);
+
+    $recipient = (object) ['name' => 'Ricardo Neves'];
+    $company = new Imobiliaria([
+        'name' => 'Imobiliária Horizonte',
+        'email' => 'contato@horizonte.example',
+    ]);
+
+    $messages = [
+        (new CorretorIntegranteLoginNotification(
+            invitationUrl: 'https://app.example.test/convite-assinado',
+            expiresAt: CarbonImmutable::parse('2026-08-31 18:30:00', 'UTC'),
+        ))->toMail($recipient),
+        (new CorretorIntegranteLoginNotification(
+            invitationUrl: 'https://app.example.test/novo-convite-assinado',
+            expiresAt: CarbonImmutable::parse('2026-09-01 10:15:00', 'UTC'),
+            isResend: true,
+        ))->toMail($recipient),
+        (new CorretorFirstLoginCodeNotification(
+            code: '482917',
+            expiresAt: '18:40 UTC',
+        ))->toMail($recipient),
+        (new CompanyResetPasswordNotification('secure-token'))->toMail($company),
+    ];
+
+    foreach ($messages as $message) {
+        $html = $message->render();
+
+        expect($html)
+            ->toContain($brandName)
+            ->toContain(asset($expectedLogo))
+            ->toContain($expectedPrimaryColor)
+            ->not->toContain(asset($unexpectedLogo))
+            ->not->toContain($unexpectedPrimaryColor)
+            ->toContain('@media only screen and (max-width: 680px)');
+    }
+
+    expect($messages[3]->subject)->toBe("Redefinição de senha - {$brandName}");
+})->with([
+    'tcc / NVS' => [
+        'tcc',
+        'NVS Seguros',
+        'imgs/Logo_NVS.png',
+        'imgs/logo-akialuga.jpg',
+        '#146FB6',
+        '#00288F',
+    ],
+    'client / Aki Aluga' => [
+        'client',
+        'Aki Aluga',
+        'imgs/logo-akialuga.jpg',
+        'imgs/Logo_NVS.png',
+        '#00288F',
+        '#146FB6',
+    ],
+]);

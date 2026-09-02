@@ -9,6 +9,7 @@ use App\Models\Lead;
 use App\Services\LeadLoversInitialFailureRecoveryService;
 use App\Services\LeadReanalysisService;
 use DomainException;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Gate;
@@ -55,9 +56,9 @@ class DashboardLeadController extends Controller
 
     public function adminUpdate(Request $request, Lead $lead)
     {
-        $this->authorizeAdminAbility('edit-leads');
+        $corretor = $this->authorizeAdminAbility('edit-leads');
 
-        return $this->saveLeadsUpdates($request, $lead);
+        return $this->saveLeadsUpdates($request, $lead, $corretor);
     }
 
     public function reanalyze(Lead $lead)
@@ -105,7 +106,7 @@ class DashboardLeadController extends Controller
         );
     }
 
-    private function authorizeAdminAbility(string $ability): void
+    private function authorizeAdminAbility(string $ability): Corretor
     {
         $corretor = Auth::guard('admin')->user();
 
@@ -117,13 +118,23 @@ class DashboardLeadController extends Controller
             'Você não possui permição para executar essa ação!'
         );
 
+        return $corretor;
     }
 
-    private function saveLeadsUpdates(Request $request, Lead $lead)
-    {
+    private function saveLeadsUpdates(
+        Request $request,
+        Lead $lead,
+        ?Corretor $corretor = null,
+    ): RedirectResponse {
         $data = $this->validateLeadUpdateRequest($request);
 
-        $result = $this->leadReanalysisService->updateLeadDataAndMaybeUnlock($lead, $data);
+        $result = $this->leadReanalysisService->updateLeadDataAndMaybeUnlock(
+            lead: $lead,
+            data: $data,
+            corretor: $corretor,
+            ip: $request->ip(),
+            userAgent: $request->userAgent(),
+        );
 
         if (! $result['changed']) {
             return back()->with('error', $result['message']);

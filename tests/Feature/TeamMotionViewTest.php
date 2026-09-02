@@ -43,6 +43,7 @@ it('renders the motion hooks across every team management page', function () {
         ->assertSee('data-team-form', false)
         ->assertSee('data-team-panel', false)
         ->assertSee('data-team-permission-count', false)
+        ->assertSee('data-team-permission-toggle-all', false)
         ->assertSee('data-team-submit', false);
 
     $this->get(route('admin.config-equipe.edit', $member))
@@ -51,6 +52,7 @@ it('renders the motion hooks across every team management page', function () {
         ->assertSee('data-team-form', false)
         ->assertSee('data-team-panel', false)
         ->assertSee('data-team-permission-count', false)
+        ->assertSee('data-team-permission-toggle-all', false)
         ->assertSee('data-team-submit', false);
 });
 
@@ -65,8 +67,10 @@ it('keeps team motion accessible and compatible with both brand profiles', funct
         ->toContain('--team-accent-rgb: 230, 0, 11;')
         ->toContain('@media (prefers-reduced-motion: reduce)')
         ->toContain('.team-permission-option.is-selected')
+        ->toContain('.team-permission-select-all:focus-within')
         ->and($javascript)
         ->toContain("matchMedia('(prefers-reduced-motion: reduce)')")
         ->toContain('IntersectionObserver')
-        ->toContain('data-team-permission-count');
+        ->toContain('data-team-permission-count')
+        ->toContain('data-team-permission-toggle-all');
 });

@@ -7,7 +7,7 @@
         </div>
         <div class="clientes d-flex row">
             <div class="logo-footer col-2">
-                <div><img src="{{ asset('imgs/logo-akialuga.jpg') }}" class="img-fluid" alt="logo"></div>
+                <div><x-brand-logo profile="client" class="img-fluid" /></div>
             </div>
             <div class="descr col-4">
                 <i><p>Veja que nossos Clientes Falam dos nossos Serviços</p></i>

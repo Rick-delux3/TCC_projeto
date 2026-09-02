@@ -3,12 +3,15 @@
 use App\Events\DashboardActivityChanged;
 use App\Jobs\RunProviderAnalysisJob;
 use App\Jobs\UpdateLeadOnLeadLoversJob;
+use App\Models\Corretor;
+use App\Models\CorretorActivityLog;
 use App\Models\InsuranceAnalysis;
 use App\Models\InsuranceAnalysisBatch;
 use App\Models\Lead;
 use App\Services\LeadLoversApiClient;
 use App\Services\LeadLoversLeadResolver;
 use App\Services\LeadReanalysisService;
+use App\Support\CorretorPermissions;
 use Illuminate\Broadcasting\BroadcastEvent;
 use Illuminate\Bus\PendingBatch;
 use Illuminate\Contracts\Queue\Queue as QueueContract;
@@ -640,7 +643,7 @@ it('persists locally and dispatches the ID-based update after commit', function 
         fn (BroadcastEvent $queued): bool => stageFourDashboardBroadcastMatches(
             $queued,
             $lead,
-            'lead.updated',
+            'lead.sync.processing',
         )
     );
     Queue::assertPushed(BroadcastEvent::class, 1);
@@ -648,6 +651,78 @@ it('persists locally and dispatches the ID-based update after commit', function 
         ->and($lead->refresh())
         ->nome->toBe('Nome atualizado')
         ->leadlovers_update_status->toBe('pending');
+});
+
+it('records the broker who requested a lead data synchronization', function () {
+    Queue::fake();
+    $corretor = Corretor::query()->create([
+        'name' => 'Carlos da Silva',
+        'email' => 'carlos-data-sync@example.test',
+        'cpf' => '98765432100',
+        'password' => 'password',
+        'role' => Corretor::ROLE_INTEGRANTE,
+        'permissions' => [
+            CorretorPermissions::VIEW_LEADS,
+            CorretorPermissions::EDIT_LEADS,
+        ],
+        'active' => true,
+        'first_login_verified_at' => now(),
+    ]);
+    $lead = stageFourLead([
+        'nome' => 'Nome anterior',
+        'leadlovers_update_status' => 'idle',
+        'leadlovers_update_version' => 0,
+    ]);
+
+    $this
+        ->actingAs($corretor, 'admin')
+        ->withServerVariables(['REMOTE_ADDR' => '192.0.2.15'])
+        ->withHeader('User-Agent', 'Dashboard data sync test')
+        ->post(route('admin.leads.update', $lead), [
+            'nome' => 'Nome atualizado pelo corretor',
+        ])
+        ->assertRedirect();
+
+    $requestLog = CorretorActivityLog::query()
+        ->where('action', 'lead_data_update_requested')
+        ->where('model_type', Lead::class)
+        ->where('model_id', $lead->id)
+        ->sole();
+
+    expect($lead->refresh())
+        ->nome->toBe('Nome atualizado pelo corretor')
+        ->updated_by_corretor_id->toBe($corretor->id)
+        ->leadlovers_update_status->toBe('pending')
+        ->leadlovers_update_version->toBe(1)
+        ->and($requestLog)
+        ->corretor_id->toBe($corretor->id)
+        ->ip->toBe('192.0.2.15')
+        ->user_agent->toBe('Dashboard data sync test')
+        ->and($requestLog->old_values)->toMatchArray([
+            'leadlovers_update_status' => 'idle',
+            'leadlovers_update_version' => 0,
+        ])
+        ->and($requestLog->new_values)->toMatchArray([
+            'leadlovers_update_status' => 'pending',
+            'leadlovers_update_version' => 1,
+            'requested_fields' => ['name'],
+        ]);
+
+    Queue::assertPushed(
+        UpdateLeadOnLeadLoversJob::class,
+        fn (UpdateLeadOnLeadLoversJob $job): bool => $job->leadId === $lead->id
+            && $job->syncVersion === 1
+            && $job->requestedFields === ['name']
+    );
+    Queue::assertPushedOn(
+        'broadcasts',
+        BroadcastEvent::class,
+        fn (BroadcastEvent $event): bool => stageFourDashboardBroadcastMatches(
+            $event,
+            $lead,
+            'lead.sync.processing',
+        )
+    );
 });
 
 it('keeps the local save and marks only the matching version failed when queueing fails', function () {
@@ -691,7 +766,7 @@ it('keeps the local save and marks only the matching version failed when queuein
         ->and(stageFourDashboardBroadcastMatches(
             $broadcastJobs[0],
             $lead,
-            'lead.updated',
+            'lead.sync.processing',
         ))->toBeTrue()
         ->and(stageFourDashboardBroadcastMatches(
             $broadcastJobs[1],

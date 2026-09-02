@@ -3,9 +3,10 @@
 namespace App\Http\Controllers;
 
 use App\Jobs\SyncProviderAnalysisStatusJob;
+use App\Models\Corretor;
+use App\Models\Imobiliaria;
 use App\Models\InsuranceAnalysis;
 use App\Models\InsuranceAnalysisBatch;
-use App\Models\Imobiliaria;
 use App\Services\LeadReanalysisService;
 use DomainException;
 use Illuminate\Http\Request;
@@ -56,9 +57,9 @@ class InsuranceAnalysisController extends Controller
             ->count();
 
         $inProgressAnalyses = InsuranceAnalysis::with([
-                'lead',
-                'events',
-            ])
+            'lead',
+            'events',
+        ])
             ->where('company_id', $companyId)
             ->whereIn('status', ['pending', 'processing', 'queued', 'running'])
             ->latest('updated_at')
@@ -66,11 +67,11 @@ class InsuranceAnalysisController extends Controller
             ->get();
 
         $batchesQuery = InsuranceAnalysisBatch::with([
-                'lead.despesas',
-                'lead.endereco',
-                'lead.conjuge',
-                'analyses.events',
-            ])
+            'lead.despesas',
+            'lead.endereco',
+            'lead.conjuge',
+            'analyses.events',
+        ])
             ->where('company_id', $companyId);
 
         if (filled($selectedStatus)) {
@@ -85,13 +86,13 @@ class InsuranceAnalysisController extends Controller
                         ->orWhere('email', 'like', "%{$search}%")
                         ->orWhere('cpf', 'like', "%{$search}%");
                 })
-                ->orWhereHas('analyses', function ($analysisQuery) use ($search) {
-                    $analysisQuery
-                        ->where('provider', 'like', "%{$search}%")
-                        ->orWhere('quote_id', 'like', "%{$search}%")
-                        ->orWhere('quote_number', 'like', "%{$search}%")
-                        ->orWhere('product_key', 'like', "%{$search}%");
-                });
+                    ->orWhereHas('analyses', function ($analysisQuery) use ($search) {
+                        $analysisQuery
+                            ->where('provider', 'like', "%{$search}%")
+                            ->orWhere('quote_id', 'like', "%{$search}%")
+                            ->orWhere('quote_number', 'like', "%{$search}%")
+                            ->orWhere('product_key', 'like', "%{$search}%");
+                    });
             });
         }
 
@@ -236,19 +237,19 @@ class InsuranceAnalysisController extends Controller
                         ->orWhere('email', 'like', "%{$search}%")
                         ->orWhere('cpf', 'like', "%{$search}%");
                 })
-                ->orWhereHas('company', function ($companyQuery) use ($search) {
-                    $companyQuery
-                        ->where('name', 'like', "%{$search}%")
-                        ->orWhere('nome', 'like', "%{$search}%")
-                        ->orWhere('cnpj', 'like', "%{$search}%");
-                })
-                ->orWhereHas('analyses', function ($analysisQuery) use ($search) {
-                    $analysisQuery
-                        ->where('provider', 'like', "%{$search}%")
-                        ->orWhere('quote_id', 'like', "%{$search}%")
-                        ->orWhere('quote_number', 'like', "%{$search}%")
-                        ->orWhere('product_key', 'like', "%{$search}%");
-                });
+                    ->orWhereHas('company', function ($companyQuery) use ($search) {
+                        $companyQuery
+                            ->where('name', 'like', "%{$search}%")
+                            ->orWhere('nome', 'like', "%{$search}%")
+                            ->orWhere('cnpj', 'like', "%{$search}%");
+                    })
+                    ->orWhereHas('analyses', function ($analysisQuery) use ($search) {
+                        $analysisQuery
+                            ->where('provider', 'like', "%{$search}%")
+                            ->orWhere('quote_id', 'like', "%{$search}%")
+                            ->orWhere('quote_number', 'like', "%{$search}%")
+                            ->orWhere('product_key', 'like', "%{$search}%");
+                    });
             });
         }
 
@@ -289,10 +290,10 @@ class InsuranceAnalysisController extends Controller
         ];
 
         $inProgressAnalysesQuery = InsuranceAnalysis::with([
-                'lead',
-                'company',
-                'events',
-            ])
+            'lead',
+            'company',
+            'events',
+        ])
             ->whereIn('status', ['pending', 'processing', 'queued', 'running']);
 
         if (filled($selectedCompany)) {
@@ -416,8 +417,20 @@ class InsuranceAnalysisController extends Controller
         $options = $this->reanalysisOptionsForProvider($analysis, $data);
 
         try {
+            $corretor = $requestedBy === 'admin'
+                ? Auth::guard('admin')->user()
+                : null;
+
             $updateResult = $this->leadReanalysisService
-                ->updateLeadDataAndMaybeUnlock($analysis->lead, $data);
+                ->updateLeadDataAndMaybeUnlock(
+                    lead: $analysis->lead,
+                    data: $data,
+                    corretor: $corretor instanceof Corretor
+                        ? $corretor
+                        : null,
+                    ip: $request->ip(),
+                    userAgent: $request->userAgent(),
+                );
 
             if (! $updateResult['changed']) {
                 return back()->with('error', $updateResult['message']);

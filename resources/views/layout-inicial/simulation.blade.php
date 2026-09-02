@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="X-UA-Compatible" content="ie=edge">
 
-    <link rel="icon" type="image/jpeg" href="{{ asset(config('branding.profiles.'.config('branding.active', 'tcc').'.logo', 'imgs/Logo_NVS.png')) }}">
+    <x-brand-favicon />
 
     <link 
         href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" 
