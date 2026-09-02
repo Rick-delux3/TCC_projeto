@@ -146,8 +146,61 @@ it('keeps the public header visual and opens one accessible unavailable-access m
     expect($html)
         ->toMatch('/<div class="auth-topbar__brand">.*data-brand-logo="client"/s')
         ->not->toMatch('/<a[^>]*class="auth-topbar__brand"/s')
+        ->toContain('Seguro fiança locatícia')
+        ->toContain('Precisa de ajuda?')
+        ->toContain('auth-topbar__access')
+        ->toContain('border-bottom: 1px solid var(--brand-border')
+        ->toContain('background: #ffffff !important;')
         ->and(substr_count($html, 'id="companyAccessUnavailableModal"'))->toBe(1)
         ->and(substr_count($html, 'data-bs-target="#companyAccessUnavailableModal"'))->toBe(1);
+});
+
+it('renders the public simulation gateway with the reference composition', function (string $profile) {
+    config(['branding.active' => $profile]);
+
+    $response = $this->get(route('simulation.start'));
+    $html = $response->getContent();
+
+    $response
+        ->assertOk()
+        ->assertViewIs('simulation.start')
+        ->assertSeeText('Escolha seu perfil')
+        ->assertSeeText('Dados da solicitação')
+        ->assertSeeText('Como podemos ajudar?')
+        ->assertSeeText('Qual opção descreve você?')
+        ->assertSeeText('Leva menos de 1 minuto')
+        ->assertSeeText('Ambiente seguro')
+        ->assertSeeText('Você poderá revisar os dados antes de enviar.');
+
+    expect($html)
+        ->toContain('data-simulation-start')
+        ->toContain('simulation-progress')
+        ->toContain('simulation-journey__aside')
+        ->toContain('simulation-journey__city')
+        ->toContain('simulation-option__indicator')
+        ->toContain('aria-live="polite"')
+        ->toContain('name="_token"')
+        ->and(substr_count($html, 'name="tipo_solicitante"'))->toBe(3);
+})->with(['tcc', 'client']);
+
+it('keeps the refactored simulation frontend free from unsafe dynamic html and browser storage', function () {
+    $startView = file_get_contents(resource_path('views/simulation/start.blade.php'));
+    $topbarView = file_get_contents(resource_path('views/auth/partials/auth-topbar.blade.php'));
+    $javascript = file_get_contents(resource_path('js/simulation.js'));
+
+    expect($startView)
+        ->not->toContain('{!!')
+        ->toContain('@csrf')
+        ->and($topbarView)
+        ->not->toContain('{!!')
+        ->not->toContain('env(')
+        ->not->toContain('target="_blank"')
+        ->and($javascript)
+        ->toContain('textContent')
+        ->not->toContain('innerHTML')
+        ->not->toContain('eval(')
+        ->not->toContain('localStorage')
+        ->not->toContain('sessionStorage');
 });
 
 it('uses the fictitious logo as the safe component fallback', function () {
