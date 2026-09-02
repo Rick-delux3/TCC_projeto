@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\CorretorActivityLog;
 use App\Models\Imobiliaria;
 use App\Models\Lead;
 use App\Models\LeadLoversTag;
@@ -88,7 +89,9 @@ class CorretorDashboardController extends Controller
                 'imobiliariaInformada',
                 'locador',
                 'insuranceAnalyses',
-                'leadLoversTagOperation',
+                'leadLoversTagOperation.desiredRequestLog.corretor',
+                'leadLoversTagOperation.inflightRequestLog.corretor',
+                'latestDataUpdateRequestLog.corretor',
             ]);
 
         $leadsQuery->when($leadSearch, function ($query) use ($leadSearch) {
@@ -192,6 +195,81 @@ class CorretorDashboardController extends Controller
                 ->all()
             : [];
 
+        $manualLeadTagProcessingStates = $canViewLeads
+            ? $leads->getCollection()
+                ->mapWithKeys(function (Lead $lead): array {
+                    $operation = $lead->leadLoversTagOperation;
+                    $requestLog = $operation?->activeManualRequestLog();
+                    $corretorName = trim((string) $requestLog?->corretor?->name);
+                    $requestedResult = data_get(
+                        $requestLog?->new_values,
+                        'requested_result'
+                    );
+                    $resultLabel = trim((string) data_get(
+                        $requestLog?->new_values,
+                        'requested_label',
+                        is_string($requestedResult)
+                            ? ManualLeadResultTags::label($requestedResult)
+                            : null
+                    ));
+
+                    if (
+                        ! $requestLog instanceof CorretorActivityLog
+                        || blank($corretorName)
+                        || blank($resultLabel)
+                    ) {
+                        return [];
+                    }
+
+                    return [
+                        (int) $lead->id => [
+                            'request_id' => (int) $requestLog->id,
+                            'corretor_name' => $corretorName,
+                            'result_label' => $resultLabel,
+                        ],
+                    ];
+                })
+                ->all()
+            : [];
+
+        $leadDataSyncProcessingStates = $canViewLeads
+            ? $leads->getCollection()
+                ->mapWithKeys(function (Lead $lead): array {
+                    $requestLog = $lead->latestDataUpdateRequestLog;
+                    $corretorName = trim((string) $requestLog?->corretor?->name);
+                    $syncVersion = (int) $lead->leadlovers_update_version;
+                    $requestSyncVersion = (int) data_get(
+                        $requestLog?->new_values,
+                        'leadlovers_update_version'
+                    );
+
+                    if (
+                        ! in_array($lead->leadlovers_update_status, [
+                            'pending',
+                            'processing',
+                        ], true)
+                        || ! $requestLog instanceof CorretorActivityLog
+                        || $requestLog->action !== 'lead_data_update_requested'
+                        || $requestLog->model_type !== Lead::class
+                        || (int) $requestLog->model_id !== (int) $lead->id
+                        || $syncVersion <= 0
+                        || $requestSyncVersion !== $syncVersion
+                        || blank($corretorName)
+                    ) {
+                        return [];
+                    }
+
+                    return [
+                        (int) $lead->id => [
+                            'request_id' => (int) $requestLog->id,
+                            'corretor_name' => $corretorName,
+                            'sync_version' => $syncVersion,
+                        ],
+                    ];
+                })
+                ->all()
+            : [];
+
         $dashboardStats = [
             'totalLeads' => $canViewLeads ? Lead::query()->createdThroughSystem()->count() : 0,
             'newLeads' => $canViewLeads
@@ -260,6 +338,8 @@ class CorretorDashboardController extends Controller
             'leadLoversSyncOptions',
             'notSentToLeadLoversCount',
             'leadLoversFailures',
+            'manualLeadTagProcessingStates',
+            'leadDataSyncProcessingStates',
         ));
 
     }

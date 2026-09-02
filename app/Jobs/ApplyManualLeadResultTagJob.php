@@ -267,15 +267,14 @@ class ApplyManualLeadResultTagJob implements ShouldBeUniqueUntilProcessing, Shou
             $completed = $coordinator->completeCurrent(
                 $this->leadId,
                 $state->version,
-                fn (LeadLoversTagOperation $lockedState): mixed =>
-                    $this->persistConfirmedTags(
-                        resultTags: $resultTags,
-                        catalog: $catalog,
-                        selectedTag: $selectedTag,
-                        retetion: $retetion,
-                        remoteTags: $remoteTags,
-                        operationVersion: $lockedState->version,
-                    )
+                fn (LeadLoversTagOperation $lockedState): mixed => $this->persistConfirmedTags(
+                    resultTags: $resultTags,
+                    catalog: $catalog,
+                    selectedTag: $selectedTag,
+                    retetion: $retetion,
+                    remoteTags: $remoteTags,
+                    operationVersion: $lockedState->version,
+                )
             );
 
             if ($completed === null) {
@@ -777,8 +776,6 @@ class ApplyManualLeadResultTagJob implements ShouldBeUniqueUntilProcessing, Shou
                 operationVersion: $operationVersion
             );
 
-            $tagsChanged = $lead->wasChanged('tags_originais');
-
             CorretorActivityLog::query()->create([
                 'corretor_id' => $this->corretorId,
                 'action' => 'lead_tag_update_completed',
@@ -806,20 +803,12 @@ class ApplyManualLeadResultTagJob implements ShouldBeUniqueUntilProcessing, Shou
                 'user_agent' => $this->normalizedUserAgent(),
             ]);
 
-            if ($tagsChanged) {
-
-                $resourceId = (int) $lead->id;
-
-                $companyId = $lead->company_id !== null ? (int) $lead->company_id : null;
-
-
-                DashboardActivityChanged::dispatch(
-                    'lead',
-                    $resourceId,
-                    $companyId,
-                    'lead.tags.changed',
-                );
-            }
+            DashboardActivityChanged::dispatch(
+                'lead',
+                (int) $lead->id,
+                $lead->company_id !== null ? (int) $lead->company_id : null,
+                'lead.tags.changed',
+            );
 
             return true;
         });
@@ -1019,6 +1008,15 @@ class ApplyManualLeadResultTagJob implements ShouldBeUniqueUntilProcessing, Shou
                     'ip' => $this->normalizedIp(),
                     'user_agent' => $this->normalizedUserAgent(),
                 ]);
+            }
+
+            if ($this->requestLogIdOrNull() !== null) {
+                DashboardActivityChanged::dispatch(
+                    'lead',
+                    (int) $lead->id,
+                    $lead->company_id !== null ? (int) $lead->company_id : null,
+                    'lead.tags.processing.failed',
+                );
             }
 
             Log::error(

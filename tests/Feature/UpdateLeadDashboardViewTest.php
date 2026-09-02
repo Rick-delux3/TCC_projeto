@@ -1,9 +1,11 @@
 <?php
 
 use App\Models\Corretor;
+use App\Models\CorretorActivityLog;
 use App\Models\Imobiliaria;
 use App\Models\Lead;
 use App\Models\User;
+use App\Services\LeadLoversTagOperationCoordinator;
 use App\Support\CorretorPermissions;
 use App\Support\LeadLoversInitialFailureCatalog;
 use App\Support\ManualLeadResultTags;
@@ -221,6 +223,108 @@ function updateLeadDashboardListedNames(string $html): array
 
     return $names;
 }
+
+it('shows who requested a manual tag while LeadLovers is processing it', function () {
+    $corretor = updateLeadDashboardAdmin([
+        'name' => 'Carlos Henrique',
+    ]);
+    $lead = updateLeadDashboardLead([
+        'tags_originais' => 'Origem X, Ruim',
+        'leadlovers_status' => 'sent',
+        'leadlovers_lead_id' => 981,
+        'sent_to_leadlovers_at' => now(),
+    ]);
+    $requestLog = CorretorActivityLog::query()->create([
+        'corretor_id' => $corretor->id,
+        'action' => 'lead_tag_update_requested',
+        'model_type' => Lead::class,
+        'model_id' => $lead->id,
+        'new_values' => [
+            'requested_result' => ManualLeadResultTags::APPROVED,
+            'requested_label' => 'Aprovado',
+            'leadlovers_tag_key' => 'aprovados',
+        ],
+    ]);
+    $coordinator = app(LeadLoversTagOperationCoordinator::class);
+    $operation = $coordinator->registerManualDesired(
+        leadId: $lead->id,
+        tagKey: 'aprovados',
+        result: ManualLeadResultTags::APPROVED,
+        requestLogId: $requestLog->id,
+        corretorId: $corretor->id,
+    );
+
+    $processingResponse = $this
+        ->actingAs($corretor, 'admin')
+        ->get(route('Dashboard-Admin'));
+
+    $processingResponse
+        ->assertSuccessful()
+        ->assertSee('data-manual-tag-processing', false)
+        ->assertSee('data-request-id="'.$requestLog->id.'"', false)
+        ->assertSee('Em processamento')
+        ->assertSee('Carlos Henrique')
+        ->assertSee('Aprovado');
+
+    $coordinator->completeWithoutInflight(
+        leadId: $lead->id,
+        version: $operation->version,
+    );
+
+    $this
+        ->actingAs($corretor, 'admin')
+        ->get(route('Dashboard-Admin'))
+        ->assertSuccessful()
+        ->assertDontSee('data-manual-tag-processing', false);
+});
+
+it('shows who requested lead data changes only while LeadLovers is synchronizing them', function () {
+    $corretor = updateLeadDashboardAdmin([
+        'name' => 'Carlos Henrique',
+    ]);
+    $lead = updateLeadDashboardLead([
+        'leadlovers_status' => 'sent',
+        'leadlovers_lead_id' => 982,
+        'sent_to_leadlovers_at' => now(),
+        'leadlovers_update_status' => 'pending',
+        'leadlovers_update_version' => 4,
+    ]);
+    $requestLog = CorretorActivityLog::query()->create([
+        'corretor_id' => $corretor->id,
+        'action' => 'lead_data_update_requested',
+        'model_type' => Lead::class,
+        'model_id' => $lead->id,
+        'new_values' => [
+            'leadlovers_update_status' => 'pending',
+            'leadlovers_update_version' => 4,
+            'requested_fields' => ['name', 'phone'],
+        ],
+    ]);
+
+    $processingResponse = $this
+        ->actingAs($corretor, 'admin')
+        ->get(route('Dashboard-Admin'));
+
+    $processingResponse
+        ->assertSuccessful()
+        ->assertSee('data-lead-data-sync-processing', false)
+        ->assertSee('data-request-id="'.$requestLog->id.'"', false)
+        ->assertSee('data-sync-version="4"', false)
+        ->assertSee('Em processamento')
+        ->assertSee('Carlos Henrique')
+        ->assertSee('solicitou a alteração dos dados do lead')
+        ->assertSee('LeadLovers');
+
+    $lead->forceFill([
+        'leadlovers_update_status' => 'synced',
+    ])->save();
+
+    $this
+        ->actingAs($corretor, 'admin')
+        ->get(route('Dashboard-Admin'))
+        ->assertSuccessful()
+        ->assertDontSee('data-lead-data-sync-processing', false);
+});
 
 it('lists approved leads first across pagination and keeps each group chronological', function () {
     $corretor = updateLeadDashboardAdmin();

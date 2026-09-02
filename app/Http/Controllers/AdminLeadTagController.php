@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Events\DashboardActivityChanged;
 use App\Http\Requests\UpdateLeadResultTagRequest;
 use App\Jobs\ApplyManualLeadResultTagJob;
 use App\Models\Corretor;
@@ -68,7 +69,6 @@ class AdminLeadTagController extends Controller
                 ])
                 ->withInput();
         }
-
 
         if (
             ManualLeadResultTags::currentFromTags($lead->tags_originais)
@@ -205,6 +205,15 @@ class AdminLeadTagController extends Controller
                 $requestLog->id,
                 version: $syncState->version,
             )->afterCommit();
+
+            DashboardActivityChanged::dispatch(
+                resource: 'lead',
+                resourceId: (int) $lockedLead->id,
+                companyId: $lockedLead->company_id !== null
+                    ? (int) $lockedLead->company_id
+                    : null,
+                change: 'lead.tags.processing',
+            );
 
             return true;
         });

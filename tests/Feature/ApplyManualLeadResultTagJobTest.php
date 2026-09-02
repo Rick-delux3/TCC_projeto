@@ -202,6 +202,14 @@ it('allows an active member with permission to request each commercial result', 
             && $job->requestLogId === $requestLogId
             && $job->phase === null
     );
+
+    Queue::assertPushedOn(
+        'broadcasts',
+        BroadcastEvent::class,
+        fn (BroadcastEvent $job): bool => $job->event instanceof DashboardActivityChanged
+            && $job->event->resourceId === $lead->id
+            && $job->event->change === 'lead.tags.processing',
+    );
 })->with([
     'Aprovado' => [ManualLeadResultTags::APPROVED],
     'Recusado' => [ManualLeadResultTags::REJECTED],

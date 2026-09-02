@@ -319,6 +319,95 @@ it('uses the framed client logo in both dashboard headers and sidebars', functio
     }
 })->with(['tcc', 'client']);
 
+it('renders the dashboard header composition for each brand profile', function (
+    string $profile,
+    string $operationLabel,
+    string $expectedLogo,
+) {
+    config(['branding.active' => $profile]);
+    $corretor = Corretor::query()->create([
+        'name' => 'Carlos Alves',
+        'email' => "header-{$profile}@example.test",
+        'password' => 'password',
+        'role' => Corretor::ROLE_CEO,
+        'permissions' => [],
+        'active' => true,
+        'first_login_verified_at' => now(),
+    ]);
+
+    $this->actingAs($corretor, 'admin');
+    $adminHeader = view('layout-inicial.partials.header_admin', [
+        'dashboardStats' => ['newLeads' => 3],
+    ])->render();
+
+    $this->actingAs(User::factory()->create());
+    $companyHeader = view('layout-inicial.partials.header_imob', [
+        'dashboardStats' => ['newLeads' => 3],
+    ])->render();
+
+    foreach ([$adminHeader, $companyHeader] as $html) {
+        expect($html)
+            ->toContain('data-dashboard-header="'.$profile.'"')
+            ->toContain('x-data="{ isCompact: window.scrollY > 24 }"')
+            ->toContain('x-on:scroll.window.throttle.100ms="isCompact = window.scrollY > 24"')
+            ->toContain('x-bind:class="{ \'is-compact\': isCompact }"')
+            ->toContain('dashboard-client-header__rail')
+            ->toContain('dashboard-client-header__primary')
+            ->toContain('dashboard-client-header__secondary')
+            ->toContain('dashboard-header-nav')
+            ->toContain('dashboard-header-status')
+            ->toContain($operationLabel)
+            ->toContain('dashboard-notification-count')
+            ->toContain('aria-label="Localização atual"')
+            ->toContain($expectedLogo);
+    }
+
+    expect($adminHeader)
+        ->toContain('Painel do CEO')
+        ->toContain('Carlos Alves')
+        ->toContain('Central de leads')
+        ->and($companyHeader)
+        ->toContain('Painel da imobiliária')
+        ->toContain('Simulação');
+})->with([
+    'NVS' => ['tcc', 'Sistema operacional', 'imgs/Logo_NVS.png'],
+    'Aki Aluga' => ['client', 'Operação ativa', 'imgs/logo-header.jpg'],
+]);
+
+it('keeps the branded dashboard header responsive and accessible', function () {
+    $adminEntry = file_get_contents(
+        resource_path('css/header-dashboard-admin.css'),
+    );
+    $companyEntry = file_get_contents(
+        resource_path('css/header-dashboard-user.css'),
+    );
+    $stylesheet = file_get_contents(
+        resource_path('css/dashboard-header.css'),
+    );
+
+    expect($adminEntry)
+        ->toContain('@import "./dashboard-header.css";')
+        ->and($companyEntry)
+        ->toContain('@import "./dashboard-header.css";')
+        ->and($stylesheet)
+        ->toContain('.dashboard-client-header[data-dashboard-header="tcc"]')
+        ->toContain('.dashboard-client-header[data-dashboard-header="client"]')
+        ->toContain('linear-gradient(108deg, #030133 0%, #020127 100%)')
+        ->toContain('background: #ffffff;')
+        ->toContain('background: #e6000b;')
+        ->toContain('min-height: 48px;')
+        ->toContain('.dashboard-client-header.is-compact')
+        ->toContain('@keyframes dashboard-header-enter')
+        ->toContain('@keyframes dashboard-status-pulse')
+        ->toContain('.dashboard-notification-menu.show')
+        ->toContain(':focus-visible')
+        ->toContain('@media (min-width: 992px)')
+        ->toContain('@media (max-width: 991.98px)')
+        ->toContain('@media (max-width: 575.98px)')
+        ->toContain('@media (prefers-reduced-motion: reduce)')
+        ->toContain('@media (forced-colors: active)');
+});
+
 it('hides analysis navigation and keeps lead simulation available when analyses are disabled', function () {
     $this->actingAs(User::factory()->create());
     config(['features.insurance_analysis.enabled' => false]);

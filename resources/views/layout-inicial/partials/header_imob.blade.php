@@ -45,13 +45,33 @@
         'features.insurance_analysis.enabled',
         false
     );
+
+    $brandProfile = config('branding.active', 'tcc');
+    $brandName = config(
+        "branding.profiles.{$brandProfile}.name",
+        'NVS Seguros'
+    );
+    $dashboardRoute = route('company.dashboard');
+    $leadsRoute = $dashboardRoute.'#leads-section';
+    $simulationRoute = route('simulation.registered-company.access');
+    $panelLabel = 'Painel da imobiliária';
+    $operationLabel = $brandProfile === 'client'
+        ? 'Operação ativa'
+        : 'Sistema operacional';
+    $currentSectionLabel = request()->routeIs('insurance-analyses.*')
+        ? 'Análises'
+        : 'Central de leads';
 @endphp
 
-<header class="dashboard-client-header sticky-top">
-    <nav class="navbar navbar-expand dashboard-client-navbar">
-        <div class="container-fluid px-3 px-lg-4">
-
-            {{-- Botão que abre o menu lateral vertical --}}
+<header
+    class="dashboard-client-header sticky-top"
+    data-dashboard-header="{{ $brandProfile }}"
+    x-data="{ isCompact: window.scrollY > 24 }"
+    x-on:scroll.window.throttle.100ms="isCompact = window.scrollY > 24"
+    x-bind:class="{ 'is-compact': isCompact }"
+>
+    <div class="dashboard-client-header__primary">
+        <div class="dashboard-client-header__rail">
             <button
                 class="btn dashboard-sidebar-toggle"
                 type="button"
@@ -62,90 +82,83 @@
             >
                 <i class="bi bi-list" aria-hidden="true"></i>
             </button>
+        </div>
 
-            {{-- Marca / logo --}}
-            <a class="navbar-brand dashboard-client-brand ms-2" href="{{ route('company.dashboard') }}">
+        <div class="navbar navbar-expand dashboard-client-navbar">
+            <a class="navbar-brand dashboard-client-brand" href="{{ $dashboardRoute }}">
                 <span class="dashboard-client-brand__logo">
                     <x-brand-logo variant="logo_header" />
                 </span>
 
-                <span class="dashboard-client-brand__text d-none d-md-flex">
-                    <strong>{{ config('branding.profiles.'.config('branding.active', 'tcc').'.name', 'NVS Seguros') }}</strong>
-                    <small>Painel da imobiliária</small>
+                <span class="dashboard-client-brand__text d-none d-sm-flex">
+                    <strong>{{ $brandName }}</strong>
+                    <small>{{ $panelLabel }}</small>
                 </span>
             </a>
 
-            {{-- Área direita do header --}}
-            <div class="ms-auto d-flex align-items-center gap-2 gap-md-3">
+            <nav class="dashboard-header-nav" aria-label="Seções do painel">
+                <a class="dashboard-header-nav__link" href="{{ $dashboardRoute }}">
+                    Visão geral
+                </a>
+                <a
+                    class="dashboard-header-nav__link {{ request()->routeIs('company.dashboard') ? 'active' : '' }}"
+                    href="{{ $leadsRoute }}"
+                    @if (request()->routeIs('company.dashboard')) aria-current="page" @endif
+                >
+                    Leads
+                </a>
 
-                {{-- Sino de notificações --}}
-                <div class="dropdown">
-                    <button
-                        class="btn dashboard-notification-btn position-relative"
-                        type="button"
-                        data-bs-toggle="dropdown"
-                        aria-expanded="false"
-                        aria-label="Abrir notificações"
+                @if ($insuranceAnalysisEnabled)
+                    <a
+                        class="dashboard-header-nav__link {{ request()->routeIs('insurance-analyses.*') ? 'active' : '' }}"
+                        href="{{ route('insurance-analyses.index') }}"
+                        @if (request()->routeIs('insurance-analyses.*')) aria-current="page" @endif
                     >
-                        <i class="bi bi-bell" aria-hidden="true"></i>
+                        Análises
+                    </a>
+                @endif
 
-                        @if ($notificationCount > 0)
-                            <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger">
-                                {{ $notificationCount > 99 ? '99+' : $notificationCount }}
-                            </span>
-                        @endif
-                    </button>
+                <a class="dashboard-header-nav__link" href="{{ $simulationRoute }}">
+                    Simulação
+                </a>
+            </nav>
 
-                    <div class="dropdown-menu dropdown-menu-end dashboard-notification-menu shadow border-0 rounded-4 p-0">
-                        <div class="p-3 border-bottom">
-                            <h6 class="fw-bold mb-1">Notificações</h6>
-                            <p class="text-muted small mb-0">
-                                Acompanhe os novos leads recebidos.
-                            </p>
-                        </div>
+            <div class="dashboard-header-actions">
+                @if ($brandProfile === 'tcc')
+                    @include('layout-inicial.partials.dashboard-header-notifications', [
+                        'notificationCount' => $notificationCount,
+                        'leadsRoute' => $leadsRoute,
+                        'notificationDescription' => 'Acompanhe os novos leads recebidos.',
+                        'notificationItemLabel' => 'lead(s) novo(s)',
+                    ])
+                    <span class="dashboard-header-separator" aria-hidden="true"></span>
+                @endif
 
-                        <div class="p-3">
-                            @if ($notificationCount > 0)
-                                <div class="d-flex gap-3 align-items-start">
-                                    <span class="dashboard-notification-icon bg-primary-subtle text-primary">
-                                        <i class="bi bi-person-plus" aria-hidden="true"></i>
-                                    </span>
+                <span class="dashboard-header-status">
+                    <span class="dashboard-header-status__dot" aria-hidden="true"></span>
+                    {{ $operationLabel }}
+                </span>
 
-                                    <div>
-                                        <div class="fw-semibold">
-                                            {{ $notificationCount }} lead(s) novo(s)
-                                        </div>
+                <span class="dashboard-header-separator" aria-hidden="true"></span>
 
-                                        <div class="small text-muted">
-                                            Existem leads em fase inicial aguardando acompanhamento.
-                                        </div>
+                @if ($brandProfile !== 'tcc')
+                    @include('layout-inicial.partials.dashboard-header-notifications', [
+                        'notificationCount' => $notificationCount,
+                        'leadsRoute' => $leadsRoute,
+                        'notificationDescription' => 'Acompanhe os novos leads recebidos.',
+                        'notificationItemLabel' => 'lead(s) novo(s)',
+                    ])
+                    <span class="dashboard-header-separator" aria-hidden="true"></span>
+                @endif
 
-                                        <a href="{{ route('company.dashboard') }}#leads-section" class="small fw-semibold text-decoration-none">
-                                            Ver leads
-                                        </a>
-                                    </div>
-                                </div>
-                            @else
-                                <div class="text-center py-3">
-                                    <i class="bi bi-check-circle text-success fs-4" aria-hidden="true"></i>
-                                    <p class="small text-muted mb-0 mt-2">
-                                        Nenhuma nova notificação no momento.
-                                    </p>
-                                </div>
-                            @endif
-                        </div>
-                    </div>
-                </div>
-
-                {{-- Perfil da imobiliária --}}
-                <div class="dropdown">
+                <div class="dropdown dashboard-profile">
                     <button
                         class="btn dashboard-profile-btn d-flex align-items-center gap-2"
                         type="button"
                         data-bs-toggle="dropdown"
                         aria-expanded="false"
+                        aria-label="Abrir menu de {{ $companyName }}"
                     >
-                        {{-- Avatar simples com iniciais --}}
                         <span class="dashboard-profile-avatar">
                             {{ $companyInitials ?: 'IM' }}
                         </span>
@@ -155,7 +168,7 @@
                             <small>{{ $companyEmail }}</small>
                         </span>
 
-                        <i class="bi bi-chevron-down small d-none d-md-inline" aria-hidden="true"></i>
+                        <i class="bi bi-chevron-down dashboard-profile-chevron" aria-hidden="true"></i>
                     </button>
 
                     <ul class="dropdown-menu dropdown-menu-end shadow border-0 rounded-4 dashboard-profile-menu">
@@ -196,10 +209,17 @@
                         </li>
                     </ul>
                 </div>
-
             </div>
         </div>
-    </nav>
+    </div>
+
+    <div class="dashboard-client-header__secondary">
+        <div class="dashboard-header-breadcrumb" aria-label="Localização atual">
+            <span>Dashboard</span>
+            <i class="bi bi-slash-lg" aria-hidden="true"></i>
+            <strong>{{ $currentSectionLabel }}</strong>
+        </div>
+    </div>
 </header>
 
 {{-- Menu lateral vertical --}}

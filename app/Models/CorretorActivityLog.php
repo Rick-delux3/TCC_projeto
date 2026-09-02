@@ -3,12 +3,14 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\MorphTo;
 
 class CorretorActivityLog extends Model
 {
     protected $table = 'logs_atividades_corretores';
 
-     protected $fillable = [
+    protected $fillable = [
         'corretor_id',
         'action',
         'model_type',
@@ -25,17 +27,17 @@ class CorretorActivityLog extends Model
         'new_values' => 'array',
     ];
 
-    public function corretor()
+    public function corretor(): BelongsTo
     {
         return $this->belongsTo(Corretor::class, 'corretor_id');
     }
 
-    public function admin()
+    public function admin(): BelongsTo
     {
         return $this->belongsTo(Corretor::class, 'corretor_id');
     }
 
-    public function subject()
+    public function subject(): MorphTo
     {
         return $this->morphTo(
             name: 'subject',

@@ -165,6 +165,9 @@ it('renders grouped permission cards and blocks real estate actions until visual
         ->actingAs($ceo, 'admin')
         ->get(route('admin.config-equipe.create'))
         ->assertOk()
+        ->assertSeeText('Ativar todas as permissões')
+        ->assertSee('data-team-permission-toggle-all', false)
+        ->assertSee('data-team-permission-toggle-all-status', false)
         ->assertSeeText('Leads e clientes')
         ->assertSeeText('Análises')
         ->assertSeeText('Imobiliárias')
@@ -187,6 +190,36 @@ it('renders grouped permission cards and blocks real estate actions until visual
         ->and($createInput[0] ?? '')->toContain('disabled')
         ->and($updateInput[0] ?? '')->toContain('disabled')
         ->and($deleteInput[0] ?? '')->toContain('disabled');
+});
+
+it('renders the shared permission toggle unchecked on create and checked when editing full access', function () {
+    $ceo = createRealEstatePermissionCorretor([
+        'role' => Corretor::ROLE_CEO,
+    ]);
+    $member = createRealEstatePermissionCorretor([
+        'permissions' => CorretorPermissions::keys(),
+    ]);
+
+    $createHtml = $this
+        ->actingAs($ceo, 'admin')
+        ->get(route('admin.config-equipe.create'))
+        ->assertOk()
+        ->getContent();
+
+    $editHtml = $this
+        ->get(route('admin.config-equipe.edit', $member))
+        ->assertOk()
+        ->getContent();
+
+    preg_match('/<input\b[^>]*data-team-permission-toggle-all[^>]*>/s', $createHtml, $createToggle);
+    preg_match('/<input\b[^>]*data-team-permission-toggle-all[^>]*>/s', $editHtml, $editToggle);
+
+    expect($createToggle[0] ?? '')
+        ->toContain('aria-controls=')
+        ->not->toContain('checked')
+        ->and($editToggle[0] ?? '')
+        ->toContain('aria-controls=')
+        ->toContain('checked');
 });
 
 it('renders existing dependent permissions enabled only when visualization is present', function () {
@@ -255,7 +288,12 @@ it('keeps the permission dependency behavior centralized in the shared assets', 
         ->toContain('input.dataset.teamPermissionRequires')
         ->toContain('input.checked = false')
         ->toContain('input.disabled = !dependenciesSatisfied')
+        ->toContain('handlePermissionToggleAllChange')
+        ->toContain('permissionToggleAll.indeterminate')
+        ->toContain('input.checked = shouldSelectAll')
         ->and($css)
         ->toContain('.team-permission-group')
-        ->toContain('.team-permission-option.is-disabled');
+        ->toContain('.team-permission-option.is-disabled')
+        ->toContain('.team-permission-select-all')
+        ->toContain('.team-permission-select-all.is-partial');
 });
