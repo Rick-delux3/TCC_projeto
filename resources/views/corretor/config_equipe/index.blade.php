@@ -1,4 +1,4 @@
-@extends('layout-inicial.dashboard_Admin')
+@extends('layout-inicial.Dashboard_Admin')
 
 @push('styles')
     @vite('resources/css/config-equipe.css')
