@@ -307,7 +307,7 @@ it('applies the inherited validation rules to administrative registration', func
     $this->assertDatabaseCount('users', 0);
 });
 
-it('registers the company and its user in the administrative flow', function () {
+it('registers the company and its user in the administrative flow', function (string $document, string $normalizedDocument) {
     Notification::fake();
 
     $creator = createImobiliariaAdmin([
@@ -337,6 +337,7 @@ it('registers the company and its user in the administrative flow', function () 
             route('admin.imobiliarias.store'),
             validAdminCompanyPayload($tag->leadlovers_tag_id, [
                 'lead_form_active' => '0',
+                'cnpj' => $document,
             ]),
         );
 
@@ -358,6 +359,7 @@ it('registers the company and its user in the administrative flow', function () 
         ->cep->toBe('01001000')
         ->lead_form_active->toBeFalse()
         ->leadlovers_tag_id->toBe(702)
+        ->cnpj->toBe($normalizedDocument)
         ->and($user->company_id)->toBe($company->id)
         ->and(Hash::check('senha1234', $company->password))->toBeTrue()
         ->and(Hash::check('senha1234', $user->password))->toBeTrue();
@@ -380,6 +382,67 @@ it('registers the company and its user in the administrative flow', function () 
         fn (CompanyAcessCodeNotification $notification): bool => $notification->companyName === $company->name
             && $notification->accessCode === $company->lead_access_code,
     );
+})->with([
+    ['11.222.333/0001-81', '11222333000181'],
+    ['11222333000181', '11222333000181'],
+    ['529.982.247-25', '52998224725'],
+    ['52998224725', '52998224725'],
+    ['012.345.678-90', '01234567890'],
+]);
+
+it('rejects invalid company documents without creating a company or sending mail', function (mixed $document) {
+    Notification::fake();
+    $creator = createImobiliariaAdmin([
+        'permissions' => ['imobiliarias.visualizar', 'imobiliarias.cadastrar'],
+    ]);
+    $this->mock(CepService::class, function (MockInterface $mock) {
+        $mock->shouldReceive('find')->andReturn([
+            'cep' => '01001000', 'cidade' => 'São Paulo', 'estado' => 'SP',
+        ]);
+    });
+    $this->actingAs($creator, 'admin')->post(route('admin.imobiliarias.store'), array_merge(
+        validAdminCompanyPayload(702),
+        ['cnpj' => $document],
+    ))->assertSessionHasErrors('cnpj');
+
+    $this->assertDatabaseCount('imobiliarias', 0);
+    Notification::assertNothingSent();
+})->with([
+    ['52998224724'], ['11222333000182'], ['11111111111'],
+    ['00000000000000'], ['123456789012'], [''], [null],
+    [['52998224725']], ['abc52998224725'], ['52998224725<script>'],
+]);
+
+it('allows editing an existing company registered with a cpf', function () {
+    $editor = createImobiliariaAdmin([
+        'permissions' => ['imobiliarias.visualizar', 'imobiliarias.editar'],
+    ]);
+    $company = createManagedImobiliaria(['cnpj' => '52998224725']);
+
+    $this->actingAs($editor, 'admin')
+        ->patch(route('admin.imobiliarias.update', $company), validCompanyUpdatePayload($company, [
+            'cnpj' => '529.982.247-25', 'city' => 'Campinas',
+        ]))->assertSessionHasNoErrors();
+
+    expect($company->fresh())->cnpj->toBe('52998224725')->city->toBe('Campinas');
+});
+
+it('rejects a duplicate cpf after normalizing its punctuation', function () {
+    Notification::fake();
+    createManagedImobiliaria(['cnpj' => '52998224725']);
+    $creator = createImobiliariaAdmin([
+        'permissions' => ['imobiliarias.visualizar', 'imobiliarias.cadastrar'],
+    ]);
+    $this->mock(CepService::class, function (MockInterface $mock) {
+        $mock->shouldReceive('find')->andReturn([
+            'cep' => '01001000', 'cidade' => 'São Paulo', 'estado' => 'SP',
+        ]);
+    });
+    $this->actingAs($creator, 'admin')->post(route('admin.imobiliarias.store'), array_merge(
+        validAdminCompanyPayload(702), ['cnpj' => '529.982.247-25'],
+    ))->assertSessionHasErrors('cnpj');
+    $this->assertDatabaseCount('imobiliarias', 1);
+    Notification::assertNothingSent();
 });
 
 it('keeps the company registered when the welcome email cannot be queued', function () {

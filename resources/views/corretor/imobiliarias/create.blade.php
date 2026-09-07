@@ -207,7 +207,7 @@
 
                             <div class="col-12 col-lg-7">
                                 <label for="cnpj" class="form-label fw-semibold">
-                                    CNPJ <span class="text-danger" aria-hidden="true">*</span>
+                                    CPF ou CNPJ <span class="text-danger" aria-hidden="true">*</span>
                                 </label>
                                 <div class="input-group">
                                     <span class="input-group-text" aria-hidden="true"><i class="bi bi-file-earmark-text"></i></span>
@@ -219,7 +219,7 @@
                                         class="form-control @error('cnpj') is-invalid @enderror"
                                         inputmode="numeric"
                                         maxlength="18"
-                                        placeholder="00.000.000/0000-00"
+                                        placeholder="CPF ou CNPJ"
                                         @error('cnpj') aria-describedby="cnpj-error" @enderror
                                         required
                                     >

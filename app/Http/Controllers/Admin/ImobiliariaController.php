@@ -4,7 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Actions\Companies\RegisterCompany;
 use App\Http\Controllers\Controller;
-use App\Http\Requests\Admin\StoreCompanyRequest;
+use App\Http\Requests\Admin\StoreCompanyRequest as StoreAdminCompanyRequest;
 use App\Http\Requests\Admin\UpdateCompanyRequest;
 use App\Models\Corretor;
 use App\Models\CorretorActivityLog;
@@ -95,7 +95,7 @@ class ImobiliariaController extends Controller
     }
 
     public function store(
-        StoreCompanyRequest $request,
+        StoreAdminCompanyRequest $request,
         RegisterCompany $registerCompany,
     ): RedirectResponse {
         $corretor = $request->user('admin');

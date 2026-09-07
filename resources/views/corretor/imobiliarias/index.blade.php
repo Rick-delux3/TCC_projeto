@@ -22,6 +22,10 @@
     $formatCnpj = static function (?string $value): string {
         $numbers = preg_replace('/\D+/', '', (string) $value) ?? '';
 
+        if (strlen($numbers) === 11) {
+            return substr($numbers, 0, 3).'.'.substr($numbers, 3, 3).'.'.substr($numbers, 6, 3).'-'.substr($numbers, 9, 2);
+        }
+
         if (strlen($numbers) !== 14) {
             return filled($value) ? (string) $value : 'Não informado';
         }
@@ -189,7 +193,7 @@
                                 value="{{ $search }}"
                                 class="form-control"
                                 maxlength="100"
-                                placeholder="Nome, CNPJ ou e-mail"
+                                placeholder="Nome, CPF/CNPJ ou e-mail"
                                 autocomplete="off"
                             >
                         </div>
@@ -416,7 +420,7 @@
 
                                 <dl class="company-mobile-details mb-3">
                                     <div>
-                                        <dt>CNPJ</dt>
+                                        <dt>CPF/CNPJ</dt>
                                         <dd>{{ $formatCnpj($company->cnpj) }}</dd>
                                     </div>
                                      <div>
@@ -629,7 +633,7 @@
 
                                 <div class="col-12 col-md-6">
                                     <label for="edit-company-cnpj" class="form-label fw-semibold">
-                                        CNPJ <span class="text-danger" aria-hidden="true">*</span>
+                                        CPF ou CNPJ <span class="text-danger" aria-hidden="true">*</span>
                                     </label>
                                     <input
                                         type="text"
@@ -639,7 +643,7 @@
                                         class="form-control @error('cnpj') is-invalid @enderror"
                                         inputmode="numeric"
                                         maxlength="18"
-                                        placeholder="00.000.000/0000-00"
+                                        placeholder="CPF ou CNPJ"
                                         data-company-cnpj-input
                                         @error('cnpj') aria-describedby="edit-company-cnpj-error" @enderror
                                         required
