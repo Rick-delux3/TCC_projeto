@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Imobiliaria;
+use App\Notifications\CompanyAcessCodeNotification;
 use App\Notifications\CompanyResetPasswordNotification;
 use App\Notifications\CorretorFirstLoginCodeNotification;
 use App\Notifications\CorretorIntegranteLoginNotification;
@@ -11,6 +12,42 @@ beforeEach(function () {
         'app.url' => 'https://app.example.test',
         'branding.active' => 'tcc',
     ]);
+});
+
+it('renders the welcome email with the correct brand and escapes company data', function (string $profile, string $logo, string $footer) {
+    config(['branding.active' => $profile]);
+    $notification = new CompanyAcessCodeNotification(
+        companyName: '<script>alert(1)</script> Horizonte & Filhos',
+        accessCode: 'ABC234',
+        accessUrl: 'https://app.example.test/simulacao/imobiliaria-cadastrada',
+    );
+    $html = $notification->toMail(new Imobiliaria)->render();
+
+    expect($html)->toContain('data-brand="'.$profile.'"')
+        ->toContain(asset($logo))
+        ->toContain($footer)
+        ->toContain('ABC234')
+        ->toContain('&lt;script&gt;alert(1)&lt;/script&gt; Horizonte &amp; Filhos')
+        ->toContain('https://app.example.test/simulacao/imobiliaria-cadastrada')
+        ->not->toContain('<script>')
+        ->not->toContain('Código ilustrativo')
+        ->not->toContain('IMOB-')
+        ->and(substr_count($html, '<h1 '))->toBe(1);
+})->with([
+    ['client', 'imgs/logo-akialuga.jpg', 'Aki Aluga · NEVES corretora de seguros'],
+    ['tcc', 'imgs/Logo_NVS.png', 'NVS Seguros · Portal imobiliário'],
+]);
+
+it('does not render executable URLs in the company welcome email', function () {
+    $notification = new CompanyAcessCodeNotification(
+        companyName: 'Imobiliária Horizonte',
+        accessCode: 'ABC234',
+        accessUrl: 'javascript:alert(1)',
+    );
+
+    expect($notification->toMail(new Imobiliaria)->render())
+        ->not->toContain('href="javascript:')
+        ->toContain('ABC234');
 });
 
 it('renders the member invitation with a dedicated branded view', function () {
