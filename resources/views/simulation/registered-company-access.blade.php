@@ -1,32 +1,33 @@
 @extends('layout-inicial.simulation')
 
+@section('inline-feedback', 'true')
 @section('content')
+@include('simulation.partials.company-access-style')
 
-<div class="container simulation-page py-4 py-lg-5">
-    <div class="simulation-panel simulation-panel--compact mx-auto" style="max-width: 520px;">
-        <div class="simulation-panel__body p-4 p-md-5">
-            <h1 class="simulation-panel__title h4 mb-2">Acesso da imobiliária cadastrada</h1>
+<div class="company-access-page">
+    <div class="company-access-card">
+        <div class="flex flex-col gap-6">
+            <h1>Acesso da imobiliária cadastrada</h1>
 
-            <p class="text-muted">
+            <p>
                 Digite a chave de acesso fornecida para sua imobiliária.
             </p>
 
-            @if ($errors->any())
-                <div class="alert alert-danger">
-                    Verifique a chave informada e tente novamente.
-                </div>
-            @endif
-
-            <form action="{{ route('simulation.registered-company.verify') }}" method="POST" class="simulation-form">
+            <form action="{{ route('simulation.registered-company.verify') }}" method="POST" class="flex flex-col gap-6" data-company-access-form>
                 @csrf
 
-                <div class="mb-3">
-                    <label for="lead_access_code" class="form-label">Chave de acesso</label>
+                <div class="flex flex-col gap-2">
+                    <label for="lead_access_code">Chave de acesso</label>
                     <input
                         type="text"
                         name="lead_access_code"
                         id="lead_access_code"
-                        class="form-control text-uppercase @error('lead_access_code') is-invalid @enderror"
+                        class="uppercase"
+                        autocomplete="off"
+                        autocapitalize="characters"
+                        spellcheck="false"
+                        aria-invalid="{{ $errors->has('lead_access_code') ? 'true' : 'false' }}"
+                        @error('lead_access_code') aria-describedby="code-error" @enderror
                         value="{{ old('lead_access_code') }}"
                         placeholder="Ex: 8K2P7A"
                         maxlength="20"
@@ -34,11 +35,16 @@
                     >
 
                     @error('lead_access_code')
-                        <div class="invalid-feedback">{{ $message }}</div>
+                        <p id="code-error" class="access-error" role="alert">{{ $message }}</p>
                     @enderror
                 </div>
 
-                <button type="submit" class="btn simulation-btn simulation-btn--primary w-100">
+                <a class="access-forgot" href="{{ route('simulation.registered-company.code.request') }}">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M15 3a6 6 0 0 0-5 9L3 19v2h4v-3h3l3-3a6 6 0 1 0 2-12Z"/><circle cx="16" cy="8" r="1"/></svg>
+                    Esqueci meu código
+                </a>
+
+                <button type="submit" class="access-button">
                     Acessar formulário
                 </button>
             </form>

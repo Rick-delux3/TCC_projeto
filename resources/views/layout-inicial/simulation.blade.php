@@ -25,6 +25,7 @@
     >
 
     <title>{{ config('branding.profiles.'.config('branding.active', 'tcc').'.name', 'NVS Seguros') }}</title>
+    @stack('styles')
 </head>
 
 <body class="auth-layout-body" data-brand="{{ config('branding.active', 'tcc') }}">
@@ -36,7 +37,7 @@
     </main>
 
     {{-- Modal de erros de validação --}}
-    @if ($errors->any())
+    @if ($errors->any() && ! View::hasSection('inline-feedback'))
         <div class="modal fade" id="modalErrors" tabindex="-1" aria-hidden="true">
             <div class="modal-dialog modal-dialog-centered">
                 <div class="modal-content">

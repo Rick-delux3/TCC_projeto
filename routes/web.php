@@ -277,6 +277,14 @@ Route::prefix('simulacao')
             ->middleware('throttle:simulation-page')
             ->name('registered-company.access');
 
+        Route::get('/imobiliaria-cadastrada/esqueci-meu-codigo', [SimulationController::class, 'forgotCompanyCode'])
+            ->middleware('throttle:simulation-page')
+            ->name('registered-company.code.request');
+
+        Route::post('/imobiliaria-cadastrada/esqueci-meu-codigo', [SimulationController::class, 'recoverCompanyCode'])
+            ->middleware('throttle:company-code-recovery')
+            ->name('registered-company.code.email');
+
         Route::post('/imobiliaria-cadastrada/verificar', [SimulationController::class, 'verifyCompanyCode'])
             ->middleware('throttle:simulation-submit')
             ->name('registered-company.verify');
