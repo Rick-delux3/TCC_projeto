@@ -57,14 +57,11 @@
                     <tr>
                         <td class="welcome-content" style="padding: 32px 50px 24px;">
                             <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="table-layout: fixed;">
-                                <tr><td align="center" style="padding-bottom: 18px;">
-                                    <span style="display: inline-block; padding: {{ $isClient ? '4px 0' : '10px 18px' }}; background-color: {{ $isClient ? '#FFFFFF' : '#F3F6FC' }}; border-radius: 7px; color: {{ $blue }}; font-size: 18px; line-height: 24px; font-weight: 700;">CADASTRO CONCLUÍDO</span>
-                                </td></tr>
                                 <tr><td align="center" style="padding-bottom: 28px;">
-                                    <h1 class="welcome-title" style="margin: 0; color: {{ $navy }}; font-size: {{ $isClient ? '42px' : '52px' }}; line-height: {{ $isClient ? '50px' : '60px' }}; font-weight: 700; letter-spacing: -1.3px;">Boas-vindas à{{ $isClient ? ' nossa parceria!' : '' }}@unless ($isClient)<br>nossa parceria!@endunless</h1>
+                                    <h1 class="welcome-title" style="margin: 0; color: {{ $navy }}; font-size: {{ $isClient ? '42px' : '52px' }}; line-height: {{ $isClient ? '50px' : '60px' }}; font-weight: 700; letter-spacing: -1.3px;">Cadastro<br>Concluído!</h1>
                                 </td></tr>
                                 <tr><td class="welcome-copy" style="padding-bottom: 22px; font-size: 20px; line-height: 28px; overflow-wrap: anywhere; word-wrap: break-word;"><strong>Olá, equipe da {{ $companyName }}.</strong></td></tr>
-                                <tr><td class="welcome-copy" style="padding-bottom: 24px; font-size: 20px; line-height: 29px;">Sua imobiliária foi cadastrada. Use o código abaixo para acessar o formulário público e enviar novas solicitações de análise.</td></tr>
+                                <tr><td class="welcome-copy" style="padding-bottom: 24px; font-size: 20px; line-height: 29px;">Agora que você é cadastrado, use o código abaixo para enviar solicitações.</td></tr>
                                 <tr><td class="welcome-code-panel" align="center" style="padding: 24px 16px; background-color: #F3F6FC; border: 1px solid {{ $isClient ? '#AFC3FF' : '#4C85E4' }}; border-radius: 11px;">
                                     <p class="welcome-code-label" style="margin: 0 0 16px; color: {{ $blue }}; font-size: 17px; line-height: 24px; font-weight: 700;">CÓDIGO DE ACESSO DA IMOBILIÁRIA</p>
                                     <p class="welcome-code" style="margin: 0; color: {{ $blue }}; font-family: Consolas, 'Courier New', monospace; font-size: 48px; line-height: 60px; font-weight: 700; letter-spacing: 7px; overflow-wrap: anywhere; word-break: break-all;">{{ $accessCode }}</p>

@@ -3,7 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Events\DashboardActivityChanged;
+use App\Http\Requests\RecoverCompanyAccessCodeRequest;
 use App\Http\Requests\StoreSimulationLeadRequest;
+use App\Jobs\RecoverCompanyAccessCodeJob;
 use App\Jobs\SendLeadToLeadLoversJob;
 use App\Jobs\StartInsuranceAnalysesBatchJob;
 use App\Models\Imobiliaria;
@@ -69,6 +71,19 @@ class SimulationController extends Controller
     public function registeredCompanyAccess()
     {
         return view('simulation.registered-company-access');
+    }
+
+    public function forgotCompanyCode(): View
+    {
+        return view('simulation.forget-acess-code');
+    }
+
+    public function recoverCompanyCode(RecoverCompanyAccessCodeRequest $request): RedirectResponse
+    {
+        RecoverCompanyAccessCodeJob::dispatch($request->validated('email'));
+
+        return redirect()->route('simulation.registered-company.code.request')
+            ->with('status', 'Se o e-mail estiver cadastrado em uma imobiliária com formulário ativo, você receberá o código de acesso.');
     }
 
     /**
