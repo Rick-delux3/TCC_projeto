@@ -2,6 +2,7 @@
 
 use App\Models\Imobiliaria;
 use App\Notifications\CompanyAcessCodeNotification;
+use App\Notifications\CompanyRecoveryAcessCodeNotification;
 use App\Notifications\CompanyResetPasswordNotification;
 use App\Notifications\CorretorFirstLoginCodeNotification;
 use App\Notifications\CorretorIntegranteLoginNotification;
@@ -12,6 +13,56 @@ beforeEach(function () {
         'app.url' => 'https://app.example.test',
         'branding.active' => 'tcc',
     ]);
+});
+
+it('renders the recovery email with the existing brand layout and dedicated copy', function (string $profile, string $brandName, string $logo) {
+    config(['branding.active' => $profile]);
+    $notification = new CompanyRecoveryAcessCodeNotification(
+        companyName: '<script>alert(1)</script> Horizonte & Filhos',
+        accessCode: 'ABC234',
+        accessUrl: 'https://app.example.test/simulacao/imobiliaria-cadastrada',
+    );
+    $mail = $notification->toMail(new Imobiliaria);
+    $html = $mail->render();
+
+    expect($mail->subject)->toBe('Reenvio do código de acesso — '.$brandName)
+        ->and($mail->view)->toBe('emails.notifications.company-recovery-acess-code')
+        ->and($html)->toContain('data-email-template="company-recovery"')
+        ->toContain('data-brand="'.$profile.'"')
+        ->toContain(asset($logo))
+        ->toContain('ABC234')
+        ->toContain('Recebemos uma solicitação de reenvio')
+        ->toContain('Seu código de acesso permanece o mesmo.')
+        ->toContain('Se você não solicitou este reenvio')
+        ->toContain('&lt;script&gt;alert(1)&lt;/script&gt; Horizonte &amp; Filhos')
+        ->toContain('color: #FFFFFF; font-size: 20px;')
+        ->not->toContain('Cadastro concluído')
+        ->not->toContain('Cadastro<br>Concluído!')
+        ->not->toContain('<script>');
+})->with([
+    ['tcc', 'NVS Seguros', 'imgs/Logo_NVS.png'],
+    ['client', 'Aki Aluga', 'imgs/logo-akialuga.jpg'],
+]);
+
+it('rejects executable links in the recovery email', function () {
+    $notification = new CompanyRecoveryAcessCodeNotification('Imobiliária Horizonte', 'ABC234', 'javascript:alert(1)');
+
+    expect($notification->toMail(new Imobiliaria)->render())
+        ->not->toContain('href="javascript:')
+        ->toContain('ABC234');
+});
+
+it('logs recovery delivery failures without requiring a broker or exposing provider details', function () {
+    \Illuminate\Support\Facades\Log::spy();
+    $notification = new CompanyRecoveryAcessCodeNotification('Imobiliária Horizonte', 'ABC234', 'https://app.example.test', 12);
+    $notification->failed(new RuntimeException('private-provider-secret'));
+
+    \Illuminate\Support\Facades\Log::shouldHaveReceived('error')->once()->withArgs(
+        fn (string $message, array $context): bool => $message === 'Falha definitiva ao reenviar o código de acesso da imobiliária.'
+            && $context['company_id'] === 12
+            && $context['exception'] === RuntimeException::class
+            && ! str_contains(json_encode($context), 'private-provider-secret'),
+    );
 });
 
 it('renders the welcome email with the correct brand and escapes company data', function (string $profile, string $logo, string $footer) {

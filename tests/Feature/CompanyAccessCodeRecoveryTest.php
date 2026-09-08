@@ -2,7 +2,7 @@
 
 use App\Jobs\RecoverCompanyAccessCodeJob;
 use App\Models\Imobiliaria;
-use App\Notifications\CompanyAcessCodeNotification;
+use App\Notifications\CompanyRecoveryAcessCodeNotification;
 use Illuminate\Contracts\Queue\ShouldBeEncrypted;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Support\Facades\Cache;
@@ -111,7 +111,7 @@ it('normalizes the email and resends the existing code only to the registered co
         return true;
     });
 
-    Notification::assertSentTo($company, CompanyAcessCodeNotification::class, function (CompanyAcessCodeNotification $notification) use ($company): bool {
+    Notification::assertSentTo($company, CompanyRecoveryAcessCodeNotification::class, function (CompanyRecoveryAcessCodeNotification $notification) use ($company): bool {
         expect($notification->accessCode)->toBe('REC234')
             ->and($notification->companyId)->toBe($company->id)
             ->and($notification->sentByCorretorId)->toBeNull()

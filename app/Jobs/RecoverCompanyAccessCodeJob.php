@@ -3,7 +3,7 @@
 namespace App\Jobs;
 
 use App\Models\Imobiliaria;
-use App\Notifications\CompanyAcessCodeNotification;
+use App\Notifications\CompanyRecoveryAcessCodeNotification;
 use Illuminate\Contracts\Queue\ShouldBeEncrypted;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -42,7 +42,7 @@ class RecoverCompanyAccessCodeJob implements ShouldBeEncrypted, ShouldQueue
             return;
         }
 
-        $company->notify(new CompanyAcessCodeNotification(
+        $company->notify(new CompanyRecoveryAcessCodeNotification(
             companyName: $company->name,
             accessCode: $company->lead_access_code,
             accessUrl: rtrim((string) config('app.url'), '/').route(
