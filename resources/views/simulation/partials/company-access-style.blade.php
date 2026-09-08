@@ -16,7 +16,7 @@
     .company-access-card .access-error { color: #b42335; font-size: 15px; }
     .company-access-card a { color: var(--access-blue); text-decoration: none; }
     .company-access-card a:hover { text-decoration: underline; }
-    .company-access-card .access-button { display: flex; align-items: center; justify-content: center; min-height: 56px; width: 100%; padding: 12px 18px; border: 1px solid transparent; border-radius: 12px; background: var(--access-blue); color: #fff; font-weight: 700; font-size: 18px; text-align: center; text-decoration: none; transition: filter .15s; }
+    .company-access-card .access-button { display: flex; align-items: center; justify-content: center; min-height: 56px; width: 100%; padding: 12px 18px; border: 1px solid transparent; border-radius: 12px; background: var(--access-blue); color: #fff !important; font-weight: 700; font-size: 18px; text-align: center; text-decoration: none !important; transition: filter .15s; }
     .company-access-card .access-button:hover { filter: brightness(.9); }
     .company-access-card .access-button:disabled { opacity: .65; cursor: wait; }
     .company-access-card :is(input, a, button):focus-visible { outline: 3px solid var(--access-blue); outline-offset: 4px; }

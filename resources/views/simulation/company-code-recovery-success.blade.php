@@ -4,4 +4,4 @@
     <p>{{ session('status') }}</p>
 </div>
 <p>Confira sua caixa de entrada e a pasta de spam. O envio pode levar alguns minutos.</p>
-<a class="access-button" href="{{ route('simulation.registered-company.access') }}">Já tenho meu código</a>
+<a class="access-button" color="primary" href="{{ route('simulation.registered-company.access') }}">Já tenho meu código</a>
