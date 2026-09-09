@@ -570,7 +570,9 @@ class SimulationController extends Controller
             'tipo_solicitante' => $context['tipo_solicitante'],
             'nome' => $data['nome'],
             'email' => $data['email'],
-            'cpf' => $data['cpf'] ?? null,
+            'cpf' => $request->hasCompanyDocument() ? null : ($data['cpf'] ?? null),
+            'tipo_locacao' => $data['tipo_locacao'],
+            'descrever_atividade' => $data['descrever_atividade'] ?? null,
             'tel' => $data['tel'] ?? null,
             'estado_civil' => $data['estado_civil'] ?? null,
             'imobiliaria' => $company?->name
@@ -611,6 +613,19 @@ class SimulationController extends Controller
                 ? $lead->leadlovers_status
                 : 'pending';
             $lead->fill($leadAttributes)->save();
+        }
+
+        if ($request->hasCompanyDocument()) {
+            $lead->lead_empresa()->updateOrCreate(
+                ['lead_id' => $lead->id],
+                [
+                    'cnpj' => $data['cpf'],
+                    'cpf_responsavel' => $data['cpf_responsavel'],
+                    'nome_responsavel' => $data['nome_responsavel'],
+                ]
+            );
+        } else {
+            $lead->lead_empresa()->delete();
         }
 
         $lead->endereco()->updateOrCreate(

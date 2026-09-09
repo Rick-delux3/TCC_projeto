@@ -16,6 +16,8 @@
     </h5>
 </div>
 
+@include('simulation.partials.rental-type')
+
 <div class="col-md-6">
     <label class="form-label">Valor do aluguel <span class="text-danger">*</span></label>
     <div class="input-group">

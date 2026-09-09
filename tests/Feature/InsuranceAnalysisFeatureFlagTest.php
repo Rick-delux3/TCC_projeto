@@ -52,6 +52,7 @@ it('creates a company lead and sends it to LeadLovers without starting analyses'
         route('simulation.registered-company.store'),
         [
             'registered_company_context' => $company->id,
+            'tipo_locacao' => 'residencial',
             'aceite_termos' => '1',
             'nome' => 'Pessoa do Formulário',
             'email' => 'new-lead@example.test',

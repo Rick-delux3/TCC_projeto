@@ -2,10 +2,12 @@
 
 namespace App\Models;
 
+use App\Enums\TipoLocacao;
 use App\Support\ManualLeadResultTags;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Relations\MorphOne;
 
 class Lead extends Model
@@ -27,6 +29,8 @@ class Lead extends Model
         'company_id',
         'tipo_solicitante',
         'cpf',
+        'tipo_locacao',
+        'descrever_atividade',
         'estado_civil',
         'imobiliaria',
         'nome',
@@ -64,6 +68,7 @@ class Lead extends Model
     ];
 
     protected $casts = [
+        'tipo_locacao' => TipoLocacao::class,
         'leadlovers_lead_id' => 'integer',
         'leadlovers_response' => 'array',
         'sent_to_leadlovers_at' => 'datetime',
@@ -110,6 +115,11 @@ class Lead extends Model
     public function company()
     {
         return $this->imobiliariaVinculada();
+    }
+
+    public function lead_empresa(): HasOne
+    {
+        return $this->hasOne(LeadEmpresa::class, 'lead_id');
     }
 
     public function imobiliariaVinculada()
