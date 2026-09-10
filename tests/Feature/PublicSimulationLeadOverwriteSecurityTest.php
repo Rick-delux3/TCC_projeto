@@ -30,6 +30,7 @@ function publicOverwriteCompany(array $overrides = []): Imobiliaria
 function publicOverwritePayload(string $email, array $overrides = []): array
 {
     return array_merge([
+        'tipo_locacao' => 'residencial',
         'aceite_termos' => '1',
         'nome' => 'Dados enviados por terceiro',
         'email' => $email,

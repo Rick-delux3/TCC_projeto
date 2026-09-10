@@ -43,6 +43,7 @@ function adminSimulationTabCompany(): Imobiliaria
 function adminSimulationTabPayload(array $overrides = []): array
 {
     return array_merge([
+        'tipo_locacao' => 'residencial',
         'aceite_termos' => '1',
         'nome' => 'Novo lead administrativo',
         'email' => 'new-admin-lead@example.test',

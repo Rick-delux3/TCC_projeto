@@ -941,6 +941,7 @@ it('broadcasts a newly created company lead after the database transaction commi
         route('simulation.registered-company.store'),
         [
             'registered_company_context' => $company->id,
+            'tipo_locacao' => 'residencial',
             'aceite_termos' => '1',
             'nome' => 'Novo lead',
             'email' => 'new-broadcast@example.test',
@@ -979,6 +980,7 @@ it('broadcasts a newly created unlinked lead only to the admin dashboard', funct
     config(['features.insurance_analysis.enabled' => false]);
 
     $response = $this->post(route('simulation.tenant.store'), [
+        'tipo_locacao' => 'residencial',
         'aceite_termos' => '1',
         'nome' => 'Lead sem imobiliaria',
         'email' => 'unlinked-broadcast@example.test',
@@ -1050,6 +1052,7 @@ it('does not change or redispatch a confirmed lead when the public form is submi
         route('simulation.registered-company.store'),
         [
             'registered_company_context' => $company->id,
+            'tipo_locacao' => 'residencial',
             'aceite_termos' => '1',
             'nome' => 'Nome reenviado',
             'email' => 'resubmission@example.test',

@@ -36,11 +36,15 @@ it('renders the access and recovery forms for each brand', function (string $bra
     $this->get(route('simulation.registered-company.access'))
         ->assertOk()
         ->assertSee('Esqueci meu código')
+        ->assertSee('company-access-layout', false)
+        ->assertSee('imgs/acesso-chave.png', false)
         ->assertSee(route('simulation.registered-company.code.request'), false);
     $this->get(route('simulation.registered-company.code.request'))
         ->assertOk()
         ->assertSee('data-brand="'.$brand.'"', false)
         ->assertSee('Receba seu código por email')
+        ->assertSee('company-access-layout', false)
+        ->assertSee('imgs/recuperar-codigo.png', false)
         ->assertSee('name="email"', false)
         ->assertSee('name="_token"', false)
         ->assertSee(route('simulation.registered-company.code.email'), false);

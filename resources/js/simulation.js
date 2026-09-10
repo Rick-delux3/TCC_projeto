@@ -1,3 +1,5 @@
+import { initializeDocumentMask } from './document-mask';
+
 const initializeProfileChoice = () => {
     const form = document.querySelector('[data-simulation-start] #profileChoiceForm');
 
@@ -52,8 +54,82 @@ const initializeProfileChoice = () => {
     });
 };
 
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initializeProfileChoice, { once: true });
-} else {
+const initializeConditionalFields = (form) => {
+    const documentInput = form.querySelector('[name="cpf"]');
+    const maritalStatus = form.querySelector('[name="estado_civil"]');
+    const rentalTypes = form.querySelectorAll('[name="tipo_locacao"]');
+
+    if (!documentInput || !maritalStatus) {
+        return;
+    }
+
+    form.querySelectorAll('[data-simulation-template]').forEach((template) => {
+        template.content.querySelectorAll('input').forEach((input) => {
+            input.value = '';
+        });
+    });
+
+    const renderFields = (condition, visible) => {
+        const target = form.querySelector(`[data-simulation-fields="${condition}"]`);
+        const template = form.querySelector(`[data-simulation-template="${condition}"]`);
+
+        if (!target || !template) {
+            return;
+        }
+
+        if (!visible) {
+            target.replaceChildren();
+        } else if (target.childElementCount === 0) {
+            target.append(template.content.cloneNode(true));
+        }
+    };
+
+    const formatDocument = initializeDocumentMask(documentInput);
+    const updateDocument = () => {
+        const normalized = formatDocument();
+        const isCompany = normalized.length === 14;
+
+        renderFields('company', isCompany);
+        documentInput.setAttribute('aria-expanded', String(isCompany));
+    };
+
+    const updateSpouse = () => {
+        const status = maritalStatus.value;
+        const visible = ['casado', 'uniao_estavel', 'divorciado', 'viuvo'].includes(status);
+        const required = ['casado', 'uniao_estavel'].includes(status);
+
+        renderFields('spouse', visible);
+        form.querySelectorAll('[name="conjuge_nome"], [name="conjuge_cpf"]').forEach((input) => {
+            input.required = required;
+        });
+    };
+
+    const updateRentalType = () => {
+        renderFields('commercial', form.querySelector('[name="tipo_locacao"]:checked')?.value === 'comercial');
+    };
+
+    documentInput.addEventListener('input', updateDocument);
+    documentInput.addEventListener('change', updateDocument);
+    maritalStatus.addEventListener('change', updateSpouse);
+    rentalTypes.forEach((input) => input.addEventListener('change', updateRentalType));
+
+    const sync = () => {
+        updateDocument();
+        updateSpouse();
+        updateRentalType();
+    };
+
+    window.addEventListener('pageshow', sync);
+    sync();
+};
+
+const initializeSimulation = () => {
     initializeProfileChoice();
+    document.querySelectorAll('form.simulation-form').forEach(initializeConditionalFields);
+};
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initializeSimulation, { once: true });
+} else {
+    initializeSimulation();
 }

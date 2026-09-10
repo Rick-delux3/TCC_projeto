@@ -1,3 +1,15 @@
+[data-admin-lead-fields] [hidden] { display: none !important; }
+[data-admin-lead-fields] .card { min-width: 0; }
+[data-admin-lead-fields] .form-control, [data-admin-lead-fields] .form-select { min-width: 0; }
+[data-admin-lead-fields] label { overflow-wrap: anywhere; }
+@keyframes admin-lead-field-enter {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: no-preference) {
+    [data-admin-lead-fields] [data-admin-condition]:not([hidden]) { animation: admin-lead-field-enter 180ms ease-out; }
+}
+
 :root {
     --primary-color: #030133;
     --secundary-color: #146FB6;
