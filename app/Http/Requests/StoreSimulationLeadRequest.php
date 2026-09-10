@@ -22,6 +22,8 @@ class StoreSimulationLeadRequest extends FormRequest
     {
         $maritalStatus = $this->input('estado_civil');
 
+        $numero = $this->input('numero');
+
         $this->merge([
             'nome' => $this->limparTexto($this->nome),
             'email' => $this->normalizarEmail($this->email),
@@ -45,7 +47,7 @@ class StoreSimulationLeadRequest extends FormRequest
 
             'cep' => $this->somenteNumeros($this->cep),
             'logradouro' => $this->limparTexto($this->logradouro),
-            'numero' => $this->limparTexto($this->numero),
+            'numero' => is_string($numero) ? $this->limparTexto($numero) : $numero,
             'complemento' => $this->limparTexto($this->complemento),
             'bairro' => $this->limparTexto($this->bairro),
             'cidade_imovel' => $this->limparTexto($this->cidade_imovel),
@@ -156,7 +158,7 @@ class StoreSimulationLeadRequest extends FormRequest
 
             'cep' => ['required', 'string', 'size:8', 'regex:/^\d{8}$/'],
             'logradouro' => ['required', 'string', 'max:255'],
-            'numero' => ['required', 'string', 'max:20'],
+            'numero' => ['nullable', 'string', 'max:20'],
             'complemento' => ['nullable', 'string', 'max:100'],
             'bairro' => ['required', 'string', 'max:100'],
             'cidade_imovel' => ['required', 'string', 'max:100'],
@@ -293,7 +295,6 @@ class StoreSimulationLeadRequest extends FormRequest
             'logradouro.string' => 'O logradouro deve ser um texto válido.',
             'logradouro.max' => 'O logradouro não pode ter mais de :max caracteres.',
 
-            'numero.required' => 'Informe o número do imóvel.',
             'numero.string' => 'O número do imóvel deve ser um texto válido.',
             'numero.max' => 'O número do imóvel não pode ter mais de :max caracteres.',
 

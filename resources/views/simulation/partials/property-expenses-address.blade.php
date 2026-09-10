@@ -1,239 +1,57 @@
-{{-- 
-    Partial reutilizável para dados do imóvel e valores da locação.
-
-    Nova lógica:
-    - valor_aluguel é obrigatório;
-    - água e luz são opcionais;
-    - se água/luz não forem preenchidas, o backend calcula 10% do aluguel;
-    - condomínio, IPTU e gás são opcionais;
-    - o usuário escolhe no select qual despesa deseja adicionar;
-    - endereço é preenchido pelo CEP, mas continua editável.
---}}
-
-<div class="col-12 mt-3">
-    <h5 class="fw-bold border-bottom pb-2">
-        Dados do imóvel e valores da locação
-    </h5>
-</div>
-
-@include('simulation.partials.rental-type')
-
-<div class="col-md-6">
-    <label class="form-label">Valor do aluguel <span class="text-danger">*</span></label>
-    <div class="input-group">
-        <span class="input-group-text">R$</span>
-        <input 
-            type="text"
-            name="valor_aluguel"
-            class="form-control @error('valor_aluguel') is-invalid @enderror"
-            value="{{ old('valor_aluguel') }}"
-            placeholder="Ex: 1500,00"
-            inputmode="decimal"
-        >
-        @error('valor_aluguel')
-            <div class="invalid-feedback">{{ $message }}</div>
-        @enderror
-    </div>
-</div>
-
-<div class="col-md-6">
-    <label class="form-label">Adicionar despesa, se houver</label>
-    <div class="input-group">
-        <select id="expenseSelector" class="form-select">
-            <option value="">Selecione uma despesa</option>
-            <option value="valor_agua">Água</option>
-            <option value="valor_luz">Luz</option>
-            <option value="valor_gas">Gás</option>
-            <option value="valor_iptu">IPTU</option>
-            <option value="valor_condominio">Condomínio</option>
-        </select>
-
-        <button type="button" class="btn btn-outline-danger" id="addExpenseButton">
-            Adicionar
-        </button>
-    </div>
-
-    <div class="form-text">
-        Água e luz são opcionais. Se não preencher, o sistema considera 10% do aluguel para cada uma.
-    </div>
-</div>
-
-@php
-    $expenseFields = [
-        'valor_agua' => 'Água',
-        'valor_luz' => 'Luz',
-        'valor_gas' => 'Gás',
-        'valor_iptu' => 'IPTU',
-        'valor_condominio' => 'Condomínio',
-    ];
-@endphp
-
-@foreach ($expenseFields as $fieldName => $fieldLabel)
-    <div 
-        class="col-md-6 expense-field {{ old($fieldName, in_array($fieldName, ['valor_agua', 'valor_luz'], true) ? '__visible__' : null) ? '' : 'd-none' }}"
-        data-expense-field="{{ $fieldName }}"
-    >
-        <label class="form-label">{{ $fieldLabel }}</label>
-
-        <div class="input-group">
-            <span class="input-group-text">R$</span>
-
-            <input 
-                type="text"
-                name="{{ $fieldName }}"
-                class="form-control @error($fieldName) is-invalid @enderror"
-                value="{{ old($fieldName) }}"
-                placeholder="Ex: 150,00"
-                inputmode="decimal"
-            >
-
-            <button 
-                type="button"
-                class="btn btn-outline-secondary remove-expense-button"
-                data-remove-expense="{{ $fieldName }}"
-            >
-                Remover
-            </button>
-
-            @error($fieldName)
-                <div class="invalid-feedback">{{ $message }}</div>
-            @enderror
+<h2 class="simulation-section-title">Valores da locação</h2>
+<div class="simulation-fields grid grid-cols-1 gap-x-5 gap-y-4 md:grid-cols-2">
+    @include('simulation.partials.rental-type')
+    @include('simulation.partials.input', ['field' => ['name' => 'valor_aluguel', 'label' => 'Valor do aluguel', 'type' => 'money', 'placeholder' => '1.500,00', 'required' => true]])
+    <div class="simulation-field">
+        <label for="expenseSelector">Despesas adicionais</label>
+        <div class="flex gap-2">
+            <select id="expenseSelector">
+                <option value="">Selecione uma despesa</option>
+                @foreach (['valor_agua' => 'Água', 'valor_luz' => 'Luz', 'valor_gas' => 'Gás', 'valor_iptu' => 'IPTU', 'valor_condominio' => 'Condomínio'] as $name => $label)
+                    <option value="{{ $name }}">{{ $label }}</option>
+                @endforeach
+            </select>
+            <button type="button" class="simulation-button simulation-button-outline simulation-expense-add" id="addExpenseButton"><span aria-hidden="true">+</span> Adicionar</button>
         </div>
     </div>
-@endforeach
-
-<div class="col-md-6">
-    <label class="form-label">Outras despesas</label>
-    <div class="input-group">
-        <span class="input-group-text">R$</span>
-        <input 
-            type="text"
-            name="outras_despesas"
-            class="form-control @error('outras_despesas') is-invalid @enderror"
-            value="{{ old('outras_despesas') }}"
-            placeholder="Outras despesas não listadas"
-            inputmode="decimal"
-        >
-        @error('outras_despesas')
-            <div class="invalid-feedback">{{ $message }}</div>
-        @enderror
+    @foreach (['valor_agua' => 'Água', 'valor_luz' => 'Luz', 'valor_gas' => 'Gás', 'valor_iptu' => 'IPTU', 'valor_condominio' => 'Condomínio'] as $name => $label)
+        @php
+            $expenseVisible = old($name) !== null || in_array($name, ['valor_agua', 'valor_luz'], true);
+        @endphp
+        <div class="expense-field {{ $expenseVisible ? '' : 'd-none' }}" data-expense-field="{{ $name }}">
+            <div class="simulation-expense-row">
+                @include('simulation.partials.input', ['field' => ['name' => $name, 'label' => $label, 'type' => 'money', 'placeholder' => 'Opcional']])
+                <button type="button" class="simulation-remove-expense remove-expense-button" data-remove-expense="{{ $name }}" aria-label="Remover {{ $label }}">@include('simulation.partials.form-icon', ['icon' => 'trash'])</button>
+            </div>
+        </div>
+    @endforeach
+    @include('simulation.partials.input', ['field' => ['name' => 'outras_despesas', 'label' => 'Outras despesas', 'type' => 'money', 'placeholder' => 'Opcional']])
+    <div class="simulation-expense-info md:col-span-2">
+        @include('simulation.partials.form-icon', ['icon' => 'info'])
+        <p>Água e luz são opcionais. Se não preencher, será considerado 10% do aluguel para cada uma.</p>
     </div>
 </div>
-
-<div class="col-12 mt-3">
-    <h5 class="fw-bold border-bottom pb-2">
-        Endereço do imóvel pretendido
-    </h5>
-</div>
-
-<div class="col-md-4">
-    <label class="form-label">CEP <span class="text-danger">*</span></label>
-    <input 
-        type="text"
-        name="cep"
-        id="cep"
-        class="form-control @error('cep') is-invalid @enderror"
-        value="{{ old('cep') }}"
-        placeholder="Ex: 18270000"
-        maxlength="9"
-        inputmode="numeric"
-    >
-    @error('cep')
-        <div class="invalid-feedback">{{ $message }}</div>
-    @enderror
-
-    <div class="form-text">
-        Digite o CEP para preencher o endereço automaticamente.
+<h2 class="simulation-section-title simulation-address-title">Endereço do imóvel</h2>
+<div class="simulation-fields grid grid-cols-1 gap-x-5 gap-y-4 md:grid-cols-3">
+    <div>
+        @include('simulation.partials.input', ['field' => ['name' => 'cep', 'label' => 'CEP', 'placeholder' => '00000-000', 'inputmode' => 'numeric', 'maxlength' => 9, 'required' => true, 'autocomplete' => 'postal-code']])
+        <p class="simulation-field-hint mt-1" id="cep-status" role="status">Preenchimento automático pelo CEP.</p>
     </div>
-</div>
-
-<div class="col-md-8">
-    <label class="form-label">Logradouro <span class="text-danger">*</span></label>
-    <input 
-        type="text"
-        name="logradouro"
-        id="logradouro"
-        class="form-control @error('logradouro') is-invalid @enderror"
-        value="{{ old('logradouro') }}"
-        placeholder="Rua, avenida, travessa..."
-    >
-    @error('logradouro')
-        <div class="invalid-feedback">{{ $message }}</div>
-    @enderror
-</div>
-
-<div class="col-md-4">
-    <label class="form-label">Número <span class="text-danger">*</span></label>
-    <input 
-        type="text"
-        name="numero"
-        class="form-control @error('numero') is-invalid @enderror"
-        value="{{ old('numero') }}"
-        placeholder="Ex: 123 ou S/N"
-    >
-    @error('numero')
-        <div class="invalid-feedback">{{ $message }}</div>
-    @enderror
-</div>
-
-<div class="col-md-4">
-    <label class="form-label">Complemento</label>
-    <input 
-        type="text"
-        name="complemento"
-        class="form-control @error('complemento') is-invalid @enderror"
-        value="{{ old('complemento') }}"
-        placeholder="Apto, bloco, casa..."
-    >
-    @error('complemento')
-        <div class="invalid-feedback">{{ $message }}</div>
-    @enderror
-</div>
-
-<div class="col-md-4">
-    <label class="form-label">Bairro <span class="text-danger">*</span></label>
-    <input 
-        type="text"
-        name="bairro"
-        id="bairro"
-        class="form-control @error('bairro') is-invalid @enderror"
-        value="{{ old('bairro') }}"
-        placeholder="Bairro"
-    >
-    @error('bairro')
-        <div class="invalid-feedback">{{ $message }}</div>
-    @enderror
-</div>
-
-<div class="col-md-8">
-    <label class="form-label">Cidade do imóvel <span class="text-danger">*</span></label>
-    <input 
-        type="text"
-        name="cidade_imovel"
-        id="cidade_imovel"
-        class="form-control @error('cidade_imovel') is-invalid @enderror"
-        value="{{ old('cidade_imovel') }}"
-        placeholder="Cidade"
-    >
-    @error('cidade_imovel')
-        <div class="invalid-feedback">{{ $message }}</div>
-    @enderror
-</div>
-
-<div class="col-md-4">
-    <label class="form-label">Estado <span class="text-danger">*</span></label>
-    <input 
-        type="text"
-        name="estado"
-        id="estado"
-        class="form-control text-uppercase @error('estado') is-invalid @enderror"
-        value="{{ old('estado') }}"
-        placeholder="UF"
-        maxlength="2"
-    >
-    @error('estado')
-        <div class="invalid-feedback">{{ $message }}</div>
-    @enderror
+    @include('simulation.partials.input', ['field' => ['name' => 'logradouro', 'label' => 'Logradouro', 'placeholder' => 'Rua, avenida, travessa...', 'required' => true, 'maxlength' => 255, 'class' => 'md:col-span-2']])
+    @include('simulation.partials.input', ['field' => ['name' => 'numero', 'label' => 'Número', 'placeholder' => 'Opcional', 'required' => false, 'maxlength' => 20]])
+    @include('simulation.partials.input', ['field' => ['name' => 'complemento', 'label' => 'Complemento', 'placeholder' => 'Apto, bloco, casa...', 'maxlength' => 100]])
+    @include('simulation.partials.input', ['field' => ['name' => 'bairro', 'label' => 'Bairro', 'placeholder' => 'Bairro', 'required' => true, 'maxlength' => 100]])
+    @include('simulation.partials.input', ['field' => ['name' => 'cidade_imovel', 'label' => 'Cidade do imóvel', 'placeholder' => 'Cidade', 'required' => true, 'maxlength' => 100, 'class' => 'md:col-span-2']])
+    <div class="simulation-field">
+        <label for="estado">Estado <span class="simulation-required">*</span></label>
+        <select id="estado" name="estado" required @error('estado') aria-invalid="true" aria-describedby="estado-error" @enderror>
+            <option value="">UF</option>
+            @foreach (['AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MT', 'MS', 'MG', 'PA', 'PB', 'PR', 'PE', 'PI', 'RJ', 'RN', 'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO'] as $uf)
+                <option value="{{ $uf }}" @selected(old('estado') === $uf)>{{ $uf }}</option>
+            @endforeach
+        </select>
+        @error('estado')<p class="simulation-field-error" id="estado-error">{{ $message }}</p>@enderror
+    </div>
 </div>
 
 @push('scripts')

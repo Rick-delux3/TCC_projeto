@@ -85,6 +85,7 @@ class CorretorDashboardController extends Controller
                 'endereco',
                 'despesas',
                 'conjuge',
+                'lead_empresa',
                 'imobiliariaVinculada',
                 'imobiliariaInformada',
                 'locador',

@@ -1,3 +1,5 @@
+import { initializeDocumentMask } from './document-mask';
+
 const initializeProfileChoice = () => {
     const form = document.querySelector('[data-simulation-start] #profileChoiceForm');
 
@@ -82,9 +84,10 @@ const initializeConditionalFields = (form) => {
         }
     };
 
+    const formatDocument = initializeDocumentMask(documentInput);
     const updateDocument = () => {
-        const normalized = documentInput.value.replace(/[.\/\s-]+/g, '');
-        const isCompany = /^[0-9]{14}$/.test(normalized);
+        const normalized = formatDocument();
+        const isCompany = normalized.length === 14;
 
         renderFields('company', isCompany);
         documentInput.setAttribute('aria-expanded', String(isCompany));

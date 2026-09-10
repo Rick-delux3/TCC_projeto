@@ -5,6 +5,10 @@
 @include('simulation.partials.company-access-style')
 
 <div class="company-access-page">
+    <div class="company-access-layout">
+        <aside class="company-access-art" aria-hidden="true">
+            <img src="{{ asset('imgs/acesso-chave.png') }}" alt="" width="1024" height="1536" decoding="async">
+        </aside>
     <div class="company-access-card">
         <div class="flex flex-col gap-6">
             <h1>Acesso da imobiliária cadastrada</h1>
@@ -52,4 +56,5 @@
     </div>
 </div>
 
+</div>
 @endsection

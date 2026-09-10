@@ -633,7 +633,7 @@ class SimulationController extends Controller
             [
                 'cep' => $data['cep'] ?? null,
                 'logradouro' => $data['logradouro'] ?? null,
-                'numero' => $data['numero'] ?? null,
+                'numero' => $data['numero'] ?? '123',
                 'complemento' => $data['complemento'] ?? null,
                 'bairro' => $data['bairro'] ?? null,
                 'cidade_imovel' => $data['cidade_imovel'] ?? null,

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\CorrectLeadLoversInitialFailureRequest;
+use App\Http\Requests\UpdateAdminLeadRequest;
 use App\Models\Corretor;
 use App\Models\Imobiliaria;
 use App\Models\Lead;
@@ -54,7 +55,7 @@ class DashboardLeadController extends Controller
         return $this->saveLeadsUpdates($request, $lead);
     }
 
-    public function adminUpdate(Request $request, Lead $lead)
+    public function adminUpdate(UpdateAdminLeadRequest $request, Lead $lead): RedirectResponse
     {
         $corretor = $this->authorizeAdminAbility('edit-leads');
 
@@ -126,7 +127,9 @@ class DashboardLeadController extends Controller
         Lead $lead,
         ?Corretor $corretor = null,
     ): RedirectResponse {
-        $data = $this->validateLeadUpdateRequest($request);
+        $data = $request instanceof UpdateAdminLeadRequest
+            ? $request->validated()
+            : $this->validateLeadUpdateRequest($request);
 
         $result = $this->leadReanalysisService->updateLeadDataAndMaybeUnlock(
             lead: $lead,

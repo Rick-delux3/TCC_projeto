@@ -316,3 +316,66 @@ it('renders the form after rejecting malformed conditional fields', function () 
 
     $this->get($url)->assertOk();
 });
+
+it('groups the profile fields into two stages within the original submission form', function (string $profile) {
+    if ($profile === 'registered-company') {
+        $company = conditionalSimulationCompany();
+        $this->post(route('simulation.registered-company.verify'), [
+            'lead_access_code' => $company->lead_access_code,
+        ])->assertRedirect();
+    }
+
+    $dom = conditionalSimulationDom($this->get(route('simulation.'.$profile.'.form'))->assertOk()->getContent());
+    $firstStep = '//form[@data-simulation-form]//section[@data-form-step="1"]';
+    $secondStep = '//form[@data-simulation-form]//section[@data-form-step="2"]';
+
+    expect($dom->query('//form[@data-simulation-form]')->length)->toBe(1)
+        ->and($dom->evaluate('string(//form[@data-simulation-form]/@action)'))->toBe(route('simulation.'.$profile.'.store'))
+        ->and($dom->query($firstStep.'//input[@name="nome"]')->length)->toBe(1)
+        ->and($dom->query($secondStep.'//input[@name="valor_aluguel"][@required]')->length)->toBe(1)
+        ->and($dom->query($secondStep.'//select[@name="estado"]/option')->length)->toBe(28)
+        ->and($dom->query($secondStep.'//input[@name="aceite_termos"][@required]')->length)->toBe(1)
+        ->and($dom->query($firstStep.'//input[@name="responsavel_nome"]')->length)->toBe($profile === 'unregistered-company' ? 1 : 0)
+        ->and($dom->query($firstStep.'//input[@name="responsavel_preenchimento"]')->length)->toBe($profile === 'registered-company' ? 1 : 0)
+        ->and($dom->query('//form[@data-simulation-form]//input[@name="_token"]')->length)->toBe(1);
+})->with(['tenant', 'unregistered-company', 'registered-company']);
+
+it('preserves optional requester fields in the internal form', function () {
+    $html = (string) $this->view('simulation.forms.unregistered-company_landlord', [
+        'isAdminSimulation' => true,
+        'lockResponsavelTipo' => true,
+        'responsavelTipo' => 'locador',
+        'formAction' => route('admin.simulations.unlinked.store', ['tipo' => 'locador']),
+        'errors' => new \Illuminate\Support\ViewErrorBag,
+    ]);
+    $dom = conditionalSimulationDom($html);
+
+    foreach (['responsavel_nome', 'responsavel_email', 'responsavel_telefone'] as $field) {
+        expect($dom->query('//input[@name="'.$field.'"]')->length)->toBe(1)
+            ->and($dom->query('//input[@name="'.$field.'"][@required]')->length)->toBe(0);
+    }
+
+    expect($dom->evaluate('string(//input[@name="responsavel_tipo"]/@value)'))->toBe('locador');
+});
+
+it('opens the stage containing validation errors and restores property values and consent', function (array $errors, string $step) {
+    $this->withSession([
+        '_old_input' => conditionalSimulationPayload(['valor_gas' => '0', 'aceite_termos' => '1']),
+        'errors' => (new \Illuminate\Support\ViewErrorBag)->put('default', new \Illuminate\Support\MessageBag($errors)),
+    ]);
+    $html = $this->get(route('simulation.tenant.form'))->assertOk()->getContent();
+    $dom = conditionalSimulationDom($html);
+
+    expect($dom->evaluate('string(//*[@data-simulation-wizard]/@data-initial-step)'))->toBe($step)
+        ->and($dom->query('//*[@role="alert"]//*[@data-error-field]')->length)->toBe(count($errors))
+        ->and($dom->query('//*[@id="modalErrors"]')->length)->toBe(0)
+        ->and($dom->evaluate('string(//input[@name="valor_gas"]/@value)'))->toBe('0')
+        ->and($dom->query('//*[@data-expense-field="valor_gas"][contains(@class,"d-none")]')->length)->toBe(0)
+        ->and($dom->evaluate('string(//select[@name="estado"]/option[@selected]/@value)'))->toBe('SP')
+        ->and($dom->query('//input[@name="aceite_termos"][@checked]')->length)->toBe(1);
+})->with([
+    'people error' => [['nome' => 'Informe seu nome.'], '1'],
+    'property error' => [['cep' => 'Informe um CEP válido.'], '2'],
+    'commercial error' => [['descrever_atividade' => 'Descreva a atividade.'], '2'],
+    'both stages' => [['cpf_responsavel' => 'Informe o CPF.', 'cep' => 'Informe o CEP.'], '1'],
+]);
