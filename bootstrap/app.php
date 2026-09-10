@@ -101,6 +101,14 @@
                 'analysis.enabled' => EnsureInsuranceAnalysisEnabled::class,
                 'auth.unframed' => PreventAuthenticationFraming::class,
             ]);
+
+            $middleware->web(append: [
+                PreventAuthenticationFraming::class,
+            ]);
+
+            $middleware->api(append: [
+                PreventAuthenticationFraming::class,
+            ]);
         })
         ->withExceptions(function (Exceptions $exceptions): void {
             //
