@@ -15,11 +15,7 @@ final class LeadLoversTagOperation extends Model
 
     protected $table = 'leadlovers_tag_operations';
 
-    protected $fillable = [
-        'lead_id',
-        'version',
-        'phase',
-    ];
+    protected $guarded = ['id'];
 
     protected $casts = [
         'version' => 'integer',

@@ -35,9 +35,6 @@ class DashboardLeadController extends Controller
 
         abort_if(! $company, 404, 'Imobiliária não encontrada.');
 
-        if(session('company_id') !== $company->id) {
-            session(['company_id' => $company->id]);
-        }
 
         return $company;
     }

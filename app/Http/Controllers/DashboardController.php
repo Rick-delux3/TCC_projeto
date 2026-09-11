@@ -65,9 +65,7 @@ class DashboardController extends Controller
                 ]);
         }
 
-        if(session('company_id') !== $company->id) {
-            session(['company_id' => $company->id]);
-        }
+       
 
         $this->ensureLeadAccessCode($company);
 

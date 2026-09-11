@@ -7,14 +7,13 @@ use Illuminate\Support\Facades\Gate;
 
 
 Broadcast::channel('companies.{companyId}.dashboard', function (User $user, int $companyId): bool {
-    $sameCompany =
-            (int) $user->company_id === $companyId
-            && (int) session('company_id') === $companyId;
+        $sameCompany = (int) $user->company_id === $companyId;
 
         $passedTwoFactor = session('2fa_passed') === true;
 
         return $sameCompany && $passedTwoFactor;
     },
+    
     ['guards' => ['web']]
 );
 
