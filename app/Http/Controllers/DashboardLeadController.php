@@ -24,13 +24,17 @@ class DashboardLeadController extends Controller
 
     private function getLoggedCompany(): Imobiliaria
     {
-        $companyId = session('company_id');
+        /** @var \App\Models\User|null $user */
 
-        abort_if(! $companyId, 401, 'Usuário não autenticado.');
+        $user = Auth::user();
 
-        $company = Imobiliaria::find($companyId);
+        abort_if(!$user || !$user->company_id, 401, 'Usuário não autenticado.');
+
+        $company = $user->imobiliaria;
+
 
         abort_if(! $company, 404, 'Imobiliária não encontrada.');
+
 
         return $company;
     }
