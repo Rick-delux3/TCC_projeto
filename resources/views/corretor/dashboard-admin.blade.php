@@ -1179,7 +1179,7 @@
 
                         <article class="card border-0 shadow-sm rounded-5 lead-card lead-list-item {{ $resultTone['card'] }}">
                             <div class="card-body p-3 p-lg-4">
-                                <div class="row g-3 align-items-center">
+                                <div class="row g-3 align-items-center admin-lead-summary">
 
                                     {{-- Cliente --}}
                                     <div class="col-12 col-md-6 col-xl-3">
@@ -1229,6 +1229,9 @@
                                     <div class="col-12 col-md-6 col-xl-2">
                                         <div class="small text-muted">
                                             E-mail
+                                            @if ($leadLoversFailureIsCorrectable && in_array('email', $leadLoversFailure['fields'], true))
+                                                <i class="bi bi-exclamation-circle admin-lead-field-error ms-1" role="img" aria-label="E-mail precisa de correção"></i>
+                                            @endif
                                         </div>
 
                                         @if ($lead->email)
@@ -1246,6 +1249,9 @@
                                     <div class="col-6 col-md-3 col-xl-1">
                                         <div class="small text-muted">
                                             Telefone
+                                            @if ($leadLoversFailureIsCorrectable && in_array('tel', $leadLoversFailure['fields'], true))
+                                                <i class="bi bi-exclamation-circle admin-lead-field-error ms-1" role="img" aria-label="Telefone precisa de correção"></i>
+                                            @endif
                                         </div>
 
                                         <div class="fw-semibold text-truncate">
@@ -1281,33 +1287,46 @@
                                     </div>
 
                                     {{-- Botões --}}
-                                    <div class="col-12 col-md-4 col-xl-1">
+                                    <div class="col-12 admin-lead-actions">
+                                        <div class="flex flex-wrap items-center justify-end gap-2">
                                         @can('edit-leads')
+                                            @if ($leadLoversFailureIsCorrectable)
+                                                <button
+                                                    type="button"
+                                                    class="btn btn-sm btn-outline-danger leadlovers-correction-trigger admin-lead-action admin-lead-action--correct text-nowrap"
+                                                    data-bs-toggle="modal"
+                                                    data-bs-target="#adminLeadLoversCorrectionModal{{ $lead->id }}"
+                                                    aria-controls="adminLeadLoversCorrectionModal{{ $lead->id }}"
+                                                    aria-haspopup="dialog"
+                                                    aria-label="Corrigir dados de {{ $leadName }} para reenvio à LeadLovers"
+                                                >
+                                                    <i class="bi bi-wrench-adjustable-circle" aria-hidden="true"></i>
+                                                    Corrigir
+                                                </button>
+                                            @endif
                                             <button
                                                 type="button"
-                                                class="btn btn-sm {{ $leadLoversFailureIsCorrectable ? 'btn-danger leadlovers-correction-trigger' : 'btn-outline-primary' }} w-100 text-nowrap mb-2"
+                                                class="btn btn-sm btn-outline-primary admin-lead-action text-nowrap"
                                                 data-bs-toggle="modal"
-                                                data-bs-target="{{ $leadLoversFailureIsCorrectable ? '#adminLeadLoversCorrectionModal'.$lead->id : '#adminLeadModal'.$lead->id }}"
-                                                aria-controls="{{ $leadLoversFailureIsCorrectable ? 'adminLeadLoversCorrectionModal'.$lead->id : 'adminLeadModal'.$lead->id }}"
+                                                data-bs-target="#adminLeadModal{{ $lead->id }}"
+                                                aria-controls="adminLeadModal{{ $lead->id }}"
                                                 aria-haspopup="dialog"
-                                                aria-label="{{ $leadLoversFailureIsCorrectable ? 'Corrigir dados de '.$leadName.' para reenvio à LeadLovers' : 'Editar lead '.$leadName }}"
+                                                aria-label="Editar lead {{ $leadName }}"
                                             >
-                                                <i
-                                                    class="bi {{ $leadLoversFailureIsCorrectable ? 'bi-wrench-adjustable-circle' : 'bi-pencil-square' }} me-1"
-                                                    aria-hidden="true"
-                                                ></i>
-                                                {{ $leadLoversFailureIsCorrectable ? 'Corrigir' : 'Editar' }}
+                                                <i class="bi bi-pencil-square" aria-hidden="true"></i>
+                                                Editar
                                             </button>
                                         @else
                                             <button
                                                 type="button"
-                                                class="btn btn-sm btn-outline-primary w-100 text-nowrap mb-2"
+                                                class="btn btn-sm btn-outline-primary admin-lead-action text-nowrap"
                                                 data-bs-toggle="modal"
                                                 data-bs-target="#adminLeadModal{{ $lead->id }}"
                                             >
                                                 Visualizar
                                             </button>
                                         @endcan
+                                        </div>
 
                                         @if ($insuranceAnalysisEnabled)
                                             @can('create-analysis')
@@ -1833,8 +1852,7 @@
             $isLeadLoversCorrectionValidationContext =
                 filled($firstInvalidLeadLoversCorrectionField)
                 && $leadLoversCorrectionContextId === (string) $lead->id;
-            $leadCanBeGenerallyEdited = Gate::allows('edit-leads')
-                && ! $leadLoversFailureIsCorrectable;
+            $leadCanBeGenerallyEdited = Gate::allows('edit-leads');
         @endphp
 
         <div
@@ -1974,16 +1992,12 @@
                                         <i class="bi bi-eye mt-1" aria-hidden="true"></i>
                                         <div>
                                             <strong>Visualização somente leitura.</strong>
-                                            @if ($leadLoversFailureIsCorrectable)
-                                                Use o botão <strong>Corrigir</strong> para alterar somente o campo recusado pela LeadLovers.
-                                            @else
-                                                Você pode consultar todos os dados deste lead, mas não possui permissão para editá-los.
-                                            @endif
+                                            Você pode consultar todos os dados deste lead, mas não possui permissão para editá-los.
                                         </div>
                                     </div>
 
                                     <fieldset disabled aria-label="Dados do lead disponíveis somente para visualização">
-                                @endcan
+                                @endif
 
                                         @include('partials.leadlovers-sync-status', [
                                             'lead' => $lead,
@@ -1998,6 +2012,7 @@
                                                 'lead' => $lead,
                                                 'leadUpdateIdPrefix' => 'admin-lead',
                                                 'isLeadValidationContext' => $isLeadValidationContext,
+                                                'leadUpdateLockedFields' => $leadLoversFailureIsCorrectable ? $leadLoversFailure['fields'] : [],
                                             ])
                                         </div>
                                 @if ($leadCanBeGenerallyEdited)

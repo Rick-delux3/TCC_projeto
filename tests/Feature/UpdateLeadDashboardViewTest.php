@@ -734,7 +734,7 @@ it('shows a machine configuration reason for an HTTP 400 machine request without
         ->not->toContain('Corrigir');
 });
 
-it('replaces Editar with Corrigir and renders field-exclusive admin correction modals', function () {
+it('keeps Editar alongside Corrigir and renders field-exclusive admin correction modals', function () {
     $admin = updateLeadDashboardAdmin();
     $phoneLead = updateLeadDashboardFailedLead('PHONE_EXISTS');
     $emailLead = updateLeadDashboardFailedLead('EMAIL_EXISTS', 400, [
@@ -755,6 +755,43 @@ it('replaces Editar with Corrigir and renders field-exclusive admin correction m
     $phoneModal = updateLeadDashboardNodeHtml($html, $phoneModalId);
     $emailModal = updateLeadDashboardNodeHtml($html, $emailModalId);
     $phoneTrigger = updateLeadDashboardTriggerHtml($html, $phoneModalId);
+
+    foreach ([$phoneLead, $emailLead] as $failedLead) {
+        $detailsModal = updateLeadDashboardNodeHtml($html, 'adminLeadModal'.$failedLead->id);
+
+        expect(updateLeadDashboardTriggerHtml($html, 'adminLeadModal'.$failedLead->id))
+            ->toContain('Editar')
+            ->toContain('bi-pencil-square')
+            ->and($detailsModal)
+            ->toContain('id="adminLeadUpdateForm'.$failedLead->id.'"')
+            ->toContain('action="'.route('admin.leads.update', $failedLead).'"')
+            ->not->toContain('<fieldset disabled')
+            ->not->toContain('Visualização somente leitura.');
+    }
+
+    foreach ([[$phoneLead, 'tel', 'email'], [$emailLead, 'email', 'tel']] as [$failedLead, $lockedField, $otherField]) {
+        $fieldId = 'admin-lead-'.$failedLead->id.'-'.$lockedField;
+        $field = updateLeadDashboardNodeHtml($html, $fieldId);
+        $correctionModal = updateLeadDashboardNodeHtml($html, 'adminLeadLoversCorrectionModal'.$failedLead->id);
+
+        expect($field)
+            ->toContain('readonly')
+            ->toContain('lead-field-pending-correction')
+            ->toContain('aria-invalid="true"')
+            ->toContain('aria-describedby="'.$fieldId.'-correction"')
+            ->toContain('value="'.$failedLead->{$lockedField}.'"')
+            ->not->toContain('disabled')
+            ->and(updateLeadDashboardNodeHtml($html, $fieldId.'-correction'))
+            ->toContain('Correção pendente.')
+            ->toContain('bi-lock')
+            ->and(updateLeadDashboardNodeHtml($html, 'admin-lead-'.$failedLead->id.'-'.$otherField))
+            ->not->toContain('lead-field-pending-correction')
+            ->and(updateLeadDashboardNodeHtml($html, 'admin-lead-'.$failedLead->id.'-nome'))
+            ->not->toContain('readonly')
+            ->and($correctionModal)
+            ->not->toContain('readonly')
+            ->not->toContain('lead-field-pending-correction');
+    }
 
     expect($phoneTrigger)
         ->toContain('Corrigir')
@@ -822,6 +859,25 @@ it('replaces Editar with Corrigir and renders field-exclusive admin correction m
         ->not->toContain('name="cpf"')
         ->not->toContain('name="status"')
         ->not->toContain('name="company_id"');
+});
+
+it('keeps a failed admin lead read-only without edit permission', function () {
+    $admin = updateLeadDashboardAdmin([
+        'permissions' => [CorretorPermissions::VIEW_LEADS],
+    ]);
+    $lead = updateLeadDashboardFailedLead('PHONE_EXISTS');
+    $html = $this->actingAs($admin, 'admin')
+        ->get(route('Dashboard-Admin'))
+        ->assertOk()
+        ->getContent();
+
+    expect(updateLeadDashboardTriggerHtml($html, 'adminLeadModal'.$lead->id))
+        ->toContain('Visualizar')
+        ->not->toContain('Editar')
+        ->and(updateLeadDashboardTriggerHtml($html, 'adminLeadLoversCorrectionModal'.$lead->id))->toBeNull()
+        ->and(updateLeadDashboardNodeHtml($html, 'adminLeadModal'.$lead->id))
+        ->toContain('<fieldset disabled')
+        ->not->toContain('id="adminLeadUpdateForm'.$lead->id.'"');
 });
 
 it('uses the company correction route with the same exclusive modal contract', function () {
@@ -1189,7 +1245,11 @@ it('returns to the normal synchronized presentation after the resend succeeds', 
         ->toContain('Sincronizado com')
         ->not->toContain('Não enviado à LeadLovers')
         ->not->toContain('Falha na integração')
-        ->not->toContain('Corrigir dados para envio');
+        ->not->toContain('Corrigir dados para envio')
+        ->not->toContain('lead-field-pending-correction')
+        ->not->toContain('Correção pendente.')
+        ->and(updateLeadDashboardNodeHtml($html, 'admin-lead-'.$lead->id.'-tel'))
+        ->not->toContain('readonly');
 });
 
 it('shares the correction stylesheet and preserves dark, mobile, and reduced-motion accessibility states', function () {

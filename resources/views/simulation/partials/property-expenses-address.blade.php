@@ -28,7 +28,7 @@
     @include('simulation.partials.input', ['field' => ['name' => 'outras_despesas', 'label' => 'Outras despesas', 'type' => 'money', 'placeholder' => 'Opcional']])
     <div class="simulation-expense-info md:col-span-2">
         @include('simulation.partials.form-icon', ['icon' => 'info'])
-        <p>Água e luz são opcionais. Se não preencher, será considerado 10% do aluguel para cada uma.</p>
+        <p>Água e luz são preenchidas com 10% do aluguel para cada uma. Você pode editar os valores. Se deixar em branco, será usado esse padrão.</p>
     </div>
 </div>
 <h2 class="simulation-section-title simulation-address-title">Endereço do imóvel</h2>
@@ -59,6 +59,44 @@
 document.addEventListener('DOMContentLoaded', function () {
     const selector = document.getElementById('expenseSelector');
     const addButton = document.getElementById('addExpenseButton');
+    const rentInput = document.getElementById('valor_aluguel');
+    const automaticExpenses = new Map(
+        ['valor_agua', 'valor_luz']
+            .map(name => document.getElementById(name))
+            .filter(Boolean)
+            .map(input => [input, input.value.trim() === ''])
+    );
+    const expenseFormatter = new Intl.NumberFormat('pt-BR', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+    });
+
+    function updateAutomaticExpenses() {
+        let value = (rentInput?.value ?? '').replace(/[^\d,.]/g, '');
+
+        if (value.includes(',')) {
+            value = value.replace(/\./g, '').replace(',', '.');
+        }
+
+        const rent = Number(value);
+        const suggestion = value !== '' && Number.isFinite(rent) && rent > 0
+            ? expenseFormatter.format(rent * 0.10)
+            : '';
+
+        automaticExpenses.forEach(function (automatic, input) {
+            if (automatic && !input.disabled) {
+                input.value = suggestion;
+            }
+        });
+    }
+
+    automaticExpenses.forEach(function (automatic, input) {
+        input.addEventListener('input', function () {
+            automaticExpenses.set(input, input.value.trim() === '');
+        });
+    });
+    rentInput?.addEventListener('input', updateAutomaticExpenses);
+    rentInput?.addEventListener('change', updateAutomaticExpenses);
 
     function formatarCep(valor) {
         const numeros = valor.replace(/\D/g, '').slice(0, 8);
@@ -84,6 +122,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
             if (input) {
                 input.disabled = false;
+                updateAutomaticExpenses();
                 input.focus();
             }
         }
@@ -103,6 +142,10 @@ document.addEventListener('DOMContentLoaded', function () {
         if (input) {
             input.value = '';
             input.disabled = true;
+
+            if (automaticExpenses.has(input)) {
+                automaticExpenses.set(input, true);
+            }
         }
 
         fieldWrapper.classList.add('d-none');
@@ -153,6 +196,7 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 
     syncExpenseSelector();
+    updateAutomaticExpenses();
 
     const cepInput = document.getElementById('cep');
 

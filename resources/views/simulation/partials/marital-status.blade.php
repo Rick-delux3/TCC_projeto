@@ -1,6 +1,6 @@
 @php
     $maritalStatus = old('estado_civil');
-    $showSpouse = in_array($maritalStatus, ['casado', 'uniao_estavel', 'divorciado', 'viuvo'], true);
+    $showSpouse = in_array($maritalStatus, ['casado', 'uniao_estavel'], true);
 @endphp
 
 <div class="col-md-4">
