@@ -15,7 +15,7 @@
         @else
             <div class="flex flex-col gap-3">
                 <h1 id="recovery-title">Receba seu código por email</h1>
-                <p>Informe o email cadastrado da sua imobiliária para receber novamente o código de acesso aos formulários públicos.</p>
+                <p>Informe o email cadastrado da sua imobiliária para receber novamente o código de acesso aos formulários.</p>
             </div>
             <form action="{{ route('simulation.registered-company.code.email') }}" method="POST" class="flex flex-col gap-6" data-company-access-form>
                 @csrf
