@@ -130,8 +130,10 @@
                                     ? $errors->first($field['name'])
                                     : null;
                                 $fieldErrorId = $fieldId.'-error';
+                                $fieldNeedsCorrection = $isAdminLeadEditor && in_array($field['name'], $leadUpdateLockedFields ?? [], true);
+                                $fieldCorrectionId = $fieldId.'-correction';
                                 $fieldVisible = ! isset($field['condition']) || $visibleConditions[$field['condition']];
-                                $fieldValue = ($field['preserve_old'] ?? true) ? $leadUpdateValue($field['name'], $field['value']) : $field['value'];
+                                $fieldValue = ! $fieldNeedsCorrection && ($field['preserve_old'] ?? true) ? $leadUpdateValue($field['name'], $field['value']) : $field['value'];
                                 $fieldRequired = $fieldVisible && (in_array($field['condition'] ?? '', ['company', 'commercial'], true) || (($field['condition'] ?? '') === 'spouse' && in_array($effectiveStatus, ['casado', 'uniao_estavel'], true)));
                             @endphp
 
@@ -155,19 +157,26 @@
                                     id="{{ $fieldId }}"
                                     type="{{ $field['type'] ?? 'text' }}"
                                     name="{{ $field['name'] }}"
-                                    class="form-control {{ $fieldError ? 'is-invalid' : '' }}"
+                                    class="form-control {{ $fieldError ? 'is-invalid' : '' }} {{ $fieldNeedsCorrection ? 'lead-field-pending-correction' : '' }}"
                                     value="{{ $fieldValue }}"
                                     @disabled(! $fieldVisible)
                                     @required($fieldRequired)
                                     @if (isset($field['maxlength'])) maxlength="{{ $field['maxlength'] }}" @endif
                                     @if (isset($field['step'])) step="{{ $field['step'] }}" @endif
                                     @if (isset($field['min'])) min="{{ $field['min'] }}" @endif
-                                    @if ($field['readonly'] ?? false) readonly @endif
-                                    @if ($fieldError)
+                                    @readonly($fieldNeedsCorrection || ($field['readonly'] ?? false))
+                                    @if ($fieldError || $fieldNeedsCorrection)
                                         aria-invalid="true"
-                                        aria-describedby="{{ $fieldErrorId }}"
+                                        aria-describedby="{{ trim(($fieldError ? $fieldErrorId : '').' '.($fieldNeedsCorrection ? $fieldCorrectionId : '')) }}"
                                     @endif
                                 >
+                                @endif
+
+                                @if ($fieldNeedsCorrection)
+                                    <p id="{{ $fieldCorrectionId }}" class="lead-field-correction-hint flex items-start gap-1.5 mt-2 mb-0">
+                                        <i class="bi bi-lock" aria-hidden="true"></i>
+                                        <span>Correção pendente. Use “Corrigir” na lista de leads.</span>
+                                    </p>
                                 @endif
 
                                 @if ($fieldError)

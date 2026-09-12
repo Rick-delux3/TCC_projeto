@@ -278,6 +278,135 @@ it('renders the same conditional controls in all simulation views', function (st
     'simulation.unregistered-company.form',
 ]);
 
+it('shows spouse fields only for married or stable union in every simulation view', function (
+    string $view,
+    bool $isAdminSimulation,
+    ?string $status,
+    bool $showSpouse
+) {
+    $this->withSession(['_old_input' => conditionalSimulationPayload([
+        'estado_civil' => $status,
+        'conjuge_nome' => 'Cônjuge Teste',
+        'conjuge_cpf' => '11144477735',
+    ])]);
+    $this->app['request']->setLaravelSession($this->app['session.store']);
+
+    $html = (string) $this->view('simulation.forms.'.$view, [
+        'company' => conditionalSimulationCompany(),
+        'isAdminSimulation' => $isAdminSimulation,
+        'errors' => new \Illuminate\Support\ViewErrorBag,
+    ]);
+    $dom = conditionalSimulationDom($html);
+    $spouseFields = '//*[@data-simulation-fields="spouse"]//input';
+
+    expect($dom->query($spouseFields)->length)->toBe($showSpouse ? 2 : 0)
+        ->and($dom->query($spouseFields.'[@required]')->length)->toBe($showSpouse ? 2 : 0);
+
+    if ($showSpouse) {
+        expect($dom->evaluate('string('.$spouseFields.'[@name="conjuge_nome"]/@value)'))->toBe('Cônjuge Teste');
+    }
+})->with(['tenant', 'registered-company', 'unregistered-company_landlord'])
+    ->with(['public' => false, 'internal' => true])
+    ->with([
+        'unselected' => [null, false],
+        'single' => ['solteiro', false],
+        'separated' => ['separado', false],
+        'married' => ['casado', true],
+        'stable union' => ['uniao_estavel', true],
+        'divorced' => ['divorciado', false],
+        'widowed' => ['viuvo', false],
+    ]);
+
+it('updates editable water and electricity defaults with the rent in simulation forms', function () {
+    $html = $this->get(route('simulation.tenant.form'))->assertOk()->getContent();
+    $dom = conditionalSimulationDom($html);
+    $script = '';
+
+    foreach ($dom->query('//script') as $element) {
+        if (str_contains($element->textContent, 'function updateAutomaticExpenses()')) {
+            $script = $element->textContent;
+            break;
+        }
+    }
+
+    expect($script)->not->toBeEmpty();
+
+    foreach (['valor_agua', 'valor_luz'] as $field) {
+        expect($dom->query('//input[@name="'.$field.'"][@readonly or @disabled]')->length)->toBe(0);
+    }
+
+    $process = new \Symfony\Component\Process\Process(['node', '-e', <<<'JS'
+        const assert = require('node:assert/strict');
+        const vm = require('node:vm');
+        const script = require('node:fs').readFileSync(0, 'utf8');
+        function setup(values = {}) {
+            const inputs = Object.fromEntries(['valor_aluguel', 'valor_agua', 'valor_luz'].map(name => {
+                const input = Object.assign(new EventTarget(), { value: values[name] ?? '', disabled: false, focus() {} });
+                return [name, input];
+            }));
+            const selector = { value: '', selectedOptions: [{}], querySelectorAll: () => [] };
+            const add = new EventTarget();
+            const remove = ['valor_agua', 'valor_luz'].map(name => Object.assign(new EventTarget(), { dataset: { removeExpense: name } }));
+            const wrappers = Object.fromEntries(['valor_agua', 'valor_luz'].map(name => {
+                const classes = new Set();
+                return [name, {
+                    querySelector: () => inputs[name],
+                    classList: { add: value => classes.add(value), remove: value => classes.delete(value), contains: value => classes.has(value) },
+                }];
+            }));
+            const document = {
+                getElementById: name => inputs[name] ?? ({ expenseSelector: selector, addExpenseButton: add }[name] ?? null),
+                querySelector: query => wrappers[query.match(/data-expense-field="([^"]+)"/)[1]],
+                querySelectorAll: query => query === '.expense-field' ? Object.values(wrappers) : remove,
+                addEventListener: (event, callback) => callback(),
+            };
+            vm.runInNewContext(script, { document, Intl });
+            return {
+                inputs,
+                change(name, value) { inputs[name].value = value; inputs[name].dispatchEvent(new Event('input')); },
+                removeWater() { remove[0].dispatchEvent(new Event('click')); },
+                addWater() { selector.value = 'valor_agua'; add.dispatchEvent(new Event('click')); },
+            };
+        }
+        const form = setup();
+        for (const rent of ['1300', '1.300,00', '1300.00']) {
+            form.change('valor_aluguel', rent);
+            assert.equal(form.inputs.valor_agua.value, '130,00');
+            assert.equal(form.inputs.valor_luz.value, '130,00');
+        }
+        form.change('valor_agua', '95,50');
+        form.change('valor_aluguel', '2000');
+        assert.equal(form.inputs.valor_agua.value, '95,50');
+        assert.equal(form.inputs.valor_luz.value, '200,00');
+        form.change('valor_luz', '0');
+        form.change('valor_aluguel', '3000');
+        assert.equal(form.inputs.valor_luz.value, '0');
+        form.removeWater();
+        form.change('valor_aluguel', '4000');
+        assert.equal(form.inputs.valor_agua.value, '');
+        assert.equal(form.inputs.valor_agua.disabled, true);
+        form.addWater();
+        assert.equal(form.inputs.valor_agua.value, '400,00');
+        assert.equal(form.inputs.valor_agua.disabled, false);
+        form.change('valor_aluguel', '');
+        assert.equal(form.inputs.valor_agua.value, '');
+        assert.equal(form.inputs.valor_luz.value, '0');
+        const restored = setup({ valor_aluguel: '1300', valor_agua: '80', valor_luz: '0' });
+        restored.change('valor_aluguel', '1500');
+        assert.equal(restored.inputs.valor_agua.value, '80');
+        assert.equal(restored.inputs.valor_luz.value, '0');
+        const initial = setup({ valor_aluguel: '1300.55' });
+        assert.equal(initial.inputs.valor_agua.value, '130,06');
+        assert.equal(initial.inputs.valor_luz.value, '130,06');
+        console.log('utility defaults verified');
+        JS]);
+    $process->setInput($script);
+    $process->run();
+
+    expect($process->getExitCode())->toBe(0, $process->getErrorOutput())
+        ->and($process->getOutput())->toContain('utility defaults verified');
+});
+
 it('restores active fields and choices after a validation error', function () {
     $this->withSession(['_old_input' => conditionalSimulationPayload([
         'cpf' => '11222333000181',

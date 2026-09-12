@@ -4,6 +4,7 @@ use App\Models\Corretor;
 use App\Models\CorretorActivityLog;
 use App\Models\Imobiliaria;
 use App\Models\Lead;
+use App\Models\LeadLoversTag;
 use App\Models\User;
 use App\Services\LeadLoversTagOperationCoordinator;
 use App\Support\CorretorPermissions;
@@ -223,6 +224,107 @@ function updateLeadDashboardListedNames(string $html): array
 
     return $names;
 }
+
+it('renders the untouched lead filter consistently without offering it as a manual tag', function (): void {
+    $admin = updateLeadDashboardAdmin(['permissions' => [
+        CorretorPermissions::VIEW_LEADS, CorretorPermissions::EDIT_LEADS,
+        CorretorPermissions::VIEW_TAGS, CorretorPermissions::MANAGE_LEAD_TAGS,
+    ]]);
+
+    foreach (range(1, 7) as $number) {
+        updateLeadDashboardLead([
+            'nome' => "Carlos {$number}", 'leadlovers_status' => 'sent',
+            'leadlovers_lead_id' => $number, 'sent_to_leadlovers_at' => now(),
+        ]);
+    }
+
+    $response = $this->actingAs($admin, 'admin')->get(route('Dashboard-Admin', [
+        'resultado' => 'no_result', 'lead_name' => '  Carlos  ',
+        'imobiliaria' => 'sem_vinculo', 'tipo_solicitante' => 'locatario', 'unused' => 'discard',
+    ]))->assertOk();
+    $dom = updateLeadDashboardDom($response->getContent());
+    $xpath = $dom['xpath'];
+    $quick = $xpath->query('//a[contains(@class,"lead-filter-chip--sem-resultado")]')->item(0);
+
+    expect($xpath->query('//select[@name="resultado"]/option[@value="sem_resultado" and @selected]')->length)->toBe(1)
+        ->and($quick?->getAttribute('aria-current'))->toBe('true')
+        ->and($quick?->getAttribute('href'))->not->toContain('resultado=', 'unused=')
+        ->and($xpath->query('//select[@name="result"]/option[@value="sem_resultado"]')->length)->toBe(0)
+        ->and($xpath->query('//select[@name="result"]')->length)->toBeGreaterThan(0)
+        ->and($response->getContent())->toContain('Resultado: Sem resultado');
+
+    $approved = $xpath->query('//a[contains(@class,"lead-filter-chip--approved")]')->item(0);
+    parse_str(parse_url($approved->getAttribute('href'), PHP_URL_QUERY), $parameters);
+    expect($parameters)->toBe([
+        'lead_name' => 'Carlos', 'imobiliaria' => 'sem_vinculo', 'tipo_solicitante' => 'locatario',
+        'resultado' => 'approved', 'page' => '1',
+    ]);
+
+    expect($response->viewData('leads')->nextPageUrl())->toContain('#leads-section');
+    $nextPage = $this->get($response->viewData('leads')->nextPageUrl())->assertOk();
+    expect($nextPage->viewData('leads')->count())->toBe(1);
+    $this->get($quick->getAttribute('href'))->assertOk()->assertViewHas('selectedResultado', '');
+});
+
+it('renders result badges and manual choices from the backend classification', function (array $attributes, string $label, string $cardClass, ?string $excludedResult): void {
+    $admin = updateLeadDashboardAdmin(['permissions' => [
+        CorretorPermissions::VIEW_LEADS, CorretorPermissions::EDIT_LEADS,
+        CorretorPermissions::VIEW_TAGS, CorretorPermissions::MANAGE_LEAD_TAGS,
+    ]]);
+    LeadLoversTag::query()->create(['key' => 'aprovados', 'title' => 'Análise positiva', 'leadlovers_tag_id' => 901, 'active' => true]);
+    $lead = updateLeadDashboardLead($attributes);
+    $response = $this->actingAs($admin, 'admin')->get(route('Dashboard-Admin'))->assertOk();
+    $dom = updateLeadDashboardDom($response->getContent());
+    $card = $dom['xpath']->query('//article[contains(@class,"lead-list-item")]')->item(0);
+    $modal = updateLeadDashboardNodeHtml($response->getContent(), 'adminLeadModal'.$lead->id);
+
+    expect($card?->getAttribute('class'))->toContain($cardClass)
+        ->and($card?->textContent)->toContain($label)
+        ->and($modal)->toContain($label);
+
+    if ($excludedResult !== null) {
+        expect($dom['xpath']->query('//select[@name="result"]/option[@value="'.$excludedResult.'"]')->length)->toBe(0);
+    }
+})->with([
+    'confirmed result overrides old tags' => [['tags_originais' => 'Ruim', 'leadlovers_confirmed_final_tag_key' => 'aprovados'], 'Aprovado', 'lead-card--approved', 'approved'],
+    'configured title' => [['tags_originais' => 'Análise positiva'], 'Aprovado', 'lead-card--approved', 'approved'],
+    'partial tag is not a result' => [['tags_originais' => 'Desaprovados'], 'Sem resultado', 'lead-card--neutral', null],
+]);
+
+it('renders the recovered requester profile and company details used by the filter', function (): void {
+    $lead = updateLeadDashboardLead(['tipo_solicitante' => null, 'origem' => 'simulacao_publica']);
+    $lead->imobiliariaInformada()->create(['nome_imobiliaria_informada' => 'Imobiliária informada no cadastro']);
+    $response = $this->actingAs(updateLeadDashboardAdmin(), 'admin')
+        ->get(route('Dashboard-Admin', ['tipo_solicitante' => 'imobiliaria_nao_cadastrada']))->assertOk();
+    $dom = updateLeadDashboardDom($response->getContent());
+    $card = $dom['xpath']->query('//article[contains(@class,"lead-list-item")]')->item(0);
+
+    expect($card?->textContent)->toContain('Imobiliária não cadastrada', 'Imobiliária informada no cadastro')
+        ->not->toContain('Perfil não informado');
+});
+
+it('keeps a missing company filter visible instead of displaying all companies', function (): void {
+    $response = $this->actingAs(updateLeadDashboardAdmin(), 'admin')
+        ->get(route('Dashboard-Admin', ['imobiliaria' => '999999']))->assertOk();
+    $dom = updateLeadDashboardDom($response->getContent());
+    $selected = $dom['xpath']->query('//select[@name="imobiliaria"]/option[@selected]')->item(0);
+
+    expect($selected?->getAttribute('value'))->toBe('999999')
+        ->and($selected?->textContent)->toContain('indisponível')
+        ->and($response->getContent())->toContain('Vínculo: Imobiliária #999999');
+});
+
+it('shows filter validation errors inside the filter instead of lead edit feedback', function (): void {
+    $this->actingAs(updateLeadDashboardAdmin(), 'admin');
+    $this->from(route('Dashboard-Admin'))->get(route('Dashboard-Admin', ['tipo_solicitante' => 'invalid']))
+        ->assertRedirect(route('Dashboard-Admin'))
+        ->assertSessionHasErrors(['tipo_solicitante'], null, 'leadFilters');
+
+    $response = $this->get(route('Dashboard-Admin'))->assertOk();
+    $panel = updateLeadDashboardNodeHtml($response->getContent(), 'leads-section');
+    expect($panel)->toContain('Selecione um perfil válido.')
+        ->and($response->getContent())->not->toContain('Não foi possível associar os erros ao lead');
+});
 
 it('shows who requested a manual tag while LeadLovers is processing it', function () {
     $corretor = updateLeadDashboardAdmin([
@@ -734,7 +836,7 @@ it('shows a machine configuration reason for an HTTP 400 machine request without
         ->not->toContain('Corrigir');
 });
 
-it('replaces Editar with Corrigir and renders field-exclusive admin correction modals', function () {
+it('keeps Editar alongside Corrigir and renders field-exclusive admin correction modals', function () {
     $admin = updateLeadDashboardAdmin();
     $phoneLead = updateLeadDashboardFailedLead('PHONE_EXISTS');
     $emailLead = updateLeadDashboardFailedLead('EMAIL_EXISTS', 400, [
@@ -755,6 +857,43 @@ it('replaces Editar with Corrigir and renders field-exclusive admin correction m
     $phoneModal = updateLeadDashboardNodeHtml($html, $phoneModalId);
     $emailModal = updateLeadDashboardNodeHtml($html, $emailModalId);
     $phoneTrigger = updateLeadDashboardTriggerHtml($html, $phoneModalId);
+
+    foreach ([$phoneLead, $emailLead] as $failedLead) {
+        $detailsModal = updateLeadDashboardNodeHtml($html, 'adminLeadModal'.$failedLead->id);
+
+        expect(updateLeadDashboardTriggerHtml($html, 'adminLeadModal'.$failedLead->id))
+            ->toContain('Editar')
+            ->toContain('bi-pencil-square')
+            ->and($detailsModal)
+            ->toContain('id="adminLeadUpdateForm'.$failedLead->id.'"')
+            ->toContain('action="'.route('admin.leads.update', $failedLead).'"')
+            ->not->toContain('<fieldset disabled')
+            ->not->toContain('Visualização somente leitura.');
+    }
+
+    foreach ([[$phoneLead, 'tel', 'email'], [$emailLead, 'email', 'tel']] as [$failedLead, $lockedField, $otherField]) {
+        $fieldId = 'admin-lead-'.$failedLead->id.'-'.$lockedField;
+        $field = updateLeadDashboardNodeHtml($html, $fieldId);
+        $correctionModal = updateLeadDashboardNodeHtml($html, 'adminLeadLoversCorrectionModal'.$failedLead->id);
+
+        expect($field)
+            ->toContain('readonly')
+            ->toContain('lead-field-pending-correction')
+            ->toContain('aria-invalid="true"')
+            ->toContain('aria-describedby="'.$fieldId.'-correction"')
+            ->toContain('value="'.$failedLead->{$lockedField}.'"')
+            ->not->toContain('disabled')
+            ->and(updateLeadDashboardNodeHtml($html, $fieldId.'-correction'))
+            ->toContain('Correção pendente.')
+            ->toContain('bi-lock')
+            ->and(updateLeadDashboardNodeHtml($html, 'admin-lead-'.$failedLead->id.'-'.$otherField))
+            ->not->toContain('lead-field-pending-correction')
+            ->and(updateLeadDashboardNodeHtml($html, 'admin-lead-'.$failedLead->id.'-nome'))
+            ->not->toContain('readonly')
+            ->and($correctionModal)
+            ->not->toContain('readonly')
+            ->not->toContain('lead-field-pending-correction');
+    }
 
     expect($phoneTrigger)
         ->toContain('Corrigir')
@@ -822,6 +961,25 @@ it('replaces Editar with Corrigir and renders field-exclusive admin correction m
         ->not->toContain('name="cpf"')
         ->not->toContain('name="status"')
         ->not->toContain('name="company_id"');
+});
+
+it('keeps a failed admin lead read-only without edit permission', function () {
+    $admin = updateLeadDashboardAdmin([
+        'permissions' => [CorretorPermissions::VIEW_LEADS],
+    ]);
+    $lead = updateLeadDashboardFailedLead('PHONE_EXISTS');
+    $html = $this->actingAs($admin, 'admin')
+        ->get(route('Dashboard-Admin'))
+        ->assertOk()
+        ->getContent();
+
+    expect(updateLeadDashboardTriggerHtml($html, 'adminLeadModal'.$lead->id))
+        ->toContain('Visualizar')
+        ->not->toContain('Editar')
+        ->and(updateLeadDashboardTriggerHtml($html, 'adminLeadLoversCorrectionModal'.$lead->id))->toBeNull()
+        ->and(updateLeadDashboardNodeHtml($html, 'adminLeadModal'.$lead->id))
+        ->toContain('<fieldset disabled')
+        ->not->toContain('id="adminLeadUpdateForm'.$lead->id.'"');
 });
 
 it('uses the company correction route with the same exclusive modal contract', function () {
@@ -1189,7 +1347,11 @@ it('returns to the normal synchronized presentation after the resend succeeds', 
         ->toContain('Sincronizado com')
         ->not->toContain('Não enviado à LeadLovers')
         ->not->toContain('Falha na integração')
-        ->not->toContain('Corrigir dados para envio');
+        ->not->toContain('Corrigir dados para envio')
+        ->not->toContain('lead-field-pending-correction')
+        ->not->toContain('Correção pendente.')
+        ->and(updateLeadDashboardNodeHtml($html, 'admin-lead-'.$lead->id.'-tel'))
+        ->not->toContain('readonly');
 });
 
 it('shares the correction stylesheet and preserves dark, mobile, and reduced-motion accessibility states', function () {

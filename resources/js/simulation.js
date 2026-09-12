@@ -95,7 +95,7 @@ const initializeConditionalFields = (form) => {
 
     const updateSpouse = () => {
         const status = maritalStatus.value;
-        const visible = ['casado', 'uniao_estavel', 'divorciado', 'viuvo'].includes(status);
+        const visible = ['casado', 'uniao_estavel'].includes(status);
         const required = ['casado', 'uniao_estavel'].includes(status);
 
         renderFields('spouse', visible);

@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\Relations\MorphOne;
 
 class Lead extends Model
@@ -210,8 +211,14 @@ class Lead extends Model
             'model_type',
             'model_id'
         )
-            ->where('action', 'lead_data_update_requested')
-            ->latestOfMany();
+            ->ofMany(['id' => 'max'], function (Builder $query): void {
+                $query->where('action', 'lead_data_update_requested');
+            });
+    }
+
+    public function activityLogs(): MorphMany
+    {
+        return $this->morphMany(CorretorActivityLog::class, 'subject', 'model_type', 'model_id');
     }
 
     public function createdByAdmin()
