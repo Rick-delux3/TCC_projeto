@@ -2,10 +2,8 @@
 
 @section('content_a')
 @php
-    use App\Support\ManualLeadResultTags;
     use Illuminate\Support\Facades\Gate;
     use Illuminate\Support\Facades\Route;
-    use Illuminate\Support\Str;
 
     /*
     |--------------------------------------------------------------------------
@@ -71,6 +69,9 @@
                     : null
         )
         ->filter(fn (?string $label): bool => filled($label));
+
+    $leadResultFilterOptions = collect($leadResultFilterOptions ?? []);
+    $leadRequesterProfiles = $leadRequesterProfiles ?? [];
 
     $manualResultVisuals = [
         'approved' => [
@@ -286,13 +287,11 @@
         ? route('admin.simulations.open')
         : '#';
 
-    $leadSearch = $leadSearch ?? request('lead_name', '');
-    $selectedImobiliaria = $selectedImobiliaria ?? request('imobiliaria', '');
-    $selectedResultado = $selectedResultado ?? request('resultado', '');
-    $selectedTipoSolicitante = $selectedTipoSolicitante
-        ?? request('tipo_solicitante', '');
-    $selectedLeadLoversSync = $selectedLeadLoversSync
-        ?? request('leadlovers_sync', '');
+    $leadSearch = $leadSearch ?? '';
+    $selectedImobiliaria = $selectedImobiliaria ?? '';
+    $selectedResultado = $selectedResultado ?? '';
+    $selectedTipoSolicitante = $selectedTipoSolicitante ?? '';
+    $selectedLeadLoversSync = $selectedLeadLoversSync ?? '';
 
     $tipoSolicitantesOptions = $tipoSolicitantesOptions ?? [
         'imobiliaria_cadastrada' => 'Imobiliária cadastrada',
@@ -328,6 +327,22 @@
     $dashboardRoute = Route::has('Dashboard-Admin')
         ? route('Dashboard-Admin')
         : url()->current();
+
+    $activeLeadFilters = [
+        'lead_name' => $leadSearch,
+        'imobiliaria' => $selectedImobiliaria,
+        'tipo_solicitante' => $selectedTipoSolicitante,
+        'resultado' => $selectedResultado,
+        'leadlovers_sync' => $selectedLeadLoversSync,
+    ];
+    $leadFilterUrl = function (array $changes = []) use ($activeLeadFilters, $dashboardRoute): string {
+        $parameters = array_filter(
+            array_replace($activeLeadFilters, $changes, ['page' => 1]),
+            fn ($value): bool => filled($value)
+        );
+
+        return $dashboardRoute.'?'.http_build_query($parameters, '', '&', PHP_QUERY_RFC3986).'#leads-section';
+    };
 
     $adminUpdateLeadRoute = function($lead) {
         return Route::has('admin.leads.update') ? route('admin.leads.update', $lead) : '#';
@@ -383,113 +398,41 @@
 
         $selectedImobiliariaName = $selectedImobiliariaModel?->name
             ?? $selectedImobiliariaModel?->nome
-            ?? null;
+            ?? (filled($selectedImobiliaria) ? 'Imobiliária #'.$selectedImobiliaria.' (indisponível)' : null);
     }
 
-    $normalizeTag = function ($value) {
-        return Str::of((string) $value)
-            ->ascii()
-            ->lower()
-            ->replace(['_', '-'], ' ')
-            ->squish()
-            ->toString();
-    };
-
-    $getLeadResultTone = function ($tags) use ($normalizeTag) {
-        $normalizedTags = collect($tags)
-            ->map(fn ($tag) => $normalizeTag($tag))
-            ->filter();
-
-        $matchesRentalConfirmed = $normalizedTags->contains(
-            fn (string $tag): bool =>
-                in_array($tag, [
-                    'fechado aluguel',
-                    'aluguel fechado',
-                    'fechado alguel',
-                ], true)
-        );
-
-        $matchesNoRentOrInsurance = $normalizedTags->contains(
-            fn (string $tag): bool =>
-                in_array($tag, [
-                    'nao aluguei nem seguro',
-                    'nao aluguel nem seguro',
-                ], true)
-        );
-
-        $matchesNegotiation = $normalizedTags->contains(
-            fn (string $tag): bool => $tag === 'em negociacao'
-        );
-
-        $matchesRejected = $normalizedTags->contains(
-            fn (string $tag): bool =>
-                str_contains($tag, 'recusad')
-                || str_contains($tag, 'reprovad')
-                || $tag === 'ruim'
-        );
-
-        $matchesApproved = $normalizedTags->contains(
-            fn (string $tag): bool => str_contains($tag, 'aprovad')
-        );
-
-        /*
-         * Prioridade visual determinística para dados legados inconsistentes:
-         * fechado aluguel, não aluguei nem seguro, negociação, recusado e aprovado.
-         */
+    $getLeadResultTone = function ($lead) use ($manualResultOptions): array {
         $tones = [
-            [
-                'matches' => $matchesRentalConfirmed,
-                'tone' => [
-                    'label' => 'Fechado aluguel',
-                    'badge' => 'text-bg-primary',
-                    'card' => 'lead-card--rent-closed',
-                    'icon' => 'bi-house-check',
-                ],
+            'rental_confirmed' => [
+                'badge' => 'text-bg-primary',
+                'card' => 'lead-card--rent-closed',
+                'icon' => 'bi-house-check',
             ],
-
-            [
-                'matches' => $matchesNoRentOrInsurance,
-                'tone' => [
-                    'label' => 'Não aluguei nem seguro',
-                    'badge' => 'text-bg-secondary',
-                    'card' => 'lead-card--no-rent-or-insurance',
-                    'icon' => 'bi-house-x',
-                ],
+            'no_rent_or_insurance' => [
+                'badge' => 'text-bg-secondary',
+                'card' => 'lead-card--no-rent-or-insurance',
+                'icon' => 'bi-house-x',
             ],
-
-            [
-                'matches' => $matchesNegotiation,
-                'tone' => [
-                    'label' => 'Em negociação',
-                    'badge' => 'text-bg-warning',
-                    'card' => 'lead-card--negotiation',
-                    'icon' => 'bi-hourglass-split',
-                ],
+            'in_negotiation' => [
+                'badge' => 'text-bg-warning',
+                'card' => 'lead-card--negotiation',
+                'icon' => 'bi-hourglass-split',
             ],
-            [
-                'matches' => $matchesRejected,
-                'tone' => [
-                    'label' => 'Recusado',
-                    'badge' => 'text-bg-danger',
-                    'card' => 'lead-card--bad',
-                    'icon' => 'bi-x-circle',
-                ],
+            'rejected' => [
+                'badge' => 'text-bg-danger',
+                'card' => 'lead-card--bad',
+                'icon' => 'bi-x-circle',
             ],
-            [
-                'matches' => $matchesApproved,
-                'tone' => [
-                    'label' => 'Aprovado',
-                    'badge' => 'text-bg-success',
-                    'card' => 'lead-card--approved',
-                    'icon' => 'bi-check-circle',
-                ],
+            'approved' => [
+                'badge' => 'text-bg-success',
+                'card' => 'lead-card--approved',
+                'icon' => 'bi-check-circle',
             ],
         ];
+        $result = $lead->dashboard_result;
 
-        foreach ($tones as $toneConfig) {
-            if ($toneConfig['matches']) {
-                return $toneConfig['tone'];
-            }
+        if (isset($tones[$result])) {
+            return ['label' => $manualResultOptions->get($result)] + $tones[$result];
         }
 
         return [
@@ -500,7 +443,7 @@
         ];
     };
 
-    $getImobiliariaName = function ($lead) {
+    $getImobiliariaName = function ($lead) use ($leadRequesterProfiles) {
         if ($lead->company_id) {
             return $lead->imobiliariaVinculada?->name
                 ?? $lead->imobiliariaVinculada?->nome
@@ -508,7 +451,7 @@
                 ?? 'Imobiliária vinculada';
         }
 
-        if ($lead->tipo_solicitante === 'imobiliaria_nao_cadastrada') {
+        if (($leadRequesterProfiles[$lead->id] ?? null) === 'imobiliaria_nao_cadastrada') {
             return $lead->imobiliariaInformada?->nome_imobiliaria_informada
                 ?? (is_string($lead->imobiliaria) ? $lead->imobiliaria : null)
                 ?? 'Imobiliária não cadastrada';
@@ -517,8 +460,8 @@
         return 'Sem imobiliária vinculada';
     };
 
-    $getTipoSolicitanteLabel = function ($lead) use ($tipoSolicitantesOptions) {
-        return $tipoSolicitantesOptions[$lead->tipo_solicitante]
+    $getTipoSolicitanteLabel = function ($lead) use ($tipoSolicitantesOptions, $leadRequesterProfiles) {
+        return $tipoSolicitantesOptions[$leadRequesterProfiles[$lead->id] ?? '']
             ?? 'Perfil não informado';
     };
 
@@ -861,6 +804,7 @@
                                         value="{{ $leadSearch }}"
                                         placeholder="Nome, e-mail, CPF ou telefone"
                                         autocomplete="off"
+                                        maxlength="255"
                                     >
                                 </div>
                             </div>
@@ -873,6 +817,10 @@
 
                                 <select id="admin-imobiliaria-filter" name="imobiliaria" class="lead-filter-control">
                                     <option value="">Todos os vínculos</option>
+
+                                    @if (filled($selectedImobiliaria) && $selectedImobiliaria !== 'sem_vinculo' && $selectedImobiliariaModel === null)
+                                        <option value="{{ $selectedImobiliaria }}" selected>{{ $selectedImobiliariaName }}</option>
+                                    @endif
 
                                     <option
                                         value="sem_vinculo"
@@ -935,7 +883,7 @@
                                 >
                                     <option value="">Todos os resultados</option>
 
-                                    @foreach ($manualResultOptions as $result => $label)
+                                    @foreach ($leadResultFilterOptions as $result => $label)
                                         <option
                                             value="{{ $result }}"
                                             @selected($selectedResultado === $result)
@@ -980,6 +928,12 @@
                         </div>
                     </form>
 
+                    @if ($errors->getBag('leadFilters')->any())
+                        <div class="lead-filter-panel__warning" role="alert">
+                            {{ $errors->getBag('leadFilters')->first() }}
+                        </div>
+                    @endif
+
                     {{-- Filtros ativos --}}
                     @if ($isFiltering)
                         <div class="lead-filter-active" role="group" aria-label="Filtros ativos">
@@ -997,7 +951,7 @@
 
                             @if (filled($leadSearch))
                                 <a
-                                    href="{{ request()->fullUrlWithQuery(['lead_name' => null, 'page' => 1]) }}#leads-section"
+                                    href="{{ $leadFilterUrl(['lead_name' => null, 'page' => 1]) }}"
                                     class="lead-filter-chip lead-filter-chip--removable"
                                     aria-label="Remover busca por {{ $leadSearch }}"
                                 >
@@ -1009,7 +963,7 @@
 
                             @if (filled($selectedImobiliaria))
                                 <a
-                                    href="{{ request()->fullUrlWithQuery(['imobiliaria' => null, 'page' => 1]) }}#leads-section"
+                                    href="{{ $leadFilterUrl(['imobiliaria' => null, 'page' => 1]) }}"
                                     class="lead-filter-chip lead-filter-chip--removable"
                                     aria-label="Remover filtro de vínculo {{ $selectedImobiliariaName ?? 'selecionado' }}"
                                 >
@@ -1021,7 +975,7 @@
 
                             @if (filled($selectedTipoSolicitante))
                                 <a
-                                    href="{{ request()->fullUrlWithQuery(['tipo_solicitante' => null, 'page' => 1]) }}#leads-section"
+                                    href="{{ $leadFilterUrl(['tipo_solicitante' => null, 'page' => 1]) }}"
                                     class="lead-filter-chip lead-filter-chip--removable"
                                     aria-label="Remover filtro de perfil {{ $tipoSolicitantesOptions[$selectedTipoSolicitante] ?? $selectedTipoSolicitante }}"
                                 >
@@ -1035,10 +989,10 @@
                                 @php
                                     $selectedResultVisual = $manualResultVisuals[$selectedResultado]
                                         ?? $defaultResultVisual;
-                                    $selectedResultLabel = $manualResultOptions->get($selectedResultado);
+                                    $selectedResultLabel = $leadResultFilterOptions->get($selectedResultado);
                                 @endphp
                                 <a
-                                    href="{{ request()->fullUrlWithQuery(['resultado' => null, 'page' => 1]) }}#leads-section"
+                                    href="{{ $leadFilterUrl(['resultado' => null, 'page' => 1]) }}"
                                     class="lead-filter-chip lead-filter-chip--removable"
                                     aria-label="Remover filtro de resultado {{ $selectedResultLabel }}"
                                 >
@@ -1050,7 +1004,7 @@
 
                             @if (filled($selectedLeadLoversSync))
                                 <a
-                                    href="{{ request()->fullUrlWithQuery(['leadlovers_sync' => null, 'page' => 1]) }}#leads-section"
+                                    href="{{ $leadFilterUrl(['leadlovers_sync' => null, 'page' => 1]) }}"
                                     class="lead-filter-chip lead-filter-chip--removable lead-filter-chip--sync"
                                     aria-label="Remover filtro de envio à LeadLovers {{ $leadLoversSyncOptions[$selectedLeadLoversSync] ?? $selectedLeadLoversSync }}"
                                 >
@@ -1073,7 +1027,7 @@
                         <div class="lead-filter-chip-list lead-filter-chip-list--quick">
 
                         <a
-                            href="{{ request()->fullUrlWithQuery(['resultado' => null, 'page' => 1]) }}#leads-section"
+                            href="{{ $leadFilterUrl(['resultado' => null, 'page' => 1]) }}"
                             class="lead-filter-chip lead-filter-chip--all"
                             @if (blank($selectedResultado)) aria-current="true" @endif
                         >
@@ -1084,18 +1038,20 @@
                             @endif
                         </a>
 
-                        @foreach ($manualResultOptions as $result => $label)
+                        @foreach ($leadResultFilterOptions as $result => $label)
                             @php
                                 $resultVisual = $manualResultVisuals[$result]
                                     ?? $defaultResultVisual;
                                 $resultIsSelected = $selectedResultado === $result;
                             @endphp
                             <a
-                                href="{{ request()->fullUrlWithQuery([
+                                href="{{ $leadFilterUrl([
                                     'resultado' => $resultIsSelected ? null : $result,
                                     'page' => 1,
-                                ]) }}#leads-section"
+                                ]) }}"
                                 class="lead-filter-chip lead-filter-chip--{{ str_replace('_', '-', $result) }}"
+                                aria-label="{{ $resultIsSelected ? 'Remover filtro: ' : 'Filtrar por: ' }}{{ $label }}"
+                                @if ($result === 'sem_resultado') title="Leads sincronizados, sem alterações ou solicitações de tag." @endif
                                 @if ($resultIsSelected) aria-current="true" @endif
                             >
                                 <i class="bi {{ $resultVisual['icon'] }}" aria-hidden="true"></i>
@@ -1109,16 +1065,16 @@
                             <span class="lead-filter-quick__divider" aria-hidden="true"></span>
 
                             <a
-                                href="{{ request()->fullUrlWithQuery([
+                                href="{{ $leadFilterUrl([
                                     'leadlovers_sync' => $selectedLeadLoversSync === $leadLoversNotSentFilter
                                         ? null
                                         : $leadLoversNotSentFilter,
                                     'page' => 1,
-                                ]) }}#leads-section"
+                                ]) }}"
                                 class="lead-filter-chip lead-filter-chip--sync lead-filter-chip--priority"
                                 aria-label="{{ $selectedLeadLoversSync === $leadLoversNotSentFilter
-                                    ? 'Remover filtro de não enviados à LeadLovers; '.$notSentToLeadLoversCount.' lead(s) na seleção'
-                                    : 'Mostrar não enviados à LeadLovers; '.$notSentToLeadLoversCount.' lead(s) pendente(s)' }}"
+                                    ? 'Remover filtro de não enviados à LeadLovers; '.$notSentToLeadLoversCount.' lead(s) pendente(s) na base geral'
+                                    : 'Mostrar não enviados à LeadLovers; '.$notSentToLeadLoversCount.' lead(s) pendente(s) na base geral' }}"
                                 @if ($selectedLeadLoversSync === $leadLoversNotSentFilter) aria-current="true" @endif
                                 data-leadlovers-quick-filter
                             >
@@ -1154,7 +1110,7 @@
                                 ->filter(fn ($tag) => filled($tag))
                                 ->map(fn ($tag) => trim($tag));
 
-                            $resultTone = $getLeadResultTone($allTags);
+                            $resultTone = $getLeadResultTone($lead);
 
                             $visibleTags = $allTags->take(3);
                             $remainingTags = max($allTags->count() - $visibleTags->count(), 0);
@@ -1214,11 +1170,11 @@
                                             {{ $imobiliariaName }}
                                         </div>
 
-                                        @if ($lead->tipo_solicitante === 'imobiliaria_nao_cadastrada')
+                                        @if (($leadRequesterProfiles[$lead->id] ?? null) === 'imobiliaria_nao_cadastrada')
                                             <div class="small text-muted">
                                                 Nome informado no formulário; sem vínculo cadastrado.
                                             </div>
-                                        @elseif ($lead->tipo_solicitante === 'locador' && filled($lead->locador?->nome))
+                                        @elseif (($leadRequesterProfiles[$lead->id] ?? null) === 'locador' && filled($lead->locador?->nome))
                                             <div class="small text-muted text-truncate">
                                                 Proprietário: {{ $lead->locador->nome }}
                                             </div>
@@ -1399,7 +1355,7 @@
 
                         @if (method_exists($leads, 'hasPages') && $leads->hasPages())
                             <div>
-                                {{ $leads->onEachSide(1)->links('pagination::bootstrap-5') }}
+                                {{ $leads->fragment('leads-section')->onEachSide(1)->links('pagination::bootstrap-5') }}
                             </div>
                         @endif
                     </div>
@@ -1792,10 +1748,8 @@
                 ->filter(fn ($tag) => filled($tag))
                 ->map(fn ($tag) => trim($tag));
 
-            $resultTone = $getLeadResultTone($allTags);
-            $currentManualResult = ManualLeadResultTags::currentFromTags(
-                $allTags
-            );
+            $resultTone = $getLeadResultTone($lead);
+            $currentManualResult = $lead->dashboard_result;
             $availableManualResultOptions = $currentManualResult
                 ? $manualResultOptions->except([$currentManualResult])
                 : $manualResultOptions;
