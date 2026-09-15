@@ -4,24 +4,34 @@ namespace App\Jobs;
 
 use App\Models\InsuranceAnalysisBatch;
 use App\Models\InsuranceAnalysisEvent;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Bus\Queueable;
-use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Mail;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Storage;
+use RuntimeException;
 use Throwable;
-use Barryvdh\DomPDF\Facade\Pdf;
 
 class SendAnalysisResultsEmailJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public int $tries = 3;
+
     public int $timeout = 120;
+
+    /**
+     * @return array<int, int>
+     */
+    public function backoff(): array
+    {
+        return [60, 300];
+    }
 
     public function __construct(
         public int $batchId,
@@ -33,6 +43,8 @@ class SendAnalysisResultsEmailJob implements ShouldQueue
     {
         if (! config('features.insurance_analysis.enabled', false)) {
             logger()->notice('Job de análise ignorado porque o módulo está desativado.', ['job' => static::class]);
+
+            $this->markEmailAsDeferredWhileDisabled();
 
             return;
         }
@@ -58,41 +70,39 @@ class SendAnalysisResultsEmailJob implements ShouldQueue
 
         $lead = $batch->lead;
 
-        if (!$lead) {
-            $batch->update([
-                'email_status' => 'failed',
-                'email_failed_at' => now(),
-                'email_error' => 'Lead não encontrado.',
-            ]);
+        if (! $lead) {
+            if ($this->attempts() >= $this->tries) {
+                $this->recordTerminalFailure(
+                    batch: $batch,
+                    message: 'Não foi possível localizar os dados necessários para o envio.',
+                    payload: [
+                        'attempt_id' => $this->attemptId,
+                        'is_reanalysis' => $this->isReanalysis,
+                    ]
+                );
+            }
 
-            return;
+            throw new RuntimeException('Lead não encontrado para envio do resultado.');
         }
 
         $recipients = $this->resolveEmailRecipients($lead);
 
         if (empty($recipients['to'])) {
-            $batch->update([
-                'email_status' => 'failed',
-                'email_failed_at' => now(),
-                'email_error' => 'Nenhum destinatário válido encontrado para envio do resultado.',
-            ]);
+            if ($this->attempts() >= $this->tries) {
+                $this->recordTerminalFailure(
+                    batch: $batch,
+                    message: 'Nenhum destinatário válido foi encontrado para o envio.',
+                    payload: [
+                        'attempt_id' => $this->attemptId,
+                        'is_reanalysis' => $this->isReanalysis,
+                        'lead_id' => $lead->id,
+                        'tipo_solicitante' => $lead->tipo_solicitante,
+                    ]
+                );
+            }
 
-            $this->registerEmailEvent(
-                batch: $batch,
-                eventType: 'email_failed',
-                message: 'Nenhum destinatário válido encontrado para envio do resultado.',
-                payload: [
-                    'attempt_id' => $this->attemptId,
-                    'is_reanalysis' => $this->isReanalysis,
-                    'lead_id' => $lead->id,
-                    'tipo_solicitante' => $lead->tipo_solicitante,
-                    'resolved_recipients' => $recipients,
-                ]
-            );
-
-            return;
+            throw new RuntimeException('Nenhum destinatário válido encontrado para envio do resultado.');
         }
-
 
         $resultEvents = $this->resultEventsForCurrentAttempt($batch);
 
@@ -108,7 +118,7 @@ class SendAnalysisResultsEmailJob implements ShouldQueue
                 $message->to($recipients['to'])
                     ->subject($subject);
 
-                if (!empty($recipients['cc'])) {
+                if (! empty($recipients['cc'])) {
                     $message->cc($recipients['cc']);
                 }
 
@@ -151,36 +161,47 @@ class SendAnalysisResultsEmailJob implements ShouldQueue
                 resultEvents: $resultEvents
             );
         } catch (Throwable $e) {
-            $this->registerEmailEvent(
-                batch: $batch,
-                eventType: 'email_failed',
-                message: $e->getMessage(),
-                payload: [
-                    'attempt_id' => $this->attemptId,
-                    'is_reanalysis' => $this->isReanalysis,
-                    'lead_id' => $lead->id ?? null,
-                    'email' => $lead->email ?? null,
-                ],
-                resultEvents: $resultEvents
-            );
-
-            $batch->update([
-                'email_status' => 'failed',
-                'email_failed_at' => now(),
-                'email_error' => $e->getMessage(),
-            ]);
+            if ($this->attempts() >= $this->tries) {
+                $this->recordTerminalFailure(
+                    batch: $batch,
+                    message: 'Não foi possível enviar o e-mail de resultado.',
+                    payload: [
+                        'attempt_id' => $this->attemptId,
+                        'is_reanalysis' => $this->isReanalysis,
+                        'lead_id' => $lead->id ?? null,
+                    ],
+                    resultEvents: $resultEvents
+                );
+            }
 
             Log::error('Erro ao enviar e-mail de resultado da análise', [
                 'batch_id' => $batch->id,
                 'attempt_id' => $this->attemptId,
                 'is_reanalysis' => $this->isReanalysis,
                 'lead_id' => $lead->id ?? null,
-                'lead_email' => $lead->email ?? null,
-                'message' => $e->getMessage(),
+                'exception' => $e::class,
             ]);
 
             throw $e;
         }
+    }
+
+    public function failed(?Throwable $exception): void
+    {
+        $batch = InsuranceAnalysisBatch::with(['analyses.events'])->find($this->batchId);
+
+        if (! $batch) {
+            return;
+        }
+
+        $this->recordTerminalFailure(
+            batch: $batch,
+            message: 'Não foi possível enviar o e-mail de resultado.',
+            payload: [
+                'attempt_id' => $this->attemptId,
+                'is_reanalysis' => $this->isReanalysis,
+            ]
+        );
     }
 
     private function emailAlreadySent(InsuranceAnalysisBatch $batch): bool
@@ -239,7 +260,7 @@ class SendAnalysisResultsEmailJob implements ShouldQueue
         }
 
         return $batch->analyses->map(function ($analysis) {
-            $event = new InsuranceAnalysisEvent();
+            $event = new InsuranceAnalysisEvent;
 
             $event->setRelation('analysis', $analysis);
             $event->event_type = $this->isReanalysis ? 'reanalysis_completed' : 'analysis_completed';
@@ -282,14 +303,13 @@ class SendAnalysisResultsEmailJob implements ShouldQueue
         | Crie a view:
         | resources/views/emails/analysis-result-pdf.blade.php
         */
-        
 
         $attachments = [];
 
         foreach ($resultEvents as $event) {
             $analysis = $event->analysis;
 
-            if (!$analysis) {
+            if (! $analysis) {
                 continue;
             }
 
@@ -373,7 +393,7 @@ class SendAnalysisResultsEmailJob implements ShouldQueue
             foreach ($events as $event) {
                 $analysis = $event->analysis;
 
-                if (!$analysis || !$analysis->exists) {
+                if (! $analysis || ! $analysis->exists) {
                     continue;
                 }
 
@@ -390,9 +410,84 @@ class SendAnalysisResultsEmailJob implements ShouldQueue
             Log::warning('Erro ao registrar evento de e-mail da análise', [
                 'batch_id' => $batch->id,
                 'event_type' => $eventType,
-                'message' => $e->getMessage(),
+                'exception' => $e::class,
             ]);
         }
+    }
+
+    private function recordTerminalFailure(
+        InsuranceAnalysisBatch $batch,
+        string $message,
+        array $payload,
+        ?Collection $resultEvents = null
+    ): void {
+        $latestQueuedId = $this->latestAttemptEventId($batch, 'email_queued');
+        $latestFailedId = $this->latestAttemptEventId($batch, 'email_failed');
+
+        if (! $latestFailedId || ($latestQueuedId && $latestFailedId < $latestQueuedId)) {
+            $this->registerEmailEvent(
+                batch: $batch,
+                eventType: 'email_failed',
+                message: $message,
+                payload: $payload,
+                resultEvents: $resultEvents
+            );
+        }
+
+        $batch->update([
+            'email_status' => 'failed',
+            'email_failed_at' => now(),
+            'email_error' => $message,
+        ]);
+    }
+
+    private function markEmailAsDeferredWhileDisabled(): void
+    {
+        $batch = InsuranceAnalysisBatch::with(['analyses.events'])->find($this->batchId);
+
+        if (! $batch) {
+            return;
+        }
+
+        $latestQueuedId = $this->latestAttemptEventId($batch, 'email_queued');
+        $latestDeferredId = $this->latestAttemptEventId($batch, 'email_deferred');
+
+        if (! $latestDeferredId || ($latestQueuedId && $latestDeferredId < $latestQueuedId)) {
+            $this->registerEmailEvent(
+                batch: $batch,
+                eventType: 'email_deferred',
+                message: 'Envio adiado porque o módulo de análise está desativado.',
+                payload: [
+                    'attempt_id' => $this->attemptId,
+                    'is_reanalysis' => $this->isReanalysis,
+                ]
+            );
+        }
+
+        $batch->update([
+            'email_status' => 'pending',
+            'email_failed_at' => null,
+            'email_error' => null,
+        ]);
+    }
+
+    private function latestAttemptEventId(
+        InsuranceAnalysisBatch $batch,
+        string $eventType
+    ): ?int {
+        $query = InsuranceAnalysisEvent::query()
+            ->whereHas('analysis', function ($query) use ($batch) {
+                $query->where('insurance_analysis_batch_id', $batch->id);
+            })
+            ->where('event_type', $eventType);
+
+        if ($this->attemptId) {
+            $query->where('payload->attempt_id', $this->attemptId);
+        }
+
+        $id = $query->max('id');
+
+        return $id ? (int) $id : null;
     }
 
     private function resolveEmailRecipients($lead): array
@@ -449,8 +544,8 @@ class SendAnalysisResultsEmailJob implements ShouldQueue
         | Se não encontrou e-mail específico do tipo solicitante,
         | tenta enviar para o e-mail principal do lead.
         */
-        if (empty($to) && $lead->email) {
-            $to[] = $lead->email;
+        if (empty($to)) {
+            $to = $this->validEmails([$lead->email]);
         }
 
         $cc = $this->validEmails($cc);
@@ -486,31 +581,31 @@ class SendAnalysisResultsEmailJob implements ShouldQueue
         $lines = [];
 
         $lines[] = "Olá, {$lead->nome}.";
-        $lines[] = "";
+        $lines[] = '';
 
         if ($this->isReanalysis) {
-            $lines[] = "Recebemos o resultado da sua reanálise de Seguro Fiança Locatícia Residencial.";
+            $lines[] = 'Recebemos o resultado da sua reanálise de Seguro Fiança Locatícia Residencial.';
         } else {
-            $lines[] = "Recebemos o resultado da sua análise de Seguro Fiança Locatícia Residencial.";
+            $lines[] = 'Recebemos o resultado da sua análise de Seguro Fiança Locatícia Residencial.';
         }
 
-        $lines[] = "";
+        $lines[] = '';
 
         if ($resultEvents->isEmpty()) {
-            $lines[] = "Nenhuma análise foi encontrada para este lote.";
-            $lines[] = "Nossa equipe irá verificar o processamento.";
-            $lines[] = "";
+            $lines[] = 'Nenhuma análise foi encontrada para este lote.';
+            $lines[] = 'Nossa equipe irá verificar o processamento.';
+            $lines[] = '';
 
             return implode("\n", $lines);
         }
 
-        $lines[] = "Resultados por companhia:";
-        $lines[] = "";
+        $lines[] = 'Resultados por companhia:';
+        $lines[] = '';
 
         foreach ($resultEvents as $event) {
             $analysis = $event->analysis;
 
-            if (!$analysis) {
+            if (! $analysis) {
                 continue;
             }
 
@@ -530,9 +625,9 @@ class SendAnalysisResultsEmailJob implements ShouldQueue
             $chargesAmount = data_get($payload, 'charges_amount');
             $totalMonthlyAmount = data_get($payload, 'total_monthly_amount');
 
-            $lines[] = "Companhia: " . strtoupper($analysis->provider);
-            $lines[] = "Tipo: " . ($this->isReanalysis ? 'Reanálise' : 'Análise');
-            $lines[] = "Status: " . $this->formatStatus($event->status ?? $analysis->status);
+            $lines[] = 'Companhia: '.strtoupper($analysis->provider);
+            $lines[] = 'Tipo: '.($this->isReanalysis ? 'Reanálise' : 'Análise');
+            $lines[] = 'Status: '.$this->formatStatus($event->status ?? $analysis->status);
 
             if ($providerStatus) {
                 $lines[] = "Status da companhia: {$providerStatus}";
@@ -551,49 +646,50 @@ class SendAnalysisResultsEmailJob implements ShouldQueue
             }
 
             if ($rentAmount !== null) {
-                $lines[] = "Aluguel enviado: R$ " . number_format((float) $rentAmount, 2, ',', '.');
+                $lines[] = 'Aluguel enviado: R$ '.number_format((float) $rentAmount, 2, ',', '.');
             }
 
             if ($chargesAmount !== null) {
-                $lines[] = "Encargos enviados: R$ " . number_format((float) $chargesAmount, 2, ',', '.');
+                $lines[] = 'Encargos enviados: R$ '.number_format((float) $chargesAmount, 2, ',', '.');
             }
 
             if ($totalMonthlyAmount !== null) {
-                $lines[] = "Total mensal enviado: R$ " . number_format((float) $totalMonthlyAmount, 2, ',', '.');
+                $lines[] = 'Total mensal enviado: R$ '.number_format((float) $totalMonthlyAmount, 2, ',', '.');
             }
 
             if ($premiumAmount) {
-                $lines[] = "Orçamento estimado: R$ " . number_format((float) $premiumAmount, 2, ',', '.');
+                $lines[] = 'Orçamento estimado: R$ '.number_format((float) $premiumAmount, 2, ',', '.');
             }
 
             if ($commercialPremium) {
-                $lines[] = "Prêmio comercial: R$ " . number_format((float) $commercialPremium, 2, ',', '.');
+                $lines[] = 'Prêmio comercial: R$ '.number_format((float) $commercialPremium, 2, ',', '.');
             }
 
             if ($grossPremium) {
-                $lines[] = "Prêmio bruto: R$ " . number_format((float) $grossPremium, 2, ',', '.');
+                $lines[] = 'Prêmio bruto: R$ '.number_format((float) $grossPremium, 2, ',', '.');
             }
 
             if ($iof) {
-                $lines[] = "IOF: R$ " . number_format((float) $iof, 2, ',', '.');
+                $lines[] = 'IOF: R$ '.number_format((float) $iof, 2, ',', '.');
             }
 
             if (($event->status ?? $analysis->status) === 'manual_review') {
-                $lines[] = "Observação: sua análise foi recebida e está em negociação/validação pela companhia.";
+                $lines[] = 'Observação: sua análise foi recebida e está em negociação/validação pela companhia.';
             }
 
-            if (($event->status ?? $analysis->status) === 'failed' && $analysis->error_message) {
-                $lines[] = "Erro técnico: {$analysis->error_message}";
+            if (($event->status ?? $analysis->status) === 'failed') {
+                $lines[] = 'Não foi possível concluir esta consulta.';
+                $lines[] = 'Nossa equipe técnica foi notificada para verificar o processamento.';
             }
 
-            $lines[] = "";
+            $lines[] = '';
         }
 
-        $lines[] = "Os PDFs com os detalhes também foram anexados quando disponíveis.";
-        $lines[] = "";
-        $lines[] = "Em breve, a imobiliária ou corretora poderá entrar em contato com mais informações.";
-        $lines[] = "";
-        $lines[] = "Este é um e-mail automático.";
+        $lines[] = 'Os PDFs com os detalhes também foram anexados quando disponíveis.';
+        $lines[] = '';
+        $lines[] = 'Em breve, a imobiliária ou corretora poderá entrar em contato com mais informações.';
+        $lines[] = '';
+        $lines[] = 'Este é um e-mail automático.';
 
         return implode("\n", $lines);
     }

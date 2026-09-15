@@ -5,7 +5,7 @@
     <section class="password-reset-shell">
         <aside class="password-reset-aside">
             <img src="{{ asset('imgs/segure-chave-a-mao-ao-ar-livre.jpg') }}" alt="Nova senha da imobiliaria">
-            <img src="{{ asset('imgs/Logo_NVS.png') }}" alt="Logo NVS" class="auth-media-logo">
+            <x-brand-logo class="auth-media-logo" />
 
             <div class="password-reset-overlay">
                 <span class="client-badge">Portal da imobiliaria</span>

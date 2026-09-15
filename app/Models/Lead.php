@@ -2,50 +2,112 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
+use App\Enums\TipoLocacao;
+use App\Support\ManualLeadResultTags;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use App\Models\InsuranceAnalysis;
-use App\Models\InsuranceAnalysisBatch;
-
-
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Eloquent\Relations\MorphMany;
+use Illuminate\Database\Eloquent\Relations\MorphOne;
 
 class Lead extends Model
 {
     use HasFactory;
 
+    public const SYSTEM_ORIGINS = [
+        'simulacao_publica',
+        'imobiliaria_cadastrada',
+        'imobiliaria_nao_cadastrada',
+        'locatario',
+        'locador',
+    ];
+
     protected $table = 'leads';
 
-    // Permite salvar dados em massa via Webhook
+    // Permite persistir os dados normalizados pelos formulários e serviços.
     protected $fillable = [
         'company_id',
         'tipo_solicitante',
         'cpf',
+        'tipo_locacao',
+        'descrever_atividade',
         'estado_civil',
         'imobiliaria',
-        'nome', 
-        'email', 
+        'nome',
+        'email',
         'tel',
-        'tags_originais', 
+        'tags_originais',
         'status',
         'origem',
         'ip',
         'user_agent',
         'aceite_termos',
         'observacoes',
+        'leadlovers_lead_id',
         'leadlovers_status',
         'leadlovers_response',
         'sent_to_leadlovers_at',
         'created_by_corretor_id',
         'updated_by_corretor_id',
         'reanalysis_unlocked_at',
+        'leadlovers_update_status',
+        'leadlovers_update_version',
+        'leadlovers_update_response',
+        'leadlovers_update_error',
+        'leadlovers_update_requested_at',
+        'leadlovers_update_at',
+        'leadlovers_initial_error_status',
+        'leadlovers_initial_error_code',
+        'leadlovers_initial_error_operation',
+        'leadlovers_initial_error_detail',
+        'leadlovers_initial_failed_at',
+        'leadlovers_confirmed_final_tag_key',
+        'leadlovers_final_tag_confirmed_at',
+        'leadlovers_confirmed_tag_version',
+        'rejected_deletion_due_at',
     ];
 
     protected $casts = [
+        'tipo_locacao' => TipoLocacao::class,
+        'leadlovers_lead_id' => 'integer',
         'leadlovers_response' => 'array',
         'sent_to_leadlovers_at' => 'datetime',
         'aceite_termos' => 'boolean',
         'reanalysis_unlocked_at' => 'datetime',
-    ]; 
+        'leadlovers_update_response' => 'array',
+        'leadlovers_update_requested_at' => 'datetime',
+        'leadlovers_update_at' => 'datetime',
+        'leadlovers_initial_error_status' => 'integer',
+        'leadlovers_initial_failed_at' => 'datetime',
+        'leadlovers_final_tag_confirmed_at' => 'datetime',
+        'leadlovers_confirmed_tag_version' => 'integer',
+        'rejected_deletion_due_at' => 'datetime',
+    ];
+
+    public function scopeCreatedThroughSystem(Builder $query): Builder
+    {
+        return $query->whereIn('origem', self::SYSTEM_ORIGINS);
+    }
+
+    public function scopeApprovedFirst(Builder $query): Builder
+    {
+        $approvedTagKey = ManualLeadResultTags::leadloversKey(
+            ManualLeadResultTags::APPROVED
+        );
+
+        return $query->orderByRaw(
+            <<<'SQL'
+                CASE
+                    WHEN leadlovers_confirmed_final_tag_key = ? THEN 0
+                    WHEN leadlovers_confirmed_final_tag_key IS NULL
+                        AND LOWER(COALESCE(tags_originais, '')) LIKE ? THEN 0
+                    ELSE 1
+                END
+            SQL,
+            [$approvedTagKey, '%aprovad%']
+        );
+    }
 
     /**
      * Um lead pode pertencer a uma imobiliária cadastrada.
@@ -54,6 +116,11 @@ class Lead extends Model
     public function company()
     {
         return $this->imobiliariaVinculada();
+    }
+
+    public function lead_empresa(): HasOne
+    {
+        return $this->hasOne(LeadEmpresa::class, 'lead_id');
     }
 
     public function imobiliariaVinculada()
@@ -130,6 +197,30 @@ class Lead extends Model
     {
         return $this->hasMany(InsuranceAnalysisBatch::class);
     }
+
+    public function leadLoversTagOperation()
+    {
+        return $this->hasOne(LeadLoversTagOperation::class);
+    }
+
+    public function latestDataUpdateRequestLog(): MorphOne
+    {
+        return $this->morphOne(
+            CorretorActivityLog::class,
+            'subject',
+            'model_type',
+            'model_id'
+        )
+            ->ofMany(['id' => 'max'], function (Builder $query): void {
+                $query->where('action', 'lead_data_update_requested');
+            });
+    }
+
+    public function activityLogs(): MorphMany
+    {
+        return $this->morphMany(CorretorActivityLog::class, 'subject', 'model_type', 'model_id');
+    }
+
     public function createdByAdmin()
     {
         return $this->createdByCorretor();
@@ -152,7 +243,7 @@ class Lead extends Model
 
     public function canRequestReanalysis(): bool
     {
-        if (!$this->reanalysis_unlocked_at) {
+        if (! $this->reanalysis_unlocked_at) {
             return false;
         }
 
@@ -160,7 +251,7 @@ class Lead extends Model
             ->latest('created_at')
             ->first();
 
-        if (!$lastAnalysis) {
+        if (! $lastAnalysis) {
             return true;
         }
 
@@ -169,9 +260,13 @@ class Lead extends Model
 
     public function canBeSentToToo()
     {
-        if(!filled($this->cpf)) return false;
+        if (! filled($this->cpf)) {
+            return false;
+        }
 
-        if($this->tipo_solicitante === 'locador') return false;
+        if ($this->tipo_solicitante === 'locador') {
+            return false;
+        }
 
         return in_array($this->tipo_solicitante, [
             'imobiliaria_cadastrada',
@@ -192,5 +287,30 @@ class Lead extends Model
     {
         return $this->hasFinalInsuranceResultForReanalysis()
             && filled($this->reanalysis_unlocked_at);
+    }
+
+    // Leads cujo envio inicial foi recusado pela LeadLovers devido a um erro HTTP 400 e que ainda não possuem identificação remota.
+
+    public function scopeNotSentToLeadLoversBecauseOfInvalidData(
+        Builder $query
+    ): Builder {
+        return $query
+            ->createdThroughSystem()
+            ->where('leadlovers_status', 'failed')
+            ->whereNull('leadlovers_lead_id')
+            ->whereNull('sent_to_leadlovers_at')
+            ->where('leadlovers_initial_error_status', 400);
+    }
+
+    public function scopeExpiredRejectedRetention(Builder $query): Builder
+    {
+        return $query
+            ->where('leadlovers_confirmed_final_tag_key', 'ruim')
+            ->whereNotNull('rejected_deletion_due_at')
+            ->where(
+                'rejected_deletion_due_at',
+                '<=',
+                now()->utc()
+            );
     }
 }

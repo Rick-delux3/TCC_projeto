@@ -13,6 +13,9 @@ class PreventAuthenticationFraming
         $response = $next($request);
 
         $response->headers->set('X-Frame-Options', 'DENY');
+        $response->headers->set('Referrer-Policy', 'no-referrer');
+        $response->headers->set('Cache-Control', 'no-store, private');
+        $response->headers->set('Pragma', 'no-cache');
         $response->headers->set(
             'Content-Security-Policy',
             $this->withFrameAncestorsNone(

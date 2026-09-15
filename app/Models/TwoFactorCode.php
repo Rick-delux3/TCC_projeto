@@ -10,6 +10,7 @@ class TwoFactorCode extends Model
 
     protected $casts = [
         'expires_at' => 'datetime',
+        'attempts' => 'integer',
     ];
 
     public function user()

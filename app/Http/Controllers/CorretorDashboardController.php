@@ -2,151 +2,196 @@
 
 namespace App\Http\Controllers;
 
-use App\Http\Controllers\Controller;
-use App\Models\Corretor;
+use App\Http\Requests\FilterCorretorDashboardRequest;
+use App\Models\CorretorActivityLog;
 use App\Models\Imobiliaria;
 use App\Models\Lead;
-use App\Models\InsuranceAnalysis;
-use Illuminate\Http\Request;
+use App\Services\CorretorDashboardLeadQuery;
+use App\Support\LeadLoversInitialFailureCatalog;
+use App\Support\ManualLeadResultTags;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Gate;
-
+use Illuminate\View\View;
 
 class CorretorDashboardController extends Controller
 {
-    public function index(Request $request)
+    public function __construct(
+        private LeadLoversInitialFailureCatalog $leadLoversFailureCatalog,
+        private CorretorDashboardLeadQuery $dashboardLeadQuery,
+    ) {}
+
+    public function index(FilterCorretorDashboardRequest $request): View
     {
         $corretor = Auth::guard('admin')->user();
 
         abort_if(! $corretor, 401, 'Corretor não autenticado.');
 
         $canViewLeads = Gate::forUser($corretor)->allows('view-leads');
+
         $canViewRealEstateCompanies = Gate::forUser($corretor)
             ->allows('view-real-estate-companies');
-        $canCreateAnalysis = config('features.insurance_analysis.enabled', false)
-            && Gate::forUser($corretor)->allows('create-analysis');
 
-        $leadSearch = $request->input('lead_name', '');
+        $canAcessSimulationForms = Gate::forUser($corretor)
+            ->allows('access-simulation-forms');
 
-        $selectedImobiliaria = $request->input('imobiliaria', '');
+        $canStartInsuranceAnalysis = Gate::forUser($corretor)->allows('create-analysis');
 
-        $selectedResultado = $request->input('resultado', '');
+        $filters = $request->validated();
+        $leadSearch = $filters['lead_name'] ?? '';
+        $selectedImobiliaria = $filters['imobiliaria'] ?? '';
+        $selectedResultado = $filters['resultado'] ?? '';
+        $selectedTipoSolicitante = $filters['tipo_solicitante'] ?? '';
+        $selectedLeadLoversSync = $filters['leadlovers_sync'] ?? '';
+        $tipoSolicitantesOptions = CorretorDashboardLeadQuery::requesterOptions();
+        $resultadoOptions = collect(ManualLeadResultTags::all());
+        $leadResultFilterOptions = $resultadoOptions->map(fn (array $definition): string => $definition['label'])->all()
+            + [CorretorDashboardLeadQuery::WITHOUT_RESULT => 'Sem resultado'];
+        $leadLoversSyncOptions = $this->leadLoversFailureCatalog->dashboardSyncOptions();
 
-        $leadsQuery = Lead::query()
-            ->with([
-                'endereco',
-                'despesas',
-                'conjuge',
-                'imobiliariaVinculada',
-                'imobiliariaInformada',
-                'locador',
-                'insuranceAnalyses',
-            ])->latest();
-        
-        $leadsQuery->when($leadSearch, function ($query) use ($leadSearch){
-            $query->where(function ($subQuery) use ($leadSearch){
-                $subQuery->where('nome', 'like', "%$leadSearch%")
-                    ->orWhere('email', 'like', "%$leadSearch%")
-                    ->orWhere('cpf', 'like', "%$leadSearch%")
-                    ->orWhere('tel', 'like', "%$leadSearch%");
-            });
-        });
+        $leadsQuery = $canViewLeads
+            ? $this->dashboardLeadQuery->apply($this->dashboardLeadQuery->base(), $filters)
+            : null;
 
-        $tipoSolicitantesOptions = [
-            'imobiliaria_cadastrada' => 'Imobiliária cadastrada',
-            'imobiliaria_nao_cadastrada' => 'Imobiliária não cadastrada',
-            'locador' => 'Proprietário / locador',
-            'locatario' => 'Locatário',
-        ];
-
-        $selectedTipoSolicitante = (string) $request->input(
-            'tipo_solicitante',
-            ''
-        );
-
-    
-         if($selectedImobiliaria === 'sem_vinculo') {
-            $leadsQuery->whereNull('company_id');
-         } elseif ($selectedImobiliaria !== '') {
-            $leadsQuery->where(
-                'company_id',
-                (int) $selectedImobiliaria
-            );
-         }
-
-         if (
-            $selectedTipoSolicitante !== ''
-            && ! array_key_exists(
-                $selectedTipoSolicitante,
-                $tipoSolicitantesOptions
-            )
-        ) {
-            $selectedTipoSolicitante = '';
-        }
-
-         $leadsQuery->when(
-            $selectedTipoSolicitante !== '',
-            function ($query) use ($selectedTipoSolicitante) {
-                $query->where(
-                    'tipo_solicitante',
-                    $selectedTipoSolicitante
-                );
-            }
-         );
-
-        $leadsQuery->when($selectedResultado, function ($query) use ($selectedResultado) {
-            $query->where(function ($subQuery) use ($selectedResultado) {
-                if ($selectedResultado === 'aprovado') {
-                    $subQuery->where('tags_originais', 'like', '%aprovad%');
-                }
-
-                if ($selectedResultado === 'recusado') {
-                $subQuery->where('tags_originais', 'like', '%recusad%')
-                    ->orWhere('tags_originais', 'like', '%reprovad%')
-                    ->orWhere('tags_originais', 'like', '%ruim%');
-                }
-            });
-        });
+        $notSentToLeadLoversCount = $canViewLeads
+            ? Lead::query()
+                ->notSentToLeadLoversBecauseOfInvalidData()
+                ->count()
+            : 0;
 
         $leads = $canViewLeads
-            ? $leadsQuery->paginate(6)->withQueryString()
+            ? $this->dashboardLeadQuery->approvedFirst($leadsQuery)
+                ->with([
+                    'endereco',
+                    'despesas',
+                    'conjuge',
+                    'lead_empresa',
+                    'imobiliariaVinculada:id,name',
+                    'imobiliariaInformada',
+                    'locador',
+                    'insuranceAnalyses' => function (HasMany $query): void {
+                        if (! config('features.insurance_analysis.enabled')) {
+                            $query->whereRaw('1 = 0');
+                        }
+
+                        $query->latest('created_at')->latest('id')->limit(1);
+                    },
+                    'leadLoversTagOperation.desiredRequestLog.corretor:id,name',
+                    'leadLoversTagOperation.inflightRequestLog.corretor:id,name',
+                    'latestDataUpdateRequestLog.corretor:id,name',
+                ])
+                ->paginate(6)
+                ->appends($filters)
             : collect();
 
-        $dashboardStats = [
-            'totalLeads' => $canViewLeads ? Lead::count() : 0,
-            'newLeads' => $canViewLeads ? Lead::where('status', 'novo')->count() : 0,
-            'recentLeads' => $canViewLeads
-                ? Lead::where('created_at', '>=', now()->subDays(7))->count()
-                : 0,
+        $leadRequesterProfiles = $canViewLeads
+            ? $leads->getCollection()->mapWithKeys(fn (Lead $lead): array => [
+                (int) $lead->id => $this->dashboardLeadQuery->requesterProfileFor($lead),
+            ])->all()
+            : [];
 
-            'totalImobiliarias' => $canViewRealEstateCompanies ? Imobiliaria::count() : 0,
+        $leadLoversFailures = $canViewLeads
+            ? $leads->getCollection()
+                ->mapWithKeys(fn (Lead $lead): array => [
+                    (int) $lead->id => $this->leadLoversFailureCatalog->describe($lead),
+                ])
+                ->all()
+            : [];
 
-            
-            'totalAprovados' => $canViewLeads
-                ? Lead::where('tags_originais', 'like', '%aprovad%')->count()
-                : 0,
+        $manualLeadTagProcessingStates = $canViewLeads
+            ? $leads->getCollection()
+                ->mapWithKeys(function (Lead $lead): array {
+                    $operation = $lead->leadLoversTagOperation;
+                    $requestLog = $operation?->activeManualRequestLog();
+                    $corretorName = trim((string) $requestLog?->corretor?->name);
+                    $requestedResult = data_get(
+                        $requestLog?->new_values,
+                        'requested_result'
+                    );
+                    $resultLabel = trim((string) data_get(
+                        $requestLog?->new_values,
+                        'requested_label',
+                        is_string($requestedResult)
+                            ? ManualLeadResultTags::label($requestedResult)
+                            : null
+                    ));
 
-            'totalRecusados' => $canViewLeads
-                ? Lead::where(function ($query) {
-                    $query->where('tags_originais', 'like', '%recusad%')
-                        ->orWhere('tags_originais', 'like', '%reprovad%')
-                        ->orWhere('tags_originais', 'like', '%ruim%');
-                })->count()
-                : 0,
+                    if (
+                        ! $requestLog instanceof CorretorActivityLog
+                        || blank($corretorName)
+                        || blank($resultLabel)
+                    ) {
+                        return [];
+                    }
 
+                    return [
+                        (int) $lead->id => [
+                            'request_id' => (int) $requestLog->id,
+                            'corretor_name' => $corretorName,
+                            'result_label' => $resultLabel,
+                        ],
+                    ];
+                })
+                ->all()
+            : [];
 
-            'latestLeadAt' => $canViewLeads
-                ? Lead::latest('created_at')->value('created_at')
-                : null,
+        $leadDataSyncProcessingStates = $canViewLeads
+            ? $leads->getCollection()
+                ->mapWithKeys(function (Lead $lead): array {
+                    $requestLog = $lead->latestDataUpdateRequestLog;
+                    $corretorName = trim((string) $requestLog?->corretor?->name);
+                    $syncVersion = (int) $lead->leadlovers_update_version;
+                    $requestSyncVersion = (int) data_get(
+                        $requestLog?->new_values,
+                        'leadlovers_update_version'
+                    );
 
+                    if (
+                        ! in_array($lead->leadlovers_update_status, [
+                            'pending',
+                            'processing',
+                        ], true)
+                        || ! $requestLog instanceof CorretorActivityLog
+                        || $requestLog->action !== 'lead_data_update_requested'
+                        || $requestLog->model_type !== Lead::class
+                        || (int) $requestLog->model_id !== (int) $lead->id
+                        || $syncVersion <= 0
+                        || $requestSyncVersion !== $syncVersion
+                        || blank($corretorName)
+                    ) {
+                        return [];
+                    }
 
-        ];
+                    return [
+                        (int) $lead->id => [
+                            'request_id' => (int) $requestLog->id,
+                            'corretor_name' => $corretorName,
+                            'sync_version' => $syncVersion,
+                        ],
+                    ];
+                })
+                ->all()
+            : [];
+
+        $dashboardStats = $canViewLeads
+            ? $this->dashboardLeadQuery->statistics()
+            : [
+                'totalLeads' => 0,
+                'newLeads' => 0,
+                'recentLeads' => 0,
+                'totalAprovados' => 0,
+                'totalRecusados' => 0,
+                'latestLeadAt' => null,
+            ];
+        $dashboardStats['totalImobiliarias'] = $canViewRealEstateCompanies
+            ? Imobiliaria::query()->count()
+            : 0;
 
         $imobiliarias = $canViewLeads
-            ? Imobiliaria::query()->orderBy('name')->get()
+            ? Imobiliaria::query()->orderBy('name')->orderBy('id')->get(['id', 'name'])
             : collect();
 
-        $simulationCompanies = $canCreateAnalysis
+        $simulationCompanies = $canAcessSimulationForms
             ? Imobiliaria::query()->where('lead_form_active', true)
                 ->orderBy('name')
                 ->get([
@@ -157,8 +202,6 @@ class CorretorDashboardController extends Controller
                     'lead_form_active',
                 ]) : collect();
 
-            
-
         return view('corretor.dashboard-admin', compact(
             'corretor',
             'dashboardStats',
@@ -167,11 +210,21 @@ class CorretorDashboardController extends Controller
             'leadSearch',
             'selectedImobiliaria',
             'selectedResultado',
+            'resultadoOptions',
+            'leadResultFilterOptions',
+            'leadRequesterProfiles',
             'selectedTipoSolicitante',
             'tipoSolicitantesOptions',
             'simulationCompanies',
-            'canCreateAnalysis',
+            'canAcessSimulationForms',
+            'canStartInsuranceAnalysis',
+            'selectedLeadLoversSync',
+            'leadLoversSyncOptions',
+            'notSentToLeadLoversCount',
+            'leadLoversFailures',
+            'manualLeadTagProcessingStates',
+            'leadDataSyncProcessingStates',
         ));
-        
+
     }
 }

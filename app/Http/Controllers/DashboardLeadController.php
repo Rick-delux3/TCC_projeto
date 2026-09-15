@@ -2,33 +2,39 @@
 
 namespace App\Http\Controllers;
 
-
+use App\Http\Requests\CorrectLeadLoversInitialFailureRequest;
+use App\Http\Requests\UpdateAdminLeadRequest;
+use App\Models\Corretor;
 use App\Models\Imobiliaria;
 use App\Models\Lead;
+use App\Services\LeadLoversInitialFailureRecoveryService;
+use App\Services\LeadReanalysisService;
+use DomainException;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Gate;
-use App\Services\LeadReanalysisService;
-use DomainException;
-
 
 class DashboardLeadController extends Controller
 {
-
     public function __construct(
-        private LeadReanalysisService $leadReanalysisService
+        private LeadReanalysisService $leadReanalysisService,
+        private LeadLoversInitialFailureRecoveryService $leadLoversFailureRecoveryService
     ) {}
-
 
     private function getLoggedCompany(): Imobiliaria
     {
-        $companyId = session('company_id');
+        /** @var \App\Models\User|null $user */
 
-        abort_if(!$companyId, 401, 'Usuário não autenticado.');
+        $user = Auth::user();
 
-        $company = Imobiliaria::find($companyId);
+        abort_if(!$user || !$user->company_id, 401, 'Usuário não autenticado.');
 
-        abort_if(!$company, 404, 'Imobiliária não encontrada.');
+        $company = $user->imobiliaria;
+
+
+        abort_if(! $company, 404, 'Imobiliária não encontrada.');
+
 
         return $company;
     }
@@ -53,18 +59,17 @@ class DashboardLeadController extends Controller
         return $this->saveLeadsUpdates($request, $lead);
     }
 
-    public function adminUpdate(Request $request, Lead $lead)
+    public function adminUpdate(UpdateAdminLeadRequest $request, Lead $lead): RedirectResponse
     {
-        $this->authorizeAdminAbility('edit-leads');
+        $corretor = $this->authorizeAdminAbility('edit-leads');
 
-        return $this->saveLeadsUpdates($request, $lead);
+        return $this->saveLeadsUpdates($request, $lead, $corretor);
     }
 
     public function reanalyze(Lead $lead)
     {
         $this->authorizeCompanyLead($lead);
 
-         
         return $this->startLeadReanalysis($lead, 'imobiliaria');
     }
 
@@ -75,11 +80,42 @@ class DashboardLeadController extends Controller
         return $this->startLeadReanalysis($lead, 'admin');
     }
 
-    private function authorizeAdminAbility(string $ability): void
+    public function correctLeadLoversFailure(
+        CorrectLeadLoversInitialFailureRequest $request,
+        Lead $lead
+    ) {
+        $company = $this->authorizeCompanyLead($lead);
+
+        return $this->executeLeadLoversCorrection(
+            request: $request,
+            lead: $lead,
+            corretor: null,
+            companyId: (int) $company->id,
+        );
+    }
+
+    public function adminCorrectLeadLoversFailure(
+        CorrectLeadLoversInitialFailureRequest $request,
+        Lead $lead
+    ) {
+        $this->authorizeAdminAbility('edit-leads');
+
+        /** @var Corretor $corretor */
+        $corretor = Auth::guard('admin')->user();
+
+        return $this->executeLeadLoversCorrection(
+            request: $request,
+            lead: $lead,
+            corretor: $corretor,
+            companyId: null,
+        );
+    }
+
+    private function authorizeAdminAbility(string $ability): Corretor
     {
         $corretor = Auth::guard('admin')->user();
 
-        abort_if(!$corretor, 401, 'Corretor não identificado!');
+        abort_if(! $corretor, 401, 'Corretor não identificado!');
 
         abort_if(
             Gate::forUser($corretor)->denies($ability),
@@ -87,15 +123,27 @@ class DashboardLeadController extends Controller
             'Você não possui permição para executar essa ação!'
         );
 
+        return $corretor;
     }
 
-    private function saveLeadsUpdates(Request $request, Lead $lead)
-    {
-        $data = $this->validateLeadUpdateRequest($request);
+    private function saveLeadsUpdates(
+        Request $request,
+        Lead $lead,
+        ?Corretor $corretor = null,
+    ): RedirectResponse {
+        $data = $request instanceof UpdateAdminLeadRequest
+            ? $request->validated()
+            : $this->validateLeadUpdateRequest($request);
 
-        $result = $this->leadReanalysisService->updateLeadDataAndMaybeUnlock($lead, $data);
+        $result = $this->leadReanalysisService->updateLeadDataAndMaybeUnlock(
+            lead: $lead,
+            data: $data,
+            corretor: $corretor,
+            ip: $request->ip(),
+            userAgent: $request->userAgent(),
+        );
 
-        if(!$result['changed']){
+        if (! $result['changed']) {
             return back()->with('error', $result['message']);
         }
 
@@ -112,7 +160,7 @@ class DashboardLeadController extends Controller
                     'motivosReanalise' => [10],
                     'observacoes' => 'Reanálise geral solicitada após alteração dos dados do lead.',
 
-                ] 
+                ]
             );
 
             return back()->with(
@@ -153,5 +201,32 @@ class DashboardLeadController extends Controller
             'numero' => ['nullable', 'string', 'max:30'],
             'complemento' => ['nullable', 'string', 'max:255'],
         ]);
+    }
+
+    private function executeLeadLoversCorrection(
+        CorrectLeadLoversInitialFailureRequest $request,
+        Lead $lead,
+        ?Corretor $corretor,
+        ?int $companyId,
+    ) {
+        try {
+            $result = $this
+                ->leadLoversFailureRecoveryService
+                ->correctAndRetry(
+                    lead: $lead,
+                    data: $request->validated(),
+                    corretor: $corretor,
+                    companyId: $companyId,
+                    ip: $request->ip(),
+                    userAgent: $request->userAgent(),
+                );
+
+            return back()->with('success', $result['message']);
+        } catch (DomainException $exception) {
+            return back()->with(
+                'error',
+                $exception->getMessage()
+            );
+        }
     }
 }

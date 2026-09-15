@@ -2,28 +2,34 @@
 
 namespace App\Http\Controllers;
 
+use App\Events\DashboardActivityChanged;
+use App\Http\Requests\RecoverCompanyAccessCodeRequest;
 use App\Http\Requests\StoreSimulationLeadRequest;
+use App\Jobs\RecoverCompanyAccessCodeJob;
 use App\Jobs\SendLeadToLeadLoversJob;
-use App\Models\Imobiliaria;
-use App\Models\Lead;
-use Illuminate\Http\Request;
 use App\Jobs\StartInsuranceAnalysesBatchJob;
+use App\Models\Imobiliaria;
+use App\Models\InsuranceAnalysisBatch;
+use App\Models\Lead;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\DB;
-use App\Models\InsuranceAnalysisBatch;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Validation\ValidationException;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
-use PhpParser\Node\Expr\FuncCall;
+use Illuminate\Validation\ValidationException;
+use Illuminate\View\View;
 
 class SimulationController extends Controller
 {
+    private const REGISTERED_COMPANY_SESSION_KEY = 'simulation.registered_company_access';
+
     private const ADMIN_UNLINKED_TYPES = [
         'imobiliaria_nao_cadastrada',
         'locatario',
         'locador',
     ];
-
 
     public function start()
     {
@@ -67,10 +73,23 @@ class SimulationController extends Controller
         return view('simulation.registered-company-access');
     }
 
+    public function forgotCompanyCode(): View
+    {
+        return view('simulation.forget-acess-code');
+    }
+
+    public function recoverCompanyCode(RecoverCompanyAccessCodeRequest $request): RedirectResponse
+    {
+        RecoverCompanyAccessCodeJob::dispatch($request->validated('email'));
+
+        return redirect()->route('simulation.registered-company.code.request')
+            ->with('status', 'Se o e-mail estiver cadastrado em uma imobiliária com formulário ativo, você receberá o código de acesso.');
+    }
+
     /**
      * Valida a chave da imobiliária.
      */
-    public function verifyCompanyCode(Request $request)
+    public function verifyCompanyCode(Request $request): RedirectResponse
     {
         $data = $request->validate([
             'lead_access_code' => ['required', 'string', 'max:20'],
@@ -84,7 +103,9 @@ class SimulationController extends Controller
             ->where('lead_form_active', true)
             ->first();
 
-        if (!$company) {
+        if (! $company) {
+            $request->session()->forget(self::REGISTERED_COMPANY_SESSION_KEY);
+
             return back()
                 ->withInput()
                 ->withErrors([
@@ -92,23 +113,33 @@ class SimulationController extends Controller
                 ]);
         }
 
-        return redirect()->route('simulation.registered-company.form', [
-            'code' => $company->lead_access_code,
+        $request->session()->regenerate();
+        $request->session()->put(self::REGISTERED_COMPANY_SESSION_KEY, [
+            'company_id' => (int) $company->getKey(),
+            'code_fingerprint' => $this->companyCodeFingerprint($company->lead_access_code),
         ]);
+
+        return redirect()->route('simulation.registered-company.form');
     }
 
     /**
      * Formulário vinculado à imobiliária cadastrada.
      */
-    public function registeredCompanyForm(string $code)
+    public function registeredCompanyForm(Request $request): RedirectResponse|View
     {
-        $company = $this->findCompanyByCode($code);
+        $company = $this->registeredCompanyFromSession($request);
+
+        if (! $company) {
+            return $this->redirectToRegisteredCompanyAccess();
+        }
 
         return view('simulation.forms.registered-company', compact('company'));
     }
 
-    public function adminRegisteredCompanyForm(Imobiliaria $company)
-    {
+    public function adminRegisteredCompanyForm(
+        Request $request,
+        Imobiliaria $company
+    ) {
         abort_unless(
             (bool) $company->lead_form_active,
             404,
@@ -123,6 +154,8 @@ class SimulationController extends Controller
             ),
 
             'isAdminSimulation' => true,
+
+            'adminSimulationChannel' => $this->adminSimulationChannel($request),
         ]);
     }
 
@@ -144,32 +177,38 @@ class SimulationController extends Controller
             origem: 'imobiliaria_cadastrada'
         );
 
-        if($existingLead) {
+        if ($existingLead) {
             return back()->withInput()
                 ->with(
                     'error',
-                    "O cliente já possui uma análise. " . "Use a reanálise do lead #{$existingLead->id}."
-                
+                    'O cliente já possui uma análise. '."Use a reanálise do lead #{$existingLead->id}."
+
                 );
         }
 
-        $lead = DB::transaction(function () use ($request, $company){
-            return $this->saveLead($request, [
-                'tipo_solicitante' => 'imobiliaria_cadastrada',
-                'company' => $company,
-                'origem' => 'imobiliaria_cadastrada',
-                'corretor_id' => (int) auth('admin')->id(),
-            ]);
+        $lead = DB::transaction(function () use ($request, $company) {
+            return $this->saveLead(
+                $request,
+                [
+                    'tipo_solicitante' => 'imobiliaria_cadastrada',
+                    'company' => $company,
+                    'origem' => 'imobiliaria_cadastrada',
+                    'corretor_id' => (int) auth('admin')->id(),
+                ],
+                allowExistingUpdate: true
+            );
         });
 
         $this->dispatchLeadFlow($lead);
 
-        return redirect()->route('Dashboard-Admin')
-        ->with('success', "Solicitação do lead #{$lead->id} adicionada à fila de análises.");
+        return redirect()->route('admin.simulations.complete', [
+            'lead' => $lead,
+            'admin_simulation_channel' => $this->adminSimulationChannel($request),
+        ]);
 
     }
 
-    public function adminUnlinkedForm(string $tipo)
+    public function adminUnlinkedForm(Request $request, string $tipo)
     {
         abort_unless(
             in_array($tipo, self::ADMIN_UNLINKED_TYPES, true),
@@ -184,19 +223,20 @@ class SimulationController extends Controller
         $commonData = [
             'formAction' => $formAction,
             'isAdminSimulation' => true,
+            'adminSimulationChannel' => $this->adminSimulationChannel($request),
         ];
 
-        if($tipo === 'locatario'){
+        if ($tipo === 'locatario') {
             return view('simulation.forms.tenant', $commonData);
         }
 
         return view('simulation.forms.unregistered-company_landlord',
-        [
-            ...$commonData,
-            'responsavelTipo' => $tipo,
-            'lockResponsavelTipo' => true,
-        ]
-        
+            [
+                ...$commonData,
+                'responsavelTipo' => $tipo,
+                'lockResponsavelTipo' => true,
+            ]
+
         );
     }
 
@@ -211,7 +251,7 @@ class SimulationController extends Controller
 
         $data = $request->validated();
 
-        if(
+        if (
             $tipo !== 'locatario' && ($data['responsavel_tipo'] ?? null) !== $tipo
         ) {
             throw ValidationException::withMessages([
@@ -225,50 +265,62 @@ class SimulationController extends Controller
             origem: $tipo
         );
 
-        if($existingLead) {
+        if ($existingLead) {
             return back()->withInput()
                 ->with(
                     'error',
-                    "O cliente já possui uma análise. " . "Use a reanálise do lead #{$existingLead->id}."
-                
+                    'O cliente já possui uma análise. '."Use a reanálise do lead #{$existingLead->id}."
+
                 );
         }
 
-        $lead = DB::transaction(function () use ($request, $tipo){
-            return $this->saveLead($request, [
-                'tipo_solicitante' => $tipo,
-                'company' => null,
-                'origem' => $tipo,
-                'corretor_id' => (int) auth('admin')->id(),
-            ]);
+        $lead = DB::transaction(function () use ($request, $tipo) {
+            return $this->saveLead(
+                $request,
+                [
+                    'tipo_solicitante' => $tipo,
+                    'company' => null,
+                    'origem' => $tipo,
+                    'corretor_id' => (int) auth('admin')->id(),
+                ],
+                allowExistingUpdate: true
+            );
         });
 
         $this->dispatchLeadFlow($lead);
 
-        return redirect()->route('Dashboard-Admin')
-         ->with('success', "Solicitação do lead #{$lead->id} adicionada à fila de análises.");
-        
-
+        return redirect()->route('admin.simulations.complete', [
+            'lead' => $lead,
+            'admin_simulation_channel' => $this->adminSimulationChannel($request),
+        ]);
 
     }
 
     /**
      * Salva lead de imobiliária cadastrada.
      */
-    public function storeRegisteredCompanyLead(StoreSimulationLeadRequest $request, string $code)
+    public function storeRegisteredCompanyLead(StoreSimulationLeadRequest $request): RedirectResponse
     {
-        $company = $this->findCompanyByCode($code);
+        $company = $this->registeredCompanyFromSession($request);
 
-        $lead = DB::transaction(function () use ($request, $company){
+        if (
+            ! $company
+            || $request->integer('registered_company_context') !== (int) $company->getKey()
+        ) {
+            return $this->redirectToRegisteredCompanyAccess();
+        }
+
+        $lead = DB::transaction(function () use ($request, $company) {
             return $this->saveLead($request, [
-                    'tipo_solicitante' => 'imobiliaria_cadastrada',
-                    'company' => $company,
-                    'origem' => 'imobiliaria_cadastrada',
-                ]);
+                'tipo_solicitante' => 'imobiliaria_cadastrada',
+                'company' => $company,
+                'origem' => 'imobiliaria_cadastrada',
+            ]);
         });
-        
 
-        $this->dispatchLeadFlow($lead);
+        if ($lead->wasRecentlyCreated) {
+            $this->dispatchLeadFlow($lead);
+        }
 
         return redirect()->route('simulation.success')->with('success', 'Solicitação enviada com sucesso.');
     }
@@ -295,10 +347,10 @@ class SimulationController extends Controller
     public function storeUnregisteredCompanyLead(StoreSimulationLeadRequest $request)
     {
         $data = $request->validated();
-        
+
         $responsavelTipo = $data['responsavel_tipo'] ?? null;
 
-        if(! in_array($responsavelTipo, ['imobiliaria_nao_cadastrada', 'locador'], true
+        if (! in_array($responsavelTipo, ['imobiliaria_nao_cadastrada', 'locador'], true
         )) {
             throw ValidationException::withMessages([
                 'responsavel_tipo' => 'O perfil informado é inválido.',
@@ -313,14 +365,15 @@ class SimulationController extends Controller
             ]);
         });
 
-        $this->dispatchLeadFlow($lead);
+        if ($lead->wasRecentlyCreated) {
+            $this->dispatchLeadFlow($lead);
+        }
 
         return redirect()
             ->route('simulation.success')
             ->with('success', 'Solicitação enviada com sucesso. O resultado será enviado por e-mail.');
     }
 
-    
     public function tenantForm()
     {
         return view('simulation.forms.tenant');
@@ -328,7 +381,7 @@ class SimulationController extends Controller
 
     public function storeTenantLead(StoreSimulationLeadRequest $request)
     {
-       $lead = DB::transaction(function () use ($request) {
+        $lead = DB::transaction(function () use ($request) {
             return $this->saveLead($request, [
                 'tipo_solicitante' => 'locatario',
                 'company' => null,
@@ -336,7 +389,9 @@ class SimulationController extends Controller
             ]);
         });
 
-        $this->dispatchLeadFlow($lead);
+        if ($lead->wasRecentlyCreated) {
+            $this->dispatchLeadFlow($lead);
+        }
 
         return redirect()
             ->route('simulation.success')
@@ -346,6 +401,8 @@ class SimulationController extends Controller
     public function adminResolveForm(Request $request)
     {
         $data = $request->validateWithBag('adminSimulation', [
+            'admin_simulation_channel' => ['nullable', 'uuid'],
+
             'vinculo' => [
                 'required',
                 Rule::in([
@@ -365,7 +422,7 @@ class SimulationController extends Controller
                             'lead_form_active',
                             true
                         )
-                     ),
+                    ),
             ],
 
             'tipo_solicitante' => [
@@ -375,35 +432,104 @@ class SimulationController extends Controller
             ],
         ]);
 
-        if($data['vinculo'] === 'imobiliaria_cadastrada') {
-            return redirect()->route('admin.simulations.registered-company.form', ['company' => (int) $data['company_id']]);
+        if ($data['vinculo'] === 'imobiliaria_cadastrada') {
+            return redirect()->route('admin.simulations.registered-company.form', [
+                'company' => (int) $data['company_id'],
+                'admin_simulation_channel' => $data['admin_simulation_channel'] ?? null,
+            ]);
         }
 
-        return redirect()->route('admin.simulations.unlinked.form', ['tipo' => $data['tipo_solicitante']]);
+        return redirect()->route('admin.simulations.unlinked.form', [
+            'tipo' => $data['tipo_solicitante'],
+            'admin_simulation_channel' => $data['admin_simulation_channel'] ?? null,
+        ]);
     }
-    
 
+    public function adminCompletion(Request $request, Lead $lead)
+    {
+        return view('simulation.admin-completion', [
+            'adminSimulationChannel' => $this->adminSimulationChannel($request),
+            'dashboardUrl' => route('Dashboard-Admin').'#leads-section',
+            'leadId' => (int) $lead->id,
+            'message' => "Solicitação do lead #{$lead->id} adicionada à fila de análises.",
+        ]);
+    }
 
     /**
-     * Busca imobiliária por código de acesso.
-     * Nunca confie em company_id vindo do formulário.
+     * Resolve somente a imobiliária concedida pela sessão após validar a chave.
      */
-    private function findCompanyByCode(string $code): Imobiliaria
+    private function registeredCompanyFromSession(Request $request): ?Imobiliaria
     {
-        $code = mb_strtoupper(trim($code));
-        $code = str_replace([' ', '-'], '', $code);
+        $grant = $request->session()->get(self::REGISTERED_COMPANY_SESSION_KEY);
 
-        return Imobiliaria::where('lead_access_code', $code)
+        if (
+            ! is_array($grant)
+            || ! isset($grant['company_id'], $grant['code_fingerprint'])
+            || ! is_int($grant['company_id'])
+            || $grant['company_id'] < 1
+            || ! is_string($grant['code_fingerprint'])
+            || strlen($grant['code_fingerprint']) !== 64
+            || ! ctype_xdigit($grant['code_fingerprint'])
+        ) {
+            $request->session()->forget(self::REGISTERED_COMPANY_SESSION_KEY);
+
+            return null;
+        }
+
+        $company = Imobiliaria::query()
+            ->whereKey($grant['company_id'])
             ->where('lead_form_active', true)
-            ->firstOrFail();
+            ->first();
+
+        if (
+            ! $company
+            || ! hash_equals(
+                $grant['code_fingerprint'],
+                $this->companyCodeFingerprint($company->lead_access_code)
+            )
+        ) {
+            $request->session()->forget(self::REGISTERED_COMPANY_SESSION_KEY);
+
+            return null;
+        }
+
+        return $company;
+    }
+
+    private function companyCodeFingerprint(string $code): string
+    {
+        return hash_hmac('sha256', $code, (string) config('app.key'));
+    }
+
+    private function redirectToRegisteredCompanyAccess(): RedirectResponse
+    {
+        return redirect()
+            ->route('simulation.registered-company.access')
+            ->withErrors([
+                'lead_access_code' => 'Informe novamente o código da imobiliária para acessar o formulário.',
+            ]);
+    }
+
+    private function adminSimulationChannel(Request $request): ?string
+    {
+        $channel = $request->input('admin_simulation_channel');
+
+        if (! is_string($channel) || ! Str::isUuid($channel)) {
+            return null;
+        }
+
+        return strtolower($channel);
     }
 
     /**
      * Salva o lead de forma centralizada.
      * Essa função evita repetir código nos quatro formulários.
      */
-    private function saveLead(StoreSimulationLeadRequest $request, array $context): Lead
-    {
+    private function saveLead(
+        StoreSimulationLeadRequest $request,
+        array $context,
+        bool $allowExistingUpdate = false
+    ): Lead {
         $data = $request->validated();
 
         $company = $context['company'] ?? null;
@@ -435,42 +561,79 @@ class SimulationController extends Controller
             'email' => $data['email'],
         ];
 
-        if (!$company) {
+        if (! $company) {
             $leadIdentity['origem'] = $context['origem'];
         }
 
-        $lead = Lead::updateOrCreate(
-            $leadIdentity,
-            [
-                'company_id' => $company?->id,
-                'tipo_solicitante' => $context['tipo_solicitante'],
-                'nome' => $data['nome'],
-                'email' => $data['email'],
-                'cpf' => $data['cpf'] ?? null,
-                'tel' => $data['tel'] ?? null,
-                'estado_civil' => $data['estado_civil'] ?? null,
-                'imobiliaria' => $company?->name 
-                    ?? 
-                    (($context['tipo_solicitante'] ?? null) === 'imobiliaria_nao_cadastrada'
+        $leadAttributes = [
+            'company_id' => $company?->id,
+            'tipo_solicitante' => $context['tipo_solicitante'],
+            'nome' => $data['nome'],
+            'email' => $data['email'],
+            'cpf' => $request->hasCompanyDocument() ? null : ($data['cpf'] ?? null),
+            'tipo_locacao' => $data['tipo_locacao'],
+            'descrever_atividade' => $data['descrever_atividade'] ?? null,
+            'tel' => $data['tel'] ?? null,
+            'estado_civil' => $data['estado_civil'] ?? null,
+            'imobiliaria' => $company?->name
+                ??
+                (($context['tipo_solicitante'] ?? null) === 'imobiliaria_nao_cadastrada'
                     ? ($data['responsavel_nome'] ?? null)
                     : null),
-                'tags_originais' => $this->tagsAsString($context['tipo_solicitante'], $company),
-                'status' => 'novo',
-                'origem' => $context['origem'],
-                'leadlovers_status' => 'pending',
-                'ip' => $request->ip(),
-                'user_agent' => $request->userAgent(),
-                'aceite_termos' => $request->boolean('aceite_termos'),
-                'observacoes' => $data['observacoes'] ?? null,
-            ]
+            'tags_originais' => $this->tagsAsString($context['tipo_solicitante'], $company),
+            'status' => 'novo',
+            'origem' => $context['origem'],
+            'leadlovers_status' => 'pending',
+            'ip' => $request->ip(),
+            'user_agent' => $request->userAgent(),
+            'aceite_termos' => $request->boolean('aceite_termos'),
+            'observacoes' => $data['observacoes'] ?? null,
+        ];
+        $lead = Lead::query()->firstOrCreate(
+            $leadIdentity,
+            $leadAttributes
         );
+
+        $wasRecentlyCreated = $lead->wasRecentlyCreated;
+
+        if (! $wasRecentlyCreated && ! $allowExistingUpdate) {
+            return $lead;
+        }
+
+        if (! $wasRecentlyCreated) {
+            $lead = Lead::query()
+                ->whereKey($lead->getKey())
+                ->lockForUpdate()
+                ->firstOrFail();
+            $leadAttributes['leadlovers_status'] = in_array(
+                $lead->leadlovers_status,
+                ['sent', 'send'],
+                true
+            )
+                ? $lead->leadlovers_status
+                : 'pending';
+            $lead->fill($leadAttributes)->save();
+        }
+
+        if ($request->hasCompanyDocument()) {
+            $lead->lead_empresa()->updateOrCreate(
+                ['lead_id' => $lead->id],
+                [
+                    'cnpj' => $data['cpf'],
+                    'cpf_responsavel' => $data['cpf_responsavel'],
+                    'nome_responsavel' => $data['nome_responsavel'],
+                ]
+            );
+        } else {
+            $lead->lead_empresa()->delete();
+        }
 
         $lead->endereco()->updateOrCreate(
             ['lead_id' => $lead->id],
             [
                 'cep' => $data['cep'] ?? null,
                 'logradouro' => $data['logradouro'] ?? null,
-                'numero' => $data['numero'] ?? null,
+                'numero' => $data['numero'] ?? '123',
                 'complemento' => $data['complemento'] ?? null,
                 'bairro' => $data['bairro'] ?? null,
                 'cidade_imovel' => $data['cidade_imovel'] ?? null,
@@ -536,7 +699,7 @@ class SimulationController extends Controller
 
         $corretorId = $context['corretor_id'] ?? null;
 
-        if($corretorId) {
+        if ($corretorId) {
             $audiColumn = $lead->wasRecentlyCreated
             ? 'created_by_corretor_id'
             : 'updated_by_corretor_id';
@@ -546,8 +709,21 @@ class SimulationController extends Controller
             ])->saveQuietly();
         }
 
+        $companyId = $lead->company_id !== null ? (int) $lead->company_id : null;
+
+        $leadId = (int) $lead->id;
+
+        DashboardActivityChanged::dispatch(
+            'lead',
+            $leadId,
+            $companyId,
+            $wasRecentlyCreated
+                ? 'lead.created'
+                : 'lead.updated',
+        );
+
         return $lead;
-        
+
     }
 
     /**
@@ -556,24 +732,24 @@ class SimulationController extends Controller
     private function tagsAsString(string $tipoSolicitante, ?Imobiliaria $company): string
     {
         $tags = match ($tipoSolicitante) {
-        'imobiliaria_cadastrada' => [
-            $company?->name,
-        ],
+            'imobiliaria_cadastrada' => [
+                $company?->name,
+            ],
 
-        'imobiliaria_nao_cadastrada' => [
-            'imobiliaria morna',
-        ],
+            'imobiliaria_nao_cadastrada' => [
+                'imobiliaria morna',
+            ],
 
-        'locatario' => [
-            'locatario',
-        ],
+            'locatario' => [
+                'locatario',
+            ],
 
-        'locador' => [
-            'diretoprop',
-        ],
+            'locador' => [
+                'diretoprop',
+            ],
 
-        default => [],
-    };
+            default => [],
+        };
 
         return collect($tags)->filter()->implode(', ');
     }
@@ -602,17 +778,20 @@ class SimulationController extends Controller
             ->first();
     }
 
-    private function dispatchLeadFlow(Lead $lead): void {
+    private function dispatchLeadFlow(Lead $lead): void
+    {
         if (! config('features.insurance_analysis.enabled', false)) {
+            SendLeadToLeadLoversJob::dispatch($lead->id)->afterCommit();
+
             return;
         }
 
         $alreadyHasBatch = InsuranceAnalysisBatch::query()
-        ->where('lead_id', $lead->id)
-        ->exists();
+            ->where('lead_id', $lead->id)
+            ->exists();
 
-        if($alreadyHasBatch) {
-            SendLeadToLeadLoversJob::dispatch($lead->id);
+        if ($alreadyHasBatch) {
+            SendLeadToLeadLoversJob::dispatch($lead->id)->afterCommit();
 
             Log::info(
                 'Análise inicial não disparada porque o lead já possui lote.',
@@ -620,6 +799,7 @@ class SimulationController extends Controller
                     'lead_id' => $lead->id,
                 ]
             );
+
             return;
         }
 

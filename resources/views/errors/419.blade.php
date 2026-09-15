@@ -18,12 +18,10 @@
                 style="background: linear-gradient(180deg, rgba(19, 37, 66, 0.16), rgba(16, 27, 55, 0.88));"
             ></div>
 
-            <img
-                src="{{ asset('imgs/Logo_NVS.png') }}"
-                alt="Logo NVS"
+            <x-brand-logo
                 class="position-absolute top-0 start-0 m-3"
                 style="width: 46px; height: 46px; object-fit: contain; filter: drop-shadow(0 8px 16px rgba(7, 15, 35, 0.3));"
-            >
+            />
 
             <div class="position-relative d-flex h-100 flex-column justify-content-end p-4 p-md-5" style="min-height: 420px;">
                 <span class="badge rounded-pill text-bg-danger align-self-start mb-3 px-3 py-2 text-uppercase">

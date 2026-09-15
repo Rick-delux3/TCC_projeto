@@ -38,6 +38,11 @@
 
     $notificationCount = $dashboardStats['newLeads'] ?? 0;
 
+    $insuranceAnalysisEnabled = (bool) config(
+        'features.insurance_analysis.enabled',
+        false
+    );
+
     /*
     |--------------------------------------------------------------------------
     | Rotas principais do dashboard admin/corretores
@@ -67,13 +72,33 @@
     $logoutRoute = Route::has('admin.logout')
         ? route('admin.logout')
         : '#';
+
+    $brandProfile = config('branding.active', 'tcc');
+    $brandName = config(
+        "branding.profiles.{$brandProfile}.name",
+        'NVS Seguros'
+    );
+    $panelLabel = $isCeo ? 'Painel do CEO' : 'Painel do corretor';
+    $operationLabel = $brandProfile === 'client'
+        ? 'Operação ativa'
+        : 'Sistema operacional';
+    $currentSectionLabel = match (true) {
+        request()->routeIs('admin.imobiliarias.*') => 'Imobiliárias',
+        request()->routeIs('admin.insurance-analyses.*') => 'Propostas',
+        request()->routeIs('admin.config-equipe.*') => 'Equipe',
+        default => 'Central de leads',
+    };
 @endphp
 
-<header class="dashboard-client-header sticky-top">
-    <nav class="navbar navbar-expand dashboard-client-navbar">
-        <div class="container-fluid px-3 px-lg-4">
-
-            {{-- Botão que abre o menu lateral --}}
+<header
+    class="dashboard-client-header sticky-top"
+    data-dashboard-header="{{ $brandProfile }}"
+    x-data="{ isCompact: window.scrollY > 24 }"
+    x-on:scroll.window.throttle.100ms="isCompact = window.scrollY > 24"
+    x-bind:class="{ 'is-compact': isCompact }"
+>
+    <div class="dashboard-client-header__primary">
+        <div class="dashboard-client-header__rail">
             <button
                 class="btn dashboard-sidebar-toggle"
                 type="button"
@@ -82,94 +107,99 @@
                 aria-controls="dashboardAdminSidebar"
                 aria-label="Abrir menu lateral"
             >
-                <i class="bi bi-list"></i>
+                <i class="bi bi-list" aria-hidden="true"></i>
             </button>
+        </div>
 
-            {{-- Logo / marca --}}
-            <a class="navbar-brand dashboard-client-brand ms-2" href="{{ $dashboardRoute }}">
+        <div class="navbar navbar-expand dashboard-client-navbar">
+            <a class="navbar-brand dashboard-client-brand" href="{{ $dashboardRoute }}">
                 <span class="dashboard-client-brand__logo">
-                    <img src="{{ asset('imgs/Logo_NVS.png') }}" alt="NVS Seguros">
+                    <x-brand-logo variant="logo_header" />
                 </span>
 
-                <span class="dashboard-client-brand__text d-none d-md-flex">
-                    <strong>NVS Seguros</strong>
-                    <small>{{ $isCeo ? 'Painel do CEO' : 'Painel do corretor' }}</small>
+                <span class="dashboard-client-brand__text d-none d-sm-flex">
+                    <strong>{{ $brandName }}</strong>
+                    <small>{{ $panelLabel }}</small>
                 </span>
             </a>
 
-            {{-- Área direita do header --}}
-            <div class="ms-auto d-flex align-items-center gap-2 gap-md-3">
+            <nav class="dashboard-header-nav" aria-label="Seções do painel">
+                <a class="dashboard-header-nav__link" href="{{ $dashboardRoute }}">
+                    Visão geral
+                </a>
 
-                {{-- Sino de notificações --}}
-                <div class="dropdown">
-                    <button
-                        class="btn dashboard-notification-btn position-relative"
-                        type="button"
-                        data-bs-toggle="dropdown"
-                        aria-expanded="false"
-                        aria-label="Abrir notificações"
+                @can('view-leads')
+                    <a
+                        class="dashboard-header-nav__link {{ request()->routeIs('Dashboard-Admin') || request()->routeIs('admin.leads.*') ? 'active' : '' }}"
+                        href="{{ $leadsRoute }}"
+                        @if (request()->routeIs('Dashboard-Admin') || request()->routeIs('admin.leads.*')) aria-current="page" @endif
                     >
-                        <i class="bi bi-bell"></i>
+                        Leads
+                    </a>
+                @endcan
 
-                        @if ($notificationCount > 0)
-                            <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger">
-                                {{ $notificationCount > 99 ? '99+' : $notificationCount }}
-                            </span>
-                        @endif
-                    </button>
+                @can('view-real-estate-companies')
+                    <a
+                        class="dashboard-header-nav__link {{ request()->routeIs('admin.imobiliarias.*') ? 'active' : '' }}"
+                        href="{{ $imobiliariasRoute }}"
+                        @if (request()->routeIs('admin.imobiliarias.*')) aria-current="page" @endif
+                    >
+                        Imobiliárias
+                    </a>
+                @endcan
 
-                    <div class="dropdown-menu dropdown-menu-end dashboard-notification-menu shadow border-0 rounded-4 p-0">
-                        <div class="p-3 border-bottom">
-                            <h6 class="fw-bold mb-1">
-                                Notificações
-                            </h6>
+                @if ($insuranceAnalysisEnabled)
+                    @can('view-analyses')
+                        <a
+                            class="dashboard-header-nav__link {{ request()->routeIs('admin.insurance-analyses.*') ? 'active' : '' }}"
+                            href="{{ $analisesRoute }}"
+                            @if (request()->routeIs('admin.insurance-analyses.*')) aria-current="page" @endif
+                        >
+                            Propostas
+                        </a>
+                    @endcan
+                @endif
 
-                            <p class="text-muted small mb-0">
-                                Acompanhe novos clientes recebidos pelas imobiliárias.
-                            </p>
-                        </div>
+                <span class="dashboard-header-nav__link dashboard-header-nav__link--disabled" aria-disabled="true">
+                    Relatórios
+                </span>
+            </nav>
 
-                        <div class="p-3">
-                            @if ($notificationCount > 0)
-                                <div class="d-flex gap-3 align-items-start">
-                                    <span class="dashboard-notification-icon bg-primary-subtle text-primary">
-                                        <i class="bi bi-person-plus"></i>
-                                    </span>
+            <div class="dashboard-header-actions">
+                @if ($brandProfile === 'tcc')
+                    @include('layout-inicial.partials.dashboard-header-notifications', [
+                        'notificationCount' => $notificationCount,
+                        'leadsRoute' => $leadsRoute,
+                        'notificationDescription' => 'Acompanhe novos clientes recebidos pelas imobiliárias.',
+                        'notificationItemLabel' => 'novo(s) cliente(s)',
+                    ])
+                    <span class="dashboard-header-separator" aria-hidden="true"></span>
+                @endif
 
-                                    <div>
-                                        <div class="fw-semibold">
-                                            {{ $notificationCount }} novo(s) cliente(s)
-                                        </div>
+                <span class="dashboard-header-status">
+                    <span class="dashboard-header-status__dot" aria-hidden="true"></span>
+                    {{ $operationLabel }}
+                </span>
 
-                                        <div class="small text-muted">
-                                            Existem leads recentes aguardando acompanhamento.
-                                        </div>
+                <span class="dashboard-header-separator" aria-hidden="true"></span>
 
-                                        <a href="{{ $leadsRoute }}" class="small fw-semibold text-decoration-none">
-                                            Ver leads
-                                        </a>
-                                    </div>
-                                </div>
-                            @else
-                                <div class="text-center py-3">
-                                    <i class="bi bi-check-circle text-success fs-4"></i>
+                @if ($brandProfile !== 'tcc')
+                    @include('layout-inicial.partials.dashboard-header-notifications', [
+                        'notificationCount' => $notificationCount,
+                        'leadsRoute' => $leadsRoute,
+                        'notificationDescription' => 'Acompanhe novos clientes recebidos pelas imobiliárias.',
+                        'notificationItemLabel' => 'novo(s) cliente(s)',
+                    ])
+                    <span class="dashboard-header-separator" aria-hidden="true"></span>
+                @endif
 
-                                    <p class="small text-muted mb-0 mt-2">
-                                        Nenhuma nova notificação no momento.
-                                    </p>
-                                </div>
-                            @endif
-                        </div>
-                    </div>
-                </div>
-
-                {{-- Perfil do corretor/admin --}}
-                <div class="dropdown">
+                <div class="dropdown dashboard-profile">
                     <button
                         class="btn dashboard-profile-btn d-flex align-items-center gap-2"
                         type="button"
                         data-bs-toggle="dropdown"
                         aria-expanded="false"
+                        aria-label="Abrir menu de {{ $adminName }}"
                     >
                         <span class="dashboard-profile-avatar">
                             {{ $adminInitials ?: 'CO' }}
@@ -180,19 +210,13 @@
                             <small>{{ $adminRole }}</small>
                         </span>
 
-                        <i class="bi bi-chevron-down small d-none d-md-inline"></i>
+                        <i class="bi bi-chevron-down dashboard-profile-chevron" aria-hidden="true"></i>
                     </button>
 
                     <ul class="dropdown-menu dropdown-menu-end shadow border-0 rounded-4 dashboard-profile-menu">
                         <li class="px-3 py-2 border-bottom">
-                            <div class="fw-bold">
-                                {{ $adminName }}
-                            </div>
-
-                            <div class="small text-muted">
-                                {{ $adminEmail }}
-                            </div>
-
+                            <div class="fw-bold">{{ $adminName }}</div>
+                            <div class="small text-muted">{{ $adminEmail }}</div>
                             <span class="badge {{ $isCeo ? 'text-bg-primary' : 'text-bg-secondary' }} mt-2">
                                 {{ $adminRole }}
                             </span>
@@ -201,20 +225,22 @@
                         @can('manage-organization')
                             <li>
                                 <a class="dropdown-item py-2" href="{{ $equipeRoute }}">
-                                    <i class="bi bi-people-gear me-2"></i>
+                                    <i class="bi bi-person-gear me-2" aria-hidden="true"></i>
                                     Gerenciar equipe
                                 </a>
                             </li>
                         @endcan
 
-                        @can('view-analyses')
-                            <li>
-                                <a class="dropdown-item py-2" href="{{ $analisesRoute }}">
-                                    <i class="bi bi-clipboard2-data me-2"></i>
-                                    Visualizar análises
-                                </a>
-                            </li>
-                        @endcan
+                        @if ($insuranceAnalysisEnabled)
+                            @can('view-analyses')
+                                <li>
+                                    <a class="dropdown-item py-2" href="{{ $analisesRoute }}">
+                                        <i class="bi bi-clipboard2-data me-2" aria-hidden="true"></i>
+                                        Visualizar análises
+                                    </a>
+                                </li>
+                            @endcan
+                        @endif
 
                         <li>
                             <a
@@ -223,31 +249,35 @@
                                 target="_blank"
                                 rel="noopener noreferrer"
                             >
-                                <i class="bi bi-question-circle me-2"></i>
+                                <i class="bi bi-question-circle me-2" aria-hidden="true"></i>
                                 Tirar dúvidas
                             </a>
                         </li>
 
-                        <li>
-                            <hr class="dropdown-divider">
-                        </li>
+                        <li><hr class="dropdown-divider"></li>
 
                         <li>
                             <form method="POST" action="{{ $logoutRoute }}">
                                 @csrf
-
                                 <button type="submit" class="dropdown-item py-2 text-danger">
-                                    <i class="bi bi-box-arrow-right me-2"></i>
+                                    <i class="bi bi-box-arrow-right me-2" aria-hidden="true"></i>
                                     Sair
                                 </button>
                             </form>
                         </li>
                     </ul>
                 </div>
-
             </div>
         </div>
-    </nav>
+    </div>
+
+    <div class="dashboard-client-header__secondary">
+        <div class="dashboard-header-breadcrumb" aria-label="Localização atual">
+            <span>Dashboard</span>
+            <i class="bi bi-slash-lg" aria-hidden="true"></i>
+            <strong>{{ $currentSectionLabel }}</strong>
+        </div>
+    </div>
 </header>
 
 {{-- Menu lateral vertical --}}
@@ -260,12 +290,12 @@
     <div class="offcanvas-header border-bottom">
         <div class="d-flex align-items-center gap-3">
             <span class="dashboard-sidebar-logo">
-                <img src="{{ asset('imgs/Logo_NVS.png') }}" alt="NVS Seguros">
+                <x-brand-logo variant="logo_header" />
             </span>
 
             <div>
                 <h5 class="offcanvas-title fw-bold mb-0" id="dashboardAdminSidebarLabel">
-                    NVS Seguros
+                    {{ config('branding.profiles.'.config('branding.active', 'tcc').'.name', 'NVS Seguros') }}
                 </h5>
 
                 <small class="text-muted">
@@ -316,21 +346,23 @@
                     href="{{ $dashboardRoute }}"
                     class="dashboard-sidebar-link {{ request()->routeIs('Dashboard-Admin') ? 'active' : '' }}"
                 >
-                    <i class="bi bi-grid-1x2"></i>
+                    <i class="bi bi-grid-1x2" aria-hidden="true"></i>
                     <span>Dashboard</span>
                 </a>
             @endcan
 
             {{-- Visualizar análises --}}
-            @can('view-analyses')
-                <a
-                    href="{{ $analisesRoute }}"
-                    class="dashboard-sidebar-link {{ request()->routeIs('admin.insurance-analyses.*') || request()->routeIs('insurance-analyses.*') ? 'active' : '' }}"
-                >
-                    <i class="bi bi-clipboard2-data"></i>
-                    <span>Visualizar análises</span>
-                </a>
-            @endcan
+            @if ($insuranceAnalysisEnabled)
+                @can('view-analyses')
+                    <a
+                        href="{{ $analisesRoute }}"
+                        class="dashboard-sidebar-link {{ request()->routeIs('admin.insurance-analyses.*') || request()->routeIs('insurance-analyses.*') ? 'active' : '' }}"
+                    >
+                        <i class="bi bi-clipboard2-data" aria-hidden="true"></i>
+                        <span>Visualizar análises</span>
+                    </a>
+                @endcan
+            @endif
 
             {{-- Equipe: somente CEO --}}
             @can('manage-organization')
@@ -338,7 +370,7 @@
                     href="{{ $equipeRoute }}"
                     class="dashboard-sidebar-link {{ request()->routeIs('admin.config-equipe.*') ? 'active' : '' }}"
                 >
-                    <i class="bi bi-people-gear"></i>
+                    <i class="bi bi-person-gear" aria-hidden="true"></i>
                     <span>Equipe</span>
                 </a>
             @endcan
@@ -350,7 +382,7 @@
                     class="dashboard-sidebar-link {{ request()->routeIs('admin.imobiliarias.*') ? 'active' : '' }} {{ $imobiliariasRoute === '#' ? 'disabled opacity-50' : '' }}"
                     @if ($imobiliariasRoute === '#') aria-disabled="true" tabindex="-1" @endif
                 >
-                    <i class="bi bi-buildings"></i>
+                    <i class="bi bi-buildings" aria-hidden="true"></i>
                     <span>Imobiliárias</span>
                 </a>
             @endcan
@@ -361,7 +393,7 @@
                     href="{{ $leadsRoute }}"
                     class="dashboard-sidebar-link {{ request()->routeIs('admin.leads.*') ? 'active' : '' }}"
                 >
-                    <i class="bi bi-people"></i>
+                    <i class="bi bi-people" aria-hidden="true"></i>
                     <span>Leads</span>
                 </a>
             @endcan
@@ -373,7 +405,7 @@
                 rel="noopener noreferrer"
                 class="dashboard-sidebar-link"
             >
-                <i class="bi bi-question-circle"></i>
+                <i class="bi bi-question-circle" aria-hidden="true"></i>
                 <span>Tirar dúvidas</span>
             </a>
         </nav>
@@ -387,7 +419,7 @@
                     type="submit"
                     class="dashboard-sidebar-link dashboard-sidebar-link-danger border-0 bg-transparent w-100 text-start"
                 >
-                    <i class="bi bi-box-arrow-right"></i>
+                    <i class="bi bi-box-arrow-right" aria-hidden="true"></i>
                     <span>Sair</span>
                 </button>
             </form>

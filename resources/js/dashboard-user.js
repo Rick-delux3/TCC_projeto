@@ -1,37 +1,28 @@
+import { initializeAdminLeadFields } from './admin-lead-fields';
+
 document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('[data-admin-lead-fields]').forEach(initializeAdminLeadFields);
     const configElement = document.getElementById('dashboardUserConfig');
 
-    const config = configElement
-        ? JSON.parse(configElement.textContent || '{}')
-        : {};
+    let config = {};
 
-    const statusUrl = config.routes?.syncStatus || null;
-    const realtimeUrl = config.routes?.realtimeStatus || null;
+    if (configElement) {
+        try {
+            config = JSON.parse(configElement.textContent || '{}');
+        } catch (error) {
+            console.warn('Não foi possível carregar a configuração do dashboard.');
+        }
+    }
 
-    const currentStatus = config.syncStatus || 'idle';
-    const initialSyncError = config.syncError || null;
-    const initialTotalLeads = Number(config.totalLeads || 0);
-    const syncJustQueued = Boolean(config.syncJustQueued);
     const leadFormUrl = config.leadFormUrl || null;
     const leadAccessCode = config.leadAccessCode || null;
-    const shouldAutoShowSyncToast = Boolean(config.shouldAutoShowSyncToast);
+    const realtimeConfig = config.realtime || null;
+    const serverHasUnsavedInput =
+        realtimeConfig?.hasUnsavedInput === true;
 
     const dashboardThemeRoot = document.getElementById('dashboardThemeRoot');
     const dashboardThemeToggle = document.getElementById('dashboardThemeToggle');
     const dashboardThemeStorageKey = 'dashboard-theme';
-
-    const syncFloatingPanel = document.getElementById('syncFloatingPanel');
-    const syncPanelCloseButton = document.getElementById('sync-panel-close-button');
-    const syncPanelRefreshButton = document.getElementById('sync-panel-refresh-button');
-
-    const toastBadgeEl = document.getElementById('sync-toast-badge');
-    const toastTitleEl = document.getElementById('sync-toast-title');
-    const toastDescriptionEl = document.getElementById('sync-toast-description');
-    const toastProgressEl = document.getElementById('sync-toast-progress-bar');
-    const toastPercentEl = document.getElementById('sync-toast-percent');
-    const toastSummaryEl = document.getElementById('sync-toast-summary');
-    const toastRetryButtonEl = document.getElementById('sync-toast-retry-button');
-    const toastRetryFormEl = document.getElementById('sync-toast-retry-form');
 
     const dashboardLeadAccessCodeCopyButton = document.getElementById('dashboardLeadAccessCodeCopyButton');
     const dashboardLeadAccessCodeInput = document.getElementById('dashboardLeadAccessCode');
@@ -41,27 +32,24 @@ document.addEventListener('DOMContentLoaded', function () {
     const dashboardLeadFormCopyStatus = document.getElementById('dashboardLeadFormCopyStatus');
     const dashboardLeadFormOpenButton = document.getElementById('dashboardLeadFormOpenButton');
 
-    let intervalId = null;
-    let doneReloadTimeout = null;
-
     /*
     |--------------------------------------------------------------------------
     | Tema claro/escuro do dashboard
     |--------------------------------------------------------------------------
     */
     function applyDashboardTheme(theme) {
-        if (!dashboardThemeRoot || !dashboardThemeToggle) {
+        if(!dashboardThemeRoot || !dashboardThemeToggle) {
             return;
         }
 
-        const normalizedTheme = theme === 'dark' ? 'dark' : 'light';
 
-        dashboardThemeRoot.setAttribute('data-dashboard-theme', normalizedTheme);
-        dashboardThemeToggle.textContent = normalizedTheme === 'dark' ? 'Modo claro' : 'Modo escuro';
+        const normalizeTheme = (theme === 'dark' ? 'dark' : 'light');
+        dashboardThemeRoot.setAttribute('data-dashboard-theme', normalizeTheme);
 
-        dashboardThemeToggle.classList.toggle('btn-outline-light', normalizedTheme === 'dark');
-        dashboardThemeToggle.classList.toggle('btn-outline-secondary', normalizedTheme !== 'dark');
-    }
+        dashboardThemeToggle.textContent = normalizeTheme === 'dark' ? 'Modo claro' : 'Modo escuro';
+        dashboardThemeToggle.classList.toggle('btn-outline-light', normalizeTheme === 'dark');
+        dashboardThemeToggle.classList.toggle('btn-outline-secondary', normalizeTheme !== 'dark');
+    } 
 
     if (dashboardThemeRoot && dashboardThemeToggle) {
         let savedTheme = 'light';
@@ -86,188 +74,6 @@ document.addEventListener('DOMContentLoaded', function () {
 
             applyDashboardTheme(nextTheme);
         });
-    }
-
-    /*
-    |--------------------------------------------------------------------------
-    | Painel flutuante de sincronização
-    |--------------------------------------------------------------------------
-    */
-    function showSyncPanel() {
-        if (syncFloatingPanel) {
-            syncFloatingPanel.classList.remove('d-none');
-        }
-    }
-
-    function hideSyncPanel() {
-        if (syncFloatingPanel) {
-            syncFloatingPanel.classList.add('d-none');
-        }
-    }
-
-    if (syncPanelCloseButton) {
-        syncPanelCloseButton.addEventListener('click', hideSyncPanel);
-    }
-
-    if (syncPanelRefreshButton) {
-        syncPanelRefreshButton.addEventListener('click', function () {
-            window.location.reload();
-        });
-    }
-
-    function stopPolling() {
-        if (intervalId) {
-            clearInterval(intervalId);
-            intervalId = null;
-        }
-    }
-
-    function progressForStatus(status, totalLeads) {
-        if (status === 'queued') {
-            return 18;
-        }
-
-        if (status === 'running') {
-            return Math.min(84, 46 + Math.min(Number(totalLeads || 0), 38));
-        }
-
-        if (status === 'completed' || status === 'completed_with_warning' || status === 'failed') {
-            return 100;
-        }
-
-        return 0;
-    }
-
-    function getToastCopy(status, payload) {
-        const leadsCount = Number(payload.totalLeads || 0);
-        const progress = progressForStatus(status, leadsCount);
-
-        if (status === 'queued') {
-            return {
-                variant: 'warning',
-                badge: 'Na fila',
-                title: 'Preparando sincronização',
-                description: 'A importação foi colocada na fila e será processada em instantes.',
-                progress,
-                summary: 'Aguardando início do processamento.',
-                retry: false,
-                refresh: false,
-            };
-        }
-
-        if (status === 'running') {
-            return {
-                variant: 'primary',
-                badge: 'Sincronizando',
-                title: 'Sincronização em andamento',
-                description: 'Os leads estão sendo sincronizados em segundo plano.',
-                progress,
-                summary: leadsCount > 0
-                    ? `${leadsCount} leads disponíveis até agora.`
-                    : 'Lendo registros da integração.',
-                retry: false,
-                refresh: false,
-            };
-        }
-
-        if (status === 'completed') {
-            return {
-                variant: 'success',
-                badge: 'Atualizado',
-                title: 'Sincronização concluída',
-                description: 'A base local foi atualizada com sucesso.',
-                progress: 100,
-                summary: `${leadsCount} leads disponíveis no painel.`,
-                retry: false,
-                refresh: true,
-            };
-        }
-
-        if (status === 'completed_with_warning') {
-            return {
-                variant: 'warning',
-                badge: 'Parcial',
-                title: 'Sincronização parcial concluída',
-                description: payload.syncError || 'A sincronização foi finalizada com uma quantidade suficiente de leads para o painel.',
-                progress: 100,
-                summary: `${leadsCount} leads disponíveis no painel.`,
-                retry: false,
-                refresh: true,
-            };
-        }
-
-        if (status === 'failed') {
-            return {
-                variant: 'danger',
-                badge: 'Falhou',
-                title: 'Falha na sincronização',
-                description: payload.syncError || 'Não foi possível concluir a sincronização.',
-                progress: 100,
-                summary: 'Revise a integração ou tente novamente.',
-                retry: true,
-                refresh: false,
-            };
-        }
-
-        return {
-            variant: 'secondary',
-            badge: 'Aguardando',
-            title: 'Sincronização aguardando',
-            description: 'Nenhuma sincronização em andamento.',
-            progress: 0,
-            summary: 'Aguardando atualização.',
-            retry: false,
-            refresh: false,
-        };
-    }
-
-    function renderToast(copy) {
-        if (!syncFloatingPanel) {
-            return;
-        }
-
-        if (toastBadgeEl) {
-            toastBadgeEl.className = `badge text-bg-${copy.variant} me-2`;
-            toastBadgeEl.textContent = copy.badge;
-        }
-
-        if (toastTitleEl) {
-            toastTitleEl.textContent = copy.title;
-        }
-
-        if (toastDescriptionEl) {
-            toastDescriptionEl.textContent = copy.description;
-        }
-
-        if (toastPercentEl) {
-            toastPercentEl.textContent = `${copy.progress}%`;
-        }
-
-        if (toastSummaryEl) {
-            toastSummaryEl.textContent = copy.summary;
-        }
-
-        if (toastProgressEl) {
-            toastProgressEl.style.width = `${copy.progress}%`;
-            toastProgressEl.setAttribute('aria-valuenow', copy.progress);
-            toastProgressEl.className = `progress-bar progress-bar-striped bg-${copy.variant}`;
-
-            if (copy.progress < 100) {
-                toastProgressEl.classList.add('progress-bar-animated');
-            } else {
-                toastProgressEl.classList.remove('progress-bar-animated');
-            }
-        }
-
-        if (toastRetryButtonEl) {
-            toastRetryButtonEl.classList.toggle('d-none', !copy.retry);
-        }
-
-        if (syncPanelRefreshButton) {
-            syncPanelRefreshButton.classList.toggle('d-none', !copy.refresh);
-        }
-
-        showSyncPanel();
     }
 
     /*
@@ -340,14 +146,6 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
-    if (toastRetryButtonEl) {
-        toastRetryButtonEl.addEventListener('click', function () {
-            if (toastRetryFormEl) {
-                toastRetryFormEl.submit();
-            }
-        });
-    }
-
     bindOpenButton(dashboardLeadFormOpenButton, leadFormUrl);
 
     bindCopyButton(
@@ -370,117 +168,38 @@ document.addEventListener('DOMContentLoaded', function () {
 
     /*
     |--------------------------------------------------------------------------
-    | Consulta do status da sincronização
-    |--------------------------------------------------------------------------
-    */
-    async function checkSyncStatus() {
-        if (!statusUrl) {
-            return;
-        }
-
-        try {
-            const response = await fetch(statusUrl, {
-                method: 'GET',
-                headers: {
-                    Accept: 'application/json',
-                    'X-Requested-With': 'XMLHttpRequest',
-                },
-            });
-
-            if (!response.ok) {
-                stopPolling();
-                return;
-            }
-
-            const data = await response.json();
-
-            if (!data.authenticated) {
-                stopPolling();
-                return;
-            }
-
-            const status = data.sync_status;
-
-            if (status === 'queued' || status === 'running') {
-                renderToast(getToastCopy(status, {
-                    totalLeads: data.total_leads,
-                    syncError: data.sync_error,
-                }));
-
-                return;
-            }
-
-            if (status === 'completed' || status === 'completed_with_warning') {
-                stopPolling();
-
-                renderToast(getToastCopy(status, {
-                    totalLeads: data.total_leads,
-                    syncError: data.sync_error,
-                }));
-
-                return;
-            }
-
-            if (status === 'failed') {
-                stopPolling();
-
-                renderToast(getToastCopy('failed', {
-                    totalLeads: data.total_leads,
-                    syncError: data.sync_error,
-                }));
-
-                showSyncPanel();
-
-                return;
-            }
-
-            stopPolling();
-        } catch (error) {
-            console.error('Erro ao consultar status da sincronização:', error);
-        }
-    }
-
-    window.addEventListener('beforeunload', function () {
-        stopPolling();
-
-        if (doneReloadTimeout) {
-            clearTimeout(doneReloadTimeout);
-        }
-    });
-
-    if (currentStatus === 'queued' || currentStatus === 'running' || syncJustQueued) {
-        const statusToRender = currentStatus === 'queued' || currentStatus === 'running'
-            ? currentStatus
-            : 'queued';
-
-        renderToast(getToastCopy(statusToRender, {
-            totalLeads: initialTotalLeads,
-            syncError: initialSyncError,
-        }));
-
-        showSyncPanel();
-
-        intervalId = setInterval(checkSyncStatus, 5000);
-        checkSyncStatus();
-    }
-
-    if (currentStatus === 'failed') {
-        renderToast(getToastCopy('failed', {
-            totalLeads: initialTotalLeads,
-            syncError: initialSyncError,
-        }));
-
-        if (shouldAutoShowSyncToast) {
-            showSyncPanel();
-        }
-    }
-
-    /*
-    |--------------------------------------------------------------------------
-    | Bloqueia envio do formulário do modal se nada foi alterado
+    | Controle isolado dos formulários de edição de lead
     |--------------------------------------------------------------------------
     */
     const leadUpdateForms = document.querySelectorAll('.lead-update-form');
+
+    function leadSubmitButtons(form) {
+        const leadId = form.dataset.leadId;
+
+        if (!leadId) {
+            return [];
+        }
+
+        return Array.from(document.querySelectorAll(
+            `[data-lead-submit][data-lead-id="${leadId}"]`
+        ));
+    }
+
+    function resetLeadUpdateForm(form) {
+        delete form.dataset.submitting;
+
+        leadSubmitButtons(form).forEach(function (submitButton) {
+            const spinner = submitButton.querySelector('[data-lead-spinner]');
+            const label = submitButton.querySelector('[data-lead-submit-label]');
+
+            submitButton.disabled = false;
+            spinner?.classList.add('d-none');
+
+            if (label && label.dataset.defaultLabel) {
+                label.textContent = label.dataset.defaultLabel;
+            }
+        });
+    }
 
     leadUpdateForms.forEach(function (form) {
         const leadId = form.dataset.leadId;
@@ -491,7 +210,7 @@ document.addEventListener('DOMContentLoaded', function () {
         const fields = Array.from(
             form.querySelectorAll('input[name], select[name], textarea[name]')
         ).filter(function (field) {
-            return !['_token', '_method'].includes(field.name);
+            return !['_token', '_method', 'lead_context_id'].includes(field.name);
         });
 
         const initialValues = new Map();
@@ -523,8 +242,19 @@ document.addEventListener('DOMContentLoaded', function () {
         });
 
         form.addEventListener('submit', function (event) {
+            if (form.dataset.submitting === 'true') {
+                event.preventDefault();
+                return;
+            }
+
             if (!formHasChanges()) {
                 event.preventDefault();
+
+                const dataTab = document.getElementById(form.dataset.leadTabId);
+
+                if (dataTab && window.bootstrap?.Tab) {
+                    window.bootstrap.Tab.getOrCreateInstance(dataTab).show();
+                }
 
                 if (alertBox) {
                     alertBox.classList.remove('d-none');
@@ -533,16 +263,230 @@ document.addEventListener('DOMContentLoaded', function () {
                         block: 'center',
                     });
                 }
+
+                return;
             }
+
+            if (!form.checkValidity()) {
+                return;
+            }
+
+            form.dataset.submitting = 'true';
+
+            leadSubmitButtons(form).forEach(function (submitButton) {
+                const spinner = submitButton.querySelector('[data-lead-spinner]');
+                const label = submitButton.querySelector('[data-lead-submit-label]');
+
+                submitButton.disabled = true;
+                spinner?.classList.remove('d-none');
+
+                if (label) {
+                    label.dataset.defaultLabel ||= label.textContent.trim();
+                    label.textContent = 'Salvando...';
+                }
+            });
+
+            window.setTimeout(function () {
+                if (event.defaultPrevented) {
+                    resetLeadUpdateForm(form);
+                }
+            }, 0);
         });
     });
+
+    window.addEventListener('pageshow', function () {
+        leadUpdateForms.forEach(resetLeadUpdateForm);
+    });
+
+    const leadLoversCorrectionForms = document.querySelectorAll(
+        '.leadlovers-correction-form'
+    );
+
+    function resetLeadLoversCorrectionForm(form) {
+        const submitButton = form.querySelector(
+            '[data-leadlovers-correction-submit]'
+        );
+        const spinner = form.querySelector(
+            '[data-leadlovers-correction-spinner]'
+        );
+        const label = form.querySelector(
+            '[data-leadlovers-correction-label]'
+        );
+        const status = form.closest('.leadlovers-correction-modal')
+            ?.querySelector('[data-leadlovers-correction-status]');
+
+        delete form.dataset.submitting;
+        form.setAttribute('aria-busy', 'false');
+
+        if (submitButton) {
+            submitButton.disabled = false;
+        }
+
+        spinner?.classList.add('d-none');
+
+        if (label) {
+            label.textContent = label.dataset.defaultLabel
+                || 'Salvar e reenviar';
+        }
+
+        if (status) {
+            status.textContent = '';
+        }
+    }
+
+    leadLoversCorrectionForms.forEach(function (form) {
+        form.addEventListener('submit', function (event) {
+            if (form.dataset.submitting === 'true') {
+                event.preventDefault();
+                return;
+            }
+
+            if (!form.checkValidity()) {
+                return;
+            }
+
+            const submitButton = form.querySelector(
+                '[data-leadlovers-correction-submit]'
+            );
+            const spinner = form.querySelector(
+                '[data-leadlovers-correction-spinner]'
+            );
+            const label = form.querySelector(
+                '[data-leadlovers-correction-label]'
+            );
+            const status = form.closest('.leadlovers-correction-modal')
+                ?.querySelector('[data-leadlovers-correction-status]');
+
+            form.dataset.submitting = 'true';
+            form.setAttribute('aria-busy', 'true');
+
+            if (submitButton) {
+                submitButton.disabled = true;
+            }
+
+            spinner?.classList.remove('d-none');
+
+            if (label) {
+                label.dataset.defaultLabel ||= label.textContent.trim();
+                label.textContent = 'Salvando e reenviando...';
+            }
+
+            if (status) {
+                status.textContent = 'Salvando e reenviando...';
+            }
+
+            window.setTimeout(function () {
+                if (event.defaultPrevented) {
+                    resetLeadLoversCorrectionForm(form);
+                }
+            }, 0);
+        });
+    });
+
+    window.addEventListener('pageshow', function () {
+        leadLoversCorrectionForms.forEach(
+            resetLeadLoversCorrectionForm
+        );
+    });
+
+    document.querySelectorAll(
+        '.leadlovers-correction-modal'
+    ).forEach(function (modalElement) {
+        modalElement.addEventListener('shown.bs.modal', function () {
+            const preferredField = modalElement.querySelector(
+                '[data-leadlovers-correction-input].is-invalid, '
+                + '[data-leadlovers-correction-input]'
+            );
+
+            if (!preferredField) {
+                return;
+            }
+
+            window.setTimeout(function () {
+                preferredField.focus({ preventScroll: true });
+            }, 0);
+        });
+    });
+
+    const leadValidationTargets = config.leadValidationTargets || null;
+
+    if (
+        leadValidationTargets
+        && window.bootstrap?.Modal
+        && window.bootstrap?.Tab
+    ) {
+        const modalElement = document.getElementById(leadValidationTargets.modal);
+        const tabElement = document.getElementById(leadValidationTargets.tab);
+        const fieldElement = document.getElementById(leadValidationTargets.field);
+
+        if (modalElement && tabElement && fieldElement) {
+            const revealLeadValidationError = function () {
+                window.bootstrap.Tab.getOrCreateInstance(tabElement).show();
+
+                window.setTimeout(function () {
+                    fieldElement.focus();
+                }, 0);
+            };
+
+            if (modalElement.classList.contains('show')) {
+                revealLeadValidationError();
+            } else {
+                modalElement.addEventListener(
+                    'shown.bs.modal',
+                    revealLeadValidationError,
+                    { once: true }
+                );
+
+                window.bootstrap.Modal.getOrCreateInstance(modalElement).show();
+            }
+        }
+    }
+
+    const leadLoversCorrectionValidationTargets =
+        config.leadLoversCorrectionValidationTargets || null;
+
+    if (
+        leadLoversCorrectionValidationTargets
+        && window.bootstrap?.Modal
+    ) {
+        const modalElement = document.getElementById(
+            leadLoversCorrectionValidationTargets.modal
+        );
+        const fieldElement = document.getElementById(
+            leadLoversCorrectionValidationTargets.field
+        );
+
+        if (modalElement && fieldElement) {
+            const revealLeadLoversCorrectionError = function () {
+                window.setTimeout(function () {
+                    fieldElement.focus();
+                }, 0);
+            };
+
+            if (modalElement.classList.contains('show')) {
+                revealLeadLoversCorrectionError();
+            } else {
+                modalElement.addEventListener(
+                    'shown.bs.modal',
+                    revealLeadLoversCorrectionError,
+                    { once: true }
+                );
+
+                window.bootstrap.Modal
+                    .getOrCreateInstance(modalElement)
+                    .show();
+            }
+        }
+    }
 
     /*
     |--------------------------------------------------------------------------
     | Limpeza de backdrop dos modais
     |--------------------------------------------------------------------------
     */
-    document.querySelectorAll('.lead-details-modal').forEach(function (modalEl) {
+    document.querySelectorAll(
+        '.lead-details-modal, .leadlovers-correction-modal'
+    ).forEach(function (modalEl) {
         modalEl.addEventListener('hidden.bs.modal', function () {
             document.querySelectorAll('.modal-backdrop').forEach(function (backdrop) {
                 backdrop.remove();
@@ -554,120 +498,197 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     });
 
-    /*
+        /*
     |--------------------------------------------------------------------------
-    | Atualização automática do dashboard
-    |--------------------------------------------------------------------------
-    | Só roda se você criar a rota Dashboard.realtimeStatus e enviar a URL.
+    | Atualização do dashboard em tempo real
     |--------------------------------------------------------------------------
     */
-    if (realtimeUrl) {
-        let currentDashboardActivityHash = config.dashboardActivityHash || null;
-        let isReloadScheduled = false;
+    const realtimeNotice =
+        document.getElementById('dashboardRealtimeNotice');
 
-        const realtimeNotice = document.getElementById('dashboardRealtimeNotice');
-        const realtimeRefreshButton = document.getElementById('dashboardRealtimeRefreshButton');
+    const realtimeMessage =
+        document.getElementById('dashboardRealtimeMessage');
 
-        const totalLeadsEl = document.getElementById('dashboardTotalLeads');
-        const newLeadsEl = document.getElementById('dashboardNewLeads');
-        const withPhoneEl = document.getElementById('dashboardWithPhone');
-        const recentLeadsEl = document.getElementById('dashboardRecentLeads');
-        const notificationBadgeEl = document.getElementById('dashboardNotificationBadge');
+    const realtimeReloadButton =
+        document.getElementById('dashboardRealtimeReloadButton');
 
-        function hasOpenLeadModal() {
-            return document.querySelector('.modal.show') !== null;
+    let realtimeReloadTimer = null;
+
+    const manualResultForms = Array.from(
+        document.querySelectorAll('.manual-lead-result-form')
+    );
+
+    manualResultForms.forEach(function (form) {
+        const resultSelect = form.querySelector('select[name="result"]');
+
+        if (resultSelect) {
+            resultSelect.dataset.initialValue = resultSelect.value;
+        }
+    });
+
+    function markFormAsChanged(event) {
+        const field = event.target;
+        const form = field?.closest?.('form');
+
+        if (
+            !form
+            || !field.name
+            || form.matches(
+                '.lead-update-form, .manual-lead-result-form'
+            )
+        ) {
+            return;
         }
 
-        function hasDirtyLeadForm() {
-            return Array.from(document.querySelectorAll('.lead-update-form')).some(function (form) {
-                return form.dataset.changed === 'true';
-            });
-        }
-
-        function showRealtimeNotice() {
-            if (realtimeNotice) {
-                realtimeNotice.classList.remove('d-none');
-            }
-        }
-
-        function updateDashboardCounters(data) {
-            if (totalLeadsEl) {
-                totalLeadsEl.textContent = data.total_leads;
-            }
-
-            if (newLeadsEl) {
-                newLeadsEl.textContent = data.new_leads;
-            }
-
-            if (withPhoneEl) {
-                withPhoneEl.textContent = data.with_phone;
-            }
-
-            if (recentLeadsEl) {
-                recentLeadsEl.textContent = data.recent_leads;
-            }
-
-            if (notificationBadgeEl) {
-                const count = Number(data.new_leads || 0);
-
-                notificationBadgeEl.textContent = count > 99 ? '99+' : count;
-                notificationBadgeEl.classList.toggle('d-none', count <= 0);
-            }
-        }
-
-        async function checkDashboardRealtimeUpdates() {
-            try {
-                const response = await fetch(realtimeUrl, {
-                    method: 'GET',
-                    headers: {
-                        Accept: 'application/json',
-                        'X-Requested-With': 'XMLHttpRequest',
-                    },
-                });
-
-                if (!response.ok) {
-                    return;
-                }
-
-                const data = await response.json();
-
-                if (!data.authenticated) {
-                    return;
-                }
-
-                updateDashboardCounters(data);
-
-                if (!currentDashboardActivityHash) {
-                    currentDashboardActivityHash = data.activity_hash;
-                    return;
-                }
-
-                if (data.activity_hash !== currentDashboardActivityHash) {
-                    currentDashboardActivityHash = data.activity_hash;
-
-                    if (!hasOpenLeadModal() && !hasDirtyLeadForm() && !isReloadScheduled) {
-                        isReloadScheduled = true;
-
-                        setTimeout(function () {
-                            window.location.reload();
-                        }, 900);
-
-                        return;
-                    }
-
-                    showRealtimeNotice();
-                }
-            } catch (error) {
-                console.warn('Não foi possível verificar atualizações em tempo real.', error);
-            }
-        }
-
-        if (realtimeRefreshButton) {
-            realtimeRefreshButton.addEventListener('click', function () {
-                window.location.reload();
-            });
-        }
-
-        setInterval(checkDashboardRealtimeUpdates, 10000);
+        form.dataset.realtimeChanged = 'true';
     }
+
+    document.addEventListener('input', markFormAsChanged, true);
+    document.addEventListener('change', markFormAsChanged, true);
+
+    document.addEventListener('submit', function (event) {
+        const form = event.target;
+
+        if (!form || form.tagName !== 'FORM' || event.defaultPrevented) {
+            return;
+        }
+
+        form.dataset.realtimeSubmitting = 'true';
+
+        window.setTimeout(function () {
+            if (event.defaultPrevented) {
+                delete form.dataset.realtimeSubmitting;
+            }
+        }, 0);
+    });
+
+    window.addEventListener('pageshow', function () {
+        document
+            .querySelectorAll('form[data-realtime-submitting="true"]')
+            .forEach(function (form) {
+                delete form.dataset.realtimeSubmitting;
+            });
+    });
+
+    function showRealtimeNotice(message, showReloadButton = true) {
+        if (!realtimeNotice) {
+            return;
+        }
+
+        const wasHidden = realtimeNotice.classList.contains('d-none');
+        realtimeNotice.classList.remove('d-none');
+
+        const updateNotice = function () {
+            if (realtimeMessage) {
+                realtimeMessage.textContent = message;
+            }
+
+            realtimeReloadButton?.classList.toggle(
+                'd-none',
+                !showReloadButton
+            );
+        };
+
+        if (wasHidden) {
+            window.requestAnimationFrame(updateNotice);
+            return;
+        }
+
+        updateNotice();
+    }
+
+    function dashboardHasUnsavedChanges() {
+        if (serverHasUnsavedInput) {
+            return true;
+        }
+
+        if (document.querySelector('.leadlovers-correction-modal.show')) {
+            return true;
+        }
+
+        if (
+            document.querySelector(
+                'form[data-submitting="true"], '
+                + 'form[data-realtime-submitting="true"], '
+                + 'form[data-realtime-changed="true"]'
+            )
+        ) {
+            return true;
+        }
+
+        if (
+            document.querySelector(
+                '.lead-update-form[data-changed="true"]'
+            )
+        ) {
+            return true;
+        }
+
+        return manualResultForms.some(function (form) {
+            const resultSelect = form.querySelector(
+                'select[name="result"]'
+            );
+
+            if (!resultSelect) {
+                return false;
+            }
+
+            return resultSelect.value
+                !== (resultSelect.dataset.initialValue ?? '');
+        });
+    }
+
+    function reloadDashboard() {
+        if (dashboardHasUnsavedChanges()) {
+            showRealtimeNotice(
+                'Há novos dados no dashboard. Salve suas alterações ou atualize manualmente.',
+                true,
+            );
+
+            return;
+        }
+
+        window.location.reload();
+    }
+
+    realtimeReloadButton?.addEventListener('click', function () {
+        if (
+            dashboardHasUnsavedChanges()
+            && !window.confirm(
+                'Existem alterações não salvas. Deseja atualizar mesmo assim?'
+            )
+        ) {
+            return;
+        }
+
+        window.location.reload();
+    });
+
+    if (
+        realtimeConfig?.channel
+        && realtimeConfig?.event
+    ) {
+        if (!window.Echo) {
+            console.error(
+                'Laravel Echo não foi inicializado. Verifique echo.js e as variáveis VITE_REVERB_*.',
+            );
+        } else {
+            window.Echo
+                .private(realtimeConfig.channel)
+                .listen(realtimeConfig.event, function () {
+                    window.clearTimeout(realtimeReloadTimer);
+
+                    showRealtimeNotice(
+                        'Novos dados recebidos. Atualizando o dashboard...',
+                        false,
+                    );
+
+                    realtimeReloadTimer = window.setTimeout(
+                        reloadDashboard,
+                        800,
+                    );
+                });
+        }
+    }
+
 });

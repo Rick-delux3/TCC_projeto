@@ -3,19 +3,31 @@
 namespace App\Http\Controllers;
 
 use App\Models\TwoFactorCode;
+use App\Services\CompanyTwoFactorMailService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Mail;
-use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\RateLimiter;
 
 class TwoFactorController extends Controller
 {
+    private const CHALLENGE_MAX_ATTEMPTS = 5;
+
     private const VERIFY_MAX_ATTEMPTS = 5;
+
     private const VERIFY_DECAY_SECONDS = 600; // 10 min
+
     private const RESEND_MAX_ATTEMPTS = 3;
+
     private const RESEND_DECAY_SECONDS = 600; // 10 min
+
     private const RESEND_COOLDOWN_SECONDS = 60; // 1 min
+
+    public function __construct(
+        private CompanyTwoFactorMailService $twoFactorMail
+    ) {}
 
     public function index()
     {
@@ -28,7 +40,7 @@ class TwoFactorController extends Controller
 
         $user = Auth::user();
 
-        if(!$user){
+        if (! $user) {
             return redirect()
                 ->route('empresa.login')
                 ->withErrors([
@@ -45,27 +57,59 @@ class TwoFactorController extends Controller
             ]);
         }
 
-        $twoFactorCode = TwoFactorCode::where('user_id', $user->id)
-        ->where('expires_at', '>=', now())
-            ->latest('id')
-            ->first();
+        $verificationResult = DB::transaction(function () use ($request, $user): string {
+            $twoFactorCode = TwoFactorCode::query()
+                ->where('user_id', $user->id)
+                ->where('expires_at', '>=', now())
+                ->latest('id')
+                ->lockForUpdate()
+                ->first();
 
-        if (
-            !$twoFactorCode ||
-            !Hash::check($request->code, $twoFactorCode->code)
-        ) {
+            if (! $twoFactorCode) {
+                return 'invalid';
+            }
+
+            if ((int) $twoFactorCode->attempts >= self::CHALLENGE_MAX_ATTEMPTS) {
+                $twoFactorCode->delete();
+
+                return 'locked';
+            }
+
+            if (! Hash::check($request->code, $twoFactorCode->code)) {
+                $attempts = (int) $twoFactorCode->attempts + 1;
+
+                if ($attempts >= self::CHALLENGE_MAX_ATTEMPTS) {
+                    $twoFactorCode->delete();
+
+                    return 'locked';
+                }
+
+                $twoFactorCode->forceFill([
+                    'attempts' => $attempts,
+                ])->save();
+
+                return 'invalid';
+            }
+
+            TwoFactorCode::query()
+                ->where('user_id', $user->id)
+                ->delete();
+
+            return 'verified';
+        });
+
+        if ($verificationResult !== 'verified') {
             RateLimiter::hit($verifyKey, self::VERIFY_DECAY_SECONDS);
 
             return back()->withErrors([
-                'code' => 'Código inválido ou expirado.',
+                'code' => $verificationResult === 'locked'
+                    ? 'Este código atingiu o limite de tentativas. Solicite um novo código.'
+                    : 'Código inválido ou expirado.',
             ]);
         }
 
         session(['2fa_passed' => true]);
         RateLimiter::clear($verifyKey);
-
-        // Cleanup all codes so the challenge cannot be replayed.
-        TwoFactorCode::where('user_id', $user->id)->delete();
 
         return redirect()->route('company.dashboard')->with('success', 'Bem vindo!');
     }
@@ -74,8 +118,21 @@ class TwoFactorController extends Controller
     {
         $user = Auth::user();
 
-        if (!$user) {
+        if (! $user) {
             return redirect()->route('empresa.login')->withErrors('Usuario nao autenticado.');
+        }
+
+        $companyEmail = $user->company?->email;
+
+        if (! filter_var($companyEmail, FILTER_VALIDATE_EMAIL)) {
+            Log::warning('Reenvio de 2FA bloqueado por ausência de e-mail válido da imobiliária.', [
+                'user_id' => $user->id,
+                'company_id' => $user->company_id,
+            ]);
+
+            return back()->withErrors([
+                'code' => 'Não foi possível reenviar o código. Verifique o e-mail cadastrado da imobiliária.',
+            ]);
         }
 
         $resendKey = $this->resendThrottleKey($user->id, $request->ip());
@@ -96,24 +153,29 @@ class TwoFactorController extends Controller
         }
 
         // Invalidate older codes and send a fresh one.
-        
+
         $plainCode = (string) random_int(100000, 999999);
+        $expiresAt = now()->addMinutes(10);
 
         TwoFactorCode::where('user_id', $user->id)->delete();
-        
+
         TwoFactorCode::create([
             'user_id' => $user->id,
             'code' => Hash::make($plainCode),
-            'expires_at' => now()->addMinutes(10),
+            'expires_at' => $expiresAt,
         ]);
 
         try {
-            Mail::send('emails.2fa-code', ['code' => $plainCode], function ($message) use ($user) {
-                $message->to($user->email)->subject('Seu novo codigo de verificacao');
-            });
-            
+            $this->twoFactorMail->sendCode($companyEmail, $plainCode, $expiresAt);
         } catch (\Throwable $e) {
             TwoFactorCode::where('user_id', $user->id)->delete();
+
+            Log::error('Falha ao reenviar código de 2FA da imobiliária.', [
+                'user_id' => $user->id,
+                'company_id' => $user->company_id,
+                'exception' => $e::class,
+                'mailer' => config('mail.default'),
+            ]);
 
             return back()->withErrors([
                 'code' => 'Não foi possível reenviar o código. Tente novamente.',
@@ -123,22 +185,21 @@ class TwoFactorController extends Controller
         RateLimiter::hit($resendKey, self::RESEND_DECAY_SECONDS);
         RateLimiter::hit($cooldownKey, self::RESEND_COOLDOWN_SECONDS);
 
-
         return back()->with('success', 'Novo codigo enviado para seu e-mail.');
     }
 
     private function verifyThrottleKey(int|string|null $userId, string $ip): string
     {
-        return '2fa:verify:' . $userId . ':' . $ip;
+        return '2fa:verify:'.$userId.':'.$ip;
     }
 
     private function resendThrottleKey(int|string $userId, string $ip): string
     {
-        return '2fa:resend:' . $userId . ':' . $ip;
+        return '2fa:resend:'.$userId.':'.$ip;
     }
 
     private function resendCooldownKey(int|string $userId, string $ip): string
     {
-        return '2fa:resend-cooldown:' . $userId . ':' . $ip;
+        return '2fa:resend-cooldown:'.$userId.':'.$ip;
     }
 }

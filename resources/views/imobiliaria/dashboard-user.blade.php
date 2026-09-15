@@ -1,4 +1,4 @@
-@extends('layout-inicial.dashboard_User')
+@extends('layout-inicial.Dashboard_User')
 
 @section('content_w')
 @php
@@ -16,9 +16,6 @@
         'perdido' => 'Perdido',
     ];
 
-    $syncStatus = $syncStatus ?? 'idle';
-    $syncError = $syncError ?? null;
-
     $totalLeads = $dashboardStats['totalLeads'] ?? 0;
     $newLeads = $dashboardStats['newLeads'] ?? 0;
     $recentLeads = $dashboardStats['recentLeads'] ?? 0;
@@ -31,9 +28,22 @@
     $filterTags = $filterTags ?? collect();
     $selectedTag = $selectedTag ?? '';
     $leadSearch = $leadSearch ?? '';
+    $leadLoversFailures = $leadLoversFailures ?? [];
+    $leadLoversSyncOptions = ! empty($leadLoversSyncOptions)
+        ? $leadLoversSyncOptions
+        : app(\App\Support\LeadLoversInitialFailureCatalog::class)
+            ->dashboardSyncOptions();
+    $leadLoversNotSentFilter =
+        \App\Support\LeadLoversInitialFailureCatalog::DASHBOARD_FILTER_NOT_SENT;
+    $notSentToLeadLoversCount = $notSentToLeadLoversCount ?? 0;
+    $selectedLeadLoversSync = $selectedLeadLoversSync
+        ?? request('leadlovers_sync', '');
     $isTagFiltered = filled($selectedTag);
     $isNameFiltered = filled($leadSearch);
-    $isFiltering = $isTagFiltered || $isNameFiltered;
+    $isLeadLoversSyncFiltered = filled($selectedLeadLoversSync);
+    $isFiltering = $isTagFiltered
+        || $isNameFiltered
+        || $isLeadLoversSyncFiltered;
     $companyTagName = mb_strtolower(trim((string) ($company->name ?? '')));
 
      /*
@@ -122,102 +132,143 @@
     $leadFormAvailable = filled($leadFormUrl);
     $leadAccessCodeAvailable = filled($leadAccessCode);
 
-    $hasSyncFailed = $syncStatus === 'failed';
-    $isSyncBusy = in_array($syncStatus, ['queued', 'running'], true);
-    $shouldAutoShowSyncToast = in_array($syncStatus, ['queued', 'running', 'failed'], true);
+    $insuranceAnalysisEnabled = (bool) config(
+        'features.insurance_analysis.enabled',
+        false
+    );
 
-    $syncBadgeClass = match ($syncStatus) {
-        'queued' => 'text-bg-warning',
-        'running' => 'text-bg-primary',
-        'completed' => 'text-bg-success',
-        'completed_with_warning' => 'text-bg-warning',
-        'failed' => 'text-bg-danger',
-        default => 'text-bg-secondary',
-    };
+    $leadValidationFields = [
+        'nome',
+        'email',
+        'tel',
+        'cpf',
+        'tipo_solicitante',
+        'estado_civil',
+        'conjuge_nome',
+        'conjuge_cpf',
+        'valor_aluguel',
+        'valor_agua',
+        'valor_luz',
+        'valor_gas',
+        'valor_condominio',
+        'valor_iptu',
+        'outras_despesas',
+        'cep',
+        'estado',
+        'cidade_imovel',
+        'bairro',
+        'logradouro',
+        'numero',
+        'complemento',
+    ];
 
-    $syncLabel = match ($syncStatus) {
-        'queued' => 'Na fila',
-        'running' => 'Sincronizando',
-        'completed' => 'Atualizado',
-        'completed_with_warning' => 'Atualizado parcialmente',
-        'failed' => 'Falhou',
-        default => 'Aguardando',
-    };
+    $leadContextId = (string) old('lead_context_id', '');
+    $firstInvalidLeadField = filled($leadContextId)
+        ? collect($leadValidationFields)->first(
+            fn (string $field): bool => $errors->has($field)
+        )
+        : null;
+    $leadValidationTargets = null;
+    $leadLoversCorrectionErrors = $errors->getBag(
+        'leadloversCorrection'
+    );
+    $leadLoversCorrectionContextId = (string) old(
+        'leadlovers_correction_context_id',
+        ''
+    );
+    $firstInvalidLeadLoversCorrectionField = collect([
+        'tel',
+        'email',
+        'leadlovers',
+    ])->first(
+        fn (string $field): bool =>
+            $leadLoversCorrectionErrors->has($field)
+    );
+    $leadLoversCorrectionValidationTargets = null;
+
+    if (filled($leadContextId) && filled($firstInvalidLeadField)) {
+        $contextLead = $leads->first(
+            fn ($lead): bool => (string) $lead->id === $leadContextId
+        );
+
+        if ($contextLead) {
+            $leadValidationTargets = [
+                'modal' => 'leadModal'.$contextLead->id,
+                'tab' => 'lead-data-tab-'.$contextLead->id,
+                'field' => 'company-lead-'.$contextLead->id.'-'.str_replace('_', '-', $firstInvalidLeadField),
+            ];
+        }
+    }
+
+    if (
+        filled($leadLoversCorrectionContextId)
+        && filled($firstInvalidLeadLoversCorrectionField)
+    ) {
+        $correctionContextLead = $leads->first(
+            fn ($lead): bool =>
+                (string) $lead->id === $leadLoversCorrectionContextId
+        );
+
+        if ($correctionContextLead) {
+            $correctionFailure = $leadLoversFailures[
+                (int) $correctionContextLead->id
+            ] ?? null;
+            $correctionField = in_array(
+                $firstInvalidLeadLoversCorrectionField,
+                ['tel', 'email'],
+                true
+            )
+                ? $firstInvalidLeadLoversCorrectionField
+                : null;
+
+            if (($correctionFailure['correctable'] ?? false) === true) {
+                $leadLoversCorrectionValidationTargets = [
+                    'modal' => 'leadLoversCorrectionModal'
+                        .$correctionContextLead->id,
+                    'field' => $correctionField
+                        ? 'company-leadlovers-correction-'
+                            .$correctionContextLead->id.'-'.$correctionField
+                        : 'leadLoversCorrectionModal'
+                            .$correctionContextLead->id.'GenericError',
+                ];
+            }
+        }
+    }
+
 @endphp
 
 
 <div id="dashboardThemeRoot" class="dashboard-shell" data-dashboard-theme="light">
     <div class="container-fluid px-3 px-lg-4 py-4">
+        <x-dashboard-realtime-notice />
         @if (session('success'))
-            <div class="alert alert-success rounded-4 border-0 shadow-sm">
+            <div class="alert alert-success rounded-4 border-0 shadow-sm" role="status" aria-live="polite">
                 {{ session('success') }}
             </div>
         @endif
 
         @if (session('error'))
-            <div class="alert alert-warning rounded-4 border-0 shadow-sm">
+            <div class="alert alert-warning rounded-4 border-0 shadow-sm" role="alert">
                 {{ session('error') }}
             </div>
         @endif
 
-        {{-- Toast não bloqueante de sincronização --}}
-        <div id="syncFloatingPanel" class="sync-floating-panel d-none">
-            <div class="sync-floating-card p-3">
-                <div class="d-flex justify-content-between align-items-start gap-3 mb-2">
-                    <div>
-                        <span class="badge {{ $syncBadgeClass }} mb-2" id="sync-toast-badge">
-                            {{ $syncLabel }}
-                        </span>
-
-                        <h6 class="fw-bold mb-1" id="sync-toast-title">
-                            Status da sincronização
-                        </h6>
-                    </div>
-
-                    <button type="button" class="btn-close" id="sync-panel-close-button" aria-label="Fechar"></button>
-                </div>
-
-                <p class="text-muted small mb-2" id="sync-toast-description">
-                    Acompanhando a sincronização com a LeadLovers.
-                </p>
-
-                <div class="progress mb-2" style="height: 8px;">
-                    <div
-                        id="sync-toast-progress-bar"
-                        class="progress-bar progress-bar-striped progress-bar-animated"
-                        style="width: 0%;"
-                        role="progressbar"
-                        aria-valuenow="0"
-                        aria-valuemin="0"
-                        aria-valuemax="100"
-                    ></div>
-                </div>
-
-                <div class="d-flex justify-content-between align-items-center mb-2">
-                    <small class="text-muted" id="sync-toast-summary">
-                        Aguardando atualização.
-                    </small>
-
-                    <small class="fw-semibold text-muted" id="sync-toast-percent">
-                        0%
-                    </small>
-                </div>
-
-                <form method="POST" action="{{ route('Dashboard.syncAgain') }}" id="sync-toast-retry-form" class="d-none">
-                    @csrf
-                </form>
-
-                <div class="d-flex gap-2 mt-3">
-                    <button type="button" class="btn btn-sm btn-danger d-none" id="sync-toast-retry-button">
-                        Tentar novamente
-                    </button>
-
-                    <button type="button" class="btn btn-sm btn-outline-primary d-none" id="sync-panel-refresh-button">
-                        Atualizar painel
-                    </button>
-                </div>
+        @if (filled($firstInvalidLeadField) && $leadValidationTargets === null)
+            <div class="alert alert-danger rounded-4 border-0 shadow-sm" role="alert">
+                Não foi possível associar os erros ao lead exibido nesta página.
             </div>
-        </div>
+        @endif
+
+        @if (
+            filled($firstInvalidLeadLoversCorrectionField)
+            && $leadLoversCorrectionValidationTargets === null
+        )
+            <div class="alert alert-danger rounded-4 border-0 shadow-sm" role="alert">
+                {{ $leadLoversCorrectionErrors->first(
+                    $firstInvalidLeadLoversCorrectionField
+                ) }}
+            </div>
+        @endif
 
         {{-- Cabeçalho moderno --}}
         <div class="d-flex flex-column flex-xl-row justify-content-between align-items-xl-center gap-3 mb-4">
@@ -231,34 +282,11 @@
                 </h1>
 
                 <p class="text-muted mb-0">
-                    Acompanhe os leads vinculados à imobiliária, copie sua chave de acesso e consulte a sincronização com a LeadLovers.
+                    Acompanhe os leads enviados pelos formulários do sistema e copie sua chave de acesso.
                 </p>
             </div>
 
             <div class="d-flex flex-column flex-sm-row gap-2">
-                <form method="POST" action="{{ route('Dashboard.syncAgain') }}">
-                    @csrf
-                    @if (config('services.leadlovers.enabled'))
-                        <button
-                            type="submit"
-                            class="btn {{ $hasSyncFailed ? 'btn-danger' : 'btn-primary' }}"
-                            @disabled($isSyncBusy)
-                        >
-                            @if ($isSyncBusy)
-                                Sincronização em andamento
-                            @elseif ($hasSyncFailed)
-                                Tentar sincronização novamente
-                            @else
-                                Sincronizar leads
-                            @endif
-                        </button>
-                    @else
-                        <button type="button" class="btn btn-secondary" disabled>
-                            Sincronização temporariamente indisponível
-                        </button>
-                    @endif
-                </form>
-
                 <a
                     href="{{ $leadFormUrl ?? '#' }}"
                     target="_blank"
@@ -318,17 +346,17 @@
                                     </div>
 
                                     <div class="fw-bold">
-                                        {{ $latestLeadAt ? $latestLeadAt->format('d/m/Y H:i') : 'Sem leads sincronizados' }}
+                                        {{ $latestLeadAt ? $latestLeadAt->format('d/m/Y H:i') : 'Sem leads cadastrados' }}
                                     </div>
 
                                     <hr class="border-white border-opacity-25">
 
                                     <div class="small text-white-50 mb-1">
-                                        Status integração
+                                        Origem exibida
                                     </div>
 
-                                    <span class="badge {{ $syncBadgeClass }}">
-                                        {{ $syncLabel }}
+                                    <span class="badge text-bg-success">
+                                        Formulários do sistema
                                     </span>
                                 </div>
                             </div>
@@ -659,54 +687,70 @@
             <div class="col-12">
 
                 {{-- Filtros --}}
-                <div class="card border-0 shadow-sm rounded-5 mb-4" id="leads-section">
-                    <div class="card-body p-4">
-                        <div class="d-flex flex-column flex-xl-row justify-content-between align-items-xl-end gap-3">
-                            <div>
-                                <span class="badge text-bg-secondary mb-2">
-                                    Filtros
+                <section
+                    class="lead-filter-panel"
+                    id="leads-section"
+                    aria-labelledby="company-lead-filter-title"
+                    data-lead-filter-panel
+                >
+                    <div class="lead-filter-panel__inner">
+                        <header class="lead-filter-panel__header">
+                            <div class="lead-filter-panel__copy">
+                                <span class="lead-filter-panel__eyebrow">
+                                    <i class="bi bi-sliders2" aria-hidden="true"></i>
+                                    Central de filtros
                                 </span>
 
-                                <h2 class="h4 fw-bold mb-1">
+                                <h2 id="company-lead-filter-title" class="lead-filter-panel__title">
                                     Fila comercial
                                 </h2>
 
-                                <p class="text-muted mb-0">
-                                    @if ($isFiltering)
-                                        {{ $filteredLeads }} lead(s) encontrados nos filtros atuais.
-                                    @else
-                                        {{ $totalLeads }} leads cadastrados na base.
-                                    @endif
+                                <p class="lead-filter-panel__description">
+                                    Encontre rapidamente quem precisa de contato ou de reenvio à integração.
                                 </p>
                             </div>
 
-                            <form method="GET" action="{{ url()->current() }}#leads-section" class="row g-2 align-items-end">
-                                {{-- Filtro por nome do lead --}}
-                                <div class="col-12 col-lg-5">
-                                    <label for="crm-lead-name-filter" class="form-label small text-muted">
+                            <div class="lead-filter-panel__result" role="status" aria-live="polite">
+                                <span class="lead-filter-panel__result-value">{{ $filteredLeads }}</span>
+                                <span class="lead-filter-panel__result-label">lead(s)</span>
+                                <small>{{ $isFiltering ? 'na seleção atual' : 'na base da imobiliária' }}</small>
+                            </div>
+                        </header>
+
+                        <form
+                            method="GET"
+                            action="{{ url()->current() }}#leads-section"
+                            class="lead-filter-form"
+                            aria-labelledby="company-lead-filter-title"
+                            data-lead-filter-form
+                        >
+                            <div class="lead-filter-form__grid lead-filter-form__grid--company">
+                                <div class="lead-filter-field lead-filter-field--search">
+                                    <label for="crm-lead-name-filter" class="lead-filter-field__label">
                                         Buscar lead por nome
                                     </label>
-
-                                    <input
-                                        type="text"
-                                        id="crm-lead-name-filter"
-                                        name="lead_name"
-                                        class="form-control"
-                                        value="{{ $leadSearch }}"
-                                        placeholder="Digite o primeiro nome ou nome completo"
-                                        autocomplete="off"
-                                    >
+                                    <div class="lead-filter-control-shell">
+                                        <span class="lead-filter-control-shell__icon">
+                                            <i class="bi bi-search" aria-hidden="true"></i>
+                                        </span>
+                                        <input
+                                            type="text"
+                                            id="crm-lead-name-filter"
+                                            name="lead_name"
+                                            class="lead-filter-control lead-filter-control--search"
+                                            value="{{ $leadSearch }}"
+                                            placeholder="Primeiro nome ou nome completo"
+                                            autocomplete="off"
+                                        >
+                                    </div>
                                 </div>
 
-                                {{-- Filtro por tag --}}
-                                <div class="col-12 col-lg-4">
-                                    <label for="crm-tag-filter" class="form-label small text-muted">
-                                        Filtrar por tag
+                                <div class="lead-filter-field">
+                                    <label for="crm-tag-filter" class="lead-filter-field__label">
+                                        Tag comercial
                                     </label>
-
-                                    <select id="crm-tag-filter" name="tag" class="form-select">
+                                    <select id="crm-tag-filter" name="tag" class="lead-filter-control">
                                         <option value="">Todas as tags</option>
-
                                         @foreach ($filterTags as $tag => $count)
                                             <option value="{{ $tag }}" @selected($selectedTag === $tag)>
                                                 {{ $tag }} ({{ $count }})
@@ -715,40 +759,137 @@
                                     </select>
                                 </div>
 
-                                {{-- Ações --}}
-                                <div class="col-12 col-lg-3 d-flex gap-2">
-                                    <button class="btn btn-primary flex-fill" type="submit">
-                                        Buscar
-                                    </button>
+                                <div class="lead-filter-field lead-filter-field--sync">
+                                    <label for="crm-leadlovers-sync-filter" class="lead-filter-field__label">
+                                        Envio à LeadLovers
+                                    </label>
+                                    <select
+                                        id="crm-leadlovers-sync-filter"
+                                        name="leadlovers_sync"
+                                        class="lead-filter-control"
+                                    >
+                                        <option value="">Todos os envios</option>
+                                        @foreach ($leadLoversSyncOptions as $value => $label)
+                                            <option value="{{ $value }}" @selected($selectedLeadLoversSync === $value)>
+                                                {{ $label }} ({{ $notSentToLeadLoversCount }})
+                                            </option>
+                                        @endforeach
+                                    </select>
+                                </div>
 
-                                    @if ($isFiltering)
-                                        <a href="{{ url()->current() }}#leads-section" class="btn btn-outline-secondary">
-                                            Limpar
+                                <div class="lead-filter-actions">
+                                    <button class="lead-filter-submit" type="submit">
+                                        <i class="bi bi-funnel" aria-hidden="true"></i>
+                                        <span>Aplicar filtros</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </form>
+
+                        @if ($isFiltering)
+                            <div class="lead-filter-active" role="group" aria-label="Filtros ativos">
+                                <div class="lead-filter-active__header">
+                                    <span>
+                                        <i class="bi bi-check2-circle" aria-hidden="true"></i>
+                                        Filtros ativos
+                                    </span>
+                                    <a href="{{ url()->current() }}#leads-section" class="lead-filter-clear">
+                                        Limpar todos
+                                    </a>
+                                </div>
+
+                                <div class="lead-filter-chip-list">
+                                    @if ($isNameFiltered)
+                                        <a
+                                            href="{{ request()->fullUrlWithQuery(['lead_name' => null, 'page' => 1]) }}#leads-section"
+                                            class="lead-filter-chip lead-filter-chip--removable"
+                                            aria-label="Remover busca por {{ $leadSearch }}"
+                                        >
+                                            <i class="bi bi-search" aria-hidden="true"></i>
+                                            <span>Busca: {{ $leadSearch }}</span>
+                                            <i class="bi bi-x-lg" aria-hidden="true"></i>
+                                        </a>
+                                    @endif
+
+                                    @if ($isTagFiltered)
+                                        <a
+                                            href="{{ request()->fullUrlWithQuery(['tag' => null, 'page' => 1]) }}#leads-section"
+                                            class="lead-filter-chip lead-filter-chip--removable"
+                                            aria-label="Remover filtro de tag {{ $selectedTag }}"
+                                        >
+                                            <i class="bi bi-tag" aria-hidden="true"></i>
+                                            <span>Tag: {{ $selectedTag }}</span>
+                                            <i class="bi bi-x-lg" aria-hidden="true"></i>
+                                        </a>
+                                    @endif
+
+                                    @if ($isLeadLoversSyncFiltered)
+                                        <a
+                                            href="{{ request()->fullUrlWithQuery(['leadlovers_sync' => null, 'page' => 1]) }}#leads-section"
+                                            class="lead-filter-chip lead-filter-chip--removable lead-filter-chip--sync"
+                                            aria-label="Remover filtro de envio à LeadLovers {{ $leadLoversSyncOptions[$selectedLeadLoversSync] ?? $selectedLeadLoversSync }}"
+                                        >
+                                            <i class="bi bi-cloud-slash" aria-hidden="true"></i>
+                                            <span>{{ $leadLoversSyncOptions[$selectedLeadLoversSync] ?? $selectedLeadLoversSync }}</span>
+                                            <i class="bi bi-x-lg" aria-hidden="true"></i>
                                         </a>
                                     @endif
                                 </div>
-                            </form>
-                        </div>
+                            </div>
+                        @endif
 
-                        @if ($filterTags->isNotEmpty())
-                            <div class="d-flex flex-wrap gap-2 mt-4">
+                        <nav class="lead-filter-quick" aria-label="Filtros rápidos da fila comercial">
+                            <div class="lead-filter-quick__copy">
+                                <span>Acesso rápido</span>
+                                <small>Tags recorrentes e pendências de integração</small>
+                            </div>
+
+                            <div class="lead-filter-chip-list lead-filter-chip-list--quick">
                                 @foreach ($filterTags->take(10) as $tag => $count)
                                     @php
                                         $filterChipClass = $tagToneClass($tag);
                                         $isSelectedFilterChip = $selectedTag === $tag;
                                     @endphp
-
                                     <a
-                                        href="{{ request()->fullUrlWithQuery(['tag' => $tag, 'page' => 1]) }}#leads-section"
-                                        class="badge rounded-pill text-decoration-none px-3 py-2 dashboard-filter-chip {{ $filterChipClass }} {{ $isSelectedFilterChip ? 'dashboard-tag-chip--selected' : '' }}"
+                                        href="{{ request()->fullUrlWithQuery([
+                                            'tag' => $isSelectedFilterChip ? null : $tag,
+                                            'page' => 1,
+                                        ]) }}#leads-section"
+                                        class="lead-filter-chip {{ $filterChipClass }}"
+                                        @if ($isSelectedFilterChip) aria-current="true" @endif
                                     >
-                                        {{ $tag }} · {{ $count }}
+                                        <i class="bi bi-tag" aria-hidden="true"></i>
+                                        <span>{{ $tag }}</span>
+                                        <strong class="lead-filter-chip__count">{{ $count }}</strong>
                                     </a>
                                 @endforeach
+
+                                @if ($filterTags->isNotEmpty())
+                                    <span class="lead-filter-quick__divider" aria-hidden="true"></span>
+                                @endif
+
+                                <a
+                                    href="{{ request()->fullUrlWithQuery([
+                                        'leadlovers_sync' => $selectedLeadLoversSync === $leadLoversNotSentFilter
+                                            ? null
+                                            : $leadLoversNotSentFilter,
+                                        'page' => 1,
+                                    ]) }}#leads-section"
+                                    class="lead-filter-chip lead-filter-chip--sync lead-filter-chip--priority"
+                                    aria-label="{{ $selectedLeadLoversSync === $leadLoversNotSentFilter
+                                        ? 'Remover filtro de não enviados à LeadLovers; '.$notSentToLeadLoversCount.' lead(s) na seleção'
+                                        : 'Mostrar não enviados à LeadLovers; '.$notSentToLeadLoversCount.' lead(s) pendente(s)' }}"
+                                    @if ($selectedLeadLoversSync === $leadLoversNotSentFilter) aria-current="true" @endif
+                                    data-leadlovers-quick-filter
+                                >
+                                    <i class="bi bi-cloud-slash" aria-hidden="true"></i>
+                                    <span>Não enviados à LeadLovers</span>
+                                    <strong class="lead-filter-chip__count">{{ $notSentToLeadLoversCount }}</strong>
+                                </a>
                             </div>
-                        @endif
+                        </nav>
                     </div>
-                </div>
+                </section>
 
                 {{-- Lista de leads em largura total --}}
                 @if ($leads->total() > 0)
@@ -802,6 +943,14 @@
                                     'perdido' => 'text-bg-danger',
                                     default => 'text-bg-secondary',
                                 };
+                                $leadLoversFailure = $leadLoversFailures[
+                                    (int) $lead->id
+                                ] ?? app(
+                                    \App\Support\LeadLoversInitialFailureCatalog::class
+                                )->describe($lead);
+                                $leadLoversFailureIsCorrectable =
+                                    $leadLoversFailure['correctable']
+                                    && $leadLoversFailure['fields'] !== [];
                             @endphp
 
                             <article class="card border-0 shadow-sm rounded-5 lead-card lead-list-item {{ $leadTone['card'] }}">
@@ -894,15 +1043,36 @@
                                         <div class="col-12 col-md-2 col-xl-1">
                                             <button
                                                 type="button"
-                                                class="btn btn-sm btn-outline-primary w-100 text-nowrap"
+                                                class="btn btn-sm {{ $leadLoversFailureIsCorrectable ? 'btn-danger leadlovers-correction-trigger' : 'btn-outline-primary' }} w-100 text-nowrap"
                                                 data-bs-toggle="modal"
-                                                data-bs-target="#leadModal{{ $lead->id }}"
+                                                data-bs-target="{{ $leadLoversFailureIsCorrectable ? '#leadLoversCorrectionModal'.$lead->id : '#leadModal'.$lead->id }}"
+                                                aria-controls="{{ $leadLoversFailureIsCorrectable ? 'leadLoversCorrectionModal'.$lead->id : 'leadModal'.$lead->id }}"
+                                                aria-haspopup="dialog"
+                                                aria-label="{{ $leadLoversFailureIsCorrectable ? 'Corrigir dados de '.$leadName.' para reenvio à LeadLovers' : 'Editar lead '.$leadName }}"
                                             >
-                                                Visualizar
+                                                <i
+                                                    class="bi {{ $leadLoversFailureIsCorrectable ? 'bi-wrench-adjustable-circle' : 'bi-pencil-square' }} me-1"
+                                                    aria-hidden="true"
+                                                ></i>
+                                                {{ $leadLoversFailureIsCorrectable ? 'Corrigir' : 'Editar' }}
                                             </button>
                                         </div>
 
                                     </div>
+
+                                    <div class="d-flex flex-wrap align-items-center gap-2 mt-3 pt-3 border-top">
+                                        <span class="small text-muted">
+                                            LeadLovers:
+                                        </span>
+                                        @include('partials.leadlovers-sync-status', [
+                                            'lead' => $lead,
+                                            'failure' => $leadLoversFailure,
+                                        ])
+                                    </div>
+
+                                    @include('partials.rejected-lead-retention-notice', [
+                                        'lead' => $lead,
+                                    ])
                                 </div>
                             </article>
                         @endforeach
@@ -946,7 +1116,7 @@
                                 </h3>
 
                                 <p class="text-muted">
-                                    Assim que novos contatos forem captados ou sincronizados, eles aparecerão aqui.
+                                    Assim que novos contatos forem enviados pelos formulários, eles aparecerão aqui.
                                 </p>
                             @endif
                         </div>
@@ -982,16 +1152,32 @@
             return mb_strtolower(trim($tag)) === $companyTagName;
         });
 
-    $lastAnalysis = $lead->insuranceAnalyses()
-        ->latest('created_at')
-        ->first();
+    $lastAnalysis = $insuranceAnalysisEnabled
+        ? $lead->insuranceAnalyses()
+            ->latest('created_at')
+            ->first()
+        : null;
 
     $lastLeadUpdate = collect([
         $lead->updated_at,
         optional($lead->endereco)->updated_at,
     ])->filter()->max();
 
-    $canReanalyze = $lead->canRequestReanalysis();
+    $canReanalyze = $insuranceAnalysisEnabled
+        && $lead->canRequestReanalysis();
+
+    $isLeadValidationContext = filled($firstInvalidLeadField)
+        && $leadContextId === (string) $lead->id;
+    $leadLoversFailure = $leadLoversFailures[(int) $lead->id]
+        ?? app(
+            \App\Support\LeadLoversInitialFailureCatalog::class
+        )->describe($lead);
+    $leadLoversFailureIsCorrectable =
+        $leadLoversFailure['correctable']
+        && $leadLoversFailure['fields'] !== [];
+    $isLeadLoversCorrectionValidationContext =
+        filled($firstInvalidLeadLoversCorrectionField)
+        && $leadLoversCorrectionContextId === (string) $lead->id;
 @endphp
 <div
     class="modal fade lead-details-modal"
@@ -1005,9 +1191,15 @@
 
             <div class="modal-header border-0 pb-0">
                 <div>
-                    <span class="badge {{ $statusBadge }} mb-2">
-                        {{ $statusLabel }}
-                    </span>
+                    <div class="d-flex flex-wrap gap-2 mb-2">
+                        <span class="badge {{ $statusBadge }}">
+                            {{ $statusLabel }}
+                        </span>
+                        @include('partials.leadlovers-sync-status', [
+                            'lead' => $lead,
+                            'failure' => $leadLoversFailure,
+                        ])
+                    </div>
 
                     <h5 class="modal-title fw-bold" id="leadModalLabel{{ $lead->id }}">
                         {{ $leadName }}
@@ -1026,36 +1218,45 @@
                 <ul class="nav nav-pills mb-4" role="tablist">
                     <li class="nav-item" role="presentation">
                         <button
+                            id="lead-data-tab-{{ $lead->id }}"
                             class="nav-link active"
                             data-bs-toggle="pill"
                             data-bs-target="#lead-data-pane-{{ $lead->id }}"
                             type="button"
                             role="tab"
+                            aria-controls="lead-data-pane-{{ $lead->id }}"
+                            aria-selected="true"
                         >
-                            Dados para reanálise
+                            Dados do lead
                         </button>
                     </li>
 
                     <li class="nav-item" role="presentation">
                         <button
+                            id="lead-tags-tab-{{ $lead->id }}"
                             class="nav-link"
                             data-bs-toggle="pill"
                             data-bs-target="#lead-tags-pane-{{ $lead->id }}"
                             type="button"
                             role="tab"
+                            aria-controls="lead-tags-pane-{{ $lead->id }}"
+                            aria-selected="false"
                         >
                             Tags
                         </button>
                     </li>
 
-                    @if (config('features.insurance_analysis.enabled', false))
+                    @if ($insuranceAnalysisEnabled)
                         <li class="nav-item" role="presentation">
                             <button
+                                id="lead-reanalysis-tab-{{ $lead->id }}"
                                 class="nav-link"
                                 data-bs-toggle="pill"
                                 data-bs-target="#lead-reanalysis-pane-{{ $lead->id }}"
                                 type="button"
                                 role="tab"
+                                aria-controls="lead-reanalysis-pane-{{ $lead->id }}"
+                                aria-selected="false"
                             >
                                 Reanálise
                             </button>
@@ -1070,188 +1271,46 @@
                         class="tab-pane fade show active"
                         id="lead-data-pane-{{ $lead->id }}"
                         role="tabpanel"
+                        aria-labelledby="lead-data-tab-{{ $lead->id }}"
                     >
-                        <form
-                            method="POST"
-                            action="{{ route('dashboard.leads.update', $lead) }}"
-                            id="leadUpdateForm{{ $lead->id }}"
-                            class="lead-update-form"
-                            data-lead-id="{{ $lead->id }}"
-                        >
-                            @csrf
-                            @method('PUT')
-
-                            <div
-                                id="leadNoChangesAlert{{ $lead->id }}"
-                                class="alert alert-warning rounded-4 d-none"
+                        @if (! $leadLoversFailureIsCorrectable)
+                            <form
+                                method="POST"
+                                action="{{ route('dashboard.leads.update', $lead) }}"
+                                id="leadUpdateForm{{ $lead->id }}"
+                                class="lead-update-form"
+                                data-lead-id="{{ $lead->id }}"
+                                data-lead-tab-id="lead-data-tab-{{ $lead->id }}"
                             >
-                                Altere pelo menos um dado do lead antes de salvar.
+                                @csrf
+                                @method('PUT')
+                        @else
+                            <div class="alert alert-info rounded-4" role="status">
+                                Use o botão <strong>Corrigir</strong> para alterar somente o campo recusado pela LeadLovers.
                             </div>
+                            <fieldset disabled aria-label="Dados do lead disponíveis somente para visualização">
+                        @endif
 
-                            <div class="row g-4">
+                            @include('partials.leadlovers-sync-status', [
+                                'lead' => $lead,
+                                'failure' => $leadLoversFailure,
+                                'showLeadLoversBadge' => false,
+                                'showLeadLoversFailureMessage' => true,
+                                'leadLoversFailureMessageMode' => 'full',
+                            ])
 
-                                <div class="col-12">
-                                    <div class="card border rounded-4">
-                                        <div class="card-body">
-                                            <h6 class="fw-bold mb-3">
-                                                Dados do solicitante
-                                            </h6>
-
-                                            <div class="row g-3">
-                                                <div class="col-12 col-md-6">
-                                                    <label class="form-label small text-muted">Nome</label>
-                                                    <input type="text" name="nome" class="form-control" value="{{ old('nome', $lead->nome) }}">
-                                                </div>
-
-                                                <div class="col-12 col-md-6">
-                                                    <label class="form-label small text-muted">E-mail</label>
-                                                    <input type="email" name="email" class="form-control" value="{{ old('email', $lead->email) }}" readonly>
-                                                </div>
-
-                                                <div class="col-12 col-md-4">
-                                                    <label class="form-label small text-muted">Telefone</label>
-                                                    <input type="text" name="tel" class="form-control" value="{{ old('tel', $lead->tel) }}">
-                                                </div>
-
-                                                <div class="col-12 col-md-4">
-                                                    <label class="form-label small text-muted">CPF/CNPJ</label>
-                                                    <input type="text" name="cpf" class="form-control" value="{{ old('cpf', $lead->cpf) }}">
-                                                </div>
-
-                                                <div class="col-12 col-md-4">
-                                                    <label class="form-label small text-muted">Tipo de solicitante</label>
-                                                    <input type="text" name="tipo_solicitante" class="form-control" value="{{ old('tipo_solicitante', $lead->tipo_solicitante) }}">
-                                                </div>
-
-                                                <div class="col-12 col-md-4">
-                                                    <label class="form-label small text-muted">Estado civil</label>
-                                                    <input type="text" name="estado_civil" class="form-control" value="{{ old('estado_civil', $lead->estado_civil) }}">
-                                                </div>
-
-                                                <div class="col-12 col-md-4">
-                                                    <label class="form-label small text-muted">Nome do cônjuge</label>
-                                                    <input type="text" name="conjuge_nome" class="form-control" value="{{ old('conjuge_nome', $lead->conjuge_nome) }}">
-                                                </div>
-
-                                                <div class="col-12 col-md-4">
-                                                    <label class="form-label small text-muted">CPF do cônjuge</label>
-                                                    <input type="text" name="conjuge_cpf" class="form-control" value="{{ old('conjuge_cpf', $lead->conjuge_cpf) }}">
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div class="col-12">
-                                    <div class="card border rounded-4">
-                                        <div class="card-body">
-                                            <h6 class="fw-bold mb-3">
-                                                Endereço do imóvel
-                                            </h6>
-
-                                            <div class="row g-3">
-                                                <div class="col-12 col-md-3">
-                                                    <label class="form-label small text-muted">CEP</label>
-                                                    <input type="text" name="cep" class="form-control" value="{{ old('cep', $lead->endereco?->cep) }}">
-                                                </div>
-
-                                                <div class="col-12 col-md-3">
-                                                    <label class="form-label small text-muted">Estado</label>
-                                                    <input type="text" name="estado" class="form-control" value="{{ old('estado', $lead->endereco?->estado) }}">
-                                                </div>
-
-                                                <div class="col-12 col-md-6">
-                                                    <label class="form-label small text-muted">Cidade</label>
-                                                    <input type="text" name="cidade_imovel" class="form-control" value="{{ old('cidade_imovel', $lead->endereco?->cidade_imovel) }}">
-                                                </div>
-
-                                                <div class="col-12 col-md-6">
-                                                    <label class="form-label small text-muted">Bairro</label>
-                                                    <input type="text" name="bairro" class="form-control" value="{{ old('bairro', $lead->endereco?->bairro) }}">
-                                                </div>
-
-                                                <div class="col-12 col-md-6">
-                                                    <label class="form-label small text-muted">Logradouro</label>
-                                                    <input type="text" name="logradouro" class="form-control" value="{{ old('logradouro', $lead->endereco?->logradouro) }}">
-                                                </div>
-
-                                                <div class="col-12 col-md-3">
-                                                    <label class="form-label small text-muted">Número</label>
-                                                    <input type="text" name="numero" class="form-control" value="{{ old('numero', $lead->endereco?->numero) }}">
-                                                </div>
-
-                                                <div class="col-12 col-md-9">
-                                                    <label class="form-label small text-muted">Complemento</label>
-                                                    <input type="text" name="complemento" class="form-control" value="{{ old('complemento', $lead->endereco?->complemento) }}">
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div class="col-12">
-                                    <div class="card border rounded-4">
-                                        <div class="card-body">
-                                            <h6 class="fw-bold mb-3">
-                                                Valores da locação
-                                            </h6>
-
-                                            <div class="row g-3">
-                                                <div class="col-6 col-md-3">
-                                                    <label class="form-label small text-muted">Aluguel</label>
-                                                    <input type="number" step="0.01" min="0" name="valor_aluguel" class="form-control" value="{{ old('valor_aluguel', $lead->despesas?->valor_aluguel) }}">
-                                                </div>
-
-                                                <div class="col-6 col-md-3">
-                                                    <label class="form-label small text-muted">Condomínio</label>
-                                                    <input type="number" step="0.01" min="0" name="valor_condominio" class="form-control" value="{{ old('valor_condominio', $lead->despesas?->valor_condominio) }}">
-                                                </div>
-
-                                                <div class="col-6 col-md-3">
-                                                    <label class="form-label small text-muted">IPTU</label>
-                                                    <input type="number" step="0.01" min="0" name="valor_iptu" class="form-control" value="{{ old('valor_iptu', $lead->despesas?->valor_iptu) }}">
-                                                </div>
-
-                                                <div class="col-6 col-md-3">
-                                                    <label class="form-label small text-muted">Gás</label>
-                                                    <input type="number" step="0.01" min="0" name="valor_gas" class="form-control" value="{{ old('valor_gas', $lead->despesas?->valor_gas) }}">
-                                                </div>
-
-                                                <div class="col-6 col-md-3">
-                                                    <label class="form-label small text-muted">Água</label>
-                                                    <input type="number" step="0.01" min="0" name="valor_agua" class="form-control" value="{{ old('valor_agua', $lead->despesas?->valor_agua) }}">
-                                                </div>
-
-                                                <div class="col-6 col-md-3">
-                                                    <label class="form-label small text-muted">Luz</label>
-                                                    <input type="number" step="0.01" min="0" name="valor_luz" class="form-control" value="{{ old('valor_luz', $lead->despesas?->valor_luz) }}">
-                                                </div>
-
-                                                <div class="col-6 col-md-3">
-                                                    <label class="form-label small text-muted">Outras despesas</label>
-                                                    <input type="number" step="0.01" min="0" name="outras_despesas" class="form-control" value="{{ old('outras_despesas', $lead->despesas?->outras_despesas) }}">
-                                                </div>
-
-                                                <div class="col-6 col-md-3">
-                                                    <label class="form-label small text-muted">Total atual</label>
-                                                    <input
-                                                        type="text"
-                                                        class="form-control fw-bold"
-                                                        value="R$ {{ number_format((float) $lead->despesas?->valor_total_encargos, 2, ',', '.') }}"
-                                                        readonly
-                                                    >
-                                                </div>
-                                            </div>
-
-                                            <div class="small text-muted mt-3">
-                                                Após salvar os dados, solicite a reanálise na aba “Reanálise”.
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-
+                            <div class="mt-3">
+                                @include('partials.lead-update-fields', [
+                                    'lead' => $lead,
+                                    'leadUpdateIdPrefix' => 'company-lead',
+                                    'isLeadValidationContext' => $isLeadValidationContext,
+                                ])
                             </div>
-                        </form>
+                        @if (! $leadLoversFailureIsCorrectable)
+                            </form>
+                        @else
+                            </fieldset>
+                        @endif
                     </div>
 
                     {{-- Aba 2: tags somente leitura --}}
@@ -1259,6 +1318,7 @@
                         class="tab-pane fade"
                         id="lead-tags-pane-{{ $lead->id }}"
                         role="tabpanel"
+                        aria-labelledby="lead-tags-tab-{{ $lead->id }}"
                     >
                         <div class="card border rounded-4">
                             <div class="card-body">
@@ -1293,12 +1353,13 @@
                         </div>
                     </div>
 
-                    @if (config('features.insurance_analysis.enabled', false))
+                    @if ($insuranceAnalysisEnabled)
                         {{-- Aba 3: reanálise --}}
                         <div
                             class="tab-pane fade"
                             id="lead-reanalysis-pane-{{ $lead->id }}"
                             role="tabpanel"
+                            aria-labelledby="lead-reanalysis-tab-{{ $lead->id }}"
                         >
                         @if ($canReanalyze)
                             <div class="alert alert-success rounded-4">
@@ -1342,13 +1403,22 @@
             
 
             <div class="modal-footer border-0 pt-0">
-                <button
-                    type="submit"
-                    form="leadUpdateForm{{ $lead->id }}"
-                    class="btn btn-primary"
-                >
-                    Salvar dados
-                </button>
+                @if (! $leadLoversFailureIsCorrectable)
+                    <button
+                        type="submit"
+                        form="leadUpdateForm{{ $lead->id }}"
+                        class="btn btn-primary"
+                        data-lead-submit
+                        data-lead-id="{{ $lead->id }}"
+                    >
+                        <span
+                            class="spinner-border spinner-border-sm me-2 d-none"
+                            aria-hidden="true"
+                            data-lead-spinner
+                        ></span>
+                        <span data-lead-submit-label>Salvar dados</span>
+                    </button>
+                @endif
 
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
                     Fechar
@@ -1357,40 +1427,32 @@
         </div>
     </div>
 </div>
+
+@include('partials.leadlovers-correction-modal', [
+    'lead' => $lead,
+    'failure' => $leadLoversFailure,
+    'correctionRoute' => route(
+        'dashboard.leads.leadlovers.correct',
+        $lead
+    ),
+    'correctionModalIdPrefix' => 'leadLoversCorrectionModal',
+    'correctionFieldIdPrefix' => 'company-leadlovers-correction',
+    'isCorrectionValidationContext' => $isLeadLoversCorrectionValidationContext,
+    'correctionErrors' => $leadLoversCorrectionErrors,
+])
 @endforeach
 
 <script id="dashboardUserConfig" type="application/json">
     {!! json_encode([
-        'routes' => [
-            'syncStatus' => route('Dashboard.syncStatus'),
-
-            /*
-            |--------------------------------------------------------------------------
-            | Se você ainda não criou essa rota, pode deixar null.
-            | Quando criar a rota Dashboard.realtimeStatus, o JS já começa a usar.
-            |--------------------------------------------------------------------------
-            */
-            'realtimeStatus' => \Illuminate\Support\Facades\Route::has('Dashboard.realtimeStatus')
-                ? route('Dashboard.realtimeStatus')
-                : null,
-        ],
-
-        'syncStatus' => $syncStatus,
-        'syncError' => $syncError,
-        'totalLeads' => $totalLeads,
-        'syncJustQueued' => $syncJustQueued ?? false,
         'leadFormUrl' => $leadFormUrl,
-        'leadAccessCode' => $leadAccessCode,
-        'shouldAutoShowSyncToast' => $shouldAutoShowSyncToast,
-
-        /*
-        |--------------------------------------------------------------------------
-        | Usado somente se você aplicar a atualização automática.
-        |--------------------------------------------------------------------------
-        */
-        'dashboardActivityHash' => $dashboardActivityHash ?? null,
+        'leadValidationTargets' => $leadValidationTargets,
+        'leadLoversCorrectionValidationTargets' => $leadLoversCorrectionValidationTargets,
+        'realtime' => [
+            'channel' => "companies.{$company->id}.dashboard",
+            'event' => '.dashboard.activity.changed',
+            'hasUnsavedInput' => session()->hasOldInput(),
+        ],
     ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) !!}
 </script>
 
-@vite(['resources/js/dashboard-user.js'])
 @endsection

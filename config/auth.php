@@ -50,9 +50,6 @@ return [
         ],
     ],
 
-     
-
-
     'providers' => [
         'users' => [
             'driver' => 'eloquent',
@@ -68,7 +65,6 @@ return [
             'model' => App\Models\Corretor::class,
         ],
 
-        
     ],
 
     /*
@@ -99,7 +95,7 @@ return [
         ],
         'companies' => [
             'provider' => 'companies',
-            'table' => env('AUTH_PASSWORD_RESET_TOKEN_TABLE', 'password_reset_tokens'),
+            'table' => env('AUTH_COMPANY_PASSWORD_RESET_TOKEN_TABLE', 'company_password_reset_tokens'),
             'expire' => 60,
             'throttle' => 60,
         ],

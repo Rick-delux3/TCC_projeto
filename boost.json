@@ -1,10 +1,14 @@
 {
     "agents": [
-        "cursor"
+        "codex"
     ],
-    "editors": [
-        "cursor",
-        "vscode"
-    ],
-    "guidelines": []
+    "skills": [
+        "pest-testing",
+        "echo-development",
+        "tailwindcss-development",
+        "laravel-patterns",
+        "laravel-security",
+        "laravel-specialist",
+        "laravel-verification"
+    ]
 }

@@ -19,6 +19,7 @@
             web: __DIR__.'/../routes/web.php',
         api: __DIR__.'/../routes/api.php',
             commands: __DIR__.'/../routes/console.php',
+        channels: __DIR__.'/../routes/channels.php',
             health: '/up',
         )
         ->withMiddleware(function (Middleware $middleware): void {
@@ -80,7 +81,7 @@
                 }
 
                 if (Auth::guard('company')->check()) {
-                    return route('Dashboard');
+                    return route('company.dashboard');
                 }
 
                 if (Auth::guard('web')->check()) {
@@ -100,6 +101,8 @@
                 'analysis.enabled' => EnsureInsuranceAnalysisEnabled::class,
                 'auth.unframed' => PreventAuthenticationFraming::class,
             ]);
+
+           
         })
         ->withExceptions(function (Exceptions $exceptions): void {
             //

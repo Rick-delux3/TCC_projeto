@@ -5,7 +5,7 @@
     <section class="password-reset-shell password-reset-shell--compact">
         <aside class="password-reset-aside">
             <img src="{{ asset('imgs/segure-chave-a-mao-ao-ar-livre.jpg') }}" alt="Recuperacao de senha">
-            <img src="{{ asset('imgs/Logo_NVS.png') }}" alt="Logo NVS" class="auth-media-logo">
+            <x-brand-logo class="auth-media-logo" />
 
             <div class="password-reset-overlay">
                 <span class="client-badge">Acesso seguro</span>

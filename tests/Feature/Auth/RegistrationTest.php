@@ -1,21 +1,40 @@
 <?php
 
-test('registration screen can be rendered', function () {
-    $response = $this->get('/register');
+use App\Models\User;
+use Illuminate\Support\Facades\Notification;
+use Laravel\Fortify\Features;
 
-    $response->assertStatus(200);
+test('generic registration entry redirects to company registration', function () {
+    $this->get('/register')
+        ->assertRedirect(route('empresa.register.form'));
 });
 
-test('new users can register', function () {
-    config(['features.insurance_analysis.enabled' => false]);
-
-    $response = $this->post('/register', [
+test('generic user registration is not available', function () {
+    $this->post('/register', [
         'name' => 'Test User',
         'email' => 'test@example.com',
         'password' => 'password',
         'password_confirmation' => 'password',
-    ]);
+    ])->assertMethodNotAllowed();
 
-    $this->assertAuthenticated();
-    $response->assertRedirect(route('company.dashboard', absolute: false));
+    $this->assertGuest();
+    $this->assertDatabaseMissing('users', [
+        'email' => 'test@example.com',
+    ]);
+});
+
+test('generic registration cannot send verification email', function () {
+    Notification::fake();
+
+    $this->post('/register', [
+        'name' => 'Test User',
+        'email' => 'test@example.com',
+        'password' => 'password',
+        'password_confirmation' => 'password',
+    ])->assertMethodNotAllowed();
+
+    Notification::assertNothingSent();
+
+    expect(User::query()->where('email', 'test@example.com')->exists())->toBeFalse()
+        ->and(config('fortify.features'))->not->toContain(Features::registration());
 });

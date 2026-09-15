@@ -9,6 +9,12 @@
         </div>
     @endif
 
+    @error('email')
+        <div class="mb-4 text-sm font-medium text-red-600" role="alert">
+            {{ $message }}
+        </div>
+    @enderror
+
     <div class="mt-4 flex items-center justify-between">
         <form method="POST" action="{{ route('verification.send') }}">
             @csrf

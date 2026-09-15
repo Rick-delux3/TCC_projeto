@@ -1,4 +1,3 @@
-import { Input } from 'postcss';
 import './bootstrap';
 import axios from 'axios';
 import Alpine from 'alpinejs';
@@ -10,39 +9,6 @@ Alpine.start();
 axios.defaults.headers.common['X-CSRF-TOKEN'] =
     document.querySelector('meta[name="csrf-token"]').content;
 
-let Senha = document.getElementById("password");
-let Senha2 = document.getElementById("password-conf");
-
-if (Senha) {
-    Senha.addEventListener('input', function(){
-        this.type = 'text';
-        clearTimeout(this._timer);
-
-        this._timer = setTimeout(() =>{
-            this.type = 'password';
-        }, 2000);
-    });
-
-    Senha.addEventListener('blur', function(){
-        this.type = 'password';
-    });
-}
-
-if (Senha2) {
-    Senha2.addEventListener('input', function(){
-        this.type = 'text';
-        clearTimeout(this._timer);
-
-        this._timer = setTimeout(() =>{
-            this.type = 'password';
-        }, 2000);
-    });
-
-    Senha2.addEventListener('blur', function(){
-        this.type = 'password';
-    });
-}
-
 document.querySelectorAll('[data-toggle-password]').forEach((button) => {
     button.addEventListener('click', () => {
         const input = document.getElementById(button.getAttribute('data-toggle-password'));
@@ -51,10 +17,27 @@ document.querySelectorAll('[data-toggle-password]').forEach((button) => {
             return;
         }
 
-        const isVisible = input.type === 'text';
-        input.type = isVisible ? 'password' : 'text';
-        button.textContent = isVisible ? 'Ver' : 'Ocultar';
-        button.setAttribute('aria-label', isVisible ? 'Mostrar senha' : 'Ocultar senha');
+        const shouldShow = input.type === 'password';
+        const showIcon = button.querySelector('[data-password-icon="show"]');
+        const hideIcon = button.querySelector('[data-password-icon="hide"]');
+        const fieldLabel = input.name === 'password_confirmation'
+            ? 'confirmação de senha'
+            : 'senha';
+        const label = shouldShow
+            ? `Ocultar ${fieldLabel}`
+            : `Mostrar ${fieldLabel}`;
+
+        input.type = shouldShow ? 'text' : 'password';
+        button.setAttribute('aria-label', label);
+        button.setAttribute('aria-pressed', String(shouldShow));
+        button.setAttribute('title', label);
+
+        if (showIcon && hideIcon) {
+            showIcon.hidden = shouldShow;
+            hideIcon.hidden = !shouldShow;
+        } else {
+            button.textContent = shouldShow ? 'Ocultar' : 'Ver';
+        }
     });
 });
 

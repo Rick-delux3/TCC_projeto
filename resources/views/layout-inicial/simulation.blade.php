@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="X-UA-Compatible" content="ie=edge">
 
-    <link rel="icon" type="image/jpeg" href="{{ asset('imgs/Logo_NVS.png') }}">
+    <x-brand-favicon />
 
     <link 
         href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" 
@@ -15,7 +15,7 @@
         crossorigin="anonymous"
     >
 
-    @vite(['resources/css/simulation.css', 'resources/js/simulation.js'])
+    @vite(['resources/css/simulation.css', 'resources/css/branding.css', 'resources/js/simulation.js'])
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -24,10 +24,11 @@
         rel="stylesheet"
     >
 
-    <title>NVS</title>
+    <title>{{ config('branding.profiles.'.config('branding.active', 'tcc').'.name', 'NVS Seguros') }}</title>
+    @stack('styles')
 </head>
 
-<body class="auth-layout-body">
+<body class="auth-layout-body" data-brand="{{ config('branding.active', 'tcc') }}">
 
     @include('layout-inicial.partials.header_simulation')
 
@@ -36,7 +37,7 @@
     </main>
 
     {{-- Modal de erros de validação --}}
-    @if ($errors->any())
+    @if ($errors->any() && ! View::hasSection('inline-feedback'))
         <div class="modal fade" id="modalErrors" tabindex="-1" aria-hidden="true">
             <div class="modal-dialog modal-dialog-centered">
                 <div class="modal-content">

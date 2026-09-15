@@ -38,7 +38,16 @@ it('sends a company reset link using the companies broker', function () {
     Notification::assertSentTo(
         $company,
         CompanyResetPasswordNotification::class,
-        fn (CompanyResetPasswordNotification $notification) => filled($notification->token)
+        function (CompanyResetPasswordNotification $notification) use ($company): bool {
+            $mail = $notification->toMail($company);
+
+            return filled($notification->token)
+                && $mail->subject === 'Redefinição de senha - '.config(
+                    'branding.profiles.'.config('branding.active', 'tcc').'.name'
+                )
+                && $mail->view === 'emails.notifications.company-reset-password'
+                && $mail->viewData['expiresInMinutes'] === 60;
+        }
     );
 });
 
@@ -98,7 +107,7 @@ it('resets a company password with a valid token', function () {
 
     $this->post(route('company.password.store'), [
         'token' => $token,
-        'email' => $company->email,
+        'email' => '  '.strtoupper($company->email).'  ',
         'password' => 'new-secure-password',
         'password_confirmation' => 'new-secure-password',
     ])->assertRedirect(route('empresa.login'));
@@ -132,4 +141,26 @@ it('rejects invalid reset tokens without changing the password', function () {
     ])->assertSessionHasErrors('email');
 
     expect($company->fresh()->password)->toBe($previousPassword);
+});
+
+it('isolates company password reset tokens from user reset tokens', function () {
+    $sharedEmail = 'shared-reset-address@example.test';
+    $company = companyForPasswordRecovery(['email' => $sharedEmail]);
+    $user = User::factory()->create(['email' => $sharedEmail]);
+
+    $companyToken = Password::broker('companies')->createToken($company);
+
+    expect(config('auth.passwords.companies.table'))
+        ->toBe('company_password_reset_tokens')
+        ->not->toBe(config('auth.passwords.users.table'))
+        ->and(Password::broker('companies')->tokenExists($company, $companyToken))->toBeTrue()
+        ->and(Password::broker('users')->tokenExists($user, $companyToken))->toBeFalse();
+
+    $userToken = Password::broker('users')->createToken($user);
+
+    expect(Password::broker('users')->tokenExists($user, $userToken))->toBeTrue()
+        ->and(Password::broker('companies')->tokenExists($company, $userToken))->toBeFalse();
+
+    $this->assertDatabaseHas('company_password_reset_tokens', ['email' => $sharedEmail]);
+    $this->assertDatabaseHas('password_reset_tokens', ['email' => $sharedEmail]);
 });
