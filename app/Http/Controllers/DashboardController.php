@@ -46,13 +46,16 @@ class DashboardController extends Controller
 
     public function index(Request $request)
     {
-        $companyId = session('company_id');
+        /** @var \App\Models\User|null $user */
 
-        if (! $companyId) {
-            return redirect()->route('empresa.login');
+        $user = $request->user();
+
+        if (! $user || ! $user->company_id) {
+            return redirect()->route('empresa.login')
+                ->withErrors(['email' => 'Usuário não vinculado a uma imobiliária.']);
         }
 
-        $company = Imobiliaria::find($companyId);
+        $company = $user->imobiliaria;
 
         if (! $company) {
             return redirect()
@@ -61,6 +64,8 @@ class DashboardController extends Controller
                     'email' => 'Empresa não encontrada. Faça login novamente.',
                 ]);
         }
+
+       
 
         $this->ensureLeadAccessCode($company);
 

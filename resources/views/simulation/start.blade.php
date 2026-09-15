@@ -28,7 +28,7 @@
             <aside class="simulation-journey__aside">
                 <div class="simulation-journey__intro">
                     <span class="simulation-eyebrow">Seguro fiança locatícia</span>
-                    <h1 id="simulation-title" class="simulation-title">Como podemos ajudar?</h1>
+                    <h1 id="simulation-title" class="simulation-title">É Online, é Simples, é Seguro</h1>
                     <p>Escolha o perfil que melhor representa esta solicitação.</p>
                 </div>
 

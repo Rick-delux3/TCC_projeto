@@ -15,7 +15,37 @@ final class LeadLoversTagOperation extends Model
 
     protected $table = 'leadlovers_tag_operations';
 
-    protected $guarded = [];
+    protected $fillable = [
+        'lead_id',
+        'version',
+        'desired_source',
+        'desired_tag_key',
+        'desired_result',
+        'desired_request_log_id',
+        'desired_corretor_id',
+        'desired_batch_id',
+        'desired_attempt_id',
+        'desired_is_reanalysis',
+        'phase',
+        'inflight_version',
+        'inflight_source',
+        'inflight_tag_key',
+        'inflight_result',
+        'inflight_request_log_id',
+        'inflight_corretor_id',
+        'inflight_batch_id',
+        'inflight_attempt_id',
+        'inflight_is_reanalysis',
+        'action_id',
+        'action_status',
+        'action_total',
+        'outcome_uncertain',
+        'post_attempts',
+        'confirmation_checks',
+        'post_started_at',
+        'last_posted_at',
+        'blocked_reason',
+    ];
 
     protected $casts = [
         'version' => 'integer',

@@ -27,6 +27,7 @@ function companyWithPublicSimulationCode(array $overrides = []): Imobiliaria
 function validRegisteredCompanySimulationPayload(array $overrides = []): array
 {
     return array_merge([
+        'tipo_locacao' => 'residencial',
         'aceite_termos' => '1',
         'nome' => 'Lead com acesso protegido',
         'email' => 'protected-code-lead@example.test',

@@ -9,6 +9,7 @@ use App\Models\Corretor;
 use App\Models\CorretorActivityLog;
 use App\Models\Lead;
 use App\Models\LeadLoversTag;
+use App\Services\CorretorDashboardLeadQuery;
 use App\Services\LeadLoversTagOperationCoordinator;
 use App\Support\ManualLeadResultTags;
 use Illuminate\Http\RedirectResponse;
@@ -16,6 +17,8 @@ use Illuminate\Support\Facades\DB;
 
 class AdminLeadTagController extends Controller
 {
+    public function __construct(private CorretorDashboardLeadQuery $dashboardLeadQuery) {}
+
     public function update(
         UpdateLeadResultTagRequest $request,
         Lead $lead
@@ -71,7 +74,7 @@ class AdminLeadTagController extends Controller
         }
 
         if (
-            ManualLeadResultTags::currentFromTags($lead->tags_originais)
+            $this->dashboardLeadQuery->withResult(Lead::query())->findOrFail($lead->id)->dashboard_result
             === $result
         ) {
             return $this->repeatedResultResponse($resultLabel);
@@ -142,14 +145,12 @@ class AdminLeadTagController extends Controller
             $selectedTagKey,
             $selectedTag
         ): bool {
-            $lockedLead = Lead::query()
+            $lockedLead = $this->dashboardLeadQuery->withResult(Lead::query())
                 ->lockForUpdate()
                 ->findOrFail($lead->id);
 
             if (
-                ManualLeadResultTags::currentFromTags(
-                    $lockedLead->tags_originais
-                ) === $result
+                $lockedLead->dashboard_result === $result
             ) {
                 return false;
             }

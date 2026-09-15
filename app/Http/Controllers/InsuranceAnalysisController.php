@@ -464,8 +464,7 @@ class InsuranceAnalysisController extends Controller
      */
     private function currentCompanyId(): ?int
     {
-        return auth()->user()?->company_id
-            ?? session('company_id');
+        return auth()->user()?->company_id;
     }
 
     /**

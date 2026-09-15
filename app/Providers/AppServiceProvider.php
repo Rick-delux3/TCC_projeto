@@ -49,6 +49,28 @@ class AppServiceProvider extends ServiceProvider
             return Limit::perMinute(10)->by($request->ip());
         });
 
+        RateLimiter::for('company-code-recovery', function (Request $request): array {
+            $email = $request->input('email');
+            $normalizedEmail = is_string($email) ? mb_strtolower(trim($email)) : '';
+            $response = function (Request $request, array $headers): \Illuminate\Http\JsonResponse|\Illuminate\Http\RedirectResponse {
+                $message = 'Muitas solicitações. Aguarde antes de solicitar o código novamente.';
+
+                if ($request->expectsJson()) {
+                    return response()->json(['message' => $message], 429, $headers);
+                }
+
+                return redirect()->route('simulation.registered-company.code.request')
+                    ->with('company_code_retry_after', (int) ($headers['Retry-After'] ?? 60))
+                    ->withErrors(['email' => $message])
+                    ->withHeaders($headers);
+            };
+
+            return [
+                Limit::perMinute(5)->by('ip:'.$request->ip())->response($response),
+                Limit::perHour(3)->by('email:'.hash('sha256', $normalizedEmail))->response($response),
+            ];
+        });
+
         Gate::before(function ($user, string $ability) {
             if (
                 $ability === 'create-analysis'

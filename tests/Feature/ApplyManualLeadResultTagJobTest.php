@@ -218,6 +218,67 @@ it('allows an active member with permission to request each commercial result', 
     'Não aluguei nem seguro' => [ManualLeadResultTags::NO_RENT_OR_INSURANCE],
 ]);
 
+it('keeps dashboard result choices consistent with result change validation', function (array $attributes, string $result, bool $allowed): void {
+    $this->withoutVite();
+    Queue::fake();
+    manualLeadTagCatalog();
+    LeadLoversTag::query()->where('key', 'aprovados')->update(['title' => 'Análise positiva']);
+
+    $corretor = manualLeadTagCorretor(['permissions' => [
+        'leads.visualizar', 'leads.editar', 'tags.visualizar', 'tags.gerenciar',
+    ]]);
+    $lead = manualLeadTagLead($attributes);
+    $dashboard = $this->actingAs($corretor, 'admin')
+        ->get(route('Dashboard-Admin'))->assertOk();
+    $dom = new DOMDocument;
+    @$dom->loadHTML('<?xml encoding="UTF-8">'.$dashboard->getContent());
+    $xpath = new DOMXPath($dom);
+
+    expect($xpath->query('//select[@id="adminLeadResultSelect'.$lead->id.'"]/option[@value="'.$result.'"]')->length)
+        ->toBe($allowed ? 1 : 0);
+
+    $response = $this->from(route('Dashboard-Admin'))
+        ->patch(route('admin.leads.result-tag.update', $lead), [
+            'result' => $result,
+            'result_context_lead_id' => $lead->id,
+        ])->assertRedirect(route('Dashboard-Admin'));
+
+    if ($allowed) {
+        $response->assertSessionHasNoErrors()->assertSessionHas('success');
+        Queue::assertPushed(ApplyManualLeadResultTagJob::class, fn (ApplyManualLeadResultTagJob $job): bool => $job->leadId === $lead->id && $job->result === $result);
+        $this->assertDatabaseHas('logs_atividades_corretores', [
+            'action' => 'lead_tag_update_requested', 'model_id' => $lead->id,
+        ]);
+    } else {
+        $response->assertSessionHasErrors(['result' => sprintf(
+            'O lead já possui o status "%s". Selecione outro status.',
+            ManualLeadResultTags::label($result),
+        )]);
+        Queue::assertNotPushed(ApplyManualLeadResultTagJob::class);
+        $this->assertDatabaseMissing('logs_atividades_corretores', [
+            'action' => 'lead_tag_update_requested', 'model_id' => $lead->id,
+        ]);
+    }
+
+    Http::assertNothingSent();
+})->with([
+    'old rejected tag does not prevent changing confirmed approval' => [
+        ['tags_originais' => 'Ruim', 'leadlovers_confirmed_final_tag_key' => 'aprovados'], 'rejected', true,
+    ],
+    'confirmed approval cannot be repeated despite old rejected tag' => [
+        ['tags_originais' => 'Ruim', 'leadlovers_confirmed_final_tag_key' => 'aprovados'], 'approved', false,
+    ],
+    'configured legacy title cannot be repeated' => [
+        ['tags_originais' => 'Análise positiva'], 'approved', false,
+    ],
+    'partial legacy tag does not prevent approval' => [
+        ['tags_originais' => 'Desaprovados'], 'approved', true,
+    ],
+    'unknown confirmation does not fall back to old tags' => [
+        ['tags_originais' => 'Ruim', 'leadlovers_confirmed_final_tag_key' => 'unknown'], 'rejected', true,
+    ],
+]);
+
 it('rejects a request that repeats the current commercial result', function (
     string $result,
     string $currentTag,

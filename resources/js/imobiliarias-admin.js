@@ -86,8 +86,15 @@ if (!prefersReducedMotion) {
     });
 }
 
-const formatCnpj = (value) => {
+const formatCompanyDocument = (value) => {
     const numbers = onlyNumbers(value, 14);
+
+    if (numbers.length <= 11) {
+        return numbers
+            .replace(/^(\d{3})(\d)/, '$1.$2')
+            .replace(/^(\d{3})\.(\d{3})(\d)/, '$1.$2.$3')
+            .replace(/^(\d{3})\.(\d{3})\.(\d{3})(\d)/, '$1.$2.$3-$4');
+    }
 
     return numbers
         .replace(/^(\d{2})(\d)/, '$1.$2')
@@ -270,7 +277,7 @@ if (editModalElement) {
         }
 
         if (editCnpj) {
-            editCnpj.value = formatCnpj(button.dataset.companyCnpj);
+            editCnpj.value = formatCompanyDocument(button.dataset.companyCnpj);
         }
 
         if (editCep) {
@@ -304,9 +311,9 @@ if (editModalElement) {
     }
 
     if (editCnpj) {
-        editCnpj.value = formatCnpj(editCnpj.value);
+        editCnpj.value = formatCompanyDocument(editCnpj.value);
         editCnpj.addEventListener('input', () => {
-            editCnpj.value = formatCnpj(editCnpj.value);
+            editCnpj.value = formatCompanyDocument(editCnpj.value);
         });
     }
 
@@ -432,9 +439,9 @@ if (registrationForm) {
     });
 
     if (cnpjInput) {
-        cnpjInput.value = formatCnpj(cnpjInput.value);
+        cnpjInput.value = formatCompanyDocument(cnpjInput.value);
         cnpjInput.addEventListener('input', () => {
-            cnpjInput.value = formatCnpj(cnpjInput.value);
+            cnpjInput.value = formatCompanyDocument(cnpjInput.value);
         });
     }
 

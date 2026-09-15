@@ -60,7 +60,7 @@ class LeadReanalysisService
             $userAgent,
         ): array {
             $lead = Lead::query()
-                ->with(['endereco', 'despesas', 'conjuge'])
+                ->with(['endereco', 'despesas', 'conjuge', 'lead_empresa', 'locador', 'imobiliariaInformada'])
                 ->whereKey($lead->getKey())
                 ->lockForUpdate()
                 ->firstOrFail();
@@ -156,6 +156,16 @@ class LeadReanalysisService
                 'estado_civil' => $submittedStringValue('estado_civil', $lead->estado_civil),
             ]);
 
+            $additionalDetailsChanged = $corretor !== null
+                && $this->updateAdminSimulationDetails($lead, $data);
+            $removeSpouse = $corretor !== null
+                && array_key_exists('estado_civil', $data)
+                && ! in_array($lead->estado_civil, ['casado', 'uniao_estavel', 'divorciado', 'viuvo'], true);
+            if ($removeSpouse) {
+                $data['conjuge_nome'] = null;
+                $data['conjuge_cpf'] = null;
+            }
+
             $endereco = $lead->endereco ?: $lead->endereco()->make();
             $endereco->fill([
                 'cep' => $submittedStringValue('cep', $endereco->cep),
@@ -163,7 +173,9 @@ class LeadReanalysisService
                 'cidade_imovel' => $submittedStringValue('cidade_imovel', $endereco->cidade_imovel),
                 'bairro' => $submittedStringValue('bairro', $endereco->bairro),
                 'logradouro' => $submittedStringValue('logradouro', $endereco->logradouro),
-                'numero' => $submittedStringValue('numero', $endereco->numero),
+                'numero' => $corretor !== null && array_key_exists('numero', $data)
+                    ? ($data['numero'] ?? '123')
+                    : $submittedStringValue('numero', $endereco->numero),
                 'complemento' => $submittedStringValue('complemento', $endereco->complemento),
             ]);
 
@@ -206,8 +218,8 @@ class LeadReanalysisService
 
             $conjuge = $lead->conjuge ?: $lead->conjuge()->make();
             $conjuge->fill([
-                'nome' => $submittedStringValue('conjuge_nome', $conjuge->nome),
-                'cpf' => $submittedStringValue('conjuge_cpf', $conjuge->cpf),
+                'nome' => $removeSpouse ? null : $submittedStringValue('conjuge_nome', $conjuge->nome),
+                'cpf' => $removeSpouse ? null : $submittedStringValue('conjuge_cpf', $conjuge->cpf),
             ]);
 
             $leadChanged = $lead->isDirty();
@@ -233,9 +245,9 @@ class LeadReanalysisService
                     'valor_iptu',
                     'outras_despesas',
                 ]));
-            $conjugeChanged = $hadConjuge
+            $conjugeChanged = $removeSpouse && $hadConjuge ? true : ($hadConjuge
                 ? $conjuge->isDirty()
-                : $hasMeaningfulValue($conjuge->only(['nome', 'cpf']));
+                : $hasMeaningfulValue($conjuge->only(['nome', 'cpf'])));
             $requestedLeadLoversFields = $this->normalizeLeadLoversUpdateFields([
                 $submittedStringChanged(
                     'nome',
@@ -315,7 +327,7 @@ class LeadReanalysisService
                     $outrasDespesas
                 )
                     ? 'outras_despesas' : null,
-                $submittedStringChanged(
+                ($removeSpouse && filled($originalRemoteValues['conjuge_cpf'])) || $submittedStringChanged(
                     'conjuge_cpf',
                     $originalRemoteValues['conjuge_cpf'],
                     $conjuge->cpf
@@ -323,7 +335,7 @@ class LeadReanalysisService
                     ? 'conjuge_cpf' : null,
             ]);
 
-            if (! $leadChanged && ! $enderecoChanged && ! $despesasChanged && ! $conjugeChanged) {
+            if (! $leadChanged && ! $enderecoChanged && ! $despesasChanged && ! $conjugeChanged && ! $additionalDetailsChanged) {
                 return [
                     'changed' => false,
                     'unlocked' => false,
@@ -350,7 +362,11 @@ class LeadReanalysisService
             }
 
             if ($conjugeChanged) {
-                $lead->conjuge()->save($conjuge);
+                if ($removeSpouse) {
+                    $lead->conjuge()->delete();
+                } else {
+                    $lead->conjuge()->save($conjuge);
+                }
             }
 
             $lead->refresh();
@@ -852,6 +868,82 @@ class LeadReanalysisService
         );
 
         return $attemptId;
+    }
+
+    private function updateAdminSimulationDetails(Lead $lead, array $data): bool
+    {
+        $changed = false;
+        if (array_key_exists('tipo_locacao', $data)) {
+            $lead->tipo_locacao = $data['tipo_locacao'];
+        }
+        if (array_key_exists('tipo_locacao', $data) || array_key_exists('descrever_atividade', $data)) {
+            $lead->descrever_atividade = $lead->tipo_locacao?->value === 'comercial'
+                ? ($data['descrever_atividade'] ?? $lead->descrever_atividade)
+                : null;
+        }
+
+        if (array_intersect(['cpf', 'cpf_responsavel', 'nome_responsavel'], array_keys($data)) !== []) {
+            $document = $data['cpf'] ?? $lead->lead_empresa?->cnpj;
+            if (array_key_exists('cpf', $data)) {
+                $document = $data['cpf'];
+            }
+            if (is_string($document) && preg_match('/^\d{14}$/D', $document) === 1) {
+                $company = $lead->lead_empresa ?: $lead->lead_empresa()->make();
+                $company->cnpj = $document;
+                foreach (['cpf_responsavel', 'nome_responsavel'] as $field) {
+                    if (array_key_exists($field, $data)) {
+                        $company->{$field} = $data[$field];
+                    }
+                }
+                $lead->cpf = null;
+                if ($company->isDirty()) {
+                    $lead->lead_empresa()->save($company);
+                    $changed = true;
+                }
+            } elseif (array_key_exists('cpf', $data) && $lead->lead_empresa !== null) {
+                $lead->lead_empresa()->delete();
+                $changed = true;
+            }
+        }
+
+        $requesterFields = ['tipo_solicitante', 'responsavel_nome', 'responsavel_email', 'responsavel_telefone', 'responsavel_preenchimento'];
+        if (array_intersect($requesterFields, array_keys($data)) === []) {
+            return $changed;
+        }
+        $profile = $lead->tipo_solicitante;
+        $relation = match ($profile) {
+            'locador' => 'locador',
+            'imobiliaria_nao_cadastrada', 'imobiliaria_cadastrada' => 'imobiliariaInformada',
+            default => null,
+        };
+        $mapping = match ($profile) {
+            'locador' => ['responsavel_nome' => 'nome', 'responsavel_email' => 'email', 'responsavel_telefone' => 'telefone'],
+            'imobiliaria_nao_cadastrada' => ['responsavel_nome' => 'nome_imobiliaria_informada', 'responsavel_email' => 'responsavel_preenchimento', 'responsavel_telefone' => 'telefone_responsavel'],
+            'imobiliaria_cadastrada' => ['responsavel_preenchimento' => 'responsavel_preenchimento'],
+            default => [],
+        };
+        if ($relation !== null) {
+            $requester = $lead->{$relation} ?: $lead->{$relation}()->make();
+            foreach ($mapping as $input => $column) {
+                if (array_key_exists($input, $data)) {
+                    $requester->{$column} = $data[$input];
+                }
+            }
+            if ($requester->isDirty() && ($requester->exists || collect($mapping)->contains(fn ($column) => filled($requester->{$column})))) {
+                $lead->{$relation}()->save($requester);
+                $changed = true;
+            }
+        }
+        if (array_key_exists('tipo_solicitante', $data)) {
+            foreach (['locador', 'imobiliariaInformada'] as $otherRelation) {
+                if ($otherRelation !== $relation && $lead->{$otherRelation} !== null) {
+                    $lead->{$otherRelation}()->delete();
+                    $changed = true;
+                }
+            }
+        }
+
+        return $changed;
     }
 
     private function ensureAnalysisEnabled(): void

@@ -32,11 +32,12 @@ class CorrectLeadLoversInitialFailureRequest extends FormRequest
                 && Gate::forUser($corretor)->allows('edit-leads');
         }
 
-        $companyId = session('company_id');
+        /** @var \App\Models\User|null $user */
+        $user = Auth::guard('web')->user();
 
-        return Auth::guard('web')->check()
-            && filled($companyId)
-            && (int) $lead->company_id === (int) $companyId;
+        return $user !== null
+            && filled($user->company_id)
+            && (int) $lead->company_id === (int) $user->company_id;
     }
 
     protected function prepareForValidation(): void

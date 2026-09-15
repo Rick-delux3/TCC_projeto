@@ -4,23 +4,30 @@ namespace App\Http\Controllers\Admin;
 
 use App\Actions\Companies\RegisterCompany;
 use App\Http\Controllers\Controller;
-use App\Http\Requests\Admin\StoreCompanyRequest;
+use App\Http\Requests\Admin\StoreCompanyRequest as StoreAdminCompanyRequest;
 use App\Http\Requests\Admin\UpdateCompanyRequest;
 use App\Models\Corretor;
 use App\Models\CorretorActivityLog;
 use App\Models\Imobiliaria;
+use App\Services\CompanyInvitationService;
 use App\Services\CompanyTagService;
+use DomainException;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
 use Throwable;
 
 class ImobiliariaController extends Controller
 {
+    public function __construct(
+        private readonly CompanyInvitationService $companyInvitationService,
+    ) {}
+
     public function index(Request $request): View
     {
         $filters = $request->validate([
@@ -88,7 +95,7 @@ class ImobiliariaController extends Controller
     }
 
     public function store(
-        StoreCompanyRequest $request,
+        StoreAdminCompanyRequest $request,
         RegisterCompany $registerCompany,
     ): RedirectResponse {
         $corretor = $request->user('admin');
@@ -102,11 +109,42 @@ class ImobiliariaController extends Controller
             userAgent: $request->userAgent(),
         );
 
+        $company = $registration['company'];
+
+        try {
+            $this->companyInvitationService->sendWelcomeAccessCode(
+                company: $company,
+                sentBy: $corretor,
+                request: $request,
+            );
+        } catch (DomainException $exception) {
+            return redirect()
+                ->route('admin.imobiliarias.index')
+                ->with(
+                    'error',
+                    "A imobiliária {$company->name} foi cadastrada, mas {$exception->getMessage()}",
+                );
+        } catch (Throwable $exception) {
+            Log::error('Falha ao enfileirar o e-mail de boas-vindas da imobiliária.', [
+                'company_id' => $company->getKey(),
+                'corretor_id' => $corretor->getKey(),
+                'exception' => $exception::class,
+                'mailer' => config('mail.default'),
+            ]);
+
+            return redirect()
+                ->route('admin.imobiliarias.index')
+                ->with(
+                    'error',
+                    "A imobiliária {$company->name} foi cadastrada, mas o e-mail de boas-vindas não pôde ser enviado.",
+                );
+        }
+
         return redirect()
             ->route('admin.imobiliarias.index')
             ->with(
                 'success',
-                "A imobiliária {$registration['company']->name} foi cadastrada com sucesso.",
+                "A imobiliária {$company->name} foi cadastrada e o e-mail de boas-vindas foi adicionado à fila de envio.",
             );
     }
 

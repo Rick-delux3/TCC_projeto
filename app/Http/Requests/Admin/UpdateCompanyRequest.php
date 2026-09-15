@@ -4,10 +4,10 @@ namespace App\Http\Requests\Admin;
 
 use App\Models\Corretor;
 use App\Models\Imobiliaria;
+use App\Rules\CpfOrCnpj;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
-use Illuminate\Validation\Validator;
 
 class UpdateCompanyRequest extends FormRequest
 {
@@ -31,7 +31,7 @@ class UpdateCompanyRequest extends FormRequest
                 trim((string) $this->input('email'))
             ),
             'phone' => $this->digitsOnly($this->input('phone')),
-            'cnpj' => $this->digitsOnly($this->input('cnpj')),
+            'cnpj' => CpfOrCnpj::normalize($this->input('cnpj')),
             'cep' => $this->digitsOnly($this->input('cep')),
             'city' => $this->normalizeText($this->input('city')),
             'state' => mb_strtoupper(
@@ -100,7 +100,7 @@ class UpdateCompanyRequest extends FormRequest
                 'bail',
                 'required',
                 'string',
-                'regex:/^\d{14}$/',
+                new CpfOrCnpj,
                 Rule::unique('imobiliarias', 'cnpj')
                     ->ignore($companyId),
             ],
@@ -140,23 +140,6 @@ class UpdateCompanyRequest extends FormRequest
         ];
     }
 
-    public function after(): array
-    {
-        return [
-            function (Validator $validator): void {
-                if (
-                    $this->filled('cnpj')
-                    && ! $this->cnpjIsValid($this->input('cnpj'))
-                ) {
-                    $validator->errors()->add(
-                        'cnpj',
-                        'O CNPJ informado é inválido.',
-                    );
-                }
-            },
-        ];
-    }
-
     public function messages(): array
     {
         return [
@@ -171,9 +154,9 @@ class UpdateCompanyRequest extends FormRequest
             'phone.regex' => 'O telefone deve conter 10 ou 11 números.',
             'phone.unique' => 'Este telefone já está sendo utilizado.',
 
-            'cnpj.required' => 'Informe o CNPJ da imobiliária.',
-            'cnpj.regex' => 'O CNPJ deve conter exatamente 14 números.',
-            'cnpj.unique' => 'Este CNPJ já está sendo utilizado.',
+            'cnpj.required' => 'Informe o CPF ou CNPJ da imobiliária.',
+            'cnpj.string' => 'Informe um CPF ou CNPJ válido.',
+            'cnpj.unique' => 'Este CPF ou CNPJ já está sendo utilizado.',
 
             'cep.required' => 'Informe o CEP da imobiliária.',
             'cep.regex' => 'O CEP deve conter exatamente 8 números.',
@@ -207,49 +190,5 @@ class UpdateCompanyRequest extends FormRequest
             preg_replace('/\s+/u', ' ', (string) $value)
                 ?? (string) $value
         );
-    }
-
-    private function cnpjIsValid(mixed $value): bool
-    {
-        $cnpj = (string) $value;
-
-        if (preg_match('/^\d{14}$/', $cnpj) !== 1) {
-            return false;
-        }
-
-        if (preg_match('/^(\d)\1{13}$/', $cnpj) === 1) {
-            return false;
-        }
-
-        $calculateDigit = function (
-            string $base,
-            array $weights,
-        ): int {
-            $sum = 0;
-
-            foreach ($weights as $index => $weight) {
-                $sum += ((int) $base[$index]) * $weight;
-            }
-
-            $remainder = $sum % 11;
-
-            return $remainder < 2 ? 0 : 11 - $remainder;
-        };
-
-        $firstDigit = $calculateDigit(
-            substr($cnpj, 0, 12),
-            [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2],
-        );
-
-        if ((int) $cnpj[12] !== $firstDigit) {
-            return false;
-        }
-
-        $secondDigit = $calculateDigit(
-            substr($cnpj, 0, 12).$firstDigit,
-            [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2],
-        );
-
-        return (int) $cnpj[13] === $secondDigit;
     }
 }

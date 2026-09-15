@@ -1,4 +1,7 @@
+import { initializeAdminLeadFields } from './admin-lead-fields';
+
 document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('[data-admin-lead-fields]').forEach(initializeAdminLeadFields);
     const configElement = document.getElementById('dashboardUserConfig');
 
     let config = {};

@@ -101,6 +101,8 @@
                 'analysis.enabled' => EnsureInsuranceAnalysisEnabled::class,
                 'auth.unframed' => PreventAuthenticationFraming::class,
             ]);
+
+           
         })
         ->withExceptions(function (Exceptions $exceptions): void {
             //
