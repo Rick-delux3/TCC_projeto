@@ -49,9 +49,9 @@ class UpdateAdminLeadRequest extends FormRequest
         $lead = $this->route('lead');
         $document = $this->input('cpf', $lead->lead_empresa?->cnpj ?? $lead->cpf);
         $company = is_string($document) && preg_match('/^\d{14}$/D', $document) === 1;
-        $status = $this->input('estado_civil', $lead->estado_civil);
+        $status = $lead->estado_civil;
         $spouse = in_array($status, ['casado', 'uniao_estavel', 'divorciado', 'viuvo'], true);
-        $spouseRequired = in_array($status, ['casado', 'uniao_estavel'], true) && $this->hasAny(['estado_civil', 'conjuge_nome', 'conjuge_cpf']);
+        $spouseRequired = in_array($status, ['casado', 'uniao_estavel'], true) && $this->hasAny(['conjuge_nome', 'conjuge_cpf']);
         $rentalType = $this->input('tipo_locacao', $lead->tipo_locacao?->value);
         $profile = $lead->tipo_solicitante;
         $requester = in_array($profile, ['locador', 'imobiliaria_nao_cadastrada'], true);
@@ -68,7 +68,7 @@ class UpdateAdminLeadRequest extends FormRequest
             'descrever_atividade' => [Rule::excludeIf($rentalType !== 'comercial'), Rule::requiredIf($rentalType === 'comercial' && $this->hasAny(['tipo_locacao', 'descrever_atividade'])), 'nullable', 'string', 'max:55'],
             'cpf_responsavel' => [Rule::excludeIf(! $company), Rule::requiredIf($companyRequired), 'bail', 'nullable', 'string', 'size:11', new CpfOrCnpj],
             'nome_responsavel' => [Rule::excludeIf(! $company), Rule::requiredIf($companyRequired), 'nullable', 'string', 'min:3', 'max:55'],
-            'estado_civil' => ['nullable', Rule::in(['solteiro', 'separado', 'casado', 'uniao_estavel', 'divorciado', 'viuvo'])],
+            'estado_civil' => ['exclude'],
             'conjuge_nome' => [Rule::excludeIf(! $spouse), Rule::requiredIf($spouseRequired), 'nullable', 'string', 'min:3', 'max:255'],
             'conjuge_cpf' => [Rule::excludeIf(! $spouse), Rule::requiredIf($spouseRequired), 'bail', 'nullable', 'string', 'size:11', new CpfOrCnpj],
             'responsavel_nome' => [Rule::excludeIf(! $requester), 'nullable', 'string', 'max:255'],
@@ -114,7 +114,7 @@ class UpdateAdminLeadRequest extends FormRequest
     {
         return [function (Validator $validator): void {
             $lead = $this->route('lead');
-            if (filled($this->input('conjuge_cpf')) && $this->input('conjuge_cpf') === $this->input('cpf', $lead->cpf) && in_array($this->input('estado_civil', $lead->estado_civil), ['casado', 'uniao_estavel', 'divorciado', 'viuvo'], true)) {
+            if (filled($this->input('conjuge_cpf')) && $this->input('conjuge_cpf') === $this->input('cpf', $lead->cpf) && in_array($lead->estado_civil, ['casado', 'uniao_estavel', 'divorciado', 'viuvo'], true)) {
                 $validator->errors()->add('conjuge_cpf', 'O CPF do cônjuge deve ser diferente do CPF do pretendente.');
             }
             if ($this->exists('tipo_solicitante') && $this->input('tipo_solicitante') !== $lead->tipo_solicitante) {

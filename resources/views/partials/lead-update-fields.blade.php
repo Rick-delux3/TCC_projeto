@@ -60,6 +60,8 @@
         $leadUpdateSections[0]['fields'][4]['readonly'] = true;
         $leadUpdateSections[0]['fields'][4]['preserve_old'] = false;
         $leadUpdateSections[0]['fields'][5]['options'] = ['' => 'Selecione', 'solteiro' => 'Solteiro(a)', 'separado' => 'Separado(a)', 'casado' => 'Casado(a)', 'uniao_estavel' => 'União estável', 'divorciado' => 'Divorciado(a)', 'viuvo' => 'Viúvo(a)'];
+        $leadUpdateSections[0]['fields'][5]['disabled'] = true;
+        $leadUpdateSections[0]['fields'][5]['preserve_old'] = false;
         $leadUpdateSections[0]['fields'][6]['condition'] = 'spouse';
         $leadUpdateSections[0]['fields'][7]['condition'] = 'spouse';
         array_splice($leadUpdateSections[0]['fields'], 5, 0, [
@@ -83,7 +85,7 @@
         ]]);
     }
     $effectiveDocument = \App\Rules\CpfOrCnpj::normalize($leadUpdateValue('cpf', $isAdminLeadEditor ? ($lead->lead_empresa?->cnpj ?? $lead->cpf) : $lead->cpf));
-    $effectiveStatus = $leadUpdateValue('estado_civil', $lead->estado_civil);
+    $effectiveStatus = $isAdminLeadEditor ? $lead->estado_civil : $leadUpdateValue('estado_civil', $lead->estado_civil);
     $effectiveProfile = $isAdminLeadEditor ? $lead->tipo_solicitante : $leadUpdateValue('tipo_solicitante', $lead->tipo_solicitante);
     $visibleConditions = [
         'company' => is_string($effectiveDocument) && preg_match('/^\d{14}$/D', $effectiveDocument) === 1,
@@ -147,7 +149,7 @@
                                 </label>
 
                                 @if (isset($field['options']))
-                                    <select id="{{ $fieldId }}" name="{{ $field['name'] }}" class="form-select {{ $fieldError ? 'is-invalid' : '' }}" @if ($fieldError) aria-invalid="true" aria-describedby="{{ $fieldErrorId }}" @endif>
+                                    <select id="{{ $fieldId }}" name="{{ $field['name'] }}" class="form-select {{ $fieldError ? 'is-invalid' : '' }}" @disabled($field['disabled'] ?? false) @if ($fieldError) aria-invalid="true" aria-describedby="{{ $fieldErrorId }}" @endif>
                                         @foreach ($field['options'] as $value => $label)
                                             <option value="{{ $value }}" @selected((string) $fieldValue === (string) $value)>{{ $label }}</option>
                                         @endforeach
