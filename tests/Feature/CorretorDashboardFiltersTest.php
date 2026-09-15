@@ -177,6 +177,24 @@ it('recovers missing requester profiles from a known origin or registered reques
     expect($response->viewData('leads')->pluck('id')->all())->toBe([$details->id, $origin->id]);
 });
 
+it('rejects incompatible untouched and unsent filters before querying leads', function (string $result): void {
+    $queries = [];
+    Event::listen(QueryExecuted::class, function (QueryExecuted $query) use (&$queries): void {
+        $queries[] = $query->sql;
+    });
+
+    $response = $this->from(route('Dashboard-Admin'))->get(route('Dashboard-Admin', [
+        'resultado' => $result,
+        'leadlovers_sync' => LeadLoversInitialFailureCatalog::DASHBOARD_FILTER_NOT_SENT,
+    ]));
+
+    $response->assertRedirect(route('Dashboard-Admin'))
+        ->assertSessionHasErrors(['leadlovers_sync'], errorBag: 'leadFilters');
+    expect(collect($queries)->filter(fn (string $sql): bool => str_contains($sql, 'from "leads"')))->toBeEmpty();
+    $this->get(route('Dashboard-Admin'))->assertOk()
+        ->assertSee('“Sem resultado” considera apenas leads sincronizados.');
+})->with(['sem_resultado', 'no_result']);
+
 it('returns only initially synchronized untouched leads for the new filter', function (): void {
     $untouched = dashboardFilterLead(['tags_originais' => 'Locatário, Origem']);
     $legacySent = dashboardFilterLead(['leadlovers_status' => 'send']);

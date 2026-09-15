@@ -29,7 +29,13 @@ final class CorretorDashboardLeadQuery
 
     public function base(): Builder
     {
-        $source = Lead::query()->createdThroughSystem()->select('leads.*');
+        $classified = $this->withResult(Lead::query()->createdThroughSystem());
+
+        return Lead::query()->fromSub($classified, 'leads')->select('leads.*');
+    }
+
+    public function withResult(Builder $query): Builder
+    {
         $normalizedTags = "LOWER(COALESCE(tags_originais, ''))";
 
         foreach (['Ã' => 'a', 'ã' => 'a', 'Ç' => 'c', 'ç' => 'c', '_' => '', '-' => '', ' ' => ''] as $from => $to) {
@@ -40,17 +46,15 @@ final class CorretorDashboardLeadQuery
             $normalizedTags = "REPLACE({$normalizedTags}, CHAR({$character}), '')";
         }
 
-        $normalizedTags = $source->getConnection()->getDriverName() === 'sqlite'
+        $normalizedTags = $query->getConnection()->getDriverName() === 'sqlite'
             ? "(',' || {$normalizedTags} || ',')"
             : "CONCAT(',', {$normalizedTags}, ',')";
 
-        $source->selectRaw("{$normalizedTags} AS dashboard_tags");
         $result = $this->resultExpression();
-        $classified = Lead::query()->fromSub($source, 'leads')
-            ->select('leads.*')
-            ->selectRaw($result['sql'].' AS dashboard_result', $result['bindings']);
+        $sql = str_replace('dashboard_tags', $normalizedTags, $result['sql']);
 
-        return Lead::query()->fromSub($classified, 'leads')->select('leads.*');
+        return $query->select('leads.*')
+            ->selectRaw($sql.' AS dashboard_result', $result['bindings']);
     }
 
     /** @param array<string, mixed> $filters */

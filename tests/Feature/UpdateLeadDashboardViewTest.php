@@ -225,6 +225,36 @@ function updateLeadDashboardListedNames(string $html): array
     return $names;
 }
 
+it('switches incompatible quick filters while preserving the company search and requester', function (bool $startWithoutResult): void {
+    $this->freezeTime();
+    $company = updateLeadDashboardCompany();
+    $sharedFilters = ['imobiliaria' => (string) $company->id, 'lead_name' => 'Carlos', 'tipo_solicitante' => 'imobiliaria_cadastrada'];
+    $synced = updateLeadDashboardLead([
+        'company_id' => $company->id, 'nome' => 'Carlos sincronizado',
+        'tipo_solicitante' => 'imobiliaria_cadastrada', 'tags_originais' => $company->name,
+        'leadlovers_status' => 'sent', 'leadlovers_lead_id' => 501,
+        'sent_to_leadlovers_at' => now()->startOfSecond(), 'updated_at' => now()->startOfSecond(),
+    ]);
+    $failed = updateLeadDashboardLead([
+        'company_id' => $company->id, 'nome' => 'Carlos não enviado',
+        'tipo_solicitante' => 'imobiliaria_cadastrada', 'tags_originais' => $company->name,
+        'leadlovers_status' => 'failed', 'leadlovers_lead_id' => null,
+        'sent_to_leadlovers_at' => null, 'leadlovers_initial_error_status' => 400,
+    ]);
+    $initial = $startWithoutResult ? ['resultado' => 'sem_resultado'] : ['leadlovers_sync' => 'not_sent_invalid_data'];
+    $expected = $startWithoutResult ? ['leadlovers_sync' => 'not_sent_invalid_data'] : ['resultado' => 'sem_resultado'];
+    $response = $this->actingAs(updateLeadDashboardAdmin(), 'admin')
+        ->get(route('Dashboard-Admin', $sharedFilters + $initial))->assertOk();
+    $xpath = updateLeadDashboardDom($response->getContent())['xpath'];
+    $selector = $startWithoutResult ? '//a[@data-leadlovers-quick-filter]' : '//a[contains(@class,"lead-filter-chip--sem-resultado")]';
+    $href = $xpath->query($selector)->item(0)->getAttribute('href');
+    parse_str(parse_url($href, PHP_URL_QUERY), $parameters);
+
+    expect($parameters)->toEqual($sharedFilters + $expected + ['page' => '1']);
+    $filtered = $this->get($href)->assertOk()->assertSessionHasNoErrors();
+    expect($filtered->viewData('leads')->pluck('id')->all())->toBe([$startWithoutResult ? $failed->id : $synced->id]);
+})->with([true, false]);
+
 it('renders the untouched lead filter consistently without offering it as a manual tag', function (): void {
     $admin = updateLeadDashboardAdmin(['permissions' => [
         CorretorPermissions::VIEW_LEADS, CorretorPermissions::EDIT_LEADS,
