@@ -2,6 +2,8 @@
 
 @section('content_a')
 @php
+    use App\Services\CorretorDashboardLeadQuery;
+    use App\Support\LeadLoversInitialFailureCatalog;
     use Illuminate\Support\Facades\Gate;
     use Illuminate\Support\Facades\Route;
 
@@ -336,6 +338,16 @@
         'leadlovers_sync' => $selectedLeadLoversSync,
     ];
     $leadFilterUrl = function (array $changes = []) use ($activeLeadFilters, $dashboardRoute): string {
+        if (($changes['resultado'] ?? null) === CorretorDashboardLeadQuery::WITHOUT_RESULT
+            && $activeLeadFilters['leadlovers_sync'] === LeadLoversInitialFailureCatalog::DASHBOARD_FILTER_NOT_SENT) {
+            $changes['leadlovers_sync'] = null;
+        }
+
+        if (($changes['leadlovers_sync'] ?? null) === LeadLoversInitialFailureCatalog::DASHBOARD_FILTER_NOT_SENT
+            && $activeLeadFilters['resultado'] === CorretorDashboardLeadQuery::WITHOUT_RESULT) {
+            $changes['resultado'] = null;
+        }
+
         $parameters = array_filter(
             array_replace($activeLeadFilters, $changes, ['page' => 1]),
             fn ($value): bool => filled($value)
@@ -432,10 +444,11 @@
         $result = $lead->dashboard_result;
 
         if (isset($tones[$result])) {
-            return ['label' => $manualResultOptions->get($result)] + $tones[$result];
+            return ['result' => $result, 'label' => $manualResultOptions->get($result)] + $tones[$result];
         }
 
         return [
+            'result' => null,
             'label' => 'Sem resultado',
             'badge' => 'text-bg-secondary',
             'card' => 'lead-card--neutral',
@@ -1749,7 +1762,7 @@
                 ->map(fn ($tag) => trim($tag));
 
             $resultTone = $getLeadResultTone($lead);
-            $currentManualResult = $lead->dashboard_result;
+            $currentManualResult = $resultTone['result'];
             $availableManualResultOptions = $currentManualResult
                 ? $manualResultOptions->except([$currentManualResult])
                 : $manualResultOptions;

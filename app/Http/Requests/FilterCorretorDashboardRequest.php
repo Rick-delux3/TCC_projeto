@@ -32,7 +32,15 @@ class FilterCorretorDashboardRequest extends FormRequest
             'imobiliaria' => ['nullable', 'string', 'regex:/\A(?:sem_vinculo|[1-9][0-9]{0,18})\z/'],
             'tipo_solicitante' => ['nullable', 'string', Rule::in(array_keys(CorretorDashboardLeadQuery::requesterOptions()))],
             'resultado' => ['nullable', 'string', Rule::in([...ManualLeadResultTags::keys(), CorretorDashboardLeadQuery::WITHOUT_RESULT])],
-            'leadlovers_sync' => ['nullable', 'string', Rule::in(array_keys(app(LeadLoversInitialFailureCatalog::class)->dashboardSyncOptions()))],
+            'leadlovers_sync' => [
+                'nullable',
+                'string',
+                Rule::in(array_keys(app(LeadLoversInitialFailureCatalog::class)->dashboardSyncOptions())),
+                Rule::prohibitedIf(
+                    $this->input('resultado') === CorretorDashboardLeadQuery::WITHOUT_RESULT
+                    && $this->input('leadlovers_sync') === LeadLoversInitialFailureCatalog::DASHBOARD_FILTER_NOT_SENT
+                ),
+            ],
             'page' => ['nullable', 'integer', 'min:1', 'max:1000000'],
         ];
     }
@@ -74,6 +82,7 @@ class FilterCorretorDashboardRequest extends FormRequest
             'resultado.in' => 'Selecione um resultado válido.',
             'leadlovers_sync.string' => 'Informe uma opção de envio válida.',
             'leadlovers_sync.in' => 'Selecione uma opção de envio válida.',
+            'leadlovers_sync.prohibited' => '“Sem resultado” considera apenas leads sincronizados. Selecione “Todos os envios” ou remova o filtro de resultado para buscar os não enviados.',
             'page.integer' => 'Informe uma página válida.',
             'page.min' => 'A página deve ser maior que zero.',
             'page.max' => 'A página informada excede o limite permitido.',
