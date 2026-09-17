@@ -86,6 +86,33 @@ function updateLeadDashboardLead(array $overrides = []): Lead
     ], $overrides));
 }
 
+it('renders the company link action for each lead according to its current company and permission', function (bool $allowed) {
+    $permissions = [CorretorPermissions::VIEW_LEADS, CorretorPermissions::VIEW_REAL_ESTATE_COMPANIES];
+    if ($allowed) {
+        $permissions[] = CorretorPermissions::LINK_LEAD_COMPANY;
+    }
+    $admin = updateLeadDashboardAdmin(['permissions' => $permissions]);
+    $company = updateLeadDashboardCompany();
+    $linked = updateLeadDashboardLead(['company_id' => $company->id]);
+    $unlinked = updateLeadDashboardLead();
+    $response = $this->actingAs($admin, 'admin')->get(route('Dashboard-Admin'))->assertOk();
+    $dom = updateLeadDashboardDom($response->getContent());
+
+    foreach ([$linked, $unlinked] as $lead) {
+        $buttons = $dom['xpath']->query('//*[@data-lead-company-trigger and @data-lead-id="'.$lead->id.'"]');
+        expect($buttons->length)->toBe($allowed ? 1 : 0);
+
+        if ($allowed) {
+            $button = $buttons->item(0);
+            expect(trim($button->textContent))->toBe($lead->company_id ? 'Substituir imobiliária' : 'Vincular imobiliária')
+                ->and($button->getAttribute('data-current-company-id'))->toBe((string) $lead->company_id)
+                ->and($button->getAttribute('class'))->toBe('btn admin-lead-link-button')
+                ->and($button->getAttribute('data-bs-target'))->toBe('#adminLeadCompanyModal')
+                ->and($button->getAttribute('data-link-url'))->toBe(route('admin.leads.company.store', $lead));
+        }
+    }
+})->with([true, false]);
+
 function updateLeadDashboardFailedLead(
     string $errorCode,
     int $httpStatus = 400,
@@ -954,6 +981,14 @@ it('keeps Editar alongside Corrigir and renders field-exclusive admin correction
 
     expect($phoneModal)
         ->toContain('Corrigir dados para envio')
+        ->toContain('leadlovers-correction-modal--attention')
+        ->toContain('Correção necessária')
+        ->toContain('Envio interrompido')
+        ->toContain('Lead selecionado')
+        ->toContain('bi-exclamation-triangle')
+        ->toContain('data-leadlovers-correction-icon')
+        ->toContain('<details class="leadlovers-correction-modal__technical">')
+        ->toContain('id="admin-leadlovers-correction-'.$phoneLead->id.'-telHint"')
         ->toContain('O telefone informado já está cadastrado na LeadLovers.')
         ->toContain('Salvar e reenviar')
         ->toContain('data-lead-id="'.$phoneLead->id.'"')
@@ -979,6 +1014,8 @@ it('keeps Editar alongside Corrigir and renders field-exclusive admin correction
         ->not->toContain('name="company_id"')
         ->and($emailModal)
         ->toContain('Corrigir dados para envio')
+        ->toContain('leadlovers-correction-modal--attention')
+        ->toContain('id="admin-leadlovers-correction-'.$emailLead->id.'-emailHint"')
         ->toContain('O e-mail informado já está cadastrado na LeadLovers')
         ->toContain('Salvar e reenviar')
         ->toContain('data-lead-id="'.$emailLead->id.'"')
@@ -1051,6 +1088,7 @@ it('uses the company correction route with the same exclusive modal contract', f
             'tel',
         ])
         ->and($modal)
+        ->not->toContain('leadlovers-correction-modal--attention')
         ->toContain('action="'.route(
             'dashboard.leads.leadlovers.correct',
             $phoneLead,

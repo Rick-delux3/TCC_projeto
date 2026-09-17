@@ -1,7 +1,9 @@
 import { initializeAdminLeadFields } from './admin-lead-fields';
+import { initializeLeadCompanyLink } from './admin-lead-company';
 
 document.addEventListener('DOMContentLoaded', function () {
     document.querySelectorAll('[data-admin-lead-fields]').forEach(initializeAdminLeadFields);
+    initializeLeadCompanyLink();
     const configElement = document.getElementById('dashboardUserConfig');
 
     let config = {};
@@ -302,6 +304,16 @@ document.addEventListener('DOMContentLoaded', function () {
         '.leadlovers-correction-form'
     );
 
+    function setCorrectionPendingControls(form, pending) {
+        const modal = form.closest('.leadlovers-correction-modal--attention');
+        if (!modal) return;
+
+        modal.querySelectorAll('[data-bs-dismiss="modal"]').forEach((button) => {
+            button.disabled = pending;
+        });
+        form.querySelector('[data-leadlovers-correction-icon]')?.classList.toggle('d-none', pending);
+    }
+
     function resetLeadLoversCorrectionForm(form) {
         const submitButton = form.querySelector(
             '[data-leadlovers-correction-submit]'
@@ -323,6 +335,7 @@ document.addEventListener('DOMContentLoaded', function () {
         }
 
         spinner?.classList.add('d-none');
+        setCorrectionPendingControls(form, false);
 
         if (label) {
             label.textContent = label.dataset.defaultLabel
@@ -365,6 +378,7 @@ document.addEventListener('DOMContentLoaded', function () {
             }
 
             spinner?.classList.remove('d-none');
+            setCorrectionPendingControls(form, true);
 
             if (label) {
                 label.dataset.defaultLabel ||= label.textContent.trim();
@@ -372,7 +386,9 @@ document.addEventListener('DOMContentLoaded', function () {
             }
 
             if (status) {
-                status.textContent = 'Salvando e reenviando...';
+                status.textContent = form.closest('.leadlovers-correction-modal--attention')
+                    ? 'Salvando a correção e solicitando um novo envio. Aguarde.'
+                    : 'Salvando e reenviando...';
             }
 
             window.setTimeout(function () {
@@ -392,6 +408,13 @@ document.addEventListener('DOMContentLoaded', function () {
     document.querySelectorAll(
         '.leadlovers-correction-modal'
     ).forEach(function (modalElement) {
+        modalElement.addEventListener('hide.bs.modal', function (event) {
+            if (modalElement.matches('.leadlovers-correction-modal--attention')
+                && modalElement.querySelector('.leadlovers-correction-form')?.dataset.submitting === 'true') {
+                event.preventDefault();
+            }
+        });
+
         modalElement.addEventListener('shown.bs.modal', function () {
             const preferredField = modalElement.querySelector(
                 '[data-leadlovers-correction-input].is-invalid, '
@@ -602,7 +625,7 @@ document.addEventListener('DOMContentLoaded', function () {
             return true;
         }
 
-        if (document.querySelector('.leadlovers-correction-modal.show')) {
+        if (document.querySelector('.leadlovers-correction-modal.show, .lead-company-modal.show')) {
             return true;
         }
 

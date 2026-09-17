@@ -2,20 +2,20 @@
 
 namespace App\Jobs;
 
-use App\Models\Lead;
 use App\Models\InsuranceAnalysis;
 use App\Models\InsuranceAnalysisBatch;
+use App\Models\Lead;
 use App\Services\Insurance\Providers\InsuranceProviderResolver;
 use Illuminate\Bus\Batch;
 use Illuminate\Bus\Queueable;
-use Illuminate\Support\Facades\Bus;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Str;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\Bus;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 use Throwable;
 
 class StartInsuranceAnalysesBatchJob implements ShouldQueue
@@ -23,6 +23,7 @@ class StartInsuranceAnalysesBatchJob implements ShouldQueue
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public int $tries = 2;
+
     public int $timeout = 120;
 
     private const PRODUCT_KEY = 'fianca_locaticia_residencial';
@@ -52,15 +53,15 @@ class StartInsuranceAnalysesBatchJob implements ShouldQueue
             'conjuge',
             'company',
             'locador',
-            'imobiliariaInformada',  
+            'imobiliariaInformada',
         ])->findOrFail($this->leadId);
 
         $existingBatch = InsuranceAnalysisBatch::query()
-        ->where('lead_id', $lead->id)
-        ->latest('id')
-        ->first();
+            ->where('lead_id', $lead->id)
+            ->latest('id')
+            ->first();
 
-        if($existingBatch) {
+        if ($existingBatch) {
             Log::warning(
                 'Análise inicial não iniciada porque o lead já possui lote.',
                 [
@@ -105,6 +106,8 @@ class StartInsuranceAnalysesBatchJob implements ShouldQueue
             $chargesAmount,
             $totalMonthlyAmount
         ) {
+            $lead = Lead::query()->lockForUpdate()->findOrFail($lead->id);
+
             /*
             |--------------------------------------------------------------------------
             | Lote operacional do lead
@@ -117,7 +120,7 @@ class StartInsuranceAnalysesBatchJob implements ShouldQueue
                 ->latest('id')
                 ->first();
 
-            if (!$batchModel) {
+            if (! $batchModel) {
                 $batchModel = InsuranceAnalysisBatch::create([
                     'lead_id' => $lead->id,
                     'company_id' => $lead->company_id,
@@ -137,7 +140,6 @@ class StartInsuranceAnalysesBatchJob implements ShouldQueue
                 'started_at' => now(),
                 'finished_at' => null,
             ]);
-            
 
             $analysisIds = [];
 
@@ -156,7 +158,7 @@ class StartInsuranceAnalysesBatchJob implements ShouldQueue
                     ->where('product', self::PRODUCT_KEY)
                     ->first();
 
-                if (!$analysis) {
+                if (! $analysis) {
                     $analysis = InsuranceAnalysis::create([
                         'insurance_analysis_batch_id' => $batchModel->id,
                         'lead_id' => $lead->id,

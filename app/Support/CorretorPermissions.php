@@ -16,6 +16,8 @@ class CorretorPermissions
 
     public const EDIT_LEADS = 'lead.editar';
 
+    public const LINK_LEAD_COMPANY = 'leads.vincular-imobiliaria';
+
     public const VIEW_TAGS = 'tags.visualizar';
 
     public const MANAGE_LEAD_TAGS = 'tags.gerenciar';
@@ -23,7 +25,7 @@ class CorretorPermissions
     public const VIEW_ANALYSIS = 'analises.visualizar';
 
     public const CREATE_ANALYSIS = 'analises.criar';
-   
+
     /**
      * Relação única entre as abilities usadas pelos Gates e as permissões
      * persistidas no cadastro do integrante. Dependências entre permissões
@@ -34,6 +36,7 @@ class CorretorPermissions
         return [
             'view-leads' => [self::VIEW_LEADS],
             'edit-leads' => [self::EDIT_LEADS],
+            'link-lead-company' => [self::LINK_LEAD_COMPANY],
             'view-analyses' => [self::VIEW_ANALYSIS],
             'create-analysis' => [self::CREATE_ANALYSIS],
             'view-real-estate-companies' => [self::VIEW_REAL_ESTATE_COMPANIES],
@@ -41,10 +44,10 @@ class CorretorPermissions
             'update-real-estate-company' => [self::UPDATE_REAL_ESTATE_COMPANIES],
             'delete-real-estate-company' => [self::DELETE_REAL_ESTATE_COMPANIES],
             'view-tags' => [
-                self::VIEW_TAGS
+                self::VIEW_TAGS,
             ],
             'manage-lead-tags' => [
-                self::MANAGE_LEAD_TAGS
+                self::MANAGE_LEAD_TAGS,
             ],
         ];
     }
@@ -54,6 +57,7 @@ class CorretorPermissions
         return [
             self::VIEW_LEADS => 'Visualizar leads/clientes',
             self::EDIT_LEADS => 'Editar dados de leads/clientes',
+            self::LINK_LEAD_COMPANY => 'Vincular lead a uma imobiliária',
             self::VIEW_ANALYSIS => 'Visualizar análises',
             self::CREATE_ANALYSIS => 'Solicitar análises',
             self::VIEW_REAL_ESTATE_COMPANIES => 'Visualizar imobiliárias',
@@ -77,6 +81,7 @@ class CorretorPermissions
             self::DELETE_REAL_ESTATE_COMPANIES => [self::VIEW_REAL_ESTATE_COMPANIES],
 
             self::EDIT_LEADS => [self::VIEW_LEADS],
+            self::LINK_LEAD_COMPANY => [self::VIEW_LEADS, self::VIEW_REAL_ESTATE_COMPANIES],
 
             self::CREATE_ANALYSIS => [self::VIEW_ANALYSIS],
 
@@ -132,6 +137,7 @@ class CorretorPermissions
                 'permissions' => [
                     self::VIEW_LEADS,
                     self::EDIT_LEADS,
+                    self::LINK_LEAD_COMPANY,
                 ],
             ],
             'analyses' => [
