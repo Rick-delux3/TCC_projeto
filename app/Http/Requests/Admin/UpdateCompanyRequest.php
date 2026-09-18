@@ -11,6 +11,8 @@ use Illuminate\Validation\Rule;
 
 class UpdateCompanyRequest extends FormRequest
 {
+    use ValidatesCompanyDepartments;
+
     /**
      * Determine if the user is authorized to make this request.
      */
@@ -25,6 +27,8 @@ class UpdateCompanyRequest extends FormRequest
 
     protected function prepareForValidation(): void
     {
+        $this->normalizeDepartments();
+
         $this->merge([
             'name' => $this->normalizeText($this->input('name')),
             'email' => mb_strtolower(
@@ -67,6 +71,7 @@ class UpdateCompanyRequest extends FormRequest
         }
 
         return [
+            ...$this->departmentRules(),
             'name' => [
                 'bail',
                 'required',
@@ -143,6 +148,7 @@ class UpdateCompanyRequest extends FormRequest
     public function messages(): array
     {
         return [
+            ...$this->departmentMessages(),
             'name.required' => 'Informe o nome da imobiliária.',
             'name.unique' => 'Já existe uma imobiliária com esse nome.',
 

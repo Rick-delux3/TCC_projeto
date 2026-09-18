@@ -21,6 +21,7 @@ class RegisterCompany
     public function __construct(
         private readonly CompanyTagService $companyTags,
         private readonly LeadLoversApiClient $leadLovers,
+        private readonly SyncCompanyDepartments $syncDepartments,
     ) {}
 
     public function execute(
@@ -60,6 +61,10 @@ class RegisterCompany
                 'password' => $password,
                 'company_id' => $company->id,
             ]);
+
+            if (array_key_exists('setores', $data)) {
+                $this->syncDepartments->execute($company, $data['setores']);
+            }
 
             if ($registeredBy !== null) {
                 CorretorActivityLog::query()->create([

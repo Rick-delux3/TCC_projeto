@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Actions\Companies\RegisterCompany;
+use App\Actions\Companies\SyncCompanyDepartments;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\StoreCompanyRequest as StoreAdminCompanyRequest;
 use App\Http\Requests\Admin\UpdateCompanyRequest;
@@ -40,6 +41,7 @@ class ImobiliariaController extends Controller
         $cnpjSearch = preg_replace('/\D+/', '', $search) ?? '';
 
         $companies = Imobiliaria::query()
+            ->with('setores:id,company_id,key,name,email')
             ->select([
                 'id',
                 'name',
@@ -224,6 +226,7 @@ class ImobiliariaController extends Controller
     public function update(
         UpdateCompanyRequest $request,
         Imobiliaria $company,
+        SyncCompanyDepartments $syncDepartments,
     ): RedirectResponse {
         $corretor = $request->user('admin');
 
@@ -239,6 +242,7 @@ class ImobiliariaController extends Controller
         try {
             $result = DB::transaction(function () use (
                 $company,
+                $syncDepartments,
                 $data,
                 $corretor,
                 $ip,
@@ -255,11 +259,16 @@ class ImobiliariaController extends Controller
                 $oldName = $companyToUpdate->name;
                 $oldStatus = (bool) $companyToUpdate->lead_form_active;
 
-                $companyToUpdate->fill($data);
+                $companyToUpdate->fill(collect($data)->except('setores')->all());
 
                 $changedFields = array_keys(
                     $companyToUpdate->getDirty()
                 );
+
+                if (array_key_exists('setores', $data)
+                    && $syncDepartments->execute($companyToUpdate, $data['setores'])) {
+                    $changedFields[] = 'setores';
+                }
 
                 if ($primaryUser !== null) {
                     $primaryUser->fill([

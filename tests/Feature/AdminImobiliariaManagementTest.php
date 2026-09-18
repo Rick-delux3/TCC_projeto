@@ -1,7 +1,10 @@
 <?php
 
+use App\Actions\Companies\SyncCompanyDepartments;
 use App\Models\Corretor;
+use App\Models\CorretorActivityLog;
 use App\Models\Imobiliaria;
+use App\Models\ImobiliariaSetor;
 use App\Models\Lead;
 use App\Models\LeadLoversTag;
 use App\Models\User;
@@ -117,6 +120,7 @@ it('renders the company index with its exact view contract and without internal 
             'inactive' => 1,
         ])
         ->assertViewHas('companies', fn ($companies) => $companies->total() === 2)
+        ->assertViewHas('companies', fn ($companies) => $companies->every(fn (Imobiliaria $company): bool => $company->relationLoaded('setores')))
         ->assertSeeText('Imobiliárias cadastradas')
         ->assertSeeText('Imobiliária Horizonte')
         ->assertSeeText('11.222.333/0001-81')
@@ -630,15 +634,18 @@ it('denies company updates without permission', function () {
         'name' => 'Imobiliária Protegida',
         'cnpj' => '11222333000181',
     ]);
+    $sector = ImobiliariaSetor::factory()->for($company, 'imobiliaria')->create();
 
     $this
         ->actingAs($unauthorized, 'admin')
         ->patch(route('admin.imobiliarias.update', $company), validCompanyUpdatePayload($company, [
             'name' => 'Alteração indevida',
+            'setores' => [],
         ]))
         ->assertForbidden();
 
     expect($company->fresh()->name)->toBe('Imobiliária Protegida');
+    $this->assertModelExists($sector);
 });
 
 it('rejects invalid update data and reopens the correct modal with submitted values', function () {
@@ -808,4 +815,170 @@ it('registers the management routes with the expected HTTP methods', function ()
         ->toBe(['PATCH'])
         ->and(Route::getRoutes()->getByName('admin.imobiliarias.destroy')?->methods())
         ->toBe(['DELETE']);
+});
+
+describe('company departments', function () {
+    beforeEach(function () {
+        Http::preventStrayRequests();
+        Notification::fake();
+        $this->actingAs(createImobiliariaAdmin([
+            'permissions' => ['imobiliarias.visualizar', 'imobiliarias.cadastrar', 'imobiliarias.editar'],
+        ]), 'admin');
+
+        $this->departmentTag = LeadLoversTag::query()->create([
+            'leadlovers_tag_id' => 9701,
+            'title' => 'Imobiliária com Setores',
+            'key' => 'imobiliaria_com_setores',
+            'active' => true,
+        ]);
+
+        $this->mock(CepService::class, function (MockInterface $mock) {
+            $mock->shouldReceive('find')->with('01001000')->andReturn([
+                'cep' => '01001000', 'cidade' => 'São Paulo', 'estado' => 'SP',
+            ]);
+        });
+    });
+
+    it('registers optional and custom departments without changing the login or welcome email', function () {
+        $this->post(route('admin.imobiliarias.store'), validAdminCompanyPayload(9701, [
+            'setores' => [
+                ['key' => ' COMERCIAL ', 'name' => ' Comercial / Vendas ', 'email' => ' COMERCIAL@EXAMPLE.TEST '],
+                ['key' => 'financeiro', 'name' => 'Financeiro', 'email' => 'comercial@example.test'],
+                ['key' => 'vistoria', 'name' => 'Vistoria', 'email' => ''],
+                ['key' => 'gerencia', 'name' => 'Gerência'],
+            ],
+        ]))->assertSessionHasNoErrors()->assertSessionHas('success');
+
+        $company = Imobiliaria::query()->where('email', 'nova.imobiliaria@example.test')->firstOrFail();
+        $sectors = $company->setores->keyBy('key');
+
+        expect($sectors)->toHaveCount(4)
+            ->and($sectors['comercial']->name)->toBe('Comercial / Vendas')
+            ->and($sectors['comercial']->email)->toBe('comercial@example.test')
+            ->and($sectors['financeiro']->email)->toBe('comercial@example.test')
+            ->and($sectors['vistoria']->email)->toBeNull()
+            ->and($sectors['gerencia']->email)->toBeNull()
+            ->and($sectors['comercial']->imobiliaria->is($company))->toBeTrue()
+            ->and($company->usuarios()->firstOrFail()->email)->toBe($company->email);
+
+        Notification::assertSentTo($company, CompanyAcessCodeNotification::class);
+        expect($company->routeNotificationFor('mail'))->toBe('nova.imobiliaria@example.test');
+    });
+
+    it('updates departments by stable key and scopes additions and removals to the company', function () {
+        $company = Imobiliaria::factory()->create();
+        $user = User::factory()->create(['company_id' => $company->id, 'name' => $company->name, 'email' => $company->email]);
+        $commercial = ImobiliariaSetor::factory()->for($company, 'imobiliaria')->create(['key' => 'comercial']);
+        $removed = ImobiliariaSetor::factory()->for($company, 'imobiliaria')->create(['key' => 'financeiro']);
+        $other = ImobiliariaSetor::factory()->create(['key' => 'comercial']);
+        $otherBefore = $other->fresh()->getAttributes();
+
+        $this->patch(route('admin.imobiliarias.update', $company), validCompanyUpdatePayload($company, [
+            'setores' => [
+                ['key' => 'comercial', 'name' => 'Atendimento comercial', 'email' => 'vendas@example.test'],
+                ['key' => 'vistoria', 'name' => 'Vistoria', 'email' => null],
+            ],
+        ]))->assertSessionHasNoErrors()->assertSessionHas('success');
+
+        expect($company->setores()->count())->toBe(2)
+            ->and($commercial->fresh())->name->toBe('Atendimento comercial')->email->toBe('vendas@example.test')
+            ->and($other->fresh()->getAttributes())->toBe($otherBefore)
+            ->and($user->fresh()->email)->toBe($company->email)
+            ->and($company->fresh()->email)->toBe($company->email);
+        $this->assertModelMissing($removed);
+
+        $log = CorretorActivityLog::query()->where('action', 'imobiliaria_updated')->sole();
+        expect($log->new_values['changed_fields'])->toBe(['setores'])
+            ->and($log->new_values['user_synchronized'])->toBeFalse();
+    });
+
+    it('preserves departments when omitted and removes them only with an explicit empty list', function () {
+        $sector = ImobiliariaSetor::factory()->create();
+        $company = $sector->imobiliaria;
+
+        $this->patch(route('admin.imobiliarias.update', $company), validCompanyUpdatePayload($company, [
+            'city' => 'Campinas',
+        ]))->assertSessionHasNoErrors()->assertSessionHas('success');
+        $this->assertModelExists($sector);
+
+        $this->patch(route('admin.imobiliarias.update', $company), validCompanyUpdatePayload($company->fresh(), [
+            'setores' => [],
+        ]))->assertSessionHasNoErrors()->assertSessionHas('success');
+        expect($company->setores()->count())->toBe(0);
+    });
+
+    it('does not rewrite or audit departments when their order alone changes', function () {
+        $company = Imobiliaria::factory()->create();
+        $sectors = ImobiliariaSetor::factory()->count(2)->for($company, 'imobiliaria')->create();
+        $before = $company->setores()->orderBy('id')->get()->toArray();
+        $this->travel(1)->minutes();
+
+        $this->patch(route('admin.imobiliarias.update', $company), validCompanyUpdatePayload($company, [
+            'setores' => $sectors->reverse()->values()->map->only(['key', 'name', 'email'])->all(),
+        ]))->assertSessionHasNoErrors()->assertSessionHas('info');
+
+        expect($company->setores()->orderBy('id')->get()->toArray())->toBe($before);
+        $this->assertDatabaseMissing('logs_atividades_corretores', ['action' => 'imobiliaria_updated']);
+    });
+
+    it('rejects invalid department data before saving', function (array $departments, string $error, string $operation) {
+        if ($operation === 'store') {
+            $response = $this->post(route('admin.imobiliarias.store'), validAdminCompanyPayload(9701, ['setores' => $departments]));
+            $this->assertDatabaseCount('imobiliarias', 0);
+        } else {
+            $company = Imobiliaria::factory()->create();
+            $response = $this->patch(route('admin.imobiliarias.update', $company), validCompanyUpdatePayload($company, ['setores' => $departments]));
+        }
+
+        $response->assertSessionHasErrors($error);
+        $this->assertDatabaseCount('imobiliaria_setores', 0);
+    })->with([
+        'duplicate keys after normalization' => [[
+            ['key' => 'COMERCIAL', 'name' => 'Comercial'],
+            ['key' => ' comercial ', 'name' => 'Vendas'],
+        ], 'setores.0.key'],
+        'invalid email' => [[['key' => 'comercial', 'name' => 'Comercial', 'email' => 'inválido']], 'setores.0.email'],
+        'missing name' => [[['key' => 'comercial', 'name' => ' ']], 'setores.0.name'],
+        'invalid key type' => [[['key' => ['comercial'], 'name' => 'Comercial']], 'setores.0.key'],
+        'foreign company and sector injection' => [[['key' => 'comercial', 'name' => 'Comercial', 'company_id' => 999, 'id' => 999]], 'setores.0'],
+        'malformed row' => [['comercial'], 'setores.0'],
+    ])->with(['store', 'update']);
+
+    it('rolls back company user and departments when department persistence fails', function (string $operation) {
+        $this->mock(SyncCompanyDepartments::class, function (MockInterface $mock) {
+            $mock->shouldReceive('execute')->once()->andReturnUsing(function (Imobiliaria $company, array $departments): bool {
+                (new SyncCompanyDepartments)->execute($company, $departments);
+                throw new RuntimeException('Department persistence failed.');
+            });
+        });
+
+        $departments = [['key' => 'comercial', 'name' => 'Comercial', 'email' => 'vendas@example.test']];
+
+        if ($operation === 'store') {
+            $this->withoutExceptionHandling();
+            expect(fn () => $this->post(route('admin.imobiliarias.store'), validAdminCompanyPayload(9701, [
+                'setores' => $departments,
+            ])))->toThrow(RuntimeException::class, 'Department persistence failed.');
+            $this->assertDatabaseCount('imobiliarias', 0);
+            $this->assertDatabaseCount('users', 0);
+            $this->assertDatabaseCount('imobiliaria_setores', 0);
+        } else {
+            $sector = ImobiliariaSetor::factory()->create(['key' => 'financeiro']);
+            $company = $sector->imobiliaria;
+            $user = User::factory()->create(['company_id' => $company->id, 'name' => $company->name, 'email' => $company->email]);
+
+            $this->patch(route('admin.imobiliarias.update', $company), validCompanyUpdatePayload($company, [
+                'email' => 'novo@example.test', 'setores' => $departments,
+            ]))->assertSessionHas('error');
+
+            expect($company->fresh()->email)->toBe($company->email)
+                ->and($user->fresh()->email)->toBe($company->email);
+            $this->assertModelExists($sector);
+            $this->assertDatabaseCount('imobiliaria_setores', 1);
+        }
+
+        $this->assertDatabaseMissing('logs_atividades_corretores', ['action' => 'imobiliaria_updated']);
+        $this->assertDatabaseMissing('logs_atividades_corretores', ['action' => 'imobiliaria_created']);
+        Notification::assertNothingSent();
+    })->with(['store', 'update']);
 });
