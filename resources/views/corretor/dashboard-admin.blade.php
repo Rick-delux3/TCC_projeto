@@ -1146,27 +1146,27 @@
                                 && $leadLoversFailure['fields'] !== [];
                         @endphp
 
-                        <article class="card border-0 shadow-sm rounded-5 lead-card lead-list-item {{ $resultTone['card'] }}">
-                            <div class="card-body p-3 p-lg-4">
-                                <div class="row g-3 align-items-center admin-lead-summary">
+                        <article class="card lead-card lead-list-item {{ $resultTone['card'] }}" aria-labelledby="admin-lead-name-{{ $lead->id }}">
+                            <div class="card-body">
+                                <div class="admin-lead-summary">
 
                                     {{-- Cliente --}}
-                                    <div class="col-12 col-md-6 col-xl-3">
-                                        <div class="d-flex align-items-center gap-3">
-                                            <div class="lead-avatar rounded-4 bg-primary text-white d-flex align-items-center justify-content-center fw-bold">
+                                    <div class="admin-lead-summary__identity">
+                                        <div class="d-flex align-items-start gap-3">
+                                            <div class="lead-avatar bg-primary text-white d-flex align-items-center justify-content-center fw-bold" aria-hidden="true">
                                                 {{ $leadInitials ?: 'C' }}
                                             </div>
 
                                             <div class="min-w-0">
-                                                <h3 class="h6 fw-bold mb-1 text-truncate">
+                                                <h3 class="admin-lead-name" id="admin-lead-name-{{ $lead->id }}">
                                                     {{ $leadName }}
                                                 </h3>
 
-                                                <div class="small text-muted text-truncate">
+                                                <div class="admin-lead-city">
                                                     {{ $leadCity }}
                                                 </div>
 
-                                                <span class="badge text-bg-info mt-1">
+                                                <span class="badge text-bg-info admin-lead-profile">
                                                     {{ $tipoSolicitanteLabel }}
                                                 </span>
                                             </div>
@@ -1174,90 +1174,110 @@
                                     </div>
 
                                     {{-- Vínculo/origem --}}
-                                    <div class="col-12 col-md-6 col-xl-3">
-                                        <div class="small text-muted">
+                                    <div class="admin-lead-summary__origin">
+                                        <div class="admin-lead-label">
                                             Vínculo/origem
                                         </div>
 
-                                        <div class="fw-semibold text-truncate">
-                                            {{ $imobiliariaName }}
+                                        <div class="admin-lead-company-name">
+                                            @if ($lead->company_id)
+                                                <i class="bi bi-link-45deg" aria-hidden="true"></i>
+                                            @endif
+                                            <span>{{ $lead->company_id ? $imobiliariaName : 'Sem imobiliária vinculada' }}</span>
                                         </div>
 
-                                        @if (($leadRequesterProfiles[$lead->id] ?? null) === 'imobiliaria_nao_cadastrada')
-                                            <div class="small text-muted">
-                                                Nome informado no formulário; sem vínculo cadastrado.
+                                        @if (! $lead->company_id && ($leadRequesterProfiles[$lead->id] ?? null) === 'imobiliaria_nao_cadastrada')
+                                            <div class="admin-lead-origin-detail">
+                                                Informada: {{ $imobiliariaName }}
                                             </div>
                                         @elseif (($leadRequesterProfiles[$lead->id] ?? null) === 'locador' && filled($lead->locador?->nome))
-                                            <div class="small text-muted text-truncate">
+                                            <div class="admin-lead-origin-detail">
                                                 Proprietário: {{ $lead->locador->nome }}
                                             </div>
                                         @endif
+
+                                        @can('link-lead-company')
+                                            <button
+                                                type="button"
+                                                class="btn admin-lead-link-button"
+                                                data-bs-toggle="modal"
+                                                data-bs-target="#adminLeadCompanyModal"
+                                                data-lead-company-trigger
+                                                data-lead-id="{{ $lead->id }}"
+                                                data-lead-name="{{ $leadName }}"
+                                                data-lead-profile="{{ $tipoSolicitanteLabel }}"
+                                                data-current-company-id="{{ $lead->company_id }}"
+                                                data-link-url="{{ route('admin.leads.company.store', $lead) }}"
+                                                aria-controls="adminLeadCompanyModal"
+                                                aria-haspopup="dialog"
+                                                aria-label="{{ $lead->company_id ? 'Substituir a imobiliária de '.$leadName : 'Vincular '.$leadName.' a uma imobiliária' }}"
+                                            >
+                                                <i class="bi {{ $lead->company_id ? 'bi-arrow-left-right' : 'bi-building-add' }}" aria-hidden="true"></i>
+                                                <span data-lead-company-trigger-label>{{ $lead->company_id ? 'Substituir imobiliária' : 'Vincular imobiliária' }}</span>
+                                            </button>
+                                            <span class="admin-lead-link-status" data-lead-company-status hidden role="status"></span>
+                                        @endcan
                                     </div>
 
-                                    {{-- E-mail --}}
-                                    <div class="col-12 col-md-6 col-xl-2">
-                                        <div class="small text-muted">
-                                            E-mail
+                                    {{-- Contato --}}
+                                    <div class="admin-lead-summary__contact">
+                                        <div class="admin-lead-label">Contato</div>
+                                        <div class="admin-lead-contact-line">
+                                            <i class="bi bi-envelope" aria-hidden="true"></i>
+                                            <span class="visually-hidden">E-mail:</span>
+                                            @if ($lead->email)
+                                                <a href="mailto:{{ $lead->email }}">{{ $leadEmail }}</a>
+                                            @else
+                                                <span>{{ $leadEmail }}</span>
+                                            @endif
                                             @if ($leadLoversFailureIsCorrectable && in_array('email', $leadLoversFailure['fields'], true))
                                                 <i class="bi bi-exclamation-circle admin-lead-field-error ms-1" role="img" aria-label="E-mail precisa de correção"></i>
                                             @endif
                                         </div>
-
-                                        @if ($lead->email)
-                                            <a href="mailto:{{ $lead->email }}" class="fw-semibold text-decoration-none text-truncate d-block">
-                                                {{ $leadEmail }}
-                                            </a>
-                                        @else
-                                            <span class="fw-semibold text-truncate d-block">
-                                                {{ $leadEmail }}
-                                            </span>
-                                        @endif
-                                    </div>
-
-                                    {{-- Telefone --}}
-                                    <div class="col-6 col-md-3 col-xl-1">
-                                        <div class="small text-muted">
-                                            Telefone
+                                        <div class="admin-lead-contact-line admin-lead-contact-line--phone">
+                                            <i class="bi bi-telephone" aria-hidden="true"></i>
+                                            <span class="visually-hidden">Telefone:</span>
+                                            @if ($lead->tel)
+                                                <a href="tel:{{ preg_replace('/[^\d+]/', '', $lead->tel) }}">{{ $leadPhone }}</a>
+                                            @else
+                                                <span>{{ $leadPhone }}</span>
+                                            @endif
                                             @if ($leadLoversFailureIsCorrectable && in_array('tel', $leadLoversFailure['fields'], true))
                                                 <i class="bi bi-exclamation-circle admin-lead-field-error ms-1" role="img" aria-label="Telefone precisa de correção"></i>
                                             @endif
                                         </div>
-
-                                        <div class="fw-semibold text-truncate">
-                                            {{ $leadPhone }}
-                                        </div>
                                     </div>
 
                                     {{-- Entrada --}}
-                                    <div class="col-6 col-md-3 col-xl-1">
-                                        <div class="small text-muted">
+                                    <div class="admin-lead-summary__entry">
+                                        <div class="admin-lead-label">
                                             Entrada
                                         </div>
 
-                                        <div class="fw-semibold">
+                                        <div class="admin-lead-date">
                                             {{ $leadDate }}
                                         </div>
 
-                                        <div class="small text-muted">
+                                        <div class="admin-lead-time">
                                             {{ $leadTime }}
                                         </div>
                                     </div>
 
                                     {{-- Resultado --}}
-                                    <div class="col-6 col-md-4 col-xl-1">
-                                        <div class="small text-muted">
+                                    <div class="admin-lead-summary__result">
+                                        <div class="admin-lead-label">
                                             Resultado
                                         </div>
 
-                                        <span class="badge {{ $resultTone['badge'] }}">
+                                        <span class="badge admin-lead-result {{ $resultTone['badge'] }}">
                                             <i class="bi {{ $resultTone['icon'] }} me-1" aria-hidden="true"></i>
                                             {{ $resultTone['label'] }}
                                         </span>
                                     </div>
 
                                     {{-- Botões --}}
-                                    <div class="col-12 admin-lead-actions">
-                                        <div class="flex flex-wrap items-center justify-end gap-2">
+                                    <div class="admin-lead-actions">
+                                        <div class="d-flex flex-wrap gap-2">
                                         @can('edit-leads')
                                             @if ($leadLoversFailureIsCorrectable)
                                                 <button
@@ -1317,8 +1337,8 @@
                                     </div>
                                 </div>
 
-                                <div class="d-flex flex-wrap align-items-center gap-2 mt-3 pt-3 border-top">
-                                    <span class="small text-muted">
+                                <div class="admin-lead-sync-row">
+                                    <span class="admin-lead-label mb-0">
                                         LeadLovers:
                                     </span>
                                     @include('partials.leadlovers-sync-status', [
@@ -1328,7 +1348,7 @@
 
                                     @if ($visibleTags->isNotEmpty())
                                         @foreach ($visibleTags as $tag)
-                                            <span class="badge rounded-pill text-bg-light border text-muted">
+                                            <span class="badge admin-lead-tag">
                                                 {{ $tag }}
                                             </span>
                                         @endforeach
@@ -1407,6 +1427,100 @@
         @endcan
     </div>
 </div>
+
+@can('link-lead-company')
+    <div class="modal fade lead-company-modal" id="adminLeadCompanyModal" tabindex="-1"
+        aria-labelledby="adminLeadCompanyModalTitle" aria-describedby="adminLeadCompanyModalDescription" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+            <form class="modal-content" method="POST" data-lead-company-form data-no-loader novalidate>
+                @csrf
+                <div class="modal-header">
+                    <div class="lead-company-modal__heading">
+                        <span class="lead-company-modal__icon" aria-hidden="true"><i class="bi bi-building-add"></i></span>
+                        <div>
+                            <span class="lead-company-modal__eyebrow">Vínculo do lead</span>
+                            <h2 class="modal-title" id="adminLeadCompanyModalTitle">Vincular imobiliária</h2>
+                        </div>
+                    </div>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar vínculo de imobiliária"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="lead-company-modal__lead">
+                        <span class="lead-company-modal__lead-label">Lead selecionado</span>
+                        <strong data-link-lead-name></strong>
+                        <span data-link-lead-profile></span>
+                    </div>
+                    <p id="adminLeadCompanyModalDescription" class="lead-company-modal__description">
+                        A imobiliária selecionada terá acesso a este lead e às suas análises.
+                        A origem, as tags e os resultados serão mantidos.
+                    </p>
+
+                    <div data-link-fields>
+                        <label class="form-label" for="adminLeadCompanySearch">Buscar imobiliária</label>
+                        <div class="lead-company-search">
+                            <i class="bi bi-search" aria-hidden="true"></i>
+                            <input type="search" class="form-control" id="adminLeadCompanySearch" data-link-search
+                                placeholder="Nome ou cidade da imobiliária" autocomplete="off" maxlength="150"
+                                aria-controls="adminLeadCompanyOptions" aria-describedby="adminLeadCompanyCount">
+                        </div>
+                        <p class="lead-company-count" id="adminLeadCompanyCount" data-link-count role="status" aria-atomic="true"></p>
+                        <fieldset id="adminLeadCompanyOptions" class="lead-company-options" aria-describedby="adminLeadCompanyError">
+                            <legend class="visually-hidden">Selecione a imobiliária que receberá o vínculo</legend>
+                            @forelse (($simulationCompanies ?? collect()) as $linkCompany)
+                                <label class="lead-company-option" data-link-option>
+                                    <input type="radio" name="company_id" value="{{ $linkCompany->id }}"
+                                        data-company-name="{{ $linkCompany->name }}" required>
+                                    <span class="lead-company-option__icon" aria-hidden="true"><i class="bi bi-buildings"></i></span>
+                                    <span class="lead-company-option__text">
+                                        <strong>{{ $linkCompany->name }}</strong>
+                                        @if (filled($linkCompany->city))
+                                            <span>{{ $linkCompany->city }}@if (filled($linkCompany->state)) · {{ $linkCompany->state }}@endif</span>
+                                        @else
+                                            <span>Imobiliária cadastrada</span>
+                                        @endif
+                                    </span>
+                                    <i class="bi bi-check-circle-fill lead-company-option__check" aria-hidden="true"></i>
+                                </label>
+                            @empty
+                                <div class="lead-company-empty">
+                                    <i class="bi bi-buildings" aria-hidden="true"></i>
+                                    <strong>Nenhuma imobiliária disponível</strong>
+                                    <span>É necessário ter uma imobiliária ativa cadastrada para solicitar o vínculo.</span>
+                                </div>
+                            @endforelse
+                            <div class="lead-company-empty" data-link-no-results hidden>
+                                <i class="bi bi-search" aria-hidden="true"></i>
+                                <strong>Nenhuma imobiliária encontrada</strong>
+                                <span>Tente outro nome ou cidade.</span>
+                            </div>
+                        </fieldset>
+                        <div class="lead-company-selection" data-link-selection hidden>
+                            <i class="bi bi-link-45deg" aria-hidden="true"></i>
+                            <span>Vincular a <strong data-link-selected-name></strong></span>
+                        </div>
+                    </div>
+
+                    <p class="lead-company-error" id="adminLeadCompanyError" data-link-error role="alert" tabindex="-1" hidden></p>
+                    <div class="lead-company-confirmation" data-link-confirmation role="status" tabindex="-1" hidden>
+                        <span class="lead-company-confirmation__icon" aria-hidden="true"><i class="bi bi-clock-history"></i></span>
+                        <h3>Solicitação enviada</h3>
+                        <p>O vínculo com <strong data-link-confirmed-name></strong> está aguardando processamento.</p>
+                        <p class="lead-company-confirmation__hint">O card será atualizado quando o vínculo for concluído. Você pode fechar esta janela.</p>
+                    </div>
+                    <span class="visually-hidden" data-link-announcement role="status" aria-live="polite"></span>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn lead-company-cancel" data-bs-dismiss="modal" data-link-cancel>Cancelar</button>
+                    <button type="submit" class="btn lead-company-submit" data-link-submit disabled>
+                        <i class="bi bi-building-add" aria-hidden="true"></i>
+                        <span data-link-submit-label>Solicitar vínculo</span>
+                    </button>
+                    <button type="button" class="btn lead-company-submit" data-bs-dismiss="modal" data-link-done hidden>Concluir</button>
+                </div>
+            </form>
+        </div>
+    </div>
+@endcan
 
 @if ($canAccessSimulationForms)
     {{-- Seleção global do formulário de novo lead --}}
@@ -2260,6 +2374,7 @@
                 'correctionRoute' => $adminLeadLoversCorrectionRoute($lead),
                 'correctionModalIdPrefix' => 'adminLeadLoversCorrectionModal',
                 'correctionFieldIdPrefix' => 'admin-leadlovers-correction',
+                'correctionAppearance' => 'attention',
                 'isCorrectionValidationContext' => $isLeadLoversCorrectionValidationContext,
                 'correctionErrors' => $leadLoversCorrectionErrors,
             ])

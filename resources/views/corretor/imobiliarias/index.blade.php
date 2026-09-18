@@ -57,7 +57,7 @@
 @endphp
 
 <div class="dashboard-shell real-estate-admin real-estate-index-page">
-    <div class="container-fluid px-3 px-lg-4 py-4 py-lg-5">
+    <div class="container-fluid company-index-container px-3 px-lg-4 py-4">
         @if (session('error'))
             <div class="alert alert-danger border-0 rounded-4 shadow-sm mb-4" role="alert" aria-live="assertive">
                 <div class="d-flex gap-3 align-items-start">
@@ -88,10 +88,10 @@
             </div>
         @endif
 
-        <section class="company-page-hero mb-4" aria-labelledby="companies-page-title" data-reveal>
-            <div class="company-page-hero__content">
+        <header class="company-index-header mb-4" aria-labelledby="companies-page-title" data-reveal>
+            <div>
                 <nav aria-label="Navegação estrutural" class="mb-3">
-                    <ol class="breadcrumb company-breadcrumb mb-0">
+                    <ol class="breadcrumb mb-0">
                         <li class="breadcrumb-item">
                             <a href="{{ route('Dashboard-Admin') }}">Dashboard</a>
                         </li>
@@ -99,7 +99,7 @@
                     </ol>
                 </nav>
 
-                <div class="d-flex flex-column flex-xl-row align-items-xl-end justify-content-between gap-4">
+                <div class="d-flex flex-column flex-xl-row align-items-xl-center justify-content-between gap-3">
                     <div class="company-page-hero__copy">
                         <span class="company-eyebrow">
                             <i class="bi bi-buildings" aria-hidden="true"></i>
@@ -113,18 +113,18 @@
                     </div>
 
                     @can('create-real-estate-company')
-                        <a href="{{ route('admin.imobiliarias.create') }}" class="btn company-primary-action">
+                        <a href="{{ route('admin.imobiliarias.create') }}" class="btn btn-primary text-white company-index-create">
                             <i class="bi bi-plus-lg" aria-hidden="true"></i>
                             Cadastrar imobiliária
                         </a>
                     @endcan
                 </div>
             </div>
-        </section>
+        </header>
 
-        <section class="row g-3 mb-4" aria-label="Resumo das imobiliárias">
-            <div class="col-12 col-sm-4" data-reveal style="--reveal-delay: 80ms">
-                <article class="card company-summary-card company-summary-card--total h-100">
+        <section class="company-overview-strip mb-4" aria-label="Resumo das imobiliárias" data-reveal data-reveal-delay="40">
+            <div class="company-overview-item">
+                <article class="company-summary-card company-summary-card--total h-100">
                     <div class="card-body">
                         <div class="company-summary-card__icon" aria-hidden="true">
                             <i class="bi bi-buildings"></i>
@@ -138,8 +138,8 @@
                 </article>
             </div>
 
-            <div class="col-6 col-sm-4" data-reveal style="--reveal-delay: 150ms">
-                <article class="card company-summary-card company-summary-card--active h-100">
+            <div class="company-overview-item">
+                <article class="company-summary-card company-summary-card--active h-100">
                     <div class="card-body">
                         <div class="company-summary-card__icon" aria-hidden="true">
                             <i class="bi bi-check-circle"></i>
@@ -153,8 +153,8 @@
                 </article>
             </div>
 
-            <div class="col-6 col-sm-4" data-reveal style="--reveal-delay: 220ms">
-                <article class="card company-summary-card company-summary-card--inactive h-100">
+            <div class="company-overview-item">
+                <article class="company-summary-card company-summary-card--inactive h-100">
                     <div class="card-body">
                         <div class="company-summary-card__icon" aria-hidden="true">
                             <i class="bi bi-pause-circle"></i>
@@ -169,7 +169,8 @@
             </div>
         </section>
 
-        <section class="card company-filter-card mb-4" aria-labelledby="company-filter-title" data-reveal style="--reveal-delay: 120ms">
+        <div class="company-directory" data-reveal data-reveal-delay="80">
+        <section class="company-filter-card" aria-labelledby="company-filter-title">
             <div class="card-body p-3 p-lg-4">
                 <div class="d-flex align-items-center justify-content-between gap-3 mb-3">
                     <div>
@@ -181,8 +182,8 @@
                     @endif
                 </div>
 
-                <form method="GET" action="{{ route('admin.imobiliarias.index') }}" class="row g-3 align-items-end">
-                    <div class="col-12 col-lg-7">
+                <form method="GET" action="{{ route('admin.imobiliarias.index') }}" class="company-directory-filters">
+                    <div class="company-directory-search">
                         <label for="company-search" class="form-label fw-semibold">Buscar</label>
                         <div class="input-group company-input-group">
                             <span class="input-group-text" aria-hidden="true"><i class="bi bi-search"></i></span>
@@ -199,7 +200,7 @@
                         </div>
                     </div>
 
-                    <div class="col-12 col-sm-6 col-lg-2">
+                    <div class="company-directory-status">
                         <label for="company-status" class="form-label fw-semibold">Status</label>
                         <select id="company-status" name="status" class="form-select">
                             <option value="">Todos</option>
@@ -208,8 +209,8 @@
                         </select>
                     </div>
 
-                    <div class="col-12 col-sm-6 col-lg-3">
-                        <div class="d-grid d-sm-flex justify-content-lg-end gap-2">
+                    <div class="company-directory-filter-actions">
+                        <div class="d-flex gap-2">
                             <button type="submit" class="btn btn-primary flex-fill">
                                 <i class="bi bi-funnel me-1" aria-hidden="true"></i>
                                 Aplicar filtros
@@ -224,7 +225,7 @@
         </section>
 
         @if ($companies->isEmpty())
-            <section class="card company-empty-state" aria-live="polite" data-reveal style="--reveal-delay: 180ms">
+            <section class="company-empty-state" aria-live="polite">
                 <div class="card-body text-center px-3 py-5">
                     <span class="company-empty-state__icon" aria-hidden="true">
                         <i class="bi {{ $hasFilters ? 'bi-search' : 'bi-buildings' }}"></i>
@@ -254,7 +255,7 @@
                 </div>
             </section>
         @else
-            <section class="card company-list-card" aria-labelledby="company-list-title" data-reveal style="--reveal-delay: 180ms">
+            <section class="company-list-card" aria-labelledby="company-list-title">
                 <div class="card-body p-0">
                     <div class="company-list-card__header">
                         <div>
@@ -266,8 +267,9 @@
                         </div>
                     </div>
 
-                    <div class="d-none d-lg-block table-responsive">
+                    <div class="d-none d-lg-block table-responsive" role="region" aria-label="Tabela de imobiliárias" tabindex="0">
                         <table class="table company-table align-middle mb-0">
+                            <caption class="visually-hidden">Imobiliárias cadastradas: contatos, localização, código de acesso e status dos formulários.</caption>
                             <thead>
                                 <tr>
                                     <th scope="col">Imobiliária</th>
@@ -373,6 +375,7 @@
                                                             title="Editar"
                                                         >
                                                             <i class="bi bi-pencil-square" aria-hidden="true"></i>
+                                                            <span>Editar</span>
                                                         </button>
                                                     @endcan
 
@@ -513,14 +516,18 @@
                         @endforeach
                     </div>
 
-                    @if ($companies->hasPages())
-                        <div class="company-pagination" aria-label="Paginação de imobiliárias">
-                            {{ $companies->onEachSide(1)->links('pagination::bootstrap-5') }}
-                        </div>
-                    @endif
+                    <footer class="company-directory-footer">
+                        <p class="mb-0">{{ number_format($companies->total(), 0, ',', '.') }} {{ $companies->total() === 1 ? 'imobiliária' : 'imobiliárias' }}</p>
+                        @if ($companies->hasPages())
+                            <div class="company-pagination" aria-label="Paginação de imobiliárias">
+                                {{ $companies->onEachSide(1)->links('pagination::bootstrap-5') }}
+                            </div>
+                        @endif
+                    </footer>
                 </div>
             </section>
         @endif
+        </div>
     </div>
 
     @can('update-real-estate-company')

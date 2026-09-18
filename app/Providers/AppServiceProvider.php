@@ -72,6 +72,10 @@ class AppServiceProvider extends ServiceProvider
         });
 
         Gate::before(function ($user, string $ability) {
+            if ($ability === 'link-lead-company' && ! $user instanceof Corretor) {
+                return false;
+            }
+
             if (
                 $ability === 'create-analysis'
                 && ! config('features.insurance_analysis.enabled', false)

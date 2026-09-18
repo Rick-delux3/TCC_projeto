@@ -1,8 +1,31 @@
+import { buildDepartmentPayload } from './company-departments';
+
 const onlyNumbers = (value, limit) => String(value ?? '')
     .replace(/\D/g, '')
     .slice(0, limit);
 
-const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const motionPreference = window.matchMedia('(prefers-reduced-motion: reduce)');
+let prefersReducedMotion = motionPreference.matches;
+const activeMotions = new Set();
+
+motionPreference.addEventListener('change', ({ matches }) => {
+    prefersReducedMotion = matches;
+    if (matches) {
+        activeMotions.forEach((animation) => animation.cancel());
+    }
+});
+
+const enterContent = (element, duration = 260, delay = 0) => {
+    if (prefersReducedMotion || !element.animate || element.matches(':focus-within')) return;
+    const animation = element.animate([
+        { opacity: 0.4, transform: 'translateY(6px)' },
+        { opacity: 1, transform: 'translateY(0)' },
+    ], { duration, delay, easing: 'cubic-bezier(0.2, 0.65, 0.3, 1)', fill: 'backwards' });
+    activeMotions.add(animation);
+    const cleanup = () => activeMotions.delete(animation);
+    animation.addEventListener('finish', cleanup, { once: true });
+    animation.addEventListener('cancel', cleanup, { once: true });
+};
 
 const animateCounter = (counter) => {
     if (counter.dataset.counted === 'true') {
@@ -17,11 +40,15 @@ const animateCounter = (counter) => {
         return;
     }
 
-    const duration = Math.min(1100, 620 + (target * 12));
+    const duration = Math.min(420, 240 + (target * 8));
     const startedAt = performance.now();
     counter.textContent = '0';
 
     const update = (now) => {
+        if (prefersReducedMotion) {
+            counter.textContent = new Intl.NumberFormat('pt-BR').format(target);
+            return;
+        }
         const progress = Math.min((now - startedAt) / duration, 1);
         const easedProgress = 1 - ((1 - progress) ** 3);
         const currentValue = Math.round(target * easedProgress);
@@ -37,14 +64,13 @@ const animateCounter = (counter) => {
 
 const revealElement = (element) => {
     element.classList.add('is-revealed');
+    enterContent(element, 300, Number(element.dataset.revealDelay ?? 0));
     element.querySelectorAll('[data-count-up]').forEach(animateCounter);
 };
 
 const revealElements = document.querySelectorAll('.real-estate-admin [data-reveal]');
 
 if (revealElements.length > 0 && !prefersReducedMotion && 'IntersectionObserver' in window) {
-    document.documentElement.classList.add('company-motion-enabled');
-
     const revealObserver = new IntersectionObserver((entries, observer) => {
         entries.forEach((entry) => {
             if (!entry.isIntersecting) {
@@ -55,8 +81,8 @@ if (revealElements.length > 0 && !prefersReducedMotion && 'IntersectionObserver'
             observer.unobserve(entry.target);
         });
     }, {
-        threshold: 0.12,
-        rootMargin: '0px 0px -6% 0px',
+        threshold: 0,
+        rootMargin: '0px',
     });
 
     revealElements.forEach((element) => revealObserver.observe(element));
@@ -427,16 +453,110 @@ if (registrationForm) {
     statusInput?.addEventListener('change', updateStatusState);
     updateStatusState();
 
-    registrationForm.querySelectorAll('.company-form-section').forEach((section) => {
-        section.addEventListener('focusin', () => section.classList.add('is-active'));
-        section.addEventListener('focusout', () => {
-            window.setTimeout(() => {
-                if (!section.contains(document.activeElement)) {
-                    section.classList.remove('is-active');
-                }
-            }, 0);
+    const sections = [...registrationForm.querySelectorAll('.company-form-section')];
+    const stepLinks = [...document.querySelectorAll('[data-company-step]')];
+    const activateSection = (section) => {
+        sections.forEach((item) => item.classList.toggle('is-active', item === section));
+        stepLinks.forEach((link) => {
+            if (link.dataset.companyStep === section.id) {
+                link.setAttribute('aria-current', 'step');
+            } else {
+                link.removeAttribute('aria-current');
+            }
+        });
+    };
+
+    sections.forEach((section) => {
+        section.addEventListener('focusin', () => activateSection(section));
+    });
+    stepLinks.forEach((link) => {
+        link.addEventListener('click', (event) => {
+            const section = sections.find((item) => item.id === link.dataset.companyStep);
+            if (!section) return;
+            event.preventDefault();
+            section.focus({ preventScroll: true });
+            section.scrollIntoView({ behavior: prefersReducedMotion ? 'instant' : 'smooth', block: 'start' });
+            activateSection(section);
         });
     });
+
+    const departmentToggle = registrationForm.querySelector('#use-department-emails');
+    const departmentFields = registrationForm.querySelector('#company-department-fields');
+    const departmentList = registrationForm.querySelector('[data-department-list]');
+    const addDepartment = registrationForm.querySelector('[data-add-department]');
+    const departmentFeedback = registrationForm.querySelector('[data-department-feedback]');
+    const departmentTemplate = document.querySelector('#company-department-template');
+
+    if (departmentToggle && departmentFields && departmentList && addDepartment && departmentTemplate) {
+        let nextDepartmentId = departmentList.children.length;
+        const updateDepartmentState = () => {
+            departmentFields.disabled = !departmentToggle.checked;
+            departmentFields.hidden = !departmentToggle.checked;
+            addDepartment.disabled = departmentList.children.length >= 50;
+        };
+
+        departmentToggle.addEventListener('change', () => {
+            updateDepartmentState();
+            if (departmentToggle.checked) enterContent(departmentFields, 200);
+        });
+        updateDepartmentState();
+        window.addEventListener('pageshow', updateDepartmentState);
+
+        addDepartment.addEventListener('click', () => {
+            if (departmentList.children.length >= 50) return;
+            const row = departmentTemplate.content.firstElementChild.cloneNode(true);
+            const id = nextDepartmentId++;
+            ['key', 'name', 'email'].forEach((field) => {
+                const input = row.querySelector(`[data-department-${field}]`);
+                input.name = `setores[${id}][${field}]`;
+                input.id = `department-${field}-${id}`;
+                row.querySelector(`[data-department-${field}-label]`)?.setAttribute('for', input.id);
+            });
+            departmentList.append(row);
+            updateDepartmentState();
+            enterContent(row, 180);
+            row.querySelector('[data-department-name]').focus();
+            departmentFeedback.textContent = 'Setor adicionado. Informe o nome e, se desejar, o email.';
+        });
+
+        departmentList.addEventListener('click', (event) => {
+            const button = event.target.closest('[data-remove-department]');
+            if (!button) return;
+            const row = button.closest('[data-department-row]');
+            const nextInput = row.nextElementSibling?.querySelector('[data-department-name]');
+            row.remove();
+            updateDepartmentState();
+            (nextInput ?? addDepartment).focus();
+            departmentFeedback.textContent = 'Setor removido.';
+        });
+
+        registrationForm.addEventListener('formdata', (event) => {
+            const departments = [...departmentList.querySelectorAll('[data-department-row]')].map((row) => ({
+                key: row.querySelector('[data-department-key]').value,
+                name: row.querySelector('[data-department-name]').value,
+                email: row.querySelector('[data-department-email]').value,
+                custom: row.dataset.custom === 'true',
+            }));
+
+            [...event.formData.keys()].filter((key) => /^setores(?:\[|$)/.test(key))
+                .forEach((key) => event.formData.delete(key));
+
+            buildDepartmentPayload(departments, departmentToggle.checked).forEach((department, index) => {
+                Object.entries(department).forEach(([field, value]) => {
+                    event.formData.append(`setores[${index}][${field}]`, value);
+                });
+            });
+        });
+    }
+
+    registrationForm.addEventListener('invalid', (event) => {
+        const section = event.target.closest('.company-form-section');
+        if (section) activateSection(section);
+    }, true);
+    const firstInvalidField = registrationForm.querySelector('.form-control.is-invalid, .form-select.is-invalid');
+    if (firstInvalidField && !firstInvalidField.disabled) {
+        firstInvalidField.focus();
+    }
 
     if (cnpjInput) {
         cnpjInput.value = formatCompanyDocument(cnpjInput.value);

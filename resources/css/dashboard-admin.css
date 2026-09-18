@@ -1,3 +1,5 @@
+@import './admin-lead-company.css';
+
 [data-admin-lead-fields] [hidden] { display: none !important; }
 [data-admin-lead-fields] .card { min-width: 0; }
 [data-admin-lead-fields] .form-control, [data-admin-lead-fields] .form-select { min-width: 0; }
@@ -468,31 +470,6 @@
 
 .dashboard-shell[data-dashboard-theme="dark"] .admin-lead-field-error {
     color: #ff8b96;
-}
-
-@media (min-width: 1400px) {
-    .admin-lead-summary {
-        display: grid;
-        grid-template-columns: minmax(0, 1.6fr) minmax(0, 1.4fr) minmax(0, 1.2fr) minmax(0, 0.85fr) minmax(0, 0.75fr) minmax(0, 0.95fr) auto;
-        gap: 1rem;
-        margin: 0;
-    }
-
-    .admin-lead-summary > div {
-        min-width: 0;
-        width: auto;
-        margin-top: 0;
-        padding: 0;
-    }
-
-    .admin-lead-summary > div + div {
-        padding-left: 1rem;
-        border-left: 1px solid rgba(100, 130, 180, 0.2);
-    }
-
-    .admin-lead-actions > .flex {
-        flex-wrap: nowrap;
-    }
 }
 
 @media (prefers-reduced-motion: reduce) {

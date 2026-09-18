@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Admin\ImobiliariaController;
+use App\Http\Controllers\Admin\LeadCompanyController;
 use App\Http\Controllers\AdminLeadTagController;
 use App\Http\Controllers\Auth\CompanyNewPasswordController;
 use App\Http\Controllers\Auth\CompanyPasswordResetLinkController;
@@ -117,6 +118,10 @@ Route::prefix('/Dashboard')->group(function () {
         Route::post('/leads/{lead}', [DashboardLeadController::class, 'adminUpdate'])
             ->middleware('can:edit-leads')
             ->name('admin.leads.update');
+
+        Route::post('/leads/{lead}/imobiliaria', LeadCompanyController::class)
+            ->middleware(['can:link-lead-company', 'throttle:10,1'])
+            ->name('admin.leads.company.store');
 
         Route::post('/leads/{lead}/leadlovers/corrigir', [DashboardLeadController::class, 'adminCorrectLeadLoversFailure'])
             ->middleware(['can:edit-leads', 'throttle:5,1'])

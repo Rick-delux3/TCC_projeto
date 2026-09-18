@@ -257,6 +257,13 @@ class CorretorEquipeController extends Controller
         $permissions = array_values(array_unique($permissions));
 
         if (! CorretorPermissions::selectionSatisfiesDependencies($permissions)) {
+            if (in_array(CorretorPermissions::LINK_LEAD_COMPANY, $permissions, true)
+                && array_diff(CorretorPermissions::dependenciesFor(CorretorPermissions::LINK_LEAD_COMPANY), $permissions) !== []) {
+                throw ValidationException::withMessages([
+                    'permissions' => 'Para vincular leads a imobiliárias, selecione também “Visualizar leads/clientes” e “Visualizar imobiliárias”.',
+                ]);
+            }
+
             throw ValidationException::withMessages([
                 'permissions' => 'Para cadastrar, editar ou remover imobiliárias, selecione também “Visualizar imobiliárias”.',
             ]);

@@ -7,6 +7,7 @@ use Illuminate\Auth\Passwords\CanResetPassword;
 use Illuminate\Contracts\Auth\CanResetPassword as CanResetPasswordContract;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Str;
 use Override;
@@ -39,6 +40,11 @@ class Imobiliaria extends Model implements CanResetPasswordContract
     public function users()
     {
         return $this->usuarios();
+    }
+
+    public function setores(): HasMany
+    {
+        return $this->hasMany(ImobiliariaSetor::class, 'company_id');
     }
 
     public function usuarios()

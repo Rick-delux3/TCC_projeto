@@ -14,6 +14,8 @@ use Illuminate\Validation\Validator;
 
 class StoreCompanyRequest extends FormRequest
 {
+    use ValidatesCompanyDepartments;
+
     private ?array $resolvedCep = null;
 
     public function authorize(): bool
@@ -29,6 +31,8 @@ class StoreCompanyRequest extends FormRequest
      */
     protected function prepareForValidation(): void
     {
+        $this->normalizeDepartments();
+
         $companyTags = app(CompanyTagService::class);
 
         $cep = $this->somenteNumeros($this->input('cep'));
@@ -166,7 +170,7 @@ class StoreCompanyRequest extends FormRequest
             ];
         }
 
-        return $rules;
+        return array_merge($rules, $this->departmentRules());
     }
 
     public function after(): array
@@ -193,6 +197,7 @@ class StoreCompanyRequest extends FormRequest
     public function messages(): array
     {
         return [
+            ...$this->departmentMessages(),
             'website.size' => 'Requisição inválida.',
 
             'leadlovers_tag_id.required' => 'Informe o nome da imobiliária.',
