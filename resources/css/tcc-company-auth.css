@@ -1,0 +1,270 @@
+body.auth-layout-body.tcc-company-auth-body {
+    background: #f4f7f9;
+}
+
+body.auth-layout-body .auth-layout-main.tcc-company-auth-main {
+    min-height: calc(100dvh - 108px);
+    padding: 32px 24px 48px;
+    background: #f4f7f9;
+}
+
+.tcc-company-auth {
+    width: 100%;
+    min-height: calc(100dvh - 188px);
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.tcc-company-auth .client-auth-shell,
+.tcc-company-auth .client-register-shell {
+    width: min(100%, 1100px);
+    min-height: 600px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    overflow: hidden;
+    border: 0;
+    border-radius: 0;
+    background: #ffffff;
+    box-shadow: 0 25px 48px rgb(15 23 42 / 20%);
+}
+
+.tcc-company-auth .client-register-shell {
+    min-height: 760px;
+}
+
+.tcc-company-auth .client-auth-aside,
+.tcc-company-auth .client-register-aside {
+    min-height: inherit;
+    background: #030133;
+}
+
+.tcc-company-auth .client-auth-aside > img:not(.auth-media-logo),
+.tcc-company-auth .client-register-aside > img:not(.auth-media-logo) {
+    min-height: inherit;
+    opacity: 0.3;
+    filter: grayscale(1);
+    mix-blend-mode: luminosity;
+}
+
+.tcc-company-auth .auth-media-logo {
+    display: none;
+}
+
+.tcc-company-auth .client-auth-overlay,
+.tcc-company-auth .client-register-overlay {
+    justify-content: space-between;
+    padding: 56px;
+    background: rgb(3 1 51 / 80%);
+}
+
+.tcc-company-auth .client-badge,
+.tcc-company-auth .client-auth-kicker,
+.tcc-company-auth .client-register-kicker {
+    border-radius: 0;
+    background: #fff0f6;
+    color: #fd1e6e;
+    font-size: 0.625rem;
+    letter-spacing: 0.14em;
+}
+
+.tcc-company-auth .client-badge {
+    padding: 6px 12px;
+    background: #fd1e6e;
+    color: #ffffff;
+}
+
+.tcc-company-auth .client-auth-overlay h2,
+.tcc-company-auth .client-register-overlay h2 {
+    max-width: 18rem;
+    font-size: clamp(1.875rem, 3vw, 2.25rem);
+    line-height: 1.15;
+}
+
+.tcc-company-auth .client-auth-overlay p,
+.tcc-company-auth .client-register-overlay p {
+    max-width: 21rem;
+    color: #d1d5db;
+    font-size: 0.875rem;
+    line-height: 1.65;
+}
+
+.tcc-company-auth .client-auth-points,
+.tcc-company-auth .client-register-points {
+    display: grid;
+    gap: 16px;
+}
+
+.tcc-company-auth .client-auth-points span,
+.tcc-company-auth .client-register-points span {
+    min-height: 52px;
+    padding: 14px 16px;
+    border: 1px solid rgb(255 255 255 / 20%);
+    border-radius: 0;
+    background: rgb(255 255 255 / 5%);
+    backdrop-filter: blur(8px);
+    font-size: 0.875rem;
+}
+
+.tcc-company-auth .client-auth-points span::before,
+.tcc-company-auth .client-register-points span::before {
+    width: 8px;
+    height: 8px;
+    flex-basis: 8px;
+    border-radius: 0;
+    background: #fd1e6e;
+    box-shadow: none;
+}
+
+.tcc-company-auth .tcc-company-auth-aside-note {
+    align-self: end;
+    margin: 0;
+    color: rgb(255 255 255 / 50%);
+    font-size: 0.75rem;
+}
+
+.tcc-company-auth .client-auth-card,
+.tcc-company-auth .client-register-card {
+    padding: 56px;
+    border-radius: 0;
+    background: #ffffff;
+}
+
+.tcc-company-auth .client-auth-header,
+.tcc-company-auth .client-register-header {
+    margin-bottom: 36px;
+}
+
+.tcc-company-auth .client-auth-header h1,
+.tcc-company-auth .client-register-header h1 {
+    color: #030133;
+    font-size: 1.5rem;
+}
+
+.tcc-company-auth .client-auth-header p,
+.tcc-company-auth .client-register-header p {
+    margin-bottom: 0;
+    color: #6b7280;
+}
+
+.tcc-company-auth .client-field {
+    margin-bottom: 24px;
+}
+
+.tcc-company-auth .client-label {
+    margin-bottom: 8px;
+    color: #030133;
+    font-size: 0.875rem;
+}
+
+.tcc-company-auth .client-input {
+    min-height: 48px;
+    padding: 12px 14px;
+    border: 2px solid #9ca3af !important;
+    border-radius: 0 !important;
+    background: #f9fafb !important;
+}
+
+.tcc-company-auth .client-input:focus {
+    border-color: #030133 !important;
+    box-shadow: 0 0 0 1px #030133 !important;
+    background: #ffffff !important;
+}
+
+.tcc-company-auth .client-input-wrap .client-input--with-icon {
+    padding-left: 42px;
+}
+
+.tcc-company-auth .password-toggle-button {
+    border-radius: 0;
+    background: transparent;
+    color: #4b5563;
+}
+
+.tcc-company-auth .password-toggle-button:hover,
+.tcc-company-auth .password-toggle-button:focus-visible {
+    background: transparent;
+    color: #030133;
+    box-shadow: none;
+}
+
+.tcc-company-auth .client-recovery-box {
+    padding: 12px;
+    border: 2px solid #e5e7eb;
+    border-radius: 0;
+    background: #f9fafb;
+}
+
+.tcc-company-auth .client-recovery-box a {
+    color: #146fb6;
+}
+
+.tcc-company-auth .client-submit,
+.tcc-company-auth .client-outline-link {
+    min-height: 52px;
+    border-radius: 0;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+.tcc-company-auth .client-submit {
+    background: #030133;
+}
+
+.tcc-company-auth .client-submit:hover {
+    background: #146fb6;
+    transform: none;
+}
+
+.tcc-company-auth .client-outline-link {
+    margin-top: 12px;
+    border: 2px solid #e5e7eb;
+}
+
+.tcc-company-auth .client-outline-link:hover {
+    border-color: #030133;
+    background: #f9fafb;
+    color: #030133;
+}
+
+@media (max-width: 767px) {
+    body.auth-layout-body .auth-layout-main.tcc-company-auth-main {
+        padding: 20px 12px 32px;
+    }
+
+    .tcc-company-auth .client-auth-shell,
+    .tcc-company-auth .client-register-shell {
+        grid-template-columns: 1fr;
+    }
+
+    .tcc-company-auth .client-auth-aside,
+    .tcc-company-auth .client-register-aside {
+        min-height: 310px;
+    }
+
+    .tcc-company-auth .client-auth-aside > img:not(.auth-media-logo),
+    .tcc-company-auth .client-register-aside > img:not(.auth-media-logo) {
+        min-height: 310px;
+    }
+
+    .tcc-company-auth .client-auth-overlay,
+    .tcc-company-auth .client-register-overlay,
+    .tcc-company-auth .client-auth-card,
+    .tcc-company-auth .client-register-card {
+        padding: 32px 24px;
+    }
+
+    .tcc-company-auth .client-auth-points,
+    .tcc-company-auth .client-register-points,
+    .tcc-company-auth .tcc-company-auth-aside-note {
+        display: none;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .tcc-company-auth,
+    .tcc-company-auth * {
+        animation: none !important;
+        transition: none !important;
+    }
+}

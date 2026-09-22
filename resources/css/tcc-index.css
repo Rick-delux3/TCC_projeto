@@ -1,0 +1,83 @@
+.nvs-index {
+    font-family: var(--font-principal), "Sansation", sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+.nvs-index [x-cloak] {
+    display: none !important;
+}
+
+.nvs-index footer {
+    display: block;
+}
+
+.nvs-index section[id] {
+    scroll-margin-top: 124px;
+}
+
+@media (min-width: 1024px) {
+    .nvs-index section[id] {
+        scroll-margin-top: 80px;
+    }
+}
+
+.nvs-index a:focus-visible,
+.nvs-index button:focus-visible {
+    outline: 3px solid #7eb4df;
+    outline-offset: 5px;
+}
+
+.nvs-index .nvs-index-float {
+    animation: nvs-index-float 7.5s ease-in-out infinite;
+}
+
+.nvs-index .card-shine {
+    position: relative;
+    overflow: hidden;
+}
+
+.nvs-index .card-shine::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: -150%;
+    width: 50%;
+    height: 100%;
+    background: linear-gradient(to right, transparent, rgb(255 255 255 / 50%), transparent);
+    transform: skewX(-25deg);
+    transition: left 680ms ease-in-out;
+    z-index: 10;
+    pointer-events: none;
+}
+
+.nvs-index .card-shine:hover::before {
+    left: 200%;
+}
+
+@keyframes nvs-index-float {
+    0%, 100% {
+        transform: translateY(0);
+    }
+
+    50% {
+        transform: translateY(-10px);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    html:has(.nvs-index) {
+        scroll-behavior: auto;
+    }
+
+    .nvs-index *,
+    .nvs-index *::before,
+    .nvs-index *::after {
+        animation: none !important;
+        transition: none !important;
+    }
+
+    .nvs-index .card-shine::before {
+        display: none;
+    }
+}

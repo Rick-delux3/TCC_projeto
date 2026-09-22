@@ -1,7 +1,10 @@
 @extends('layout-inicial.app')
 
+@section('body-class', config('branding.active', 'tcc') === 'tcc' ? 'tcc-company-auth-body' : '')
+@section('main-class', config('branding.active', 'tcc') === 'tcc' ? 'tcc-company-auth-main' : '')
+
 @section('content')
-<div class="client-auth-page">
+<div class="client-auth-page tcc-company-auth">
     <section class="client-auth-shell">
         <aside class="client-auth-aside">
             <img src="{{ asset('imgs/segure-chave-a-mao-ao-ar-livre.jpg') }}" alt="Acesso da imobiliária">
@@ -20,6 +23,8 @@
                     <span>Acompanhamento de leads</span>
                     <span>Fluxo seguro para sua equipe</span>
                 </div>
+
+                <p class="tcc-company-auth-aside-note">&copy; {{ now()->year }} NVS Seguros. Ambiente seguro e monitorado.</p>
             </div>
         </aside>
 

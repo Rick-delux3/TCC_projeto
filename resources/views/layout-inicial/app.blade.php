@@ -10,6 +10,9 @@
     @vite(['resources/css/app.css', 'resources/js/app.js'])
     @vite(['resources/css/form-register.css'])
     @vite(['resources/css/branding.css'])
+    @if (config('branding.active', 'tcc') === 'tcc')
+        @vite(['resources/css/tcc-company-auth.css'])
+    @endif
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400..900&family=Press+Start+2P&family=Roboto+Condensed:ital,wght@0,100..900;1,100..900&family=Sansation:ital,wght@0,300;0,400;0,700;1,300;1,400;1,700&family=TASA+Explorer:wght@400..800&display=swap" rel="stylesheet">
@@ -29,7 +32,7 @@
     </script>
 </head>
 
-<body class="auth-layout-body" data-brand="{{ config('branding.active', 'tcc') }}">
+<body class="auth-layout-body @yield('body-class')" data-brand="{{ config('branding.active', 'tcc') }}">
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js" integrity="sha384-FKyoEForCGlyvwx9Hj09JcYn3nv7wiPVlz7YYwJrWVcXK/BmnVDxM+D2scQbITxI" crossorigin="anonymous"></script>
 
     @if ($errors->any())
@@ -76,7 +79,7 @@
 
    @include('layout-inicial.partials.header_app')
 
-    <main class="auth-layout-main">
+    <main class="auth-layout-main @yield('main-class')">
         @yield('content')
     </main>
 

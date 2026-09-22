@@ -1,6 +1,9 @@
-@extends('layout-inicial.index-app')
+@extends(config('branding.active', 'tcc') === 'tcc' ? 'layout-inicial.tcc-index-app' : 'layout-inicial.index-app')
 
 @section('content')
+@if (config('branding.active', 'tcc') === 'tcc')
+    @include('layout-inicial.partials.tcc-index-content')
+@else
 
 <section id="hero" class="relative overflow-hidden bg-[linear-gradient(180deg,#08173f_0%,#10316b_54%,#146FB6_100%)] text-zinc-100">
     <div class="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.12),transparent_28%),radial-gradient(circle_at_82%_18%,rgba(253,30,110,0.18),transparent_18%),radial-gradient(circle_at_50%_100%,rgba(210,234,255,0.18),transparent_26%),linear-gradient(180deg,rgba(3,1,51,0.14)_0%,rgba(3,1,51,0.08)_100%)]"></div>
@@ -175,4 +178,5 @@
         <p class="text-blue-100/70">&copy; {{ now()->year }} Todos os direitos reservados.</p>
     </div>
 </footer>
+@endif
 @endsection

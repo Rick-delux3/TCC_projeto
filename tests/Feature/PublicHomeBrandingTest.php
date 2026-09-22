@@ -25,6 +25,76 @@ it('keeps the legacy index visually isolated from the active brand', function (s
         ->assertDontSee('data-brand=', false);
 })->with(['tcc', 'client']);
 
+it('renders the reference landing page only for the tcc index', function (string $profile) {
+    config([
+        'features.public_index_enabled' => true,
+        'branding.active' => $profile,
+    ]);
+
+    $response = $this->get(route('index'))->assertOk();
+
+    if ($profile === 'tcc') {
+        $response->assertSee('nvs-index', false)
+            ->assertSee('id="solucoes"', false)
+            ->assertSee('id="recursos"', false)
+            ->assertSee('id="suporte"', false)
+            ->assertSee('https://wa.me/5511999999999', false)
+            ->assertDontSee('images.unsplash.com', false)
+            ->assertDontSee('cdn.tailwindcss.com', false);
+    } else {
+        $response->assertSee('id="hero"', false)
+            ->assertDontSee('nvs-index', false)
+            ->assertDontSee('id="suporte"', false);
+    }
+})->with(['tcc', 'client']);
+
+it('connects the tcc landing actions and serves local images with valid section anchors', function () {
+    config([
+        'features.public_index_enabled' => true,
+        'branding.active' => 'tcc',
+    ]);
+
+    $html = $this->get(route('index'))->assertOk()->getContent();
+    $document = new DOMDocument;
+    @$document->loadHTML('<?xml encoding="UTF-8">'.$html);
+    $xpath = new DOMXPath($document);
+
+    foreach ([
+        'Começar agora' => 'empresa.register.form',
+        'Simular seguro' => 'simulation.start',
+        'Ir para o painel' => 'empresa.login',
+        'Entrar' => 'empresa.login',
+        'Área do Cliente' => 'empresa.login',
+    ] as $label => $routeName) {
+        $link = $xpath->query('//a[normalize-space(.)="'.$label.'"]')->item(0);
+
+        expect($link)->not->toBeNull()
+            ->and($link->getAttribute('href'))->toBe(route($routeName));
+    }
+
+    foreach ($xpath->query('//a[starts-with(@href, "#")]') as $anchor) {
+        $target = substr($anchor->getAttribute('href'), 1);
+
+        expect($target)->not->toBeEmpty()
+            ->and($xpath->query('//*[@id="'.$target.'"]')->length)->toBe(1);
+    }
+
+    foreach ($xpath->query('//img') as $image) {
+        $path = parse_url($image->getAttribute('src'), PHP_URL_PATH);
+
+        expect($image->getAttribute('alt'))->not->toBeEmpty()
+            ->and(is_file(public_path(ltrim($path, '/'))))->toBeTrue();
+    }
+
+    $navigation = $xpath->query('//header/nav | //header//nav')->item(0);
+
+    expect($xpath->query('//header//button')->length)->toBe(0)
+        ->and($xpath->query('//header//nav')->length)->toBe(1)
+        ->and($navigation->getAttribute('class'))->not->toContain('hidden')
+        ->and($xpath->query('.//a[starts-with(@href, "#")]', $navigation)->length)->toBe(4)
+        ->and($xpath->query('//*[@id="nvs-mobile-menu"]')->length)->toBe(0);
+});
+
 it('renders the new public page with the selected brand', function (
     string $profile,
     string $expectedLogo,
