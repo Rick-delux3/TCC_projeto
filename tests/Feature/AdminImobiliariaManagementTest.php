@@ -311,19 +311,23 @@ it('applies the inherited validation rules to administrative registration', func
     $this->assertDatabaseCount('users', 0);
 });
 
-it('registers the company and its user in the administrative flow', function (string $document, string $normalizedDocument) {
+it('registers the company and its user in the administrative flow', function (string $document, string $normalizedDocument, bool $typedName = false) {
     Notification::fake();
+    Http::preventStrayRequests();
+    Http::fake();
 
     $creator = createImobiliariaAdmin([
         'permissions' => ['imobiliarias.visualizar', 'imobiliarias.cadastrar'],
     ]);
 
-    $tag = LeadLoversTag::query()->create([
-        'leadlovers_tag_id' => 702,
-        'title' => 'Imobiliária Nova Parceira',
-        'key' => 'imobiliaria_nova_parceira',
-        'active' => true,
-    ]);
+    if (! $typedName) {
+        LeadLoversTag::query()->create([
+            'leadlovers_tag_id' => 702,
+            'title' => 'Imobiliária Nova Parceira',
+            'key' => 'imobiliaria_nova_parceira',
+            'active' => true,
+        ]);
+    }
 
     $this->mock(CepService::class, function (MockInterface $mock) {
         $mock->shouldReceive('find')
@@ -339,7 +343,9 @@ it('registers the company and its user in the administrative flow', function (st
         ->actingAs($creator, 'admin')
         ->post(
             route('admin.imobiliarias.store'),
-            validAdminCompanyPayload($tag->leadlovers_tag_id, [
+            validAdminCompanyPayload(702, [
+                'leadlovers_tag_id' => $typedName ? null : 702,
+                'company_name' => $typedName ? 'Nova Parceira' : null,
                 'lead_form_active' => '0',
                 'cnpj' => $document,
             ]),
@@ -362,7 +368,8 @@ it('registers the company and its user in the administrative flow', function (st
         ->name->toBe('Imobiliária Nova Parceira')
         ->cep->toBe('01001000')
         ->lead_form_active->toBeFalse()
-        ->leadlovers_tag_id->toBe(702)
+        ->leadlovers_tag_id->toBe($typedName ? null : 702)
+        ->leadlovers_tag_name->toBe($typedName ? null : 'Imobiliária Nova Parceira')
         ->cnpj->toBe($normalizedDocument)
         ->and($user->company_id)->toBe($company->id)
         ->and(Hash::check('senha1234', $company->password))->toBeTrue()
@@ -386,12 +393,15 @@ it('registers the company and its user in the administrative flow', function (st
         fn (CompanyAcessCodeNotification $notification): bool => $notification->companyName === $company->name
             && $notification->accessCode === $company->lead_access_code,
     );
+    $this->assertDatabaseCount('lead_lovers_tags', $typedName ? 0 : 1);
+    Http::assertNothingSent();
 })->with([
     ['11.222.333/0001-81', '11222333000181'],
     ['11222333000181', '11222333000181'],
     ['529.982.247-25', '52998224725'],
     ['52998224725', '52998224725'],
     ['012.345.678-90', '01234567890'],
+    'typed company name' => ['11.222.333/0001-81', '11222333000181', true],
 ]);
 
 it('rejects invalid company documents without creating a company or sending mail', function (mixed $document) {

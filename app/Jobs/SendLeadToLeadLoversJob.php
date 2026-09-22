@@ -93,7 +93,7 @@ class SendLeadToLeadLoversJob implements ShouldQueue
         if ($remoteLeadId === null) {
             $mainTagId = $this->mainTagIdForLead($lead);
 
-            if ($mainTagId === null) {
+            if ($mainTagId === null && $lead->tipo_solicitante !== 'imobiliaria_cadastrada') {
                 Log::warning('Tag principal nao encontrada para o lead.', [
                     'lead_id' => $lead->id,
                     'tipo_solicitante' => $lead->tipo_solicitante,
@@ -138,7 +138,7 @@ class SendLeadToLeadLoversJob implements ShouldQueue
     private function resolveRemoteLead(
         LeadLoversApiClient $leadLovers,
         Lead $lead,
-        int $mainTagId
+        ?int $mainTagId
     ): ?array {
         $phase = $this->currentPhase($lead);
 
@@ -730,7 +730,7 @@ class SendLeadToLeadLoversJob implements ShouldQueue
     /**
      * @return array<string, mixed>
      */
-    private function creationPayload(Lead $lead, int $mainTagId): array
+    private function creationPayload(Lead $lead, ?int $mainTagId): array
     {
         return [
             'staticFields' => [
@@ -745,7 +745,7 @@ class SendLeadToLeadLoversJob implements ShouldQueue
                         ?? $lead->imobiliaria
                 ),
             ],
-            'tags' => [$mainTagId],
+            ...($mainTagId === null ? [] : ['tags' => [$mainTagId]]),
             'dynamicFields' => $this->dynamicFieldsForLead($lead),
         ];
     }
@@ -1336,10 +1336,6 @@ class SendLeadToLeadLoversJob implements ShouldQueue
 
     private function mainTagIdForLead(Lead $lead): ?int
     {
-        if ($lead->tipo_solicitante === 'imobiliaria_cadastrada') {
-            return $this->companyTagId($lead);
-        }
-
         $tagKey = match ($lead->tipo_solicitante) {
             'locatario' => 'locatario',
             'imobiliaria_nao_cadastrada' => 'imobiliaria_morna',
@@ -1354,28 +1350,6 @@ class SendLeadToLeadLoversJob implements ShouldQueue
         return $this->positiveInteger(
             LeadLoversTag::query()
                 ->where('key', $tagKey)
-                ->where('active', true)
-                ->value('leadlovers_tag_id')
-        );
-    }
-
-    private function companyTagId(Lead $lead): ?int
-    {
-        if (! $lead->company) {
-            return null;
-        }
-
-        $companyTagId = $this->positiveInteger(
-            $lead->company->leadlovers_tag_id
-        );
-
-        if ($companyTagId !== null) {
-            return $companyTagId;
-        }
-
-        return $this->positiveInteger(
-            LeadLoversTag::query()
-                ->where('title', $lead->company->name)
                 ->where('active', true)
                 ->value('leadlovers_tag_id')
         );

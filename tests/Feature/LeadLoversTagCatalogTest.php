@@ -1,9 +1,12 @@
 <?php
 
 use App\Actions\Companies\RegisterCompany;
+use App\Models\Imobiliaria;
 use App\Models\LeadLoversTag;
+use App\Models\User;
 use App\Services\CompanyTagService;
 use App\Support\ManualLeadResultTags;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\RateLimiter;
@@ -42,14 +45,6 @@ function leadLoversStageTwoCompanyData(array $overrides = []): array
         'password' => 'senha1234',
         'lead_form_active' => true,
     ], $overrides);
-}
-
-function leadLoversStageTwoNameExistsResponse(): array
-{
-    return [
-        'success' => false,
-        'error' => ['code' => 'NAME_EXISTS'],
-    ];
 }
 
 beforeEach(function () {
@@ -222,95 +217,44 @@ it('fails tag synchronization safely for provider errors', function (
     ],
 ]);
 
-it('creates a remote company tag with the new contract', function () {
-    $remoteTag = [
-        'id' => 301,
-        'name' => 'Imobiliária Nova Casa',
-    ];
-    Http::fake([
-        LEADLOVERS_STAGE_TWO_API_URL.'/tags/' => Http::response(
-            $remoteTag,
-            200
-        ),
-    ]);
-
+it('creates a company and its internal user without a remote tag', function () {
     $registration = app(RegisterCompany::class)->execute(
         leadLoversStageTwoCompanyData()
     );
 
     expect($registration['company'])
         ->name->toBe('Imobiliária Nova Casa')
-        ->leadlovers_tag_id->toBe(301)
-        ->and($registration['user']->company_id)
-        ->toBe($registration['company']->id);
+        ->leadlovers_tag_id->toBeNull()
+        ->leadlovers_tag_name->toBeNull()
+        ->and($registration['user']->company_id)->toBe($registration['company']->id)
+        ->and($registration['user']->name)->toBe($registration['company']->name);
 
-    $stored = LeadLoversTag::query()
-        ->where('leadlovers_tag_id', 301)
-        ->firstOrFail();
-
-    expect($stored)
-        ->title->toBe('Imobiliária Nova Casa')
-        ->key->toBe('imobiliaria_nova_casa')
-        ->active->toBeTrue()
-        ->and($stored->raw_payload)->toBe($remoteTag);
-
-    Http::assertSent(function (Request $request): bool {
-        return $request->method() === 'POST'
-            && $request->url() === LEADLOVERS_STAGE_TWO_API_URL.'/tags/'
-            && $request->data() === ['name' => 'Imobiliária Nova Casa']
-            && $request->hasHeader(
-                'x-api-token',
-                LEADLOVERS_STAGE_TWO_TOKEN
-            )
-            && parse_url($request->url(), PHP_URL_QUERY) === null
-            && ! str_contains(
-                json_encode($request->data()),
-                LEADLOVERS_STAGE_TWO_TOKEN
-            );
-    });
-    Http::assertSentCount(1);
+    $this->assertDatabaseCount('lead_lovers_tags', 0);
+    Http::assertNothingSent();
 });
 
-it('reuses only one exact normalized tag after NAME_EXISTS', function () {
-    $matchedTag = leadLoversStageTwoRemoteTag(
-        401,
-        'Imobiliária Nova Casa'
-    );
-    Http::fake([
-        LEADLOVERS_STAGE_TWO_API_URL.'/tags/' => Http::sequence()
-            ->push(leadLoversStageTwoNameExistsResponse(), 400)
-            ->push([
-                $matchedTag,
-                leadLoversStageTwoRemoteTag(
-                    402,
-                    'Imobiliária Nova Casa Premium'
-                ),
-            ], 200),
+it('uses an imported company name without changing or querying the remote catalog', function () {
+    $tag = LeadLoversTag::query()->create([
+        'leadlovers_tag_id' => 401,
+        'title' => 'Imobiliária Importada',
+        'key' => 'imobiliaria_importada',
+        'active' => true,
+        'raw_payload' => leadLoversStageTwoRemoteTag(401, 'Imobiliária Importada'),
     ]);
+    $original = $tag->fresh()->getAttributes();
 
     $registration = app(RegisterCompany::class)->execute(
-        leadLoversStageTwoCompanyData()
+        leadLoversStageTwoCompanyData(['leadlovers_tag_id' => 401])
     );
-    $stored = LeadLoversTag::query()
-        ->where('leadlovers_tag_id', 401)
-        ->firstOrFail();
 
-    expect($registration['company']->leadlovers_tag_id)->toBe(401)
-        ->and($stored->title)->toBe('Imobiliária Nova Casa')
-        ->and($stored->key)->toBe('imobiliaria_nova_casa')
-        ->and($stored->active)->toBeTrue()
-        ->and($stored->raw_payload)->toBe($matchedTag);
+    expect($registration['company'])
+        ->name->toBe('Imobiliária Importada')
+        ->leadlovers_tag_id->toBe(401)
+        ->leadlovers_tag_name->toBe('Imobiliária Importada')
+        ->and($tag->fresh()->getAttributes())->toBe($original)
+        ->and(app(CompanyTagService::class)->hasAvailableTags())->toBeFalse();
 
-    $requests = Http::recorded()
-        ->map(fn (array $record): Request => $record[0])
-        ->values();
-
-    expect($requests)->toHaveCount(2)
-        ->and($requests[0]->method())->toBe('POST')
-        ->and($requests[0]->data())
-        ->toBe(['name' => 'Imobiliária Nova Casa'])
-        ->and($requests[1]->method())->toBe('GET')
-        ->and($requests[1]->data())->toBe([]);
+    Http::assertNothingSent();
 });
 
 it('normalizes conservatively without fuzzy or accent-insensitive matching', function () {
@@ -377,34 +321,23 @@ it('rejects a selected tag that is not a company tag', function () {
     Http::assertNothingSent();
 });
 
-it('does not reuse a protected commercial id after NAME_EXISTS', function () {
+it('preserves a protected commercial identity when registering another company', function () {
     $commercialTag = LeadLoversTag::query()->create([
         'leadlovers_tag_id' => 454,
         'title' => 'Fechado aluguel',
         'key' => 'fechado_aluguel',
         'active' => true,
     ]);
-    Http::fake([
-        LEADLOVERS_STAGE_TWO_API_URL.'/tags/' => Http::sequence()
-            ->push(leadLoversStageTwoNameExistsResponse(), 400)
-            ->push([
-                leadLoversStageTwoRemoteTag(
-                    $commercialTag->leadlovers_tag_id,
-                    'Imobiliária Nova Casa'
-                ),
-            ], 200),
-    ]);
+    $original = $commercialTag->fresh()->getAttributes();
 
-    expect(fn () => app(RegisterCompany::class)->execute(
+    $registration = app(RegisterCompany::class)->execute(
         leadLoversStageTwoCompanyData()
-    ))->toThrow(ValidationException::class);
+    );
 
-    expect($commercialTag->refresh())
-        ->title->toBe('Fechado aluguel')
-        ->key->toBe('fechado_aluguel')
-        ->active->toBeTrue();
-    $this->assertDatabaseCount('imobiliarias', 0);
-    Http::assertSentCount(2);
+    expect($registration['company']->leadlovers_tag_id)->toBeNull()
+        ->and($commercialTag->fresh()->getAttributes())->toBe($original);
+    $this->assertDatabaseCount('lead_lovers_tags', 1);
+    Http::assertNothingSent();
 });
 
 it('keeps a colliding generated key null instead of aborting synchronization', function () {
@@ -429,163 +362,106 @@ it('keeps a colliding generated key null instead of aborting synchronization', f
         ->title->toBe('Imobiliária Casa-Azul');
 });
 
-it('fails closed when NAME_EXISTS cannot be reconciled safely', function (
-    array $remoteTags
-) {
+it('rejects duplicate internal names without creating records or calling the API', function (string $source) {
+    if ($source === 'company') {
+        Imobiliaria::factory()->create(['name' => 'Imobiliária Nova Casa']);
+    } else {
+        LeadLoversTag::query()->create([
+            'leadlovers_tag_id' => 501,
+            'title' => 'Imobiliária Nova Casa',
+            'active' => false,
+        ]);
+    }
+
+    try {
+        app(RegisterCompany::class)->execute(leadLoversStageTwoCompanyData());
+        $this->fail('Expected the duplicate company name to be rejected.');
+    } catch (ValidationException $exception) {
+        expect($exception->errors())->toHaveKey('company_name');
+    }
+
+    $this->assertDatabaseCount('imobiliarias', $source === 'company' ? 1 : 0);
+    $this->assertDatabaseCount('lead_lovers_tags', $source === 'company' ? 0 : 1);
+    $this->assertDatabaseCount('users', 0);
+    Http::assertNothingSent();
+})->with(['company', 'inactive catalog tag']);
+
+it('registers locally regardless of provider errors without sending requests', function (int $status) {
     Http::fake([
-        LEADLOVERS_STAGE_TWO_API_URL.'/tags/' => Http::sequence()
-            ->push(leadLoversStageTwoNameExistsResponse(), 400)
-            ->push($remoteTags, 200),
+        LEADLOVERS_STAGE_TWO_API_URL.'/*' => Http::response([
+            'error' => ['code' => 'INTERNAL_SERVER_ERROR'],
+        ], $status),
     ]);
 
-    $exception = null;
+    $registration = app(RegisterCompany::class)->execute(
+        leadLoversStageTwoCompanyData()
+    );
+
+    expect($registration['company']->leadlovers_tag_id)->toBeNull();
+    $this->assertDatabaseCount('imobiliarias', 1);
+    $this->assertDatabaseCount('users', 1);
+    $this->assertDatabaseCount('lead_lovers_tags', 0);
+    Http::assertNothingSent();
+})->with([401, 429, 500, 502]);
+
+it('rejects unavailable selected catalog entries without calling the API', function (string $reason) {
+    $tag = LeadLoversTag::query()->create([
+        'leadlovers_tag_id' => 601,
+        'title' => 'Imobiliária Importada',
+        'active' => $reason !== 'inactive',
+    ]);
+    if ($reason === 'assigned') {
+        Imobiliaria::factory()->create([
+            'name' => $tag->title,
+            'leadlovers_tag_id' => $tag->leadlovers_tag_id,
+        ]);
+    }
 
     try {
         app(RegisterCompany::class)->execute(
-            leadLoversStageTwoCompanyData()
+            leadLoversStageTwoCompanyData([
+                'leadlovers_tag_id' => $reason === 'missing' ? 999 : $tag->leadlovers_tag_id,
+            ])
         );
-    } catch (ValidationException $caught) {
-        $exception = $caught;
+        $this->fail('Expected the unavailable catalog entry to be rejected.');
+    } catch (ValidationException $exception) {
+        expect($exception->errors())->toHaveKey('leadlovers_tag_id');
     }
 
-    expect($exception)
-        ->toBeInstanceOf(ValidationException::class)
-        ->and($exception?->errors())->toHaveKey('company_name');
-    $this->assertDatabaseCount('imobiliarias', 0);
+    $this->assertDatabaseCount('imobiliarias', $reason === 'assigned' ? 1 : 0);
     $this->assertDatabaseCount('users', 0);
-    $this->assertDatabaseCount('lead_lovers_tags', 0);
-    Http::assertSentCount(2);
-})->with([
-    'no exact normalized match' => [[
-        leadLoversStageTwoRemoteTag(501, 'Imobiliária Nova Casa Premium'),
-        leadLoversStageTwoRemoteTag(502, 'Imobiliaria Nova Casa'),
-    ]],
-    'ambiguous distinct ids' => [[
-        leadLoversStageTwoRemoteTag(503, 'Imobiliária Nova Casa'),
-        leadLoversStageTwoRemoteTag(504, '  IMOBILIÁRIA  NOVA CASA '),
-    ]],
-]);
+    Http::assertNothingSent();
+})->with(['inactive', 'assigned', 'missing']);
 
-it('does not reconcile errors other than the exact NAME_EXISTS code', function (
-    int $status,
-    array|string $body,
-    array $headers
-) {
-    Http::fake([
-        LEADLOVERS_STAGE_TWO_API_URL.'/tags/' => Http::response(
-            $body,
-            $status,
-            $headers
-        ),
-    ]);
+it('rolls back the company when its internal user cannot be created', function () {
+    User::factory()->create(['email' => 'nova-casa@example.test']);
 
     expect(fn () => app(RegisterCompany::class)->execute(
         leadLoversStageTwoCompanyData()
-    ))->toThrow(ValidationException::class);
+    ))->toThrow(QueryException::class);
 
     $this->assertDatabaseCount('imobiliarias', 0);
-    $this->assertDatabaseCount('users', 0);
+    $this->assertDatabaseCount('users', 1);
     $this->assertDatabaseCount('lead_lovers_tags', 0);
-    Http::assertSentCount(1);
-})->with([
-    'other bad request' => [
-        400,
-        [
-            'success' => false,
-            'error' => ['code' => 'OTHER_ERROR'],
-        ],
-        [],
-    ],
-    'authentication failure' => [401, 'Unauthorized', []],
-    'transient timeout' => [
-        422,
-        [
-            'success' => false,
-            'error' => ['code' => 'TIMEOUT'],
-        ],
-        [],
-    ],
-    'rate limit' => [
-        429,
-        ['error' => 'rate_limit', 'message' => 'Too many requests'],
-        ['RateLimit-Reset' => '17'],
-    ],
-    'provider failure' => [
-        503,
-        [
-            'success' => false,
-            'error' => ['code' => 'UNAVAILABLE'],
-        ],
-        [],
-    ],
-]);
+    Http::assertNothingSent();
+});
 
-it('fails safely when the successful creation returns another name', function () {
+it('does not connect to the provider while registering a typed company name', function () {
     Http::fake([
-        LEADLOVERS_STAGE_TWO_API_URL.'/tags/' => Http::response([
-            'id' => 601,
-            'name' => 'Imobiliária Diferente',
-        ], 200),
+        LEADLOVERS_STAGE_TWO_API_URL.'/*' => Http::failedConnection(),
     ]);
 
-    expect(fn () => app(RegisterCompany::class)->execute(
+    $registration = app(RegisterCompany::class)->execute(
         leadLoversStageTwoCompanyData()
-    ))->toThrow(ValidationException::class);
+    );
 
-    $this->assertDatabaseCount('imobiliarias', 0);
+    expect($registration['company']->name)->toBe('Imobiliária Nova Casa');
+    $this->assertDatabaseCount('users', 1);
     $this->assertDatabaseCount('lead_lovers_tags', 0);
-    Http::assertSentCount(1);
+    Http::assertNothingSent();
 });
 
-it('fails safely if listing tags after NAME_EXISTS fails', function () {
-    Http::fake([
-        LEADLOVERS_STAGE_TWO_API_URL.'/tags/' => Http::sequence()
-            ->push(leadLoversStageTwoNameExistsResponse(), 400)
-            ->push([
-                'success' => false,
-                'error' => ['code' => 'UNAVAILABLE'],
-            ], 503),
-    ]);
-
-    expect(fn () => app(RegisterCompany::class)->execute(
-        leadLoversStageTwoCompanyData()
-    ))->toThrow(ValidationException::class);
-
-    $this->assertDatabaseCount('imobiliarias', 0);
-    $this->assertDatabaseCount('lead_lovers_tags', 0);
-    Http::assertSentCount(2);
-});
-
-it('normalizes a connection failure into a safe registration error', function () {
-    Http::fake([
-        LEADLOVERS_STAGE_TWO_API_URL.'/tags/' => Http::failedConnection(
-            'Connection failed for '.LEADLOVERS_STAGE_TWO_TOKEN
-        ),
-    ]);
-
-    $exception = null;
-
-    try {
-        app(RegisterCompany::class)->execute(
-            leadLoversStageTwoCompanyData()
-        );
-    } catch (ValidationException $caught) {
-        $exception = $caught;
-    }
-
-    expect($exception)
-        ->toBeInstanceOf(ValidationException::class)
-        ->and(json_encode([
-            'message' => $exception?->getMessage(),
-            'errors' => $exception?->errors(),
-        ]))
-        ->not->toContain(LEADLOVERS_STAGE_TWO_TOKEN);
-    $this->assertDatabaseCount('imobiliarias', 0);
-    $this->assertDatabaseCount('lead_lovers_tags', 0);
-    Http::assertSentCount(1);
-});
-
-it('rejects company names beyond the remote tag limit before HTTP', function () {
+it('rejects company names beyond the registration limit before HTTP', function () {
     $response = $this->post(route('empresa.register.post'), [
         'company_name' => str_repeat('A', 101),
     ]);
