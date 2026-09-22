@@ -557,15 +557,26 @@ it('does not let a stale job or failed callback overwrite a newer version', func
         ->leadlovers_update_status->toBe('pending');
 });
 
-it('queues a newer reconciliation when an old PUT finishes after a newer local edit', function () {
+it('queues a newer reconciliation when an old PUT finishes after a newer local edit', function (bool $legacyLink) {
     Queue::fake();
     $lead = stageFourLead();
-    Http::fake(function (Request $request) use ($lead) {
+    if ($legacyLink) {
+        $lead->activityLogs()->create([
+            'corretor_id' => Corretor::query()->create([
+                'name' => 'Legacy Broker', 'email' => 'legacy@example.test', 'password' => 'password',
+                'role' => Corretor::ROLE_CEO, 'active' => true,
+            ])->id,
+            'action' => 'lead_company_link_requested',
+            'new_values' => ['status' => 'completed', 'sync_version' => 2],
+            'description' => 'Legacy link',
+        ]);
+    }
+    Http::fake(function (Request $request) use ($lead, $legacyLink) {
         Lead::query()->whereKey($lead->id)->update([
             'leadlovers_update_version' => 2,
             'leadlovers_update_status' => 'pending',
             'leadlovers_update_response' => json_encode([
-                'requested_fields' => ['phone'],
+                'requested_fields' => $legacyLink ? ['phone', 'company'] : ['phone'],
             ], JSON_THROW_ON_ERROR),
         ]);
 
@@ -587,7 +598,7 @@ it('queues a newer reconciliation when an old PUT finishes after a newer local e
     expect($lead->refresh())
         ->leadlovers_update_version->toBe(3)
         ->leadlovers_update_status->toBe('pending');
-});
+})->with([false, true]);
 
 it('keeps old serialized jobs without version or field context from calling HTTP', function () {
     $lead = stageFourLead([
@@ -1147,3 +1158,36 @@ it('does not call either administrative endpoint while disabled', function () {
 
     Http::assertNothingSent();
 });
+
+it('drops only legacy company link updates while preserving ordinary remote edits', function (array $fields, int $logVersion, string $logStatus, array $expected) {
+    $lead = stageFourLead(['imobiliaria' => 'Internal Company']);
+    $lead->activityLogs()->create([
+        'corretor_id' => \App\Models\Corretor::query()->create([
+            'name' => 'Legacy Broker', 'email' => 'legacy@example.test', 'password' => 'password',
+            'role' => \App\Models\Corretor::ROLE_CEO, 'active' => true,
+        ])->id,
+        'action' => 'lead_company_link_requested',
+        'new_values' => ['status' => $logStatus, 'sync_version' => $logVersion],
+        'description' => 'Legacy link',
+    ]);
+    Http::fake(['*/leads/501' => Http::response(['success' => true])]);
+    runStageFourUpdate(new UpdateLeadOnLeadLoversJob($lead->id, 1, $fields));
+    runStageFourUpdate(new UpdateLeadOnLeadLoversJob($lead->id, 1, $fields));
+    expect($lead->fresh()->leadlovers_update_status)->toBe('synced');
+
+    if ($expected === []) {
+        Http::assertNothingSent();
+        expect($lead->fresh()->leadlovers_update_response['operation'])->toBe('company_link_internal')
+            ->and($lead->fresh()->leadlovers_update_response['remote_request_sent'])->toBeFalse()
+            ->and($lead->fresh()->leadlovers_update_at)->toBeNull();
+    } else {
+        Http::assertSent(fn (Request $request): bool => $request->method() === 'PUT'
+            && $request->data() === ['staticFields' => $expected]);
+        Http::assertSentCount(1);
+    }
+})->with([
+    'company only' => [['company'], 1, 'completed', []],
+    'mixed edit' => [['name', 'company'], 1, 'completed', ['name' => 'Pessoa Teste']],
+    'different edit version' => [['company'], 2, 'completed', ['company' => 'Internal Company']],
+    'rejected link' => [['company'], 1, 'rejected', ['company' => 'Internal Company']],
+]);

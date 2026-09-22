@@ -6,6 +6,7 @@ use App\Events\DashboardActivityChanged;
 use App\Exceptions\LeadLoversApiException;
 use App\Models\Lead;
 use App\Models\LeadLoversTag;
+use App\Services\LeadCompanyLinkService;
 use App\Services\LeadLoversApiClient;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -660,6 +661,23 @@ class SendLeadToLeadLoversJob implements ShouldQueue
                 )
                     ? $lead->leadlovers_update_response['requested_fields']
                     : [];
+            $remoteFields = app(LeadCompanyLinkService::class)->withoutLegacyCompanyUpdate(
+                $lead, (int) $lead->leadlovers_update_version, $requestedFields,
+            );
+
+            if ($requestedFields !== [] && $remoteFields === []) {
+                $lead->forceFill([
+                    'leadlovers_update_status' => 'synced',
+                    'leadlovers_update_error' => null,
+                    'leadlovers_update_response' => [
+                        'operation' => 'company_link_internal',
+                        'requested_fields' => [],
+                        'remote_request_sent' => false,
+                    ],
+                ]);
+            }
+
+            $requestedFields = $remoteFields;
             $previousAction = is_array($lead->leadlovers_response)
                 && is_array($lead->leadlovers_response['action'] ?? null)
                     ? $lead->leadlovers_response['action']

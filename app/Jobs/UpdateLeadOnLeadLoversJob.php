@@ -2,11 +2,12 @@
 
 namespace App\Jobs;
 
+use App\Events\DashboardActivityChanged;
 use App\Exceptions\LeadLoversApiException;
 use App\Models\Lead;
+use App\Services\LeadCompanyLinkService;
 use App\Services\LeadLoversApiClient;
 use App\Services\LeadLoversLeadResolver;
-use App\Events\DashboardActivityChanged;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -120,6 +121,24 @@ class UpdateLeadOnLeadLoversJob implements ShouldQueue
         }
 
         $requestedFields = $this->normalizeRequestedFields($this->requestedFields);
+        $remoteFields = app(LeadCompanyLinkService::class)->withoutLegacyCompanyUpdate($lead, $this->syncVersion, $requestedFields);
+
+        if ($requestedFields !== [] && $remoteFields === []) {
+            $this->updateCurrentVersion([
+                'leadlovers_update_status' => 'synced',
+                'leadlovers_update_error' => null,
+                'leadlovers_update_response' => $this->encodeSummary([
+                    'operation' => 'company_link_internal',
+                    'requested_fields' => [],
+                    'remote_request_sent' => false,
+                ]),
+            ], ['processing']);
+
+            return;
+        }
+
+        $requestedFields = $remoteFields;
+        $this->requestedFields = $remoteFields;
 
         if ($requestedFields === []) {
             $this->markFailed(
@@ -481,7 +500,7 @@ class UpdateLeadOnLeadLoversJob implements ShouldQueue
             ->update($attributes);
 
         if ($updated !== 1) {
-        return $updated;
+            return $updated;
         }
 
         $change = match ($attributes['leadlovers_update_status'] ?? null) {
@@ -496,10 +515,11 @@ class UpdateLeadOnLeadLoversJob implements ShouldQueue
         }
 
         return $updated;
-        
+
     }
 
-    private function notifyDashboard(string $change): void {
+    private function notifyDashboard(string $change): void
+    {
 
         $lead = Lead::query()
             ->select(['id', 'company_id'])
@@ -522,8 +542,6 @@ class UpdateLeadOnLeadLoversJob implements ShouldQueue
             $change,
         );
     }
-    
-
 
     private function failureSummary(
         string $operation,
@@ -745,7 +763,9 @@ class UpdateLeadOnLeadLoversJob implements ShouldQueue
 
             $requestedFields = $this->normalizeRequestedFields([
                 ...$this->requestedFields,
-                ...$this->requestedFieldsFromLead($lead),
+                ...app(LeadCompanyLinkService::class)->withoutLegacyCompanyUpdate(
+                    $lead, (int) $lead->leadlovers_update_version, $this->requestedFieldsFromLead($lead),
+                ),
             ]);
 
             if ($requestedFields === []) {
@@ -793,11 +813,10 @@ class UpdateLeadOnLeadLoversJob implements ShouldQueue
                     'leadlovers_update_status' => 'failed',
                     'leadlovers_update_error' => 'A reconciliacao nao pode ser colocada na fila.',
                 ]);
-            
+
             if ($updated === 1) {
                 $this->notifyDashboard('lead.sync.failed');
             }
-            
 
             Log::warning('Falha ao enfileirar reconciliacao do lead na LeadLovers.', [
                 'lead_id' => $this->leadId,

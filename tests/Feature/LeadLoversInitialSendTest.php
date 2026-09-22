@@ -1162,3 +1162,36 @@ it('does not change or redispatch a confirmed lead when the public form is submi
     Bus::assertNotDispatched(SendLeadToLeadLoversJob::class);
     Queue::assertNotPushed(BroadcastEvent::class);
 });
+
+it('filters legacy company updates before scheduling edits after initial sending', function (array $fields) {
+    Queue::fake();
+    $lead = leadForInitialLeadLoversSend([
+        'leadlovers_status' => 'processing',
+        'leadlovers_lead_id' => 501,
+        'leadlovers_update_version' => 3,
+        'leadlovers_update_status' => 'waiting_initial_send',
+        'leadlovers_update_response' => ['requested_fields' => $fields],
+        'leadlovers_response' => ['phase' => 'machine_confirmation_pending', 'lead_id' => 501],
+    ]);
+    $lead->activityLogs()->create([
+        'corretor_id' => \App\Models\Corretor::query()->create([
+            'name' => 'Legacy Broker', 'email' => 'legacy@example.test', 'password' => 'password',
+            'role' => \App\Models\Corretor::ROLE_CEO, 'active' => true,
+        ])->id,
+        'action' => 'lead_company_link_requested',
+        'new_values' => ['status' => 'completed', 'sync_version' => 3],
+        'description' => 'Legacy link',
+    ]);
+    Http::fake(['*/leads/501/machines' => Http::response([machineAssociationForInitialSend()])]);
+    initialSendJob($lead, 2)->handle(app(LeadLoversApiClient::class));
+    expect($lead->fresh()->leadlovers_status)->toBe('sent');
+    Http::assertSentCount(1);
+    if ($fields === ['company']) {
+        Queue::assertNotPushed(UpdateLeadOnLeadLoversJob::class);
+        expect($lead->fresh()->leadlovers_update_status)->toBe('synced')
+            ->and($lead->fresh()->leadlovers_update_response['remote_request_sent'])->toBeFalse();
+    } else {
+        Queue::assertPushed(UpdateLeadOnLeadLoversJob::class, fn ($job): bool => $job->requestedFields === ['name'] && $job->syncVersion === 4);
+        expect($lead->fresh()->leadlovers_update_response['requested_fields'])->toBe(['name']);
+    }
+})->with([[['company']], [['company', 'name']]]);
