@@ -288,7 +288,7 @@
             <nav class="auth-topbar__nav" aria-label="Opções de acesso">
                 <span class="auth-topbar__help">Precisa de ajuda?</span>
 
-                @if (config('branding.active', 'tcc') === 'tcc' && request()->routeIs('empresa.login', 'empresa.register.form'))
+                @if (request()->routeIs('empresa.*', 'company.password.*'))
                     <a href="{{ route('empresa.login') }}" class="auth-topbar__link auth-topbar__access">
                         Entrar
                     </a>

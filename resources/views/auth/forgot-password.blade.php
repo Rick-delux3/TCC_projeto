@@ -1,6 +1,7 @@
 @extends('layout-inicial.app')
 
 @section('content')
+{{-- Solicita o link de redefinição; status e erros vêm da sessão/validação do Laravel. --}}
 <div class="password-reset-page">
     <section class="password-reset-shell password-reset-shell--compact">
         <aside class="password-reset-aside">
@@ -42,6 +43,7 @@
                 </div>
             @enderror
 
+            {{-- A resposta do endpoint não deve revelar se o e-mail existe, evitando enumerar contas. --}}
             <form method="POST" action="{{ route('password.email') }}" class="password-reset-form">
                 @csrf
 

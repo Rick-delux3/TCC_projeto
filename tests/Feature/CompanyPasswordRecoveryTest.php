@@ -27,6 +27,38 @@ it('renders the company password recovery form', function () {
         ->assertSee('Enviar link de recuperacao');
 });
 
+it('styles company password pages only for tcc while preserving form destinations', function (string $profile) {
+    config(['branding.active' => $profile]);
+    $this->withoutVite();
+
+    foreach ([
+        [route('company.password.request'), route('company.password.email')],
+        [route('company.password.reset', ['token' => 'preview-token', 'email' => 'company@example.test']), route('company.password.store')],
+    ] as [$page, $destination]) {
+        $response = $this->get($page)->assertOk();
+        $response->assertSee('action="'.$destination.'"', false)
+            ->assertSee('name="_token"', false)
+            ->assertSee('href="'.route('empresa.login').'"', false)
+            ->assertSee('imgs/segure-chave-a-mao-ao-ar-livre.jpg', false);
+
+        if ($profile === 'tcc') {
+            $response->assertSee('tcc-company-auth-body', false)
+                ->assertSee('tcc-company-auth-main', false)
+                ->assertSee('password-reset-card client-auth-card', false)
+                ->assertSee('imgs/Logo_NVS.png', false);
+        } else {
+            $response->assertDontSee('tcc-company-auth', false)
+                ->assertSee('class="password-reset-card"', false);
+        }
+
+        if (str_contains($page, 'preview-token')) {
+            $response->assertSee('name="token" value="preview-token"', false)
+                ->assertSee('value="company@example.test"', false)
+                ->assertSee('name="password_confirmation"', false);
+        }
+    }
+})->with(['tcc', 'client']);
+
 it('sends a company reset link using the companies broker', function () {
     Notification::fake();
     $company = companyForPasswordRecovery();

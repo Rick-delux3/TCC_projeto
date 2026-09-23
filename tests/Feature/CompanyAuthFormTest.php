@@ -62,6 +62,23 @@ it('renders the tcc company access pages with the redesign and working destinati
         ->assertSee(route('empresa.login'), false);
 });
 
+it('links the company access header to the imobiliaria login throughout the company auth journey', function () {
+    foreach ([
+        'registration' => route('empresa.register.form'),
+        'login' => route('empresa.login'),
+        'password recovery' => route('company.password.request'),
+    ] as $page) {
+        $response = $this->get($page)->assertOk();
+        $document = new DOMDocument;
+        @$document->loadHTML('<?xml encoding="UTF-8">'.$response->getContent());
+        $xpath = new DOMXPath($document);
+        $accessLink = $xpath->query('//header[contains(@class, "auth-topbar")]//a[contains(concat(" ", normalize-space(@class), " "), " auth-topbar__access ")]')->item(0);
+
+        expect($accessLink)->not->toBeNull()
+            ->and($accessLink->getAttribute('href'))->toBe(route('empresa.login'));
+    }
+});
+
 it('keeps the original company access layout for the client profile', function () {
     config(['branding.active' => 'client']);
 

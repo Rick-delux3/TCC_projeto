@@ -1,6 +1,7 @@
 @extends(config('branding.active', 'tcc') === 'tcc' ? 'layout-inicial.tcc-index-app' : 'layout-inicial.index-app')
 
 @section('content')
+{{-- A home alterna o layout/conteúdo conforme a marca ativa; mantenha as duas experiências sincronizadas. --}}
 @if (config('branding.active', 'tcc') === 'tcc')
     @include('layout-inicial.partials.tcc-index-content')
 @else
@@ -24,6 +25,7 @@
                     Centralize seus leads, automatize a esteira de locação e elimine o atrito operacional. Uma plataforma construída para conectar corretores, clientes e seguradoras com máxima elegância e agilidade.
                 </p>
 
+                {{-- CTAs principais: os nomes das rotas devem permanecer alinhados ao fluxo comercial. --}}
                 <div class="mt-10 flex flex-col gap-4 sm:flex-row">
                     <a href="{{ route('empresa.register.form') }}" class="showcase-cta inline-flex items-center justify-center rounded-full border border-white/12 bg-gradient-to-r from-[#030133] via-[#145ca5] to-[#146FB6] px-7 py-3.5 text-base font-semibold text-white shadow-[0_18px_45px_rgba(3,1,51,0.28)] transition hover:-translate-y-0.5 hover:brightness-105">
                         Inicie sua Operação

@@ -227,6 +227,20 @@ body.auth-layout-body .auth-layout-main.tcc-company-auth-main {
     color: #030133;
 }
 
+.tcc-company-auth.password-reset-page {
+    font-family: var(--font-principal), "Sansation", sans-serif;
+}
+
+.tcc-company-auth .password-reset-note,
+.tcc-company-auth .password-reset-alert {
+    border-radius: 0;
+}
+
+.tcc-company-auth .password-reset-note {
+    background: #f9fafb;
+    color: #55658c;
+}
+
 @media (max-width: 767px) {
     body.auth-layout-body .auth-layout-main.tcc-company-auth-main {
         padding: 20px 12px 32px;
