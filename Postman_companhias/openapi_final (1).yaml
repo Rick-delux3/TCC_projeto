@@ -1,0 +1,2113 @@
+openapi: 3.0.0
+info:
+  title: Fiança Locatícia
+  description: |-
+   O que é?
+   
+    Indicado para quem deseja alugar um imóvel, o Seguro Fiança Locatícia da Too Seguros é uma garantia locatícia reconhecida pela lei do inquilinato que assim como o Fiador e o Caução, garante ao proprietário de imóvel (locador) o recebimento dos aluguéis e encargos vencidos e não pagos pelo inquilino.
+    
+    Vantagens e benefícios
+    
+    O Seguro Fiança da Too Seguros é um facilitador do processo de locação para inquilinos, proprietários e imobiliárias.
+    Para o inquilino, agilidade no processo de locação do imóvel, sem a necessidade de ter que apresentar fiador ou caução, além de serviços emergenciais para a residência.
+
+    Para o proprietário, segurança no recebimento do aluguel, além de coberturas de IPTU, condomínio, água, luz, gás canalizado, multa por rescisão, pintura, danos ao imóvel e danos aos móveis.
+    
+    Para imobiliárias análise cadastral gratuita de seus clientes, suporte jurídico em caso de inadimplência do aluguel e redução substancial de custos operacionais.
+    
+    Como funciona o seguro fiança?
+    
+    O seguro garante ao proprietário o recebimento de aluguéis e encargos não pagos pelo inquilino até a desocupação do imóvel ou o esgotamento das ISs (importância segurada) contratadas.
+    
+    Principais Papéis
+    
+    Dentro deste seguro temos 02 principais papéis:
+    
+    Segurado = proponente/ locador/ Proprietário do imóvel
+    
+    Garantido = pretendente / locatário/ inquilino do imóvel
+    
+    O garantido(inquilino) fica responsável pela contratação e pagamento do seguro, enquanto o segurado(proprietário do imóvel) beneficiário deste seguro, é quem receberá a indenização em caso de inadimplência do inquilino.
+  contact:
+    url: https://developer.tooseguros.com.br
+  version: '1.0'
+  x-codegen-settings:
+    Nullify404: false
+    GenerateAsyncCode: true
+    UseMethodPrefix: false
+    UseModelPostfix: false
+    UseControllerPrefix: true
+    UseEnumPostfix: true
+    CollectParameters: false
+    UseConstructorsForConfig: false
+    UseCommonSDKLibrary: false
+    iOSUseAppInfoPlist: false
+    AndroidUseAppManifest: false
+    BodySerialization: 0
+    EnableAdditionalModelProperties: false
+    PreserveParameterOrder: true
+    AppendContentHeaders: true
+    iOSGenerateCoreData: false
+    GenerateInterfaces: false
+    NodeHttpClient: NODE_REQUEST
+    ValidateRequiredParameters: false
+    JavaUsePropertiesConfig: false
+    Timeout: 0
+    StoreTimezoneInformation: false
+    EnablePHPComposerVersionString: false
+    EnableLogging: false
+    ArraySerialization: Indexed
+    ModelSerializationScheme: Json
+    UseExceptionPrefix: true
+    RunscopeEnabled: false
+    AndroidHttpClient: ANDROID_OK
+    ObjCHttpClient: UNIREST
+    CSharpHttpClient: UNIREST
+    PHPHttpClient: UNIREST
+    JavaHttpClient: JAVA_OK
+    ParameterArrayFormat: ParamArrayWithIndex
+    SecurityProtocols:
+      - Ssl3
+      - Tls
+    GenerateTravisConfig: false
+    GenerateCircleConfig: false
+    GenerateAppveyorConfig: false
+    GenerateJenkinsConfig: false
+    EnableHttpCache: false
+    Retries: 0
+    RetryInterval: 1
+    GenerateAdvancedDocs: true
+    UnderscoreNumbers: true
+    UseSingletonPattern: true
+    DisableLinting: false
+    ApplyCustomizations: []
+    SortResources: false
+    AllowSkippingSSLCertVerification: false
+    DoNotSplitWords: []
+    EnableGlobalUserAgent: true
+    ReturnCompleteHttpResponse: false
+    GenerateModels: true
+    GenerateExceptions: true
+    IgnoreIfNullJson: false
+    DisableDocs: false
+    LiftParameterDescriptionFromCustomType: false
+    ThrowForHttpErrorStatusCodes: true
+    ResponseMapping:
+      Type: Simple
+    ForceKeywordArgsInRuby: false
+    SymbolizeHashKeysInRuby: false
+    UsageExampleEndpoint:
+      Description: ''
+      EndpointGroupName: ''
+      EndpointName: ''
+    IsLatestVersion: false
+    EnableImmutableModels: false
+    GenerateEnums: true
+    BackoffFactor: 2
+    StatusCodesToRetry:
+      - 408
+      - 413
+      - 429
+      - 500
+      - 502
+      - 503
+      - 504
+      - 521
+      - 522
+      - 524
+    RequestMethodsToRetry:
+      - GET
+      - PUT
+    UserConfigurableRetries: true
+    UseEndpointMethodName: false
+    EncodeTemplateParameters: true
+    GenerateExamplesForOptionalFields: false
+    MultitargetDotnetVersions: false
+    BackoffMax: 0
+    RetryOnTimeout: true
+    EnableCookies: false
+    EnableJsonPassThroughForAny: false
+  x-server-configuration:
+    default-environment: homolog
+    default-server: Gateway
+    environments:
+      - name: homolog
+        description: Ambiente de HomologaÃ§Ã£o
+        servers:
+          - name: Auth
+            url: https://openapi-uat.tooseguros.com.br
+          - name: Gateway
+            url: https://openapi-uat.tooseguros.com.br
+    parameters: []
+  x-image-uri: ''
+servers:
+  - url: https://openapi-uat.tooseguros.com.br
+    description: Ambiente de Homologação
+    variables: {}
+  - url: https://openapi-uat.tooseguros.com.br
+    description: Ambiente de Homologação
+    variables: {}
+paths:
+  /authentication:
+    post:
+      tags:
+        - Aluguel Garantido
+      summary: Autenticar
+      description: Autentica e obter o bearer token
+      operationId: Autenticar
+      parameters:
+        - name: clientid
+          in: header
+          description: ''
+          required: true
+          style: simple
+          schema:
+            type: string
+            example: '{{clientid}}'
+        - name: clientsecret
+          in: header
+          description: ''
+          required: true
+          style: simple
+          schema:
+            type: string
+            example: '{{clientsecret}}'
+      responses:
+        '200':
+          description: ''
+          headers: {}
+          content:
+            text/plain:
+              schema:
+                type: object
+                example: '{     "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjMzFmODhiOWQzYmE0YTkxODQ3NDg3OWFjOTliMzRlYiIsImp0aSI6IjhhMDJmYWE2LTY1MGItNDMyNC04MWM0LTZkODA0ZmQ1OTEwYSIsImlhdCI6MTYzMzAzNDQxOSwiSXNVc2VyIjoiZmFsc2UiLCJVc2VySWQiOiIiLCJuYmYiOjE2MzMwMzQxMTksImV4cCI6MTYzMzA3MDQxOSwiaXNzIjoiUGFuU2VndXJvc0lzc3VlciIsImF1ZCI6IlBhblNlZ3Vyb3NBdWRpZW5jZSJ9.dtyrfFSekMY1bQni-BcJ2myJhQe4HePp8wMUY1bZ8XI",     "expires_in": 18000,     "token_type": "Bearer",     "scope": "authorized_apps email profile" }'
+                x-is-dynamic: true
+              example: '{     "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjMzFmODhiOWQzYmE0YTkxODQ3NDg3OWFjOTliMzRlYiIsImp0aSI6IjhhMDJmYWE2LTY1MGItNDMyNC04MWM0LTZkODA0ZmQ1OTEwYSIsImlhdCI6MTYzMzAzNDQxOSwiSXNVc2VyIjoiZmFsc2UiLCJVc2VySWQiOiIiLCJuYmYiOjE2MzMwMzQxMTksImV4cCI6MTYzMzA3MDQxOSwiaXNzIjoiUGFuU2VndXJvc0lzc3VlciIsImF1ZCI6IlBhblNlZ3Vyb3NBdWRpZW5jZSJ9.dtyrfFSekMY1bQni-BcJ2myJhQe4HePp8wMUY1bZ8XI",     "expires_in": 18000,     "token_type": "Bearer",     "scope": "authorized_apps email profile" }'
+      deprecated: false
+      security: []
+      servers:
+        - url: https://openapi-uat.tooseguros.com.br
+          variables: {}
+      x-operation-settings:
+        CollectParameters: false
+        AllowDynamicQueryParameters: false
+        AllowDynamicFormParameters: false
+        IsMultiContentStreaming: false
+      x-unitTests:
+        - request:
+            method: GET
+            uri: /authentication
+            headers:
+              clientid: '{{clientid}}'
+              clientsecret: '{{clientsecret}}'
+          expectedResponse:
+            x-allowExtraHeaders: true
+            x-bodyMatchMode: NONE
+            x-arrayOrderedMatching: false
+            x-arrayCheckCount: false
+            x-matchResponseSchema: true
+            statusCode: '200'
+            headers: {}
+          x-testShouldPass: true
+          x-testEnabled: false
+          x-testName: Authentication
+      x-server-name: Auth
+  /fianca/cotacao/aluguel-garantido:
+    post:
+      tags:
+        - Aluguel Garantido
+      summary: Registro de Cotação
+      description: 'Registro de Cotação: destinada ao registro de cotação para o aluguel fiança, disponível somente para Pessoa Física Residencial'
+      operationId: RegistrodeCotação
+      parameters:
+        - name: clientid
+          in: header
+          description: ''
+          required: true
+          style: simple
+          schema:
+            type: string
+            example: '{{clientid}}'
+        - name: clientsecret
+          in: header
+          description: ''
+          required: true
+          style: simple
+          schema:
+            type: string
+            example: '{{clientsecret}}'
+      requestBody:
+        description: ''
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CriarCotaoAluguelGarantidoRequest'
+            example:
+              cep: '{{cep}}'
+              cnpjCorretor: '{{cnpjCorretor}}'
+              razaoSocialCorretor: '{{nomeCorretora}}'
+              inicioVigencia: '{{dataAtual}}'
+              fimVigencia: '{{dataFinal}}'
+              finalidadeLocacao: Residencial
+              indiceReajusteAluguel: IGPM
+              percentualComissao: 0.18
+              periodoIndAluguel: 12
+              tipoPessoa: Pessoa Fisica
+              tipoSeguro: Novo
+              valorAluguel: 2200
+              valorAgua: 0
+              valorCondominio: 600
+              valorGas: 0
+              valorIptu: 0
+              valorLuz: 0
+              valorDanosAMoveis: 0
+              valorDanosAoImovel: 0
+              valorMultasContratuais: 1200
+              valorPinturaExterna: 1200
+              valorPinturaInterna: 0
+        required: true
+      responses:
+        '200':
+          description: ''
+          headers: {}
+          content:
+            text/plain:
+              schema:
+                type: object
+                example: '{     "numeroCotacao": 2095172,     "response": {         "coberturas": [             {                 "tipo": "Aluguel",                 "verba": 2200,                 "periodoIndenitario": 12,                 "premioLiquido": 6173.42,                 "contratada": "True"             },             {                 "tipo": "Condominio",                 "verba": 600,                 "periodoIndenitario": 12,                 "premioLiquido": 854.84,                 "contratada": "True"             },             {                 "tipo": "Iptu",                 "verba": 0,                 "periodoIndenitario": 12,                 "premioLiquido": 0,                 "contratada": "False"             },             {                 "tipo": "Agua",                 "verba": 0,                 "periodoIndenitario": 6,                 "premioLiquido": 0,                 "contratada": "False"             },             {                 "tipo": "Luz",                 "verba": 0,                 "periodoIndenitario": 6,                 "premioLiquido": 0,                 "contratada": "False"             },             {                 "tipo": "Gas",                 "verba": 0,                 "periodoIndenitario": 6,                 "premioLiquido": 0,                 "contratada": "False"             },             {                 "tipo": "DanosAoImovel",                 "verba": 0,                 "periodoIndenitario": 6,                 "premioLiquido": 0,                 "contratada": "False"             },             {                 "tipo": "PinturaInterna",                 "verba": 0,                 "periodoIndenitario": 3,                 "premioLiquido": 0,                 "contratada": "False"             },             {                 "tipo": "PinturaExterna",                 "verba": 0,                 "periodoIndenitario": 3,                 "premioLiquido": 0,                 "contratada": "False"             },             {                 "tipo": "MultasContratuais",                 "verba": 0,                 "periodoIndenitario": 3,                 "premioLiquido": 0,                 "contratada": "False"             },             {                 "tipo": "DanosAMoveis",                 "verba": 0,                 "periodoIndenitario": 1,                 "premioLiquido": 0,                 "contratada": "False"             }         ],         "codigoProduto": 279,         "cnpjCorretor": "{{cnpjCorretor}}",         "comissao": "18",         "inicioVigencia": "{{dataAtual}}",         "fimVigencia": "{{dataFinal}}",         "regiao": "MG",         "condicoesPagamento": {             "premioBrutoTotal": 7546.95,             "premioLiquido": 7028.26,             "descontoAVista": 1509.39,             "descontoEm4x": 754.69,             "quantidadeParcelas": 36         },         "finalidadeLocacao": "Residencial",         "indiceReajusteAluguel": "IGPM",         "razaoSocialCorretor": "",         "cep": "{{cep}}"     },     "versaoCotacao": 1,     "dataCriacao": "{{dataAtual}}T17:41:57.647064-03:00" }'
+                x-is-dynamic: true
+              example: '{     "numeroCotacao": 2095172,     "response": {         "coberturas": [             {                 "tipo": "Aluguel",                 "verba": 2200,                 "periodoIndenitario": 12,                 "premioLiquido": 6173.42,                 "contratada": "True"             },             {                 "tipo": "Condominio",                 "verba": 600,                 "periodoIndenitario": 12,                 "premioLiquido": 854.84,                 "contratada": "True"             },             {                 "tipo": "Iptu",                 "verba": 0,                 "periodoIndenitario": 12,                 "premioLiquido": 0,                 "contratada": "False"             },             {                 "tipo": "Agua",                 "verba": 0,                 "periodoIndenitario": 6,                 "premioLiquido": 0,                 "contratada": "False"             },             {                 "tipo": "Luz",                 "verba": 0,                 "periodoIndenitario": 6,                 "premioLiquido": 0,                 "contratada": "False"             },             {                 "tipo": "Gas",                 "verba": 0,                 "periodoIndenitario": 6,                 "premioLiquido": 0,                 "contratada": "False"             },             {                 "tipo": "DanosAoImovel",                 "verba": 0,                 "periodoIndenitario": 6,                 "premioLiquido": 0,                 "contratada": "False"             },             {                 "tipo": "PinturaInterna",                 "verba": 0,                 "periodoIndenitario": 3,                 "premioLiquido": 0,                 "contratada": "False"             },             {                 "tipo": "PinturaExterna",                 "verba": 0,                 "periodoIndenitario": 3,                 "premioLiquido": 0,                 "contratada": "False"             },             {                 "tipo": "MultasContratuais",                 "verba": 0,                 "periodoIndenitario": 3,                 "premioLiquido": 0,                 "contratada": "False"             },             {                 "tipo": "DanosAMoveis",                 "verba": 0,                 "periodoIndenitario": 1,                 "premioLiquido": 0,                 "contratada": "False"             }         ],         "codigoProduto": 279,         "cnpjCorretor": "{{cnpjCorretor}}",         "comissao": "18",         "inicioVigencia": "{{dataAtual}}",         "fimVigencia": "{{dataFinal}}",         "regiao": "MG",         "condicoesPagamento": {             "premioBrutoTotal": 7546.95,             "premioLiquido": 7028.26,             "descontoAVista": 1509.39,             "descontoEm4x": 754.69,             "quantidadeParcelas": 36         },         "finalidadeLocacao": "Residencial",         "indiceReajusteAluguel": "IGPM",         "razaoSocialCorretor": "",         "cep": "{{cep}}"     },     "versaoCotacao": 1,     "dataCriacao": "{{dataAtual}}T17:41:57.647064-03:00" }'
+      deprecated: false
+      servers:
+        - url: https://openapi-uat.tooseguros.com.br
+          variables: {}
+      x-operation-settings:
+        CollectParameters: false
+        AllowDynamicQueryParameters: false
+        AllowDynamicFormParameters: false
+        IsMultiContentStreaming: false
+      x-unitTests:
+        - request:
+            method: POST
+            uri: /fianca/cotacao/aluguel-garantido
+            headers:
+              clientid: '{{clientid}}'
+              clientsecret: '{{clientsecret}}'
+              Content-Type: application/json
+            body: "{\r\n  \"cep\": \"{{cep}}\",\r\n  \"cnpjCorretor\": \"{{cnpjCorretor}}\",\r\n  \"fimVigencia\": \"{{dataFinal}}\",\r\n  \"finalidadeLocacao\": \"Residencial\",\r\n  \"indiceReajusteAluguel\": \"IGPM\",\r\n  \"inicioVigencia\": \"{{dataAtual}}\",\r\n  \"percentualComissao\": 0.18,\r\n  \"periodoIndAluguel\": 12,\r\n  \"tipoPessoa\": \"Pessoa Fisica\",\r\n  \"tipoSeguro\": \"Novo\",\r\n  \"valorAgua\": 0,\r\n  \"valorAluguel\": 2200,\r\n  \"valorCondominio\": 600,\r\n  \"valorDanosAMoveis\": 0,\r\n  \"valorDanosAoImovel\": 0,\r\n  \"valorGas\": 0,\r\n  \"valorIptu\": 0,\r\n  \"valorLuz\": 0,\r\n  \"valorMultasContratuais\": 1200,\r\n  \"valorPinturaExterna\": 1200,\r\n  \"valorPinturaInterna\": 0\r\n}"
+          expectedResponse:
+            x-allowExtraHeaders: true
+            x-bodyMatchMode: NONE
+            x-arrayOrderedMatching: false
+            x-arrayCheckCount: false
+            x-matchResponseSchema: true
+            statusCode: '200'
+            headers: {}
+          x-testShouldPass: true
+          x-testEnabled: false
+          x-testName: Criar Cotação Aluguel Garantido
+      x-server-name: Gateway
+  /fianca/cotacao/{numeroCotacao}:
+    get:
+      tags:
+        - Aluguel Garantido
+      summary: Consultar cotação
+      description: 'Consulta de Cotação: disponibiliza uma consulta para identificar a situação da cotação registrada no processo anterior'
+      operationId: ConsultarCotação
+      parameters:
+        - name: Content-Type
+          in: header
+          description: ''
+          required: true
+          style: simple
+          schema:
+            type: string
+            example: application/json
+        - name: clientid
+          in: header
+          description: ''
+          required: true
+          style: simple
+          schema:
+            type: string
+            example: '{{clientid}}'
+        - name: clientsecret
+          in: header
+          description: ''
+          required: true
+          style: simple
+          schema:
+            type: string
+            example: '{{clientsecret}}'
+        - name: numeroCotacao
+          in: path
+          description: ''
+          required: true
+          style: simple
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+          headers: {}
+          content:
+            text/plain:
+              schema:
+                type: object
+                example: '{     "request": {         "cep": "{{cep}}",         "cnpjCorretor": "{{cnpjCorretor}}",         "fimVigencia": "{{dataFinal}}",         "finalidadeLocacao": "Residencial",         "indiceReajusteAluguel": "IGPM",         "inicioVigencia": "{{dataAtual}}",         "percentualComissao": 0.18,         "periodoIndAluguel": 12,         "tipoPessoa": "Pessoa Fisica",         "tipoSeguro": "Novo",         "valorAgua": 0,         "valorAluguel": 2200,         "valorCondominio": 600,         "valorDanosAMoveis": 0,         "valorDanosAoImovel": 0,         "valorGas": 0,         "valorIptu": 0,         "valorLuz": 0,         "valorMultasContratuais": 0,         "valorPinturaExterna": 0,         "valorPinturaInterna": 0     },     "numeroCotacao": 2095172,     "response": {         "coberturas": [             {                 "tipo": "Aluguel",                 "verba": 2200,                 "periodoIndenitario": 12,                 "premioLiquido": 6173.42,                 "contratada": "True"             },             {                 "tipo": "Condominio",                 "verba": 600,                 "periodoIndenitario": 12,                 "premioLiquido": 854.84,                 "contratada": "True"             },             {                 "tipo": "Iptu",                 "verba": 0,                 "periodoIndenitario": 12,                 "premioLiquido": 0,                 "contratada": "False"             },             {                 "tipo": "Agua",                 "verba": 0,                 "periodoIndenitario": 6,                 "premioLiquido": 0,                 "contratada": "False"             },             {                 "tipo": "Luz",                 "verba": 0,                 "periodoIndenitario": 6,                 "premioLiquido": 0,                 "contratada": "False"             },             {                 "tipo": "Gas",                 "verba": 0,                 "periodoIndenitario": 6,                 "premioLiquido": 0,                 "contratada": "False"             },             {                 "tipo": "DanosAoImovel",                 "verba": 0,                 "periodoIndenitario": 6,                 "premioLiquido": 0,                 "contratada": "False"             },             {                 "tipo": "PinturaInterna",                 "verba": 0,                 "periodoIndenitario": 3,                 "premioLiquido": 0,                 "contratada": "False"             },             {                 "tipo": "PinturaExterna",                 "verba": 0,                 "periodoIndenitario": 3,                 "premioLiquido": 0,                 "contratada": "False"             },             {                 "tipo": "MultasContratuais",                 "verba": 0,                 "periodoIndenitario": 3,                 "premioLiquido": 0,                 "contratada": "False"             },             {                 "tipo": "DanosAMoveis",                 "verba": 0,                 "periodoIndenitario": 1,                 "premioLiquido": 0,                 "contratada": "False"             }         ],         "codigoProduto": 279,         "cnpjCorretor": "{{cnpjCorretor}}",         "comissao": "18",         "inicioVigencia": "{{dataAtual}}",         "fimVigencia": "{{dataFinal}}",         "regiao": "MG",         "condicoesPagamento": {             "premioBrutoTotal": 7546.95,             "premioLiquido": 7028.26,             "descontoAVista": 1509.39,             "descontoEm4x": 754.69,             "quantidadeParcelas": 36         },         "finalidadeLocacao": "Residencial",         "indiceReajusteAluguel": "IGPM",         "razaoSocialCorretor": "",         "cep": "{{cep}}"     },     "versaoCotacao": 1,     "dataCriacao": "{{dataAtual}}T20:41:57.647Z" }'
+                x-is-dynamic: true
+              example: '{     "request": {         "cep": "{{cep}}",         "cnpjCorretor": "{{cnpjCorretor}}",         "fimVigencia": "{{dataFinal}}",         "finalidadeLocacao": "Residencial",         "indiceReajusteAluguel": "IGPM",         "inicioVigencia": "{{dataAtual}}",         "percentualComissao": 0.18,         "periodoIndAluguel": 12,         "tipoPessoa": "Pessoa Fisica",         "tipoSeguro": "Novo",         "valorAgua": 0,         "valorAluguel": 2200,         "valorCondominio": 600,         "valorDanosAMoveis": 0,         "valorDanosAoImovel": 0,         "valorGas": 0,         "valorIptu": 0,         "valorLuz": 0,         "valorMultasContratuais": 0,         "valorPinturaExterna": 0,         "valorPinturaInterna": 0     },     "numeroCotacao": 2095172,     "response": {         "coberturas": [             {                 "tipo": "Aluguel",                 "verba": 2200,                 "periodoIndenitario": 12,                 "premioLiquido": 6173.42,                 "contratada": "True"             },             {                 "tipo": "Condominio",                 "verba": 600,                 "periodoIndenitario": 12,                 "premioLiquido": 854.84,                 "contratada": "True"             },             {                 "tipo": "Iptu",                 "verba": 0,                 "periodoIndenitario": 12,                 "premioLiquido": 0,                 "contratada": "False"             },             {                 "tipo": "Agua",                 "verba": 0,                 "periodoIndenitario": 6,                 "premioLiquido": 0,                 "contratada": "False"             },             {                 "tipo": "Luz",                 "verba": 0,                 "periodoIndenitario": 6,                 "premioLiquido": 0,                 "contratada": "False"             },             {                 "tipo": "Gas",                 "verba": 0,                 "periodoIndenitario": 6,                 "premioLiquido": 0,                 "contratada": "False"             },             {                 "tipo": "DanosAoImovel",                 "verba": 0,                 "periodoIndenitario": 6,                 "premioLiquido": 0,                 "contratada": "False"             },             {                 "tipo": "PinturaInterna",                 "verba": 0,                 "periodoIndenitario": 3,                 "premioLiquido": 0,                 "contratada": "False"             },             {                 "tipo": "PinturaExterna",                 "verba": 0,                 "periodoIndenitario": 3,                 "premioLiquido": 0,                 "contratada": "False"             },             {                 "tipo": "MultasContratuais",                 "verba": 0,                 "periodoIndenitario": 3,                 "premioLiquido": 0,                 "contratada": "False"             },             {                 "tipo": "DanosAMoveis",                 "verba": 0,                 "periodoIndenitario": 1,                 "premioLiquido": 0,                 "contratada": "False"             }         ],         "codigoProduto": 279,         "cnpjCorretor": "{{cnpjCorretor}}",         "comissao": "18",         "inicioVigencia": "{{dataAtual}}",         "fimVigencia": "{{dataFinal}}",         "regiao": "MG",         "condicoesPagamento": {             "premioBrutoTotal": 7546.95,             "premioLiquido": 7028.26,             "descontoAVista": 1509.39,             "descontoEm4x": 754.69,             "quantidadeParcelas": 36         },         "finalidadeLocacao": "Residencial",         "indiceReajusteAluguel": "IGPM",         "razaoSocialCorretor": "",         "cep": "{{cep}}"     },     "versaoCotacao": 1,     "dataCriacao": "{{dataAtual}}T20:41:57.647Z" }'
+      deprecated: false
+      servers:
+        - url: https://openapi-uat.tooseguros.com.br
+          variables: {}
+      x-operation-settings:
+        CollectParameters: false
+        AllowDynamicQueryParameters: false
+        AllowDynamicFormParameters: false
+        IsMultiContentStreaming: false
+      x-unitTests: []
+      x-server-name: Gateway
+  /fianca/proposta/{cpf}:
+    post:
+      tags:
+        - Aluguel Garantido
+      summary: Registrar Proposta
+      operationId: RegistrarProposta
+      parameters:
+        - name: clientid
+          in: header
+          description: ''
+          required: true
+          style: simple
+          schema:
+            type: string
+            example: '{{clientid}}'
+        - name: clientsecret
+          in: header
+          description: ''
+          required: true
+          style: simple
+          schema:
+            type: string
+            example: '{{clientsecret}}'
+        - name: cpf
+          in: path
+          description: ''
+          required: true
+          style: simple
+          schema:
+            type: string
+      requestBody:
+        description: ''
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegistrarPropostaRequest'
+            example:
+              numeroCotacao: '{{numeroCotacao}}'
+              pretendentes:
+                - nome: Proprietario Too
+                  cpf: '{{cpf}}'
+                  dataNascimento: 1985/12/10
+                  estadoCivil: casado
+                  residiraImovel: true
+                  responsavelFinanceiroPeloImovel: true
+                  rendaFixaMensal: 10000
+                  outrasRendas: 0
+                  vinculoEmpregaticio: Clt
+                  profissao: Analista
+                  cep: '{{cep}}'
+                  telefone:
+                    ddd: 11
+                    numero: 99885566
+                    tiposNotificacao:
+                      - SMS
+                    tipoTelefone: Celular
+                  pessoaPoliticamenteExposta: NaoInformado
+                  politicamenteExpostaNome: ''
+                  politicamenteExpostaCpf: ''
+                  politicamenteExpostaGrauParentesco: ''
+              locacao:
+                cep: '{{cep}}'
+                logradouro: Rua Ali
+                numero: '456'
+                complemento: AA
+                bairro: Lapa
+                cidade: São Paulo
+                uf: SP
+                imobiliaria:
+                  razaoSocial: '{{nomeImobiliaria}}'
+                  cnpj: 123456789101
+                periodicidadeLocacao: Anual
+        required: true
+      responses:
+        '200':
+          description: ''
+          headers: {}
+      deprecated: false
+      servers:
+        - url: https://openapi-uat.tooseguros.com.br
+          variables: {}
+      x-operation-settings:
+        CollectParameters: false
+        AllowDynamicQueryParameters: false
+        AllowDynamicFormParameters: false
+        IsMultiContentStreaming: false
+      x-unitTests: []
+      x-server-name: Gateway
+  /fianca/proposta/{cpf}/{numeroProposta}:
+    get:
+      tags:
+        - Aluguel Garantido
+      summary: Consultar Status da Ficha e da Proposta
+      description: 'Consulta de Status da Ficha e da Proposta: realiza a consulta para saber o status da ficha e da proposta antes e depois da análise de crédito'
+      operationId: ConsultarStatusdaProposta
+      parameters:
+        - name: Content-Type
+          in: header
+          description: ''
+          required: true
+          style: simple
+          schema:
+            type: string
+            example: application/json
+        - name: clientid
+          in: header
+          description: ''
+          required: true
+          style: simple
+          schema:
+            type: string
+            example: '{{clientid}}'
+        - name: clientsecret
+          in: header
+          description: ''
+          required: true
+          style: simple
+          schema:
+            type: string
+            example: '{{clientsecret}}'
+        - name: cpf
+          in: path
+          description: ''
+          required: true
+          style: simple
+          schema:
+            type: string
+        - name: numeroProposta
+          in: path
+          description: ''
+          required: true
+          style: simple
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+          headers: {}
+      deprecated: false
+      servers:
+        - url: https://openapi-uat.tooseguros.com.br
+          variables: {}
+      x-operation-settings:
+        CollectParameters: false
+        AllowDynamicQueryParameters: false
+        AllowDynamicFormParameters: false
+        IsMultiContentStreaming: false
+      x-unitTests: []
+      x-server-name: Gateway
+  /fianca/proposta/{numeroProposta}/proponentes/{cpf}/documentos:
+    post:
+      tags:
+        - Aluguel Garantido
+      summary: Envio Documentos
+      description: 'Envio de Documentos: reservada ao processo de envio de documentos por proponentes'
+      operationId: EnvioDocumentos
+      parameters:
+        - name: Content-Type
+          in: header
+          description: ''
+          required: true
+          style: simple
+          schema:
+            type: string
+            example: application/json
+        - name: clientid
+          in: header
+          description: ''
+          required: true
+          style: simple
+          schema:
+            type: string
+            example: '{{clientid}}'
+        - name: clientsecret
+          in: header
+          description: ''
+          required: true
+          style: simple
+          schema:
+            type: string
+            example: '{{clientsecret}}'
+        - name: numeroProposta
+          in: path
+          description: ''
+          required: true
+          style: simple
+          schema:
+            type: string
+        - name: cpf
+          in: path
+          description: ''
+          required: true
+          style: simple
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/x-www-form-urlencoded:
+            encoding: {}
+            schema:
+              required:
+                - anexo
+                - tipoDocumento
+                - descricao
+              type: object
+              properties:
+                anexo:
+                  type: string
+                tipoDocumento:
+                  type: string
+                  example: Rg
+                descricao:
+                  type: string
+                  example: RG tipo 1 - Teste - Enviar RG Válido
+        required: false
+      responses:
+        '200':
+          description: ''
+          headers: {}
+      deprecated: false
+      servers:
+        - url: https://openapi-uat.tooseguros.com.br
+          variables: {}
+      x-operation-settings:
+        CollectParameters: false
+        AllowDynamicQueryParameters: false
+        AllowDynamicFormParameters: false
+        IsMultiContentStreaming: false
+      x-unitTests: []
+      x-server-name: Gateway
+  /fianca/credito/{cpf}/{numeroProposta}/analisar:
+    post:
+      tags:
+        - Aluguel Garantido
+      summary: Enviar solicitação de análise de crédito
+      description: 'Solicitação de análise de crédito: realiza a solicitação da análise de crédito da ficha'
+      operationId: Enviarsolicitaçãodeanálisedecrédito
+      parameters:
+        - name: Content-Type
+          in: header
+          description: ''
+          required: true
+          style: simple
+          schema:
+            type: string
+            example: application/json
+        - name: clientid
+          in: header
+          description: ''
+          required: true
+          style: simple
+          schema:
+            type: string
+            example: '{{clientid}}'
+        - name: clientsecret
+          in: header
+          description: ''
+          required: true
+          style: simple
+          schema:
+            type: string
+            example: '{{clientsecret}}'
+        - name: cpf
+          in: path
+          description: ''
+          required: true
+          style: simple
+          schema:
+            type: string
+        - name: numeroProposta
+          in: path
+          description: ''
+          required: true
+          style: simple
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+          headers: {}
+      deprecated: false
+      servers:
+        - url: https://openapi-uat.tooseguros.com.br
+          variables: {}
+      x-operation-settings:
+        CollectParameters: false
+        AllowDynamicQueryParameters: false
+        AllowDynamicFormParameters: false
+        IsMultiContentStreaming: false
+      x-unitTests: []
+      x-server-name: Gateway
+  /fianca/credito/{cpf}/{numeroProposta}/parecer:
+    get:
+      tags:
+        - Aluguel Garantido
+      summary: Consultar PDF da carta com parecer da análise de crédito
+      parameters:
+        - name: Content-Type
+          in: header
+          description: ''
+          required: true
+          style: simple
+          schema:
+            type: string
+            example: application/json
+        - name: clientid
+          in: header
+          description: ''
+          required: true
+          style: simple
+          schema:
+            type: string
+            example: '{{clientid}}'
+        - name: clientsecret
+          in: header
+          description: ''
+          required: true
+          style: simple
+          schema:
+            type: string
+            example: '{{clientsecret}}'
+        - name: cpf
+          in: path
+          description: ''
+          required: true
+          schema:
+            type: string
+            description: ''
+            nullable: true
+        - name: numeroProposta
+          in: path
+          description: ''
+          required: true
+          schema:
+            type: integer
+            description: ''
+            format: int64
+      responses:
+        '200':
+          description: ''
+          headers: {}
+        '400':
+          description: ''
+          headers: {}
+        '500':
+          description: ''
+          headers: {}
+      deprecated: false
+      servers:
+        - url: https://openapi-uat.tooseguros.com.br
+          variables: {}
+      x-operation-settings:
+        CollectParameters: false
+        AllowDynamicQueryParameters: false
+        AllowDynamicFormParameters: false
+        IsMultiContentStreaming: false
+      x-unitTests: []
+      x-server-name: Gateway
+  /fianca/proposta/formaspagamento/{numeroCotacao}:
+    get:
+      tags:
+        - Aluguel Garantido
+      summary: Consulta de Formas de Pagamento
+      description: 'Consulta de Formas de Pagamento: recupera uma lista de formas de pagamentos disponíveis'
+      operationId: ConsultadeFormasdePagamento
+      parameters:
+        - name: Content-Type
+          in: header
+          description: ''
+          required: true
+          style: simple
+          schema:
+            type: string
+            example: application/json
+        - name: clientid
+          in: header
+          description: ''
+          required: true
+          style: simple
+          schema:
+            type: string
+            example: '{{clientid}}'
+        - name: clientsecret
+          in: header
+          description: ''
+          required: true
+          style: simple
+          schema:
+            type: string
+            example: '{{clientsecret}}'
+        - name: numeroCotacao
+          in: path
+          description: ''
+          required: true
+          style: simple
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+          headers: {}
+      deprecated: false
+      servers:
+        - url: https://openapi-uat.tooseguros.com.br
+          variables: {}
+      x-operation-settings:
+        CollectParameters: false
+        AllowDynamicQueryParameters: false
+        AllowDynamicFormParameters: false
+        IsMultiContentStreaming: false
+      x-unitTests: []
+      x-server-name: Gateway
+  /fianca/proposta/{numeroProposta}/atualizar:
+    put:
+      tags:
+        - Aluguel Garantido
+      summary: Atualizar Registro de Proposta Aprovada
+      description: 'Atualizar Registro de Proposta Aprovada: destinado ao processo de atualização de proposta. Válido somente para propostas aprovadas'
+      operationId: AtualizarRegistrodePropostaAprovada
+      parameters:
+        - name: clientid
+          in: header
+          description: ''
+          required: true
+          style: simple
+          schema:
+            type: string
+            example: '{{clientid}}'
+        - name: clientsecret
+          in: header
+          description: ''
+          required: true
+          style: simple
+          schema:
+            type: string
+            example: '{{clientsecret}}'
+        - name: numeroProposta
+          in: path
+          description: ''
+          required: true
+          style: simple
+          schema:
+            type: string
+      requestBody:
+        description: ''
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AtualizarRegistrodePropostaAprovadaRequest'
+            example:
+              numeroCotacao: '{{numeroCotacao}}'
+              formaPagamento:
+                tipoPagamento: 2
+                tipoEntrada: 1
+                tipoOpcaoParcelamento: 2
+                quantidadeParcelas: 23
+              pretendentes:
+                - cpf: '{{cpf}}'
+                  telefone:
+                    ddd: 11
+                    numero: 99885566
+                    tiposNotificacao:
+                      - SMS
+                    tipoTelefone: Celular
+                  email: pretendente@tooseguros.com
+                  pessoaPoliticamenteExposta: Nao
+                  politicamenteExpostaNome: ''
+                  politicamenteExpostaCpf: ''
+                  politicamenteExpostaGrauParentesco: ''
+              locacao:
+                cep: '{{cep}}'
+                logradouro: Rua Iracema Souza Pinto
+                numero: '2'
+                complemento: 
+                bairro: Planalto
+                cidade: Minas Gerais
+                uf: MG
+                imobiliaria:
+                  razaoSocial: '{{nomeImobiliaria}}'
+                  cnpj: 12345678900
+                periodicidadeLocacao: Anual
+                dataInicioVigenciaLocacao: '{{dataAtual}}'
+                dataFimVigenciaLocacao: '{{dataFinal}}'
+              proprietario:
+                tipoPessoa: Fisica
+                nome: {{nomeProprietario}}
+                cpf: '{{cpfProprietario}}'
+                dataNascimento: '1990-04-05'
+                estadoCivil: Casado
+                nacionalidade: Brasil
+                profissao: Empresário
+                informarRendaFixa: true
+                rendaFixaMensal: 5000
+                pessoaPoliticamenteExposta: Nao
+                politicamenteExpostaNome: ''
+                politicamenteExpostaCpf: ''
+                politicamenteExpostaGrauParentesco: ''
+                email: {{emailProprietario}}
+                telefone:
+                  ddd: 11
+                  numero: 976544356
+                  tiposNotificacao:
+                    - SMS
+                  tipoTelefone: Celular
+                cep: '{{cepProprietario}}'
+                logradouro: Avenida Atlântica
+                numero: '2174'
+                complemento: Ap 04
+                bairro: Copacabana
+                cidade: Rio de Janeiro
+                uf: RJ
+        required: true
+      responses:
+        '200':
+          description: ''
+          headers: {}
+      deprecated: false
+      servers:
+        - url: https://openapi-uat.tooseguros.com.br
+          variables: {}
+      x-operation-settings:
+        CollectParameters: false
+        AllowDynamicQueryParameters: false
+        AllowDynamicFormParameters: false
+        IsMultiContentStreaming: false
+      x-unitTests: []
+      x-server-name: Gateway
+  /fianca/proposta/{cpf}/{numeroProposta}/pdf:
+    get:
+      tags:
+        - Aluguel Garantido
+      summary: Consultar PDF da Proposta
+      description: 'Consultar PDF da Proposta: retorna a proposta em formato PDF'
+      operationId: ConsultarPDFdaProposta
+      parameters:
+        - name: Content-Type
+          in: header
+          description: ''
+          required: true
+          style: simple
+          schema:
+            type: string
+            example: application/json
+        - name: clientid
+          in: header
+          description: ''
+          required: true
+          style: simple
+          schema:
+            type: string
+            example: '{{clientid}}'
+        - name: clientsecret
+          in: header
+          description: ''
+          required: true
+          style: simple
+          schema:
+            type: string
+            example: '{{clientsecret}}'
+        - name: cpf
+          in: path
+          description: ''
+          required: true
+          style: simple
+          schema:
+            type: string
+        - name: numeroProposta
+          in: path
+          description: ''
+          required: true
+          style: simple
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+          headers: {}
+      deprecated: false
+      servers:
+        - url: https://openapi-uat.tooseguros.com.br
+          variables: {}
+      x-operation-settings:
+        CollectParameters: false
+        AllowDynamicQueryParameters: false
+        AllowDynamicFormParameters: false
+        IsMultiContentStreaming: false
+      x-unitTests: []
+      x-server-name: Gateway
+  /fianca/proposta/{numeroProposta}/transmitir:
+    post:
+      tags:
+        - Aluguel Garantido
+      summary: Transmitir Proposta
+      description: 'Transmitir Proposta: realiza a transmissão da proposta e envia para emissão'
+      operationId: TransmitirProposta
+      parameters:
+        - name: Content-Type
+          in: header
+          description: ''
+          required: true
+          style: simple
+          schema:
+            type: string
+            example: application/json
+        - name: clientid
+          in: header
+          description: ''
+          required: true
+          style: simple
+          schema:
+            type: string
+            example: '{{clientid}}'
+        - name: clientsecret
+          in: header
+          description: ''
+          required: true
+          style: simple
+          schema:
+            type: string
+            example: '{{clientsecret}}'
+        - name: numeroProposta
+          in: path
+          description: ''
+          required: true
+          style: simple
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+          headers: {}
+      deprecated: false
+      servers:
+        - url: https://openapi-uat.tooseguros.com.br
+          variables: {}
+      x-operation-settings:
+        CollectParameters: false
+        AllowDynamicQueryParameters: false
+        AllowDynamicFormParameters: false
+        IsMultiContentStreaming: false
+      x-unitTests: []
+      x-server-name: Gateway
+  /fianca/apolice/{numeroApolice}:
+    get:
+      tags:
+        - Aluguel Garantido
+      summary: Consulta Apolice
+      description: 'Consulta de Apólice: recurso disponível para obter a apólice'
+      operationId: ConsultaApolice
+      parameters:
+        - name: Content-Type
+          in: header
+          description: ''
+          required: true
+          style: simple
+          schema:
+            type: string
+            example: application/json
+        - name: clientid
+          in: header
+          description: ''
+          required: true
+          style: simple
+          schema:
+            type: string
+            example: '{{clientid}}'
+        - name: clientsecret
+          in: header
+          description: ''
+          required: true
+          style: simple
+          schema:
+            type: string
+            example: '{{clientsecret}}'
+        - name: numeroApolice
+          in: path
+          description: ''
+          required: true
+          style: simple
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+          headers: {}
+      deprecated: false
+      servers:
+        - url: https://openapi-uat.tooseguros.com.br
+          variables: {}
+      x-operation-settings:
+        CollectParameters: false
+        AllowDynamicQueryParameters: false
+        AllowDynamicFormParameters: false
+        IsMultiContentStreaming: false
+      x-unitTests: []
+      x-server-name: Gateway
+  /fianca/apolice/{numeroApolice}/pdf:
+    get:
+      tags:
+        - Aluguel Garantido
+      summary: Consultar PDF da Apólice
+      description: 'Consultar PDF da Apólice: recurso disponível para obter a Apólice no formato PDF'
+      operationId: ConsultarPDFdaApólice
+      parameters:
+        - name: Content-Type
+          in: header
+          description: ''
+          required: true
+          style: simple
+          schema:
+            type: string
+            example: application/json
+        - name: clientid
+          in: header
+          description: ''
+          required: true
+          style: simple
+          schema:
+            type: string
+            example: '{{clientid}}'
+        - name: clientsecret
+          in: header
+          description: ''
+          required: true
+          style: simple
+          schema:
+            type: string
+            example: '{{clientsecret}}'
+        - name: numeroApolice
+          in: path
+          description: ''
+          required: true
+          style: simple
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ''
+          headers: {}
+      deprecated: false
+      servers:
+        - url: https://openapi-uat.tooseguros.com.br
+          variables: {}
+      x-operation-settings:
+        CollectParameters: false
+        AllowDynamicQueryParameters: false
+        AllowDynamicFormParameters: false
+        IsMultiContentStreaming: false
+      x-unitTests: []
+      x-server-name: Gateway
+components:
+  schemas:
+    CriarCotaoAluguelGarantidoRequest:
+      title: CriarCotaoAluguelGarantidoRequest
+      required:
+        - cep
+        - cnpjCorretor
+        - fimVigencia
+        - finalidadeLocacao
+        - indiceReajusteAluguel
+        - inicioVigencia
+        - percentualComissao
+        - periodoIndAluguel
+        - tipoPessoa
+        - tipoSeguro
+        - valorAgua
+        - valorAluguel
+        - valorCondominio
+        - valorDanosAMoveis
+        - valorDanosAoImovel
+        - valorGas
+        - valorIptu
+        - valorLuz
+        - valorMultasContratuais
+        - valorPinturaExterna
+        - valorPinturaInterna
+      type: object
+      properties:
+        cep:
+          type: string
+        cnpjCorretor:
+          type: string
+        fimVigencia:
+          type: string
+        finalidadeLocacao:
+          type: string
+        indiceReajusteAluguel:
+          type: string
+        inicioVigencia:
+          type: string
+        percentualComissao:
+          type: number
+        periodoIndAluguel:
+          type: integer
+          format: int32
+        tipoPessoa:
+          type: string
+        tipoSeguro:
+          type: string
+        valorAgua:
+          type: integer
+          format: int32
+        valorAluguel:
+          type: integer
+          format: int32
+        valorCondominio:
+          type: integer
+          format: int32
+        valorDanosAMoveis:
+          type: integer
+          format: int32
+        valorDanosAoImovel:
+          type: integer
+          format: int32
+        valorGas:
+          type: integer
+          format: int32
+        valorIptu:
+          type: integer
+          format: int32
+        valorLuz:
+          type: integer
+          format: int32
+        valorMultasContratuais:
+          type: integer
+          format: int32
+        valorPinturaExterna:
+          type: integer
+          format: int32
+        valorPinturaInterna:
+          type: integer
+          format: int32
+      example:
+        cep: '{{cep}}'
+        cnpjCorretor: '{{cnpjCorretor}}'
+        fimVigencia: '{{dataFinal}}'
+        finalidadeLocacao: Residencial
+        indiceReajusteAluguel: IGPM
+        inicioVigencia: '{{dataAtual}}'
+        percentualComissao: 0.18
+        periodoIndAluguel: 12
+        tipoPessoa: Pessoa Fisica
+        tipoSeguro: Novo
+        valorAgua: 0
+        valorAluguel: 2200
+        valorCondominio: 600
+        valorDanosAMoveis: 0
+        valorDanosAoImovel: 0
+        valorGas: 0
+        valorIptu: 0
+        valorLuz: 0
+        valorMultasContratuais: 1200
+        valorPinturaExterna: 1200
+        valorPinturaInterna: 0
+    RegistrarPropostaRequest:
+      title: RegistrarPropostaRequest
+      required:
+        - numeroCotacao
+        - pretendentes
+        - locacao
+      type: object
+      properties:
+        numeroCotacao:
+          type: string
+        pretendentes:
+          type: array
+          items:
+            $ref: '#/components/schemas/Pretendente'
+          description: ''
+        locacao:
+          $ref: '#/components/schemas/Locacao'
+      example:
+        numeroCotacao: '{{numeroCotacao}}'
+        pretendentes:
+          - nome: Proprietario Too
+            cpf: '{{cpf}}'
+            dataNascimento: 1985/12/10
+            estadoCivil: casado
+            residiraImovel: true
+            responsavelFinanceiroPeloImovel: true
+            rendaFixaMensal: 10000
+            outrasRendas: 0
+            vinculoEmpregaticio: Clt
+            profissao: Analista
+            cep: '{{cep}}'
+            rg:
+              numero: ''
+              dataEmissao: ''
+              orgaoEmissor: ''
+            telefone:
+              ddd: 11
+              numero: 99885566
+              tiposNotificacao:
+                - SMS
+              tipoTelefone: Celular
+            pessoaPoliticamenteExposta: NaoInformado
+            politicamenteExpostaNome: ''
+            politicamenteExpostaCpf: ''
+            politicamenteExpostaGrauParentesco: ''
+        locacao:
+          cep: '{{cep}}'
+          logradouro: Rua Ali
+          numero: '456'
+          complemento: AA
+          bairro: Lapa
+          cidade: São Paulo
+          uf: SP
+          imobiliaria:
+            razaoSocial: {{nomeImobiliaria}}
+            cnpj: {{cnpjImobiliaria}}
+          periodicidadeLocacao: Anual
+          dataInicioVigenciaLocacao: '{{dataAtual}}'
+          dataFimVigenciaLocacao: '{{dataFinal}}'
+          empresaConstituida: null
+    Pretendente:
+      title: Pretendente
+      required:
+        - nome
+        - cpf
+        - dataNascimento
+        - estadoCivil
+        - residiraImovel
+        - responsavelFinanceiroPeloImovel
+        - rendaFixaMensal
+        - outrasRendas
+        - vinculoEmpregaticio
+        - profissao
+        - cep
+        - rg
+        - telefone
+        - pessoaPoliticamenteExposta
+        - politicamenteExpostaNome
+        - politicamenteExpostaCpf
+        - politicamenteExpostaGrauParentesco
+      type: object
+      properties:
+        nome:
+          type: string
+        cpf:
+          type: string
+        dataNascimento:
+          type: string
+        estadoCivil:
+          type: string
+        residiraImovel:
+          type: boolean
+        responsavelFinanceiroPeloImovel:
+          type: boolean
+        rendaFixaMensal:
+          type: integer
+          format: int32
+        outrasRendas:
+          type: integer
+          format: int32
+        vinculoEmpregaticio:
+          type: string
+        profissao:
+          type: string
+        cep:
+          type: string
+        rg:
+          $ref: '#/components/schemas/Rg'
+        telefone:
+          $ref: '#/components/schemas/Telefone'
+        pessoaPoliticamenteExposta:
+          type: string
+        politicamenteExpostaNome:
+          type: string
+        politicamenteExpostaCpf:
+          type: string
+        politicamenteExpostaGrauParentesco:
+          type: string
+      example:
+        nome: Proprietario Too
+        cpf: '{{cpf}}'
+        dataNascimento: 1985/12/10
+        estadoCivil: casado
+        residiraImovel: true
+        responsavelFinanceiroPeloImovel: true
+        rendaFixaMensal: 10000
+        outrasRendas: 0
+        vinculoEmpregaticio: Clt
+        profissao: Analista
+        cep: '{{cep}}'
+        rg:
+          numero: ''
+          dataEmissao: ''
+          orgaoEmissor: ''
+        telefone:
+          ddd: 11
+          numero: 99885566
+          tiposNotificacao:
+            - SMS
+          tipoTelefone: Celular
+        pessoaPoliticamenteExposta: NaoInformado
+        politicamenteExpostaNome: ''
+        politicamenteExpostaCpf: ''
+        politicamenteExpostaGrauParentesco: ''
+    Rg:
+      title: Rg
+      required:
+        - numero
+        - dataEmissao
+        - orgaoEmissor
+      type: object
+      properties:
+        numero:
+          type: string
+        dataEmissao:
+          type: string
+        orgaoEmissor:
+          type: string
+      example:
+        numero: ''
+        dataEmissao: ''
+        orgaoEmissor: ''
+    Telefone:
+      title: Telefone
+      required:
+        - ddd
+        - numero
+        - tiposNotificacao
+        - tipoTelefone
+      type: object
+      properties:
+        ddd:
+          type: integer
+          format: int32
+        numero:
+          type: integer
+          format: int32
+        tiposNotificacao:
+          type: array
+          items:
+            type: string
+          description: ''
+        tipoTelefone:
+          type: string
+      example:
+        ddd: 11
+        numero: 99885566
+        tiposNotificacao:
+          - SMS
+        tipoTelefone: Celular
+    Locacao:
+      title: Locacao
+      required:
+        - cep
+        - logradouro
+        - numero
+        - complemento
+        - bairro
+        - cidade
+        - uf
+        - imobiliaria
+        - periodicidadeLocacao
+        - dataInicioVigenciaLocacao
+        - dataFimVigenciaLocacao
+        - empresaConstituida
+      type: object
+      properties:
+        cep:
+          type: string
+        logradouro:
+          type: string
+        numero:
+          type: string
+        complemento:
+          type: string
+        bairro:
+          type: string
+        cidade:
+          type: string
+        uf:
+          type: string
+        imobiliaria:
+          $ref: '#/components/schemas/Imobiliaria'
+        periodicidadeLocacao:
+          type: string
+        dataInicioVigenciaLocacao:
+          type: string
+        dataFimVigenciaLocacao:
+          type: string
+        empresaConstituida:
+          type: string
+          nullable: true
+      example:
+        cep: '{{cep}}'
+        logradouro: Rua Ali
+        numero: '456'
+        complemento: AA
+        bairro: Lapa
+        cidade: São Paulo
+        uf: SP
+        imobiliaria:
+          razaoSocial: {{nomeImobiliaria}}
+          cnpj: {{cnpjImobiliaria}}
+        periodicidadeLocacao: Anual
+        dataInicioVigenciaLocacao: '{{dataAtual}}'
+        dataFimVigenciaLocacao: '{{dataFinal}}'
+        empresaConstituida: null
+    Imobiliaria:
+      title: Imobiliaria
+      required:
+        - razaoSocial
+        - cnpj
+      type: object
+      properties:
+        razaoSocial:
+          type: string
+        cnpj:
+          type: integer
+          format: int64
+      example:
+        razaoSocial: {{nomeImobiliaria}}
+        cnpj: {{cnpjImobiliaria}}
+    AtualizarRegistrodePropostaAprovadaRequest:
+      title: AtualizarRegistrodePropostaAprovadaRequest
+      required:
+        - numeroCotacao
+        - opcaoPagamento
+        - formaPagamento
+        - pretendentes
+        - locacao
+        - proprietario
+      type: object
+      properties:
+        numeroCotacao:
+          type: string
+        opcaoPagamento:
+          type: string
+        formaPagamento:
+          $ref: '#/components/schemas/FormaPagamento'
+        pretendentes:
+          type: array
+          items:
+            $ref: '#/components/schemas/Pretendente1'
+          description: ''
+        locacao:
+          $ref: '#/components/schemas/Locacao1'
+        proprietario:
+          $ref: '#/components/schemas/Proprietario'
+      example:
+        numeroCotacao: '{{numeroCotacao}}'
+        formaPagamento:
+          tipoPagamento: 2
+          tipoEntrada: 1
+          tipoOpcaoParcelamento: 2
+          quantidadeParcelas: 23
+        pretendentes:
+          - cpf: '{{cpf}}'
+            telefone:
+              ddd: 11
+              numero: 99885566
+              tiposNotificacao:
+                - SMS
+              tipoTelefone: Celular
+            rg:
+              numero: ''
+              dataEmissao: ''
+              orgaoEmissor: 
+            email: {{emailPretendente}}
+            pessoaPoliticamenteExposta: Nao
+            politicamenteExpostaNome: ''
+            politicamenteExpostaCpf: ''
+            politicamenteExpostaGrauParentesco: ''
+        locacao:
+          cep: '{{cepPretendente}}'
+          logradouro: Rua Iracema Souza Pinto
+          numero: '128'
+          complemento: 
+          bairro: Planalto
+          cidade: Minas Gerais
+          uf: MG
+          imobiliaria:
+            razaoSocial: {{nomeImobiliaria}}
+            cnpj: {{cnpjImobiliaria}}
+          periodicidadeLocacao: Anual
+          dataInicioVigenciaLocacao: '{{dataAtual}}'
+          dataFimVigenciaLocacao: '{{dataFinal}}'
+          possuiEmpresaConstituida: true
+          empresaConstituida:
+            cnpj: '{{cnpjEmpresaLocatario}}'
+            ramoAtividade: Comercio
+        proprietario:
+          tipoPessoa: Fisica
+          nome: {{nomeProprietario}}
+          cpf: '{{cpfProprietario}}'
+          rg:
+            numero: ''
+            dataEmissao: ''
+            orgaoEmissor: 
+          dataNascimento: '1990-04-05'
+          estadoCivil: Casado
+          nacionalidade: Brasil
+          profissao: Empresário
+          informarRendaFixa: true
+          rendaFixaMensal: 5000
+          pessoaPoliticamenteExposta: Nao
+          politicamenteExpostaNome: ''
+          politicamenteExpostaCpf: ''
+          politicamenteExpostaGrauParentesco: ''
+          email: {{emailProprietario}}
+          telefone:
+            ddd: 11
+            numero: 976544356
+            tiposNotificacao:
+              - SMS
+            tipoTelefone: Celular
+          cep: '{{cepPriprietario}}'
+          logradouro: Avenida Atlântica
+          numero: '2174'
+          complemento: 
+          bairro: Copacabana
+          cidade: Rio de Janeiro
+          uf: RJ
+    FormaPagamento:
+      title: FormaPagamento
+      required:
+        - tipoPagamento
+        - tipoEntrada
+        - tipoOpcaoParcelamento
+        - quantidadeParcelas
+      type: object
+      properties:
+        tipoPagamento:
+          type: integer
+          format: int32
+        tipoEntrada:
+          type: integer
+          format: int32
+        tipoOpcaoParcelamento:
+          type: integer
+          format: int32
+        quantidadeParcelas:
+          type: integer
+          format: int32
+      example:
+        tipoPagamento: 2
+        tipoEntrada: 1
+        tipoOpcaoParcelamento: 2
+        quantidadeParcelas: 23
+    Pretendente1:
+      title: Pretendente1
+      required:
+        - cpf
+        - telefone
+        - rg
+        - email
+        - pessoaPoliticamenteExposta
+        - politicamenteExpostaNome
+        - politicamenteExpostaCpf
+        - politicamenteExpostaGrauParentesco
+      type: object
+      properties:
+        cpf:
+          type: string
+        telefone:
+          $ref: '#/components/schemas/Telefone'
+        rg:
+          $ref: '#/components/schemas/Rg'
+        email:
+          type: string
+        pessoaPoliticamenteExposta:
+          type: string
+        politicamenteExpostaNome:
+          type: string
+        politicamenteExpostaCpf:
+          type: string
+        politicamenteExpostaGrauParentesco:
+          type: string
+      example:
+        cpf: '{{cpf}}'
+        telefone:
+          ddd: 11
+          numero: 99885566
+          tiposNotificacao:
+            - SMS
+          tipoTelefone: Celular
+        rg:
+          numero: ''
+          dataEmissao: ''
+          orgaoEmissor: 
+        email: {{emailPretendente}}
+        pessoaPoliticamenteExposta: Nao
+        politicamenteExpostaNome: ''
+        politicamenteExpostaCpf: ''
+        politicamenteExpostaGrauParentesco: ''
+    Locacao1:
+      title: Locacao1
+      required:
+        - cep
+        - logradouro
+        - numero
+        - complemento
+        - bairro
+        - cidade
+        - uf
+        - imobiliaria
+        - periodicidadeLocacao
+        - dataInicioVigenciaLocacao
+        - dataFimVigenciaLocacao
+        - possuiEmpresaConstituida
+        - empresaConstituida
+      type: object
+      properties:
+        cep:
+          type: string
+        logradouro:
+          type: string
+        numero:
+          type: string
+        complemento:
+          type: string
+        bairro:
+          type: string
+        cidade:
+          type: string
+        uf:
+          type: string
+        imobiliaria:
+          $ref: '#/components/schemas/Imobiliaria'
+        periodicidadeLocacao:
+          type: string
+        dataInicioVigenciaLocacao:
+          type: string
+        dataFimVigenciaLocacao:
+          type: string
+        possuiEmpresaConstituida:
+          type: boolean
+        empresaConstituida:
+          $ref: '#/components/schemas/EmpresaConstituida'
+      example:
+        cep: '{{cepPretendente}}'
+        logradouro: Rua Iracema Souza Pinto
+        numero: '128'
+        complemento: ap 101
+        bairro: Planalto
+        cidade: Minas Gerais
+        uf: MG
+        imobiliaria:
+          razaoSocial: {{nomeImobiliaria}}
+          cnpj: {{cnpjImobiliaria}}
+        periodicidadeLocacao: Anual
+        dataInicioVigenciaLocacao: '{{dataAtual}}'
+        dataFimVigenciaLocacao: '{{dataFinal}}'
+        possuiEmpresaConstituida: true
+        empresaConstituida:
+          cnpj: '{{cnpjEmpresaLocatario}}'
+          ramoAtividade: Comercio
+    EmpresaConstituida:
+      title: EmpresaConstituida
+      required:
+        - cnpj
+        - ramoAtividade
+      type: object
+      properties:
+        cnpj:
+          type: string
+        ramoAtividade:
+          type: string
+      example:
+        cnpj: '{{cnpjEmpresaLocatario}}'
+        ramoAtividade: Comercio
+    Proprietario:
+      title: Proprietario
+      required:
+        - tipoPessoa
+        - nome
+        - cpf
+        - rg
+        - dataNascimento
+        - estadoCivil
+        - nacionalidade
+        - profissao
+        - informarRendaFixa
+        - rendaFixaMensal
+        - pessoaPoliticamenteExposta
+        - politicamenteExpostaNome
+        - politicamenteExpostaCpf
+        - politicamenteExpostaGrauParentesco
+        - email
+        - telefone
+        - cep
+        - logradouro
+        - numero
+        - complemento
+        - bairro
+        - cidade
+        - uf
+      type: object
+      properties:
+        tipoPessoa:
+          type: string
+        nome:
+          type: string
+        cpf:
+          type: string
+        rg:
+          $ref: '#/components/schemas/Rg'
+        dataNascimento:
+          type: string
+        estadoCivil:
+          type: string
+        nacionalidade:
+          type: string
+        profissao:
+          type: string
+        informarRendaFixa:
+          type: boolean
+        rendaFixaMensal:
+          type: integer
+          format: int32
+        pessoaPoliticamenteExposta:
+          type: string
+        politicamenteExpostaNome:
+          type: string
+        politicamenteExpostaCpf:
+          type: string
+        politicamenteExpostaGrauParentesco:
+          type: string
+        email:
+          type: string
+        telefone:
+          $ref: '#/components/schemas/Telefone'
+        cep:
+          type: string
+        logradouro:
+          type: string
+        numero:
+          type: string
+        complemento:
+          type: string
+        bairro:
+          type: string
+        cidade:
+          type: string
+        uf:
+          type: string
+      example:
+        tipoPessoa: Fisica
+        nome: {{nomeProprietario}}
+        cpf: '{{cpfProprietario}}'
+        rg:
+          numero: ''
+          dataEmissao: ''
+          orgaoEmissor: 
+        dataNascimento: '1990-04-05'
+        estadoCivil: Casado
+        nacionalidade: Brasil
+        profissao: Empresário
+        informarRendaFixa: true
+        rendaFixaMensal: 5000
+        pessoaPoliticamenteExposta: Nao
+        politicamenteExpostaNome: ''
+        politicamenteExpostaCpf: ''
+        politicamenteExpostaGrauParentesco: ''
+        email: {{emailProprietario}}
+        telefone:
+          ddd: 11
+          numero: 976544356
+          tiposNotificacao:
+            - SMS
+          tipoTelefone: Celular
+        cep: '{{cep}}'
+        logradouro: Avenida Atlântica
+        numero: '3'
+        complemento: 
+        bairro: Copacabana
+        cidade: Rio de Janeiro
+        uf: RJ
+    CriarCotacaoComEndereco:
+      title: CriarCotacaoComEndereco
+      required:
+        - cnpjCorretor
+        - valorAluguel
+        - valorGas
+        - valorLuz
+        - valorAgua
+        - valorIptu
+        - valorCondominio
+        - valorPinturaInterna
+        - valorDanosAoImovel
+        - valorPinturaExterna
+        - valorMultasContratuais
+        - fimVigencia
+        - inicioVigencia
+        - cep
+        - tipoPessoa
+        - tipoSeguro
+        - percentualComissao
+        - finalidadeLocacao
+        - indiceReajusteAluguel
+      type: object
+      properties:
+        cnpjCorretor:
+          type: string
+        valorAluguel:
+          type: integer
+          format: int32
+        valorGas:
+          type: integer
+          format: int32
+        valorLuz:
+          type: integer
+          format: int32
+        valorAgua:
+          type: integer
+          format: int32
+        valorIptu:
+          type: integer
+          format: int32
+        valorCondominio:
+          type: integer
+          format: int32
+        valorPinturaInterna:
+          type: integer
+          format: int32
+        valorDanosAoImovel:
+          type: integer
+          format: int32
+        valorPinturaExterna:
+          type: integer
+          format: int32
+        valorMultasContratuais:
+          type: integer
+          format: int32
+        fimVigencia:
+          type: string
+        inicioVigencia:
+          type: string
+        cep:
+          type: string
+        tipoPessoa:
+          type: string
+        tipoSeguro:
+          type: string
+        percentualComissao:
+          type: number
+        finalidadeLocacao:
+          type: string
+        indiceReajusteAluguel:
+          type: string
+      example:
+        cnpjCorretor: '{{cnpjCorretor}}'
+        valorAluguel: 1500
+        valorGas: 101
+        valorLuz: 102
+        valorAgua: 103
+        valorIptu: 104
+        valorCondominio: 105
+        valorPinturaInterna: 1500
+        valorDanosAoImovel: 1500
+        valorPinturaExterna: 1500
+        valorMultasContratuais: 1500
+        fimVigencia: '{{dataFinal}}'
+        inicioVigencia: '{{dataAtual}}'
+        cep: '{{cep}}'
+        tipoPessoa: Pessoa Fisica
+        tipoSeguro: Novo
+        percentualComissao: 0.18
+        finalidadeLocacao: Residencial
+        indiceReajusteAluguel: IPCA
+    CriarCadastrodePropostaValidaRequest:
+      title: CriarCadastrodePropostaValidaRequest
+      required:
+        - numeroCotacao
+        - pretendentes
+        - locacao
+      type: object
+      properties:
+        numeroCotacao:
+          type: string
+        pretendentes:
+          type: array
+          items:
+            $ref: '#/components/schemas/Pretendente'
+          description: ''
+        locacao:
+          $ref: '#/components/schemas/Locacao'
+      example:
+        numeroCotacao: '{{numeroCotacao}}'
+        pretendentes:
+          - nome: Proprietario Too
+            cpf: '{{cpf}}'
+            dataNascimento: 1985/12/10
+            estadoCivil: casado
+            residiraImovel: true
+            responsavelFinanceiroPeloImovel: true
+            rendaFixaMensal: 10000
+            outrasRendas: 0
+            vinculoEmpregaticio: Clt
+            profissao: Analista
+            cep: '05086010'
+            rg:
+              numero: ''
+              dataEmissao: ''
+              orgaoEmissor: ''
+            telefone:
+              ddd: 11
+              numero: 99885566
+              tiposNotificacao:
+                - SMS
+              tipoTelefone: Celular
+            pessoaPoliticamenteExposta: NaoInformado
+            politicamenteExpostaNome: ''
+            politicamenteExpostaCpf: ''
+            politicamenteExpostaGrauParentesco: ''
+        locacao:
+          cep: '05086010'
+          logradouro: Rua Ali
+          numero: '456'
+          complemento: AA
+          bairro: Lapa
+          cidade: São Paulo
+          uf: SP
+          imobiliaria:
+            razaoSocial: {{nomeImobiliaria}}
+            cnpj: {{cnpjImobiliaria}}
+          periodicidadeLocacao: Anual
+          dataInicioVigenciaLocacao: '{{dataAtual}}'
+          dataFimVigenciaLocacao: '{{dataFinal}}'
+          empresaConstituida: null
+    AtualizarCadastroDeProposta:
+      title: AtualizarCadastroDeProposta
+      required:
+        - numeroCotacao
+        - opcaoPagamento
+        - formaPagamento
+        - pretendentes
+        - locacao
+        - proprietario
+      type: object
+      properties:
+        numeroCotacao:
+          type: string
+        opcaoPagamento:
+          type: string
+        formaPagamento:
+          $ref: '#/components/schemas/FormaPagamento'
+        pretendentes:
+          type: array
+          items:
+            $ref: '#/components/schemas/Pretendente1'
+          description: ''
+        locacao:
+          $ref: '#/components/schemas/Locacao1'
+        proprietario:
+          $ref: '#/components/schemas/Proprietario'
+      example:
+        numeroCotacao: '{{numeroCotacao}}'
+        formaPagamento:
+          tipoPagamento: 2
+          tipoEntrada: 1
+          tipoOpcaoParcelamento: 2
+          quantidadeParcelas: 23
+        pretendentes:
+          - cpf: '{{cpf}}'
+            telefone:
+              ddd: 11
+              numero: 99885566
+              tiposNotificacao:
+                - SMS
+              tipoTelefone: Celular
+            rg:
+              numero: ''
+              dataEmissao: ''
+              orgaoEmissor: 
+            email: {{emailPretendente}}
+            pessoaPoliticamenteExposta: Nao
+            politicamenteExpostaNome: ''
+            politicamenteExpostaCpf: ''
+            politicamenteExpostaGrauParentesco: ''
+        locacao:
+          cep: '{{cepPretendente}}'
+          logradouro: Rua Iracema Souza Pinto
+          numero: '128'
+          complemento: ap 101
+          bairro: Planalto
+          cidade: Minas Gerais
+          uf: MG
+          imobiliaria:
+            razaoSocial: {{nomeImobiliaria}}
+            cnpj: {{cnpjImobiliaria}}
+          periodicidadeLocacao: Anual
+          dataInicioVigenciaLocacao: '{{dataAtual}}'
+          dataFimVigenciaLocacao: '{{dataFinal}}'
+          possuiEmpresaConstituida: true
+          empresaConstituida:
+            cnpj: '{{cnpjEmpresaLocatario}}'
+            ramoAtividade: Comercio
+        proprietario:
+          tipoPessoa: Fisica
+          nome: José Silva
+          cpf: '{{cpfProprietario}}'
+          rg:
+            numero: ''
+            dataEmissao: ''
+            orgaoEmissor: 
+          dataNascimento: '1990-04-05'
+          estadoCivil: Casado
+          nacionalidade: Brasil
+          profissao: Empresário
+          informarRendaFixa: true
+          rendaFixaMensal: 5000
+          pessoaPoliticamenteExposta: Nao
+          politicamenteExpostaNome: ''
+          politicamenteExpostaCpf: ''
+          politicamenteExpostaGrauParentesco: ''
+          email: bre@gmail.com
+          telefone:
+            ddd: 11
+            numero: 999999999
+            tiposNotificacao:
+              - SMS
+            tipoTelefone: Celular
+          cep: '{{cepProprietario}}'
+          logradouro: Avenida Atlântica
+          numero: '2174'
+          complemento: 
+          bairro: Copacabana
+          cidade: Rio de Janeiro
+          uf: RJ
+  securitySchemes:
+    httpBearer:
+      type: http
+      scheme: bearer
+      x-additional-headers:
+        - name: clientid
+          description: Id do Client fornecido pela Too
+          required: true
+          schema:
+            default: ''
+        - name: clientsecret
+          description: chave secreta fornecida junto com o clientid
+          required: true
+          schema:
+            default: ''
+security:
+  - httpBearer: []
+tags:
+  - name: Aluguel Garantido
+  

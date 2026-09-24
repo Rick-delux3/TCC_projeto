@@ -27,6 +27,10 @@ class UpdateCompanyRequest extends FormRequest
 
     protected function prepareForValidation(): void
     {
+        if ($this->boolean('_edit_department_emails') && ! $this->exists('setores')) {
+            $this->merge(['setores' => []]);
+        }
+
         $this->normalizeDepartments();
 
         $this->merge([

@@ -262,6 +262,7 @@ it('preserves the intentional update of an existing lead by an authenticated adm
 
     expect($lead)
         ->nome->toBe('Atualização administrativa legítima')
+        ->data_edited_at->not->toBeNull()
         ->updated_by_corretor_id->toBe($admin->id)
         ->and($lead->endereco->logradouro)->toBe('Endereço enviado por terceiro');
 });
@@ -296,6 +297,7 @@ it('preserves the intentional update of an unlinked lead by an authenticated adm
 
     expect($lead->refresh())
         ->nome->toBe('Atualização administrativa sem vínculo')
+        ->data_edited_at->not->toBeNull()
         ->updated_by_corretor_id->toBe($admin->id);
 });
 
@@ -315,3 +317,61 @@ it('does not expose existing-lead updates through an unauthenticated admin route
     assertPublicSubmissionDidNotOverwrite($lead);
     Queue::assertNothingPushed();
 });
+
+it('marks only actual simulation data edits and keeps filter membership consistent', function (string $profile, string $change): void {
+    $this->withoutVite();
+    $this->freezeTime();
+    $admin = Corretor::query()->create([
+        'name' => 'Admin regression', 'email' => 'regression@example.test', 'password' => 'password',
+        'role' => Corretor::ROLE_CEO, 'active' => true, 'first_login_verified_at' => now(),
+    ]);
+    $company = publicOverwriteCompany();
+    $url = $profile === 'imobiliaria_cadastrada'
+        ? route('admin.simulations.registered-company.store', $company)
+        : route('admin.simulations.unlinked.store', ['tipo' => $profile]);
+    $payload = publicOverwritePayload('regression-lead@example.test', [
+        'responsavel_tipo' => in_array($profile, ['locador', 'imobiliaria_nao_cadastrada'], true) ? $profile : null,
+        'responsavel_nome' => 'Responsible Person', 'responsavel_email' => 'responsible@example.test',
+        'responsavel_telefone' => '11912345678',
+    ]);
+    if ($change === 'remove spouse') {
+        $payload = array_merge($payload, ['estado_civil' => 'casado', 'conjuge_nome' => 'Spouse', 'conjuge_cpf' => '52998224725']);
+    }
+    if ($change === 'company document') {
+        $payload = array_merge($payload, ['cpf' => '11222333000181', 'cpf_responsavel' => '52998224725', 'nome_responsavel' => 'Representative']);
+    }
+    $this->actingAs($admin, 'admin')->post($url, $payload)->assertSessionHasNoErrors()->assertRedirect();
+    $lead = Lead::query()->where('email', 'regression-lead@example.test')->sole();
+    expect($lead->data_edited_at)->toBeNull()->and($lead->updated_by_corretor_id)->toBeNull();
+    $lead->update(['status' => 'em_analise', 'tags_originais' => 'Origem preservada']);
+    $this->travel(5)->minutes();
+    $this->withHeader('User-Agent', 'Different browser')->post($url, $payload)->assertSessionHasNoErrors()->assertRedirect();
+    expect($lead->fresh()->data_edited_at)->toBeNull()->and($lead->fresh()->updated_by_corretor_id)->toBeNull();
+    expect($lead->fresh()->status)->toBe('em_analise')->and($lead->fresh()->tags_originais)->toBe('Origem preservada');
+    expect($this->get(route('Dashboard-Admin', ['resultado' => 'sem_resultado']))->viewData('leads')->pluck('id')->all())->toBe([$lead->id]);
+
+    $changes = match ($change) {
+        'name' => ['nome' => 'Changed Name'],
+        'address' => ['numero' => '1234'],
+        'expenses' => ['valor_aluguel' => '2000'],
+        'add spouse' => ['estado_civil' => 'casado', 'conjuge_nome' => 'Spouse', 'conjuge_cpf' => '52998224725'],
+        'remove spouse' => ['estado_civil' => 'solteiro', 'conjuge_nome' => null, 'conjuge_cpf' => null],
+        'company document' => ['nome_responsavel' => 'Another Representative'],
+        'responsible' => ['responsavel_telefone' => '21912345678'],
+    };
+    $payload = array_merge($payload, $changes);
+    $this->travel(5)->minutes();
+    $this->post($url, $payload)->assertSessionHasNoErrors()->assertRedirect();
+    $editedAt = $lead->fresh()->data_edited_at;
+    expect($editedAt)->not->toBeNull()->and($lead->fresh()->updated_by_corretor_id)->toBe($admin->id);
+    expect($this->get(route('Dashboard-Admin', ['resultado' => 'sem_resultado']))->viewData('leads')->total())->toBe(0);
+    $this->travel(5)->minutes();
+    $this->post($url, $payload)->assertSessionHasNoErrors()->assertRedirect();
+    expect($lead->fresh()->data_edited_at->equalTo($editedAt))->toBeTrue();
+})->with([
+    ['imobiliaria_cadastrada', 'name'], ['locatario', 'name'],
+    ['imobiliaria_cadastrada', 'address'], ['locatario', 'expenses'],
+    ['imobiliaria_cadastrada', 'add spouse'], ['imobiliaria_cadastrada', 'remove spouse'],
+    ['imobiliaria_cadastrada', 'company document'],
+    ['locador', 'responsible'], ['imobiliaria_nao_cadastrada', 'responsible'],
+]);

@@ -46,7 +46,7 @@ class CorretorDashboardController extends Controller
         $tipoSolicitantesOptions = CorretorDashboardLeadQuery::requesterOptions();
         $resultadoOptions = collect(ManualLeadResultTags::all());
         $leadResultFilterOptions = $resultadoOptions->map(fn (array $definition): string => $definition['label'])->all()
-            + [CorretorDashboardLeadQuery::WITHOUT_RESULT => 'Sem resultado'];
+            + [CorretorDashboardLeadQuery::WITHOUT_RESULT => 'Sem resultado e sem edição'];
         $leadLoversSyncOptions = $this->leadLoversFailureCatalog->dashboardSyncOptions();
 
         $leadsQuery = $canViewLeads

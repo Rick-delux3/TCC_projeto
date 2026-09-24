@@ -233,6 +233,87 @@ it('persists leadId before requesting the machine and keeps a 202 pending', func
     expect($creation->body())->not->toContain('stage-three-test-token');
 });
 
+it('sends company leads without remote company tags and preserves their internal identity', function (string $mapping, string $initialStatus) {
+    Queue::fake();
+    $company = Imobiliaria::factory()->create([
+        'name' => 'Imobiliária Interna',
+        'leadlovers_tag_id' => $mapping === 'direct' ? 987 : null,
+        'leadlovers_tag_name' => $mapping === 'direct' ? 'Imobiliária Interna' : null,
+    ]);
+    if ($mapping === 'catalog') {
+        LeadLoversTag::query()->create([
+            'leadlovers_tag_id' => 987,
+            'title' => $company->name,
+            'active' => true,
+        ]);
+    }
+
+    $lead = leadForInitialLeadLoversSend([
+        'company_id' => $company->id,
+        'tipo_solicitante' => 'imobiliaria_cadastrada',
+        'origem' => 'imobiliaria_cadastrada',
+        'imobiliaria' => $company->name,
+        'tags_originais' => $company->name.', Aprovado',
+        'leadlovers_status' => $initialStatus,
+    ]);
+    $catalog = LeadLoversTag::query()->orderBy('id')->get()->toArray();
+    Http::fake([
+        'https://api.leadlovers.test/leads/' => Http::response(['success' => true, 'leadId' => 501]),
+        'https://api.leadlovers.test/leads/move' => Http::response([
+            'actionId' => 9001, 'status' => 'pending', 'total' => 1,
+        ], 202),
+        'https://api.leadlovers.test/leads/501/machines' => Http::response([
+            machineAssociationForInitialSend(['sequence' => ['id' => 321, 'name' => 'Sequencia imobiliaria']]),
+        ]),
+    ]);
+
+    $job = initialSendJob($lead);
+    $job->handle(app(LeadLoversApiClient::class));
+    $job->assertReleased(15);
+
+    expect($lead->refresh())->leadlovers_lead_id->toBe(501)
+        ->leadlovers_status->toBe('processing');
+
+    $confirmation = initialSendJob($lead, 2);
+    $confirmation->handle(app(LeadLoversApiClient::class));
+    $confirmation->assertNotReleased();
+    $confirmation->assertNotFailed();
+
+    expect($lead->refresh())
+        ->leadlovers_status->toBe('sent')
+        ->sent_to_leadlovers_at->not->toBeNull()
+        ->company_id->toBe($company->id)
+        ->imobiliaria->toBe($company->name)
+        ->tags_originais->toBe($company->name.', Aprovado')
+        ->and(LeadLoversTag::query()->orderBy('id')->get()->toArray())->toBe($catalog);
+
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'POST'
+        && $request->url() === 'https://api.leadlovers.test/leads/'
+        && ! array_key_exists('tags', $request->data())
+        && $request['staticFields']['company'] === $company->name
+        && $request['staticFields']['email'] === $lead->email);
+    Http::assertSent(fn (Request $request): bool => $request->url() === 'https://api.leadlovers.test/leads/move'
+        && $request['sequenceId'] === 321
+        && $request['leadIds'] === [501]);
+    Http::assertSentCount(3);
+})->with([
+    'new internal company' => ['none', 'pending'],
+    'legacy remote id' => ['direct', 'pending'],
+    'legacy catalog name' => ['catalog', 'pending'],
+    'retry previous missing company tag' => ['none', 'tag_failed'],
+]);
+
+it('still requires the configured profile tag for leads outside registered companies', function () {
+    $lead = leadForInitialLeadLoversSend();
+    LeadLoversTag::query()->where('key', 'locatario')->update(['active' => false]);
+
+    initialSendJob($lead)->handle(app(LeadLoversApiClient::class));
+
+    expect($lead->refresh())->leadlovers_status->toBe('tag_failed')
+        ->leadlovers_lead_id->toBeNull();
+    Http::assertNothingSent();
+});
+
 it('claims the send before HTTP so a concurrent old job cannot duplicate creation', function () {
     $lead = leadForInitialLeadLoversSend();
     Http::fake([
@@ -1081,3 +1162,36 @@ it('does not change or redispatch a confirmed lead when the public form is submi
     Bus::assertNotDispatched(SendLeadToLeadLoversJob::class);
     Queue::assertNotPushed(BroadcastEvent::class);
 });
+
+it('filters legacy company updates before scheduling edits after initial sending', function (array $fields) {
+    Queue::fake();
+    $lead = leadForInitialLeadLoversSend([
+        'leadlovers_status' => 'processing',
+        'leadlovers_lead_id' => 501,
+        'leadlovers_update_version' => 3,
+        'leadlovers_update_status' => 'waiting_initial_send',
+        'leadlovers_update_response' => ['requested_fields' => $fields],
+        'leadlovers_response' => ['phase' => 'machine_confirmation_pending', 'lead_id' => 501],
+    ]);
+    $lead->activityLogs()->create([
+        'corretor_id' => \App\Models\Corretor::query()->create([
+            'name' => 'Legacy Broker', 'email' => 'legacy@example.test', 'password' => 'password',
+            'role' => \App\Models\Corretor::ROLE_CEO, 'active' => true,
+        ])->id,
+        'action' => 'lead_company_link_requested',
+        'new_values' => ['status' => 'completed', 'sync_version' => 3],
+        'description' => 'Legacy link',
+    ]);
+    Http::fake(['*/leads/501/machines' => Http::response([machineAssociationForInitialSend()])]);
+    initialSendJob($lead, 2)->handle(app(LeadLoversApiClient::class));
+    expect($lead->fresh()->leadlovers_status)->toBe('sent');
+    Http::assertSentCount(1);
+    if ($fields === ['company']) {
+        Queue::assertNotPushed(UpdateLeadOnLeadLoversJob::class);
+        expect($lead->fresh()->leadlovers_update_status)->toBe('synced')
+            ->and($lead->fresh()->leadlovers_update_response['remote_request_sent'])->toBeFalse();
+    } else {
+        Queue::assertPushed(UpdateLeadOnLeadLoversJob::class, fn ($job): bool => $job->requestedFields === ['name'] && $job->syncVersion === 4);
+        expect($lead->fresh()->leadlovers_update_response['requested_fields'])->toBe(['name']);
+    }
+})->with([[['company']], [['company', 'name']]]);

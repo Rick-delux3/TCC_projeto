@@ -338,16 +338,6 @@
         'leadlovers_sync' => $selectedLeadLoversSync,
     ];
     $leadFilterUrl = function (array $changes = []) use ($activeLeadFilters, $dashboardRoute): string {
-        if (($changes['resultado'] ?? null) === CorretorDashboardLeadQuery::WITHOUT_RESULT
-            && $activeLeadFilters['leadlovers_sync'] === LeadLoversInitialFailureCatalog::DASHBOARD_FILTER_NOT_SENT) {
-            $changes['leadlovers_sync'] = null;
-        }
-
-        if (($changes['leadlovers_sync'] ?? null) === LeadLoversInitialFailureCatalog::DASHBOARD_FILTER_NOT_SENT
-            && $activeLeadFilters['resultado'] === CorretorDashboardLeadQuery::WITHOUT_RESULT) {
-            $changes['resultado'] = null;
-        }
-
         $parameters = array_filter(
             array_replace($activeLeadFilters, $changes, ['page' => 1]),
             fn ($value): bool => filled($value)
@@ -597,7 +587,7 @@
                                     </div>
 
                                     <div class="fw-bold">
-                                        {{ $latestLeadAt ? $latestLeadAt->format('d/m/Y H:i') : 'Sem clientes cadastrados' }}
+                                        {{ $latestLeadAt ? $latestLeadAt->copy()->setTimezone('America/Sao_Paulo')->format('d/m/Y H:i') : 'Sem clientes cadastrados' }}
                                     </div>
 
                                     <hr class="border-white border-opacity-25">
@@ -1064,7 +1054,7 @@
                                 ]) }}"
                                 class="lead-filter-chip lead-filter-chip--{{ str_replace('_', '-', $result) }}"
                                 aria-label="{{ $resultIsSelected ? 'Remover filtro: ' : 'Filtrar por: ' }}{{ $label }}"
-                                @if ($result === 'sem_resultado') title="Leads sincronizados, sem alterações ou solicitações de tag." @endif
+                                @if ($result === 'sem_resultado') title="Leads sem resultado comercial e sem edição de dados, com ou sem vínculo com imobiliária." @endif
                                 @if ($resultIsSelected) aria-current="true" @endif
                             >
                                 <i class="bi {{ $resultVisual['icon'] }}" aria-hidden="true"></i>
@@ -1116,8 +1106,8 @@
                             $leadPhone = $lead->tel ?: 'Telefone não informado';
                             $leadCity = $getLeadCity($lead);
 
-                            $leadDate = $lead->created_at ? $lead->created_at->format('d/m/Y') : 'Sem data';
-                            $leadTime = $lead->created_at ? $lead->created_at->format('H:i') : '--:--';
+                            $leadDate = $lead->created_at ? $lead->created_at->copy()->setTimezone('America/Sao_Paulo')->format('d/m/Y') : 'Sem data';
+                            $leadTime = $lead->created_at ? $lead->created_at->copy()->setTimezone('America/Sao_Paulo')->format('H:i') : '--:--';
 
                             $allTags = collect(preg_split('/\s*,\s*/', $lead->tags_originais ?? ''))
                                 ->filter(fn ($tag) => filled($tag))

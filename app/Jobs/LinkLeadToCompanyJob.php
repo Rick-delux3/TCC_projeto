@@ -2,12 +2,10 @@
 
 namespace App\Jobs;
 
-use App\Exceptions\LeadLoversApiException;
 use App\Services\LeadCompanyLinkService;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Queue\Middleware\WithoutOverlapping;
-use Illuminate\Support\Facades\Bus;
 use Throwable;
 
 class LinkLeadToCompanyJob implements ShouldQueue
@@ -40,31 +38,7 @@ class LinkLeadToCompanyJob implements ShouldQueue
      */
     public function handle(LeadCompanyLinkService $links): void
     {
-        $syncJob = $links->process($this->requestLogId);
-
-        try {
-            $delay = $links->synchronizeCompanyTags($this->requestLogId);
-        } catch (LeadLoversApiException $exception) {
-            if (! $exception->isTransient) {
-                $this->fail($exception);
-
-                return;
-            }
-
-            $this->release(max(1, $exception->retryAfterSeconds ?? 30));
-
-            return;
-        }
-
-        if ($delay !== null) {
-            $this->release($delay);
-
-            return;
-        }
-
-        if ($syncJob !== null) {
-            Bus::dispatch($syncJob);
-        }
+        $links->process($this->requestLogId);
     }
 
     public function failed(?Throwable $exception): void

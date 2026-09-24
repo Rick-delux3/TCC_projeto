@@ -50,6 +50,7 @@ class Lead extends Model
         'sent_to_leadlovers_at',
         'created_by_corretor_id',
         'updated_by_corretor_id',
+        'data_edited_at',
         'reanalysis_unlocked_at',
         'leadlovers_update_status',
         'leadlovers_update_version',
@@ -69,6 +70,7 @@ class Lead extends Model
     ];
 
     protected $casts = [
+        'data_edited_at' => 'datetime',
         'tipo_locacao' => TipoLocacao::class,
         'leadlovers_lead_id' => 'integer',
         'leadlovers_response' => 'array',

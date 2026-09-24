@@ -13,8 +13,6 @@ use App\Models\LeadLoversTag;
 use App\Models\User;
 use App\Services\Insurance\Providers\InsuranceProviderResolver;
 use App\Services\LeadCompanyLinkService;
-use App\Services\LeadLoversApiClient;
-use App\Services\LeadLoversLeadResolver;
 use App\Support\CorretorPermissions;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Event;
@@ -25,6 +23,7 @@ beforeEach(function () {
     Bus::fake();
     Event::fake([DashboardActivityChanged::class]);
     Http::preventStrayRequests();
+    Http::fake();
     config(['services.leadlovers.enabled' => true, 'features.insurance_analysis.enabled' => false]);
 
     $this->corretor = Corretor::query()->create([
@@ -91,126 +90,83 @@ function prepareCompanyTransfer(Tests\TestCase $test): Imobiliaria
     return $previous;
 }
 
-function companyTransferRemoteTags(array $ids): array
-{
-    return array_map(fn (int $id): array => [
-        'id' => $id, 'name' => 'Tag '.$id, 'linkedAt' => '2026-09-17T12:00:00Z',
-    ], $ids);
-}
-
-it('transfers company ownership and replaces only its tag after remote confirmation', function (string $origin) {
+it('transfers ownership and company tags internally while preserving analyses and history', function (string $origin) {
     $previous = prepareCompanyTransfer($this);
     $this->lead->update(['origem' => $origin, 'tipo_solicitante' => $origin]);
-    $owner = $this->lead->locador()->create(['nome' => 'Proprietário']);
+    $owner = $this->lead->locador()->create(['nome' => 'Owner']);
     $batch = $this->lead->insuranceAnalysesBatches()->create(['company_id' => $previous->id, 'status' => 'completed']);
     $analysis = $this->lead->insuranceAnalyses()->create([
         'insurance_analysis_batch_id' => $batch->id, 'company_id' => $previous->id,
         'provider' => 'pottencial', 'product' => 'fianca_locaticia_residencial', 'status' => 'approved',
     ]);
-    Http::fake([
-        '*/leads/901/tags' => Http::sequence()
-            ->push(companyTransferRemoteTags([301, 101, 102]))
-            ->push(companyTransferRemoteTags([301, 302, 101, 102]))
-            ->push(companyTransferRemoteTags([302, 101, 102])),
-        '*/leads/tags' => Http::response(['actionId' => 71, 'status' => 'pending', 'total' => 1], 202),
-    ]);
+    $version = $this->lead->fresh()->leadlovers_update_version;
     $requestId = requestCompanyLink($this);
-    $job = (new LinkLeadToCompanyJob($requestId))->withFakeQueueInteractions();
-    $job->handle(app(LeadCompanyLinkService::class));
-    $job->assertReleased((int) config('services.leadlovers.tag_confirmation_delay_seconds'));
-
-    expect($this->lead->fresh()->company_id)->toBe($this->company->id)
+    processCompanyLink($requestId);
+    processCompanyLink($requestId);
+    $lead = $this->lead->fresh();
+    expect($lead->company_id)->toBe($this->company->id)
+        ->and($lead->imobiliaria)->toBe($this->company->name)
+        ->and($lead->tags_originais)->toBe('diretoprop, aprovados, Campanha setembro, '.$this->company->name)
         ->and($batch->fresh()->company_id)->toBe($this->company->id)
         ->and($analysis->fresh()->company_id)->toBe($this->company->id)
         ->and($analysis->fresh()->status)->toBe('approved')
         ->and($previous->leads()->exists())->toBeFalse()
         ->and($previous->insuranceAnalysisBatches()->exists())->toBeFalse()
         ->and($previous->insuranceAnalyses()->exists())->toBeFalse()
-        ->and(CorretorActivityLog::findOrFail($requestId)->old_values['company_id'])->toBe($previous->id)
-        ->and(CorretorActivityLog::findOrFail($requestId)->new_values['company_tag_sync']['status'])->toBe('confirming');
-    Bus::assertNotDispatched(UpdateLeadOnLeadLoversJob::class);
-    Event::assertDispatched(DashboardActivityChanged::class, fn ($event): bool => $event->companyId === $previous->id && $event->change === 'lead.company.unlinked');
-
-    processCompanyLink($requestId);
-    expect($this->lead->fresh()->tags_originais)->toContain('Imobiliária anterior');
-    processCompanyLink($requestId);
-    processCompanyLink($requestId);
-
-    $lead = $this->lead->fresh();
-    expect($lead->tags_originais)->toBe('diretoprop, aprovados, Campanha setembro, Imobiliária destino')
         ->and($lead->origem)->toBe($origin)
         ->and($lead->tipo_solicitante)->toBe($origin)
         ->and($lead->locador->id)->toBe($owner->id)
         ->and($lead->leadlovers_confirmed_final_tag_key)->toBe('aprovados')
-        ->and($lead->leadlovers_update_version)->toBe(1)
-        ->and(CorretorActivityLog::findOrFail($requestId)->new_values['company_tag_sync']['status'])->toBe('synced');
-    Http::assertSent(fn ($request): bool => $request->method() === 'POST' && $request->data() === [
-        'applyTags' => [302], 'removeTags' => [301], 'leadsIds' => [901],
-    ]);
-    Http::assertSentCount(4);
-    Bus::assertDispatched(UpdateLeadOnLeadLoversJob::class);
+        ->and($lead->leadlovers_update_version)->toBe($version)
+        ->and(CorretorActivityLog::findOrFail($requestId)->old_values['company_id'])->toBe($previous->id)
+        ->and(CorretorActivityLog::findOrFail($requestId)->new_values['status'])->toBe('completed');
+    Http::assertNothingSent();
+    Bus::assertNotDispatched(UpdateLeadOnLeadLoversJob::class);
     Bus::assertNotDispatched(StartInsuranceAnalysesBatchJob::class);
     Bus::assertNotDispatched(SendLeadToLeadLoversJob::class);
+    Event::assertDispatchedTimes(DashboardActivityChanged::class, 2);
+    Event::assertDispatched(DashboardActivityChanged::class, fn ($event): bool => $event->companyId === $previous->id && $event->change === 'lead.company.unlinked');
 })->with(['locador', 'imobiliaria_cadastrada']);
 
-it('blocks another transfer until the earlier asynchronous mutation is confirmed', function () {
+it('allows successive internal transfers and ignores completed job redelivery', function () {
     $previous = prepareCompanyTransfer($this);
-    Http::fake([
-        '*/leads/901/tags' => Http::sequence()
-            ->push(companyTransferRemoteTags([301]))->push(companyTransferRemoteTags([302]))
-            ->push(companyTransferRemoteTags([302]))->push(companyTransferRemoteTags([301])),
-        '*/leads/tags' => Http::sequence()
-            ->push(['actionId' => 71, 'status' => 'pending', 'total' => 1], 202)
-            ->push(['actionId' => 72, 'status' => 'pending', 'total' => 1], 202),
-    ]);
     $requestId = requestCompanyLink($this);
-    processCompanyLink($requestId);
-    $this->postJson(route('admin.leads.company.store', $this->lead), ['company_id' => $previous->id])
-        ->assertUnprocessable()->assertJsonValidationErrors('company_id');
     processCompanyLink($requestId);
     $nextId = $this->postJson(route('admin.leads.company.store', $this->lead), ['company_id' => $previous->id])
         ->assertAccepted()->json('request_id');
     processCompanyLink($nextId);
-    processCompanyLink($nextId);
     processCompanyLink($requestId);
     expect($this->lead->fresh()->company_id)->toBe($previous->id)
-        ->and($this->lead->fresh()->tags_originais)->toBe('diretoprop, aprovados, Campanha setembro, Imobiliária anterior');
-    Http::assertSent(fn ($request): bool => $request->method() === 'POST' && $request['removeTags'] === [302] && $request['applyTags'] === [301]);
+        ->and($this->lead->fresh()->tags_originais)->toBe('diretoprop, aprovados, Campanha setembro, '.$previous->name);
+    Http::assertNothingSent();
 });
 
-it('confirms an uncertain tag mutation without reposting it and preserves concurrent result changes', function () {
-    prepareCompanyTransfer($this);
-    Http::fake([
-        '*/leads/901/tags' => Http::sequence()->push(companyTransferRemoteTags([301]))->push(companyTransferRemoteTags([302])),
-        '*/leads/tags' => Http::failedConnection(),
-    ]);
-    $requestId = requestCompanyLink($this);
-    processCompanyLink($requestId);
-    $this->lead->update(['tags_originais' => 'diretoprop, Imobiliária anterior, Fechado Aluguel, Campanha setembro']);
-    processCompanyLink($requestId);
-    expect($this->lead->fresh()->tags_originais)->toBe('diretoprop, Fechado Aluguel, Campanha setembro, Imobiliária destino')
-        ->and(CorretorActivityLog::findOrFail($requestId)->new_values['company_tag_sync']['status'])->toBe('synced');
-    Http::assertSentCount(3);
-});
-
-it('keeps unresolved tag failures visible and resumes confirmation on queue retry', function () {
+it('preserves result changes made before processing the internal transfer', function () {
     $previous = prepareCompanyTransfer($this);
-    Http::fake([
-        '*/leads/901/tags' => Http::sequence()->push(companyTransferRemoteTags([301]))->push(companyTransferRemoteTags([302])),
-        '*/leads/tags' => Http::response(['actionId' => 71, 'status' => 'pending', 'total' => 1], 202),
-    ]);
     $requestId = requestCompanyLink($this);
+    $this->lead->update(['tags_originais' => 'diretoprop, '.$previous->name.', Fechado Aluguel, Campanha setembro']);
     processCompanyLink($requestId);
-    (new LinkLeadToCompanyJob($requestId))->failed(new RuntimeException('confirmation exhausted'));
-    expect($this->lead->fresh()->leadlovers_update_status)->toBe('failed')
-        ->and(CorretorActivityLog::findOrFail($requestId)->new_values['company_tag_sync']['error'])->not->toBeNull();
-    $this->postJson(route('admin.leads.company.store', $this->lead), ['company_id' => $previous->id])->assertUnprocessable();
-    processCompanyLink($requestId);
-    expect($this->lead->fresh()->leadlovers_update_status)->toBe('pending')
-        ->and(CorretorActivityLog::findOrFail($requestId)->new_values['company_tag_sync']['error'])->toBeNull();
-    Bus::assertDispatched(UpdateLeadOnLeadLoversJob::class);
-    Http::assertSentCount(3);
+    expect($this->lead->fresh()->tags_originais)->toBe('diretoprop, Fechado Aluguel, Campanha setembro, '.$this->company->name);
+    Http::assertNothingSent();
 });
+
+it('finishes legacy pending company tags locally when the old job is retried', function (string $status) {
+    $previous = prepareCompanyTransfer($this);
+    $requestId = requestCompanyLink($this);
+    $this->lead->update(['company_id' => $this->company->id, 'imobiliaria' => $this->company->name]);
+    $log = CorretorActivityLog::findOrFail($requestId);
+    $log->update(['new_values' => [...$log->new_values, 'status' => 'completed', 'company_tag_sync' => [
+        'status' => $status, 'previous' => ['name' => $previous->name, 'company_name' => $previous->name],
+        'error' => 'Remote failure',
+    ]]]);
+    processCompanyLink($requestId);
+    processCompanyLink($requestId);
+    expect($this->lead->fresh()->tags_originais)->toBe('diretoprop, aprovados, Campanha setembro, '.$this->company->name)
+        ->and($log->fresh()->new_values['company_tag_sync']['status'])->toBe('completed_locally')
+        ->and($log->fresh()->new_values['company_tag_sync']['error'])->toBeNull();
+    Bus::assertNotDispatched(UpdateLeadOnLeadLoversJob::class);
+    Http::assertNothingSent();
+})->with(['pending', 'confirming']);
 
 it('rejects a queued transfer when ownership changed after the request', function () {
     prepareCompanyTransfer($this);
@@ -222,7 +178,7 @@ it('rejects a queued transfer when ownership changed after the request', functio
     Http::assertNothingSent();
 });
 
-it('rejects transfers with missing company tag mappings or unrelated analyses', function (string $scenario) {
+it('allows missing remote mappings but rejects unrelated analyses', function (string $scenario) {
     $previous = prepareCompanyTransfer($this);
     match ($scenario) {
         'missing source tag' => $previous->update(['leadlovers_tag_id' => null]),
@@ -233,6 +189,13 @@ it('rejects transfers with missing company tag mappings or unrelated analyses', 
             'product' => 'fianca_locaticia_residencial', 'status' => 'approved',
         ]),
     };
+    if (str_starts_with($scenario, 'missing')) {
+        processCompanyLink(requestCompanyLink($this));
+        expect($this->lead->fresh()->company_id)->toBe($this->company->id);
+        Http::assertNothingSent();
+
+        return;
+    }
     $this->actingAs($this->corretor, 'admin')->postJson(route('admin.leads.company.store', $this->lead), ['company_id' => $this->company->id])
         ->assertUnprocessable()->assertJsonValidationErrors('company_id');
     expect($this->lead->fresh()->company_id)->toBe($previous->id);
@@ -240,65 +203,53 @@ it('rejects transfers with missing company tag mappings or unrelated analyses', 
     Http::assertNothingSent();
 })->with(['missing source tag', 'missing destination tag', 'unrelated batch', 'unrelated analysis']);
 
-it('waits for enabled integration and initial sending before replacing company tags', function (bool $enabled, string $status) {
-    prepareCompanyTransfer($this);
+it('transfers internally regardless of integration and initial sending status', function (bool $enabled, string $status) {
+    $previous = prepareCompanyTransfer($this);
+    $previous->update(['leadlovers_tag_id' => null, 'leadlovers_tag_name' => null]);
+    $this->company->update(['leadlovers_tag_id' => null, 'leadlovers_tag_name' => null]);
     config(['services.leadlovers.enabled' => $enabled]);
     $this->lead->update(['leadlovers_status' => $status, 'sent_to_leadlovers_at' => null]);
-    $requestId = requestCompanyLink($this);
-    $job = (new LinkLeadToCompanyJob($requestId))->withFakeQueueInteractions();
+    $job = (new LinkLeadToCompanyJob(requestCompanyLink($this)))->withFakeQueueInteractions();
     $job->handle(app(LeadCompanyLinkService::class));
-    $job->assertReleased(60);
-    expect($this->lead->fresh()->company_id)->toBe($this->company->id);
+    $job->assertNotReleased();
+    expect($this->lead->fresh()->company_id)->toBe($this->company->id)
+        ->and($this->lead->fresh()->tags_originais)->toContain($this->company->name)->not->toContain($previous->name)
+        ->and($this->lead->fresh()->leadlovers_status)->toBe($status);
+    Bus::assertNotDispatched(UpdateLeadOnLeadLoversJob::class);
     Http::assertNothingSent();
-
-    config(['services.leadlovers.enabled' => true]);
-    $this->lead->update(['leadlovers_status' => 'sent', 'sent_to_leadlovers_at' => now()->subMinutes(5)]);
-    Http::fake(['*/leads/901/tags' => Http::response(companyTransferRemoteTags([302]))]);
-    processCompanyLink($requestId);
-    expect($this->lead->fresh()->tags_originais)->toContain('Imobiliária destino')->not->toContain('Imobiliária anterior');
-    Bus::assertDispatched(UpdateLeadOnLeadLoversJob::class);
-    Http::assertSentCount(1);
 })->with([[false, 'disabled'], [true, 'pending'], [true, 'processing'], [true, 'failed']]);
 
-it('honors rate limiting without treating the rejected tag request as accepted', function () {
+it('completes internal transfers without contacting a rate limited or unavailable API', function (int $status) {
     prepareCompanyTransfer($this);
-    Http::fake([
-        '*/leads/901/tags' => Http::response(companyTransferRemoteTags([301])),
-        '*/leads/tags' => Http::sequence()->push(['error' => 'rate limit'], 429, ['Retry-After' => '45'])
-            ->push(['actionId' => 71, 'status' => 'pending', 'total' => 1], 202),
-    ]);
+    Http::fake(['*' => Http::response([], $status)]);
     $requestId = requestCompanyLink($this);
     $job = (new LinkLeadToCompanyJob($requestId))->withFakeQueueInteractions();
     $job->handle(app(LeadCompanyLinkService::class));
-    $job->assertReleased();
-    expect(CorretorActivityLog::findOrFail($requestId)->new_values['company_tag_sync']['status'])->toBe('pending');
-    processCompanyLink($requestId);
-    expect(CorretorActivityLog::findOrFail($requestId)->new_values['company_tag_sync']['status'])->toBe('confirming');
-});
+    $job->assertNotReleased();
+    expect(CorretorActivityLog::findOrFail($requestId)->new_values['status'])->toBe('completed');
+    Http::assertNothingSent();
+})->with([429, 500, 502]);
 
-it('retries an uncertain post only after checking remote state and waiting the existing safety interval', function () {
-    prepareCompanyTransfer($this);
-    config(['services.leadlovers.tag_posting_stale_seconds' => 60, 'services.leadlovers.tag_uncertain_retry_checks' => 2]);
-    Http::fake([
-        '*/leads/901/tags' => Http::sequence()
-            ->push(companyTransferRemoteTags([301]))->push(companyTransferRemoteTags([301]))
-            ->push(companyTransferRemoteTags([301]))->push(companyTransferRemoteTags([302])),
-        '*/leads/tags' => Http::sequence()->push([], 503)
-            ->push(['actionId' => 71, 'status' => 'pending', 'total' => 1], 202),
-    ]);
+it('removes pending legacy company tags when transferring again without waiting for the API', function () {
+    $previous = prepareCompanyTransfer($this);
     $requestId = requestCompanyLink($this);
+    $log = CorretorActivityLog::findOrFail($requestId);
+    $log->update(['new_values' => [...$log->new_values, 'status' => 'completed', 'company_tag_sync' => [
+        'status' => 'confirming', 'previous' => ['name' => $previous->name, 'company_name' => $previous->name],
+    ]]]);
+    $this->lead->update(['company_id' => $this->company->id, 'imobiliaria' => $this->company->name]);
+    $third = Imobiliaria::factory()->create(['lead_form_active' => true]);
+    $nextId = $this->postJson(route('admin.leads.company.store', $this->lead), ['company_id' => $third->id])
+        ->assertAccepted()->json('request_id');
+    processCompanyLink($nextId);
     processCompanyLink($requestId);
-    processCompanyLink($requestId);
-    Http::assertSentCount(3);
-    $this->travel(61)->seconds();
-    processCompanyLink($requestId);
-    processCompanyLink($requestId);
-    Http::assertSentCount(6);
-    expect(CorretorActivityLog::findOrFail($requestId)->new_values['company_tag_sync']['status'])->toBe('synced')
-        ->and(CorretorActivityLog::findOrFail($requestId)->new_values['company_tag_sync']['post_attempts'])->toBe(2);
+    expect($this->lead->fresh()->company_id)->toBe($third->id)
+        ->and($this->lead->fresh()->tags_originais)->toBe('diretoprop, aprovados, Campanha setembro, '.$third->name)
+        ->and($log->fresh()->new_values['company_tag_sync']['status'])->toBe('completed_locally');
+    Http::assertNothingSent();
 });
 
-it('uses catalog mappings for legacy companies and normalizes only the company tag locally', function () {
+it('normalizes company tags locally without depending on catalog mappings', function () {
     $previous = prepareCompanyTransfer($this);
     foreach ([$previous, $this->company] as $company) {
         LeadLoversTag::query()->create([
@@ -308,38 +259,19 @@ it('uses catalog mappings for legacy companies and normalizes only the company t
         $company->update(['leadlovers_tag_id' => null, 'leadlovers_tag_name' => null]);
     }
     $this->lead->update(['tags_originais' => 'diretoprop, IMOBILIÁRIA  ANTERIOR, aprovados, Imobiliária destino']);
-    Http::fake(['*/leads/901/tags' => Http::response(companyTransferRemoteTags([302]))]);
     processCompanyLink(requestCompanyLink($this));
     expect($this->lead->fresh()->tags_originais)->toBe('diretoprop, aprovados, Imobiliária destino');
-    Http::assertSentCount(1);
+    Http::assertNothingSent();
 });
 
-it('reconciles a missing remote id only when the email identifies exactly one lead', function (bool $exactMatch) {
+it('does not search remote leads when linking without a remote identity', function () {
     prepareCompanyTransfer($this);
     $this->lead->update(['leadlovers_lead_id' => null]);
-    Http::fake([
-        '*/leads/search' => Http::response([
-            'total' => 1,
-            'records' => [[
-                'id' => 555, 'leadId' => 901,
-                'email' => $exactMatch ? $this->lead->email : 'other@example.test',
-                'createdAt' => '2026-09-17T12:00:00Z',
-            ]],
-            'pagination' => ['current' => 1, 'size' => 10, 'next' => null, 'prev' => null, 'pages' => 1],
-        ]),
-        '*/leads/901/tags' => Http::response(companyTransferRemoteTags([302])),
-    ]);
-    $requestId = requestCompanyLink($this);
-
-    if ($exactMatch) {
-        processCompanyLink($requestId);
-        expect(CorretorActivityLog::findOrFail($requestId)->new_values['company_tag_sync']['status'])->toBe('synced');
-        Http::assertSentCount(2);
-    } else {
-        expect(fn () => processCompanyLink($requestId))->toThrow(RuntimeException::class, 'identificar com segurança');
-        Http::assertSentCount(1);
-    }
-})->with([true, false]);
+    processCompanyLink(requestCompanyLink($this));
+    expect($this->lead->fresh()->company_id)->toBe($this->company->id)
+        ->and($this->lead->fresh()->leadlovers_lead_id)->toBeNull();
+    Http::assertNothingSent();
+});
 
 it('requires the new permission and its dependencies', function (array $permissions, bool $allowed) {
     $this->corretor->update(['permissions' => $permissions]);
@@ -424,18 +356,18 @@ it('queues once and atomically links the lead and existing analyses while preser
         ->and($lead->imobiliaria)->toBe($this->company->name)
         ->and($lead->tipo_solicitante)->toBe('locador')
         ->and($lead->origem)->toBe('locador')
-        ->and($lead->tags_originais)->toBe('diretoprop, aprovados')
+        ->and($lead->tags_originais)->toBe('diretoprop, aprovados, '.$this->company->name)
         ->and($lead->locador->id)->toBe($owner->id)
         ->and($lead->reanalysis_unlocked_at)->toBeNull()
         ->and($lead->updated_by_corretor_id)->toBe($this->corretor->id)
         ->and($batch->fresh()->company_id)->toBe($this->company->id)
         ->and($analysis->fresh()->company_id)->toBe($this->company->id)
         ->and($analysis->fresh()->status)->toBe('approved')
-        ->and($lead->leadlovers_update_version)->toBe(1)
+        ->and($lead->leadlovers_update_version)->toBe(0)
         ->and(CorretorActivityLog::findOrFail($requestId)->new_values['status'])->toBe('completed');
     Bus::assertNotDispatched(StartInsuranceAnalysesBatchJob::class);
     Bus::assertNotDispatched(SendLeadToLeadLoversJob::class);
-    Bus::assertDispatched(UpdateLeadOnLeadLoversJob::class, fn ($job): bool => $job->requestedFields === ['company'] && $job->queue === 'leadlovers');
+    Bus::assertNotDispatched(UpdateLeadOnLeadLoversJob::class);
     Event::assertDispatchedTimes(DashboardActivityChanged::class, 1);
 });
 
@@ -465,44 +397,47 @@ it('does not take analyses already owned by a company', function () {
     Bus::assertNothingDispatched();
 });
 
-it('sends only the updated company without changing remote tags or email', function () {
-    config(['services.leadlovers.api_url' => 'https://api.leadlovers.link.test', 'services.leadlovers.token' => 'link-test-token']);
-    Http::fake(['https://api.leadlovers.link.test/leads/901' => Http::response(['success' => true])]);
-    $requestId = requestCompanyLink($this);
-    processCompanyLink($requestId);
-    (new UpdateLeadOnLeadLoversJob($this->lead->id, 1, ['company']))->handle(app(LeadLoversApiClient::class), app(LeadLoversLeadResolver::class));
-    Http::assertSent(fn ($request): bool => $request->method() === 'PUT' && $request->data() === ['staticFields' => ['company' => $this->company->name]]);
-    Http::assertSentCount(1);
-    expect($this->lead->fresh()->leadlovers_update_status)->toBe('synced');
+it('keeps the company link local without dispatching a remote company update', function () {
+    $before = $this->lead->fresh()->getAttributes();
+    processCompanyLink(requestCompanyLink($this));
+    $after = $this->lead->fresh()->getAttributes();
+    foreach ($before as $key => $value) {
+        if (str_starts_with($key, 'leadlovers_') || $key === 'email') {
+            expect($after[$key])->toBe($value);
+        }
+    }
+    Bus::assertNotDispatched(UpdateLeadOnLeadLoversJob::class);
+    Http::assertNothingSent();
 });
 
-it('preserves outstanding fields when scheduling company synchronization', function () {
+it('preserves outstanding remote lead edits without adding company synchronization', function () {
     $this->lead->update(['leadlovers_update_status' => 'processing', 'leadlovers_update_version' => 4, 'leadlovers_update_response' => ['requested_fields' => ['name', 'phone']]]);
     processCompanyLink(requestCompanyLink($this));
-    Bus::assertDispatched(UpdateLeadOnLeadLoversJob::class, fn ($job): bool => $job->syncVersion === 5 && $job->requestedFields === ['name', 'phone', 'company']);
+    expect($this->lead->fresh()->leadlovers_update_version)->toBe(4)
+        ->and($this->lead->fresh()->leadlovers_update_status)->toBe('processing')
+        ->and($this->lead->fresh()->leadlovers_update_response)->toBe(['requested_fields' => ['name', 'phone']]);
+    Bus::assertNotDispatched(UpdateLeadOnLeadLoversJob::class);
 });
 
-it('accepts legacy synchronization metadata without a field list', function () {
+it('preserves legacy synchronization metadata without a field list', function () {
     $this->lead->update(['leadlovers_update_status' => 'failed', 'leadlovers_update_response' => ['requested_fields' => null]]);
     processCompanyLink(requestCompanyLink($this));
-    Bus::assertDispatched(UpdateLeadOnLeadLoversJob::class, fn ($job): bool => $job->requestedFields === ['company']);
+    expect($this->lead->fresh()->leadlovers_update_status)->toBe('failed')
+        ->and($this->lead->fresh()->leadlovers_update_response)->toBe(['requested_fields' => null]);
+    Bus::assertNotDispatched(UpdateLeadOnLeadLoversJob::class);
 });
 
-it('records remote synchronization limitations without blocking the local link', function (string $initialStatus, bool $enabled, string $expectedStatus) {
+it('links locally without scheduling updates when initial sending is unavailable', function (string $initialStatus, bool $enabled) {
     config(['services.leadlovers.enabled' => $enabled]);
     $this->lead->update(['leadlovers_status' => $initialStatus, 'sent_to_leadlovers_at' => null, 'leadlovers_lead_id' => null]);
+    $before = $this->lead->fresh()->leadlovers_update_status;
     processCompanyLink(requestCompanyLink($this));
     expect($this->lead->fresh()->company_id)->toBe($this->company->id)
-        ->and($this->lead->fresh()->leadlovers_update_status)->toBe($expectedStatus)
-        ->and($this->lead->fresh()->leadlovers_update_response['requested_fields'])->toBe(['company']);
+        ->and($this->lead->fresh()->leadlovers_update_status)->toBe($before);
     Bus::assertNotDispatched(UpdateLeadOnLeadLoversJob::class);
     Bus::assertNotDispatched(SendLeadToLeadLoversJob::class);
-})->with([
-    ['pending', true, 'waiting_initial_send'],
-    ['processing', true, 'waiting_initial_send'],
-    ['failed', true, 'failed'],
-    ['disabled', false, 'disabled'],
-]);
+    Http::assertNothingSent();
+})->with([['pending', true], ['processing', true], ['failed', true], ['disabled', false]]);
 
 it('records terminal queue failures and allows a new request', function () {
     $requestId = requestCompanyLink($this);
@@ -512,12 +447,13 @@ it('records terminal queue failures and allows a new request', function () {
     expect(requestCompanyLink($this))->not->toBe($requestId);
 });
 
-it('keeps the local link and exposes synchronization failure if dispatch retries are exhausted', function () {
+it('does not mark a completed local link or unrelated integration as failed on late job failure', function () {
     $requestId = requestCompanyLink($this);
     processCompanyLink($requestId);
+    $before = $this->lead->fresh()->leadlovers_update_status;
     (new LinkLeadToCompanyJob($requestId))->failed(new RuntimeException('queue unavailable'));
     expect($this->lead->fresh()->company_id)->toBe($this->company->id)
-        ->and($this->lead->fresh()->leadlovers_update_status)->toBe('failed')
+        ->and($this->lead->fresh()->leadlovers_update_status)->toBe($before)
         ->and(CorretorActivityLog::findOrFail($requestId)->new_values['status'])->toBe('completed');
 });
 
@@ -537,8 +473,10 @@ it('uses the current company when an initial analysis starts while linking is pr
         ->and($this->lead->insuranceAnalyses()->sole()->company_id)->toBe($this->company->id);
 });
 
-it('rolls back the link and analysis ownership when recording completion fails', function () {
-    $batch = $this->lead->insuranceAnalysesBatches()->create(['status' => 'completed']);
+it('rolls back the link and analysis ownership when recording completion fails', function (bool $transfer) {
+    $previous = $transfer ? prepareCompanyTransfer($this) : null;
+    $originalTags = $this->lead->fresh()->tags_originais;
+    $batch = $this->lead->insuranceAnalysesBatches()->create(['company_id' => $previous?->id, 'status' => 'completed']);
     $requestId = requestCompanyLink($this);
     $this->app['events']->listen('eloquent.updating: '.CorretorActivityLog::class, function (CorretorActivityLog $log): void {
         if (($log->new_values['status'] ?? null) === 'completed') {
@@ -547,11 +485,12 @@ it('rolls back the link and analysis ownership when recording completion fails',
     });
 
     expect(fn () => processCompanyLink($requestId))->toThrow(RuntimeException::class, 'audit unavailable');
-    expect($this->lead->fresh()->company_id)->toBeNull()
-        ->and($batch->fresh()->company_id)->toBeNull()
+    expect($this->lead->fresh()->company_id)->toBe($previous?->id)
+        ->and($this->lead->fresh()->tags_originais)->toBe($originalTags)
+        ->and($batch->fresh()->company_id)->toBe($previous?->id)
         ->and(CorretorActivityLog::findOrFail($requestId)->new_values['status'])->toBe('queued');
     Bus::assertNotDispatched(UpdateLeadOnLeadLoversJob::class);
-});
+})->with([false, true]);
 
 it('validates the new permission dependencies when managing team members', function () {
     $member = $this->corretor;
