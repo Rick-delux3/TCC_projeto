@@ -554,6 +554,9 @@ it('shows edit and delete controls only for their respective permissions', funct
         ->get(route('admin.imobiliarias.index'))
         ->assertOk()
         ->assertSee('data-company-edit', false)
+        ->assertSee('id="companyEditModal"', false)
+        ->assertSee('data-company-edit-form', false)
+        ->assertSee('name="_editing_company_id"', false)
         ->assertSee('data-company-update-url="'.route('admin.imobiliarias.update', $company).'"', false)
         ->assertSee('name="_method" value="PATCH"', false)
         ->assertDontSee('data-company-delete', false)
@@ -684,6 +687,8 @@ it('rejects invalid update data and reopens the correct modal with submitted val
     $response
         ->assertOk()
         ->assertSee('data-reopen-company-id="'.$company->id.'"', false)
+        ->assertSee('action="'.route('admin.imobiliarias.update', $company).'"', false)
+        ->assertSee('data-preserve-input="true"', false)
         ->assertSee('value="email-invalido"', false)
         ->assertSeeText('As informações enviadas foram preservadas')
         ->assertSeeText('Informe um e-mail válido');
@@ -991,4 +996,51 @@ describe('company departments', function () {
         $this->assertDatabaseMissing('logs_atividades_corretores', ['action' => 'imobiliaria_created']);
         Notification::assertNothingSent();
     })->with(['store', 'update']);
+});
+
+it('provides scoped department data for the edit modal without exposing credentials', function () {
+    $this->actingAs(createImobiliariaAdmin(['permissions' => ['imobiliarias.visualizar', 'imobiliarias.editar']]), 'admin');
+    $company = createManagedImobiliaria(['cnpj' => '11222333000181']);
+    $sector = ImobiliariaSetor::factory()->for($company, 'imobiliaria')->create(['key' => 'custom', 'name' => '<script>alert(1)</script>', 'email' => 'department@example.test']);
+    $response = $this->get(route('admin.imobiliarias.index'))->assertOk();
+    $response->assertSee('data-edit-department-list', false)->assertSee('name="_edit_department_emails"', false);
+    $response->assertSee('class="company-edit-heading"', false)
+        ->assertSee('class="company-edit-identity"', false)
+        ->assertSee('Imobiliária selecionada')
+        ->assertSee('class="company-edit-department-row"', false)
+        ->assertSee('data-company-edit-submit', false);
+    preg_match('/<script type="application\/json" id="edit-company-department-data">(.*?)<\/script>/s', $response->getContent(), $matches);
+    $data = json_decode($matches[1], true, flags: JSON_THROW_ON_ERROR);
+    expect($data[$company->id])->toBe([['key' => 'custom', 'name' => $sector->name, 'email' => $sector->email]])
+        ->and($matches[1])->not->toContain('<script>', '</script>', 'password');
+});
+
+it('restores submitted department fields and errors inside the correct edit modal', function () {
+    $this->actingAs(createImobiliariaAdmin(['permissions' => ['imobiliarias.visualizar', 'imobiliarias.editar']]), 'admin');
+    $company = createManagedImobiliaria(['cnpj' => '11222333000181']);
+    $sector = ImobiliariaSetor::factory()->for($company, 'imobiliaria')->create(['email' => 'original@example.test']);
+    $response = $this->from(route('admin.imobiliarias.index'))->followingRedirects()
+        ->patch(route('admin.imobiliarias.update', $company), validCompanyUpdatePayload($company, [
+            '_edit_department_emails' => '1',
+            'setores' => [['key' => $sector->key, 'name' => 'Changed sector', 'email' => 'invalid-email']],
+        ]))->assertOk();
+    $response->assertSee('data-reopen-company-id="'.$company->id.'"', false)
+        ->assertSee('data-preserve-input="true"', false)
+        ->assertSee('value="Changed sector"', false)->assertSee('value="invalid-email"', false)
+        ->assertSee('id="edit-department-email-0"', false)->assertSee('is-invalid', false);
+    expect($sector->fresh()->email)->toBe('original@example.test');
+});
+
+it('removes all sectors from an explicitly submitted empty department editor only', function () {
+    $this->actingAs(createImobiliariaAdmin(['permissions' => ['imobiliarias.visualizar', 'imobiliarias.editar']]), 'admin');
+    $company = createManagedImobiliaria(['cnpj' => '11222333000181']);
+    $sector = ImobiliariaSetor::factory()->for($company, 'imobiliaria')->create();
+    $other = ImobiliariaSetor::factory()->create();
+    $this->patch(route('admin.imobiliarias.update', $company), validCompanyUpdatePayload($company))
+        ->assertSessionHasNoErrors();
+    $this->assertModelExists($sector);
+    $this->patch(route('admin.imobiliarias.update', $company), validCompanyUpdatePayload($company, ['_edit_department_emails' => '1']))
+        ->assertSessionHasNoErrors()->assertSessionHas('success');
+    $this->assertModelMissing($sector);
+    $this->assertModelExists($other);
 });

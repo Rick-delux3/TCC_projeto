@@ -1,4 +1,5 @@
 import { buildDepartmentPayload } from './company-departments';
+import { initializeEditDepartments } from './company-edit-departments.js';
 
 const onlyNumbers = (value, limit) => String(value ?? '')
     .replace(/\D/g, '')
@@ -263,6 +264,8 @@ if (editModalElement) {
     const editState = editModalElement.querySelector('#edit-company-state');
     const editStatus = editModalElement.querySelector('#edit-company-status');
     const validationSummary = editModalElement.querySelector('.company-modal-validation');
+    const departmentsByCompany = JSON.parse(document.querySelector('#edit-company-department-data')?.textContent ?? '{}');
+    const populateDepartments = initializeEditDepartments(editForm);
 
     const clearServerValidation = () => {
         validationSummary?.setAttribute('hidden', '');
@@ -289,6 +292,7 @@ if (editModalElement) {
         }
 
         clearServerValidation();
+        populateDepartments(departmentsByCompany[button.dataset.companyId] ?? []);
 
         if (editName) {
             editName.value = button.dataset.companyName ?? '';

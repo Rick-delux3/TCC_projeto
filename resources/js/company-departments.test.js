@@ -1,6 +1,24 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { buildDepartmentPayload } from './company-departments.js';
+import { editDepartmentRows } from './company-edit-departments.js';
+
+test('editing retains saved departments with empty emails and adds only missing suggestions', () => {
+    const saved = [{ key: 'comercial', name: 'Custom commercial name', email: null }, { key: 'custom', name: 'Custom sector', email: 'custom@example.test' }];
+    const rows = editDepartmentRows(saved);
+    assert.equal(rows.filter(({ key }) => key === 'comercial').length, 1);
+    assert.deepEqual(buildDepartmentPayload(rows, true), saved.map((sector) => ({ ...sector, email: sector.email ?? '' })));
+    assert.equal(saved[0].email, null);
+});
+
+test('switching companies produces independent department rows and honors the row limit', () => {
+    const first = editDepartmentRows([{ key: 'private', name: 'Private', email: 'private@example.test' }]);
+    const second = editDepartmentRows([]);
+    assert.equal(first.some(({ key }) => key === 'private'), true);
+    assert.equal(second.some(({ key }) => key === 'private'), false);
+    assert.deepEqual(buildDepartmentPayload(second, true), []);
+    assert.equal(editDepartmentRows(Array.from({ length: 50 }, (_, index) => ({ key: `custom_${index}`, name: `Sector ${index}`, email: null }))).length, 50);
+});
 
 test('disabled department emails send no departments even when fields retain their values', () => {
     assert.deepEqual(buildDepartmentPayload([

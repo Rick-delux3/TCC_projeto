@@ -4,10 +4,10 @@
         <legend class="simulation-field-label">Quem está solicitando? <span class="simulation-required">*</span></legend>
         @if ($lockResponsavelTipo)
             <input type="hidden" name="responsavel_tipo" value="{{ $responsavelTipo }}">
-            <p class="simulation-context">{{ $responsavelTipo === 'locador' ? 'Proprietário / locador' : 'Imobiliária não cadastrada' }}</p>
+            <p class="simulation-context">{{ $responsavelTipo === 'locador' ? 'Proprietário / locador' : 'Imobiliária' }}</p>
         @else
             <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
-                @foreach (['imobiliaria_nao_cadastrada' => 'Imobiliária não cadastrada', 'locador' => 'Proprietário / locador'] as $value => $label)
+                @foreach (['imobiliaria_nao_cadastrada' => 'Imobiliária', 'locador' => 'Proprietário / locador'] as $value => $label)
                     <label class="simulation-requester-choice flex items-center gap-4" for="responsavel_{{ $value }}">
                         <span class="simulation-choice-icon">@include('simulation.partials.form-icon', ['icon' => $value === 'locador' ? 'house' : 'building'])</span>
                         <input type="radio" name="responsavel_tipo" id="responsavel_{{ $value }}" value="{{ $value }}" @checked(old('responsavel_tipo', $responsavelTipo ?? 'imobiliaria_nao_cadastrada') === $value) required>
