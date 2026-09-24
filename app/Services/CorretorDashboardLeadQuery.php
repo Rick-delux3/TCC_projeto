@@ -193,26 +193,21 @@ final class CorretorDashboardLeadQuery
     {
         $query->whereNull('dashboard_result')
             ->whereNull('leadlovers_confirmed_final_tag_key')
-            ->whereIn('leadlovers_status', ['sent', 'send'])
-            ->where('leadlovers_lead_id', '>', 0)
-            ->whereNotNull('sent_to_leadlovers_at')
-            ->whereNull('updated_by_corretor_id')
-            ->where('leadlovers_update_version', 0)
-            ->where('leadlovers_update_status', 'idle')
-            ->whereNull('leadlovers_update_requested_at')
-            ->whereNull('leadlovers_update_at')
-            ->whereNull('leadlovers_final_tag_confirmed_at')
-            ->whereColumn('updated_at', '<=', 'sent_to_leadlovers_at')
-            ->whereDoesntHave('leadLoversTagOperation')
+            ->whereNull('data_edited_at')
+            ->where(function (Builder $editor): void {
+                $editor->whereNull('updated_by_corretor_id')
+                    ->orWhereHas('activityLogs', function (Builder $links): void {
+                        $links->where('action', 'lead_company_link_requested')
+                            ->where('new_values->status', 'completed')
+                            ->whereColumn('corretor_id', 'leads.updated_by_corretor_id');
+                    });
+            })
+            ->whereDoesntHave('leadLoversTagOperation', function (Builder $operations): void {
+                $operations->where('desired_source', 'manual')->orWhere('inflight_source', 'manual');
+            })
             ->whereDoesntHave('activityLogs', function (Builder $logs): void {
                 $logs->whereIn('action', ['lead_data_update_requested', 'lead_tag_update_requested', 'lead_updated']);
             });
-
-        foreach (['endereco', 'despesas', 'conjuge', 'lead_empresa', 'imobiliariaInformada', 'locador'] as $relationship) {
-            $query->whereDoesntHave($relationship, function (Builder $details): void {
-                $details->whereColumn($details->qualifyColumn('updated_at'), '>', 'leads.sent_to_leadlovers_at');
-            });
-        }
     }
 
     /** @return array{sql: string, bindings: list<string>} */

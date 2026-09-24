@@ -672,6 +672,7 @@ it('corrects only the mapped field and resets incompatible sync state', function
     $lead->refresh();
 
     expect($result['lead_id'])->toBe($lead->id)
+        ->and($lead->data_edited_at)->not->toBeNull()
         ->and($lead->{$changedField})->toBe($expectedValue)
         ->and($lead->nome)->not->toBe('Tentativa indevida')
         ->and($lead->status)->not->toBe('recusado')

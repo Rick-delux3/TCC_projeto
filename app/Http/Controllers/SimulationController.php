@@ -595,6 +595,7 @@ class SimulationController extends Controller
         );
 
         $wasRecentlyCreated = $lead->wasRecentlyCreated;
+        $originalData = null;
 
         if (! $wasRecentlyCreated && ! $allowExistingUpdate) {
             return $lead;
@@ -605,6 +606,8 @@ class SimulationController extends Controller
                 ->whereKey($lead->getKey())
                 ->lockForUpdate()
                 ->firstOrFail();
+            $originalData = $this->editableLeadData($lead);
+            unset($leadAttributes['tags_originais'], $leadAttributes['status']);
             $leadAttributes['leadlovers_status'] = in_array(
                 $lead->leadlovers_status,
                 ['sent', 'send'],
@@ -697,10 +700,16 @@ class SimulationController extends Controller
             $lead->locador()->delete();
         }
 
+        $dataChanged = ! $wasRecentlyCreated && $originalData !== $this->editableLeadData($lead);
+
+        if ($dataChanged) {
+            $lead->forceFill(['data_edited_at' => now()])->saveQuietly();
+        }
+
         $corretorId = $context['corretor_id'] ?? null;
 
-        if ($corretorId) {
-            $audiColumn = $lead->wasRecentlyCreated
+        if ($corretorId && ($wasRecentlyCreated || $dataChanged)) {
+            $audiColumn = $wasRecentlyCreated
             ? 'created_by_corretor_id'
             : 'updated_by_corretor_id';
 
@@ -724,6 +733,25 @@ class SimulationController extends Controller
 
         return $lead;
 
+    }
+
+    /** @return array<string, mixed> */
+    private function editableLeadData(Lead $lead): array
+    {
+        $relationships = ['lead_empresa', 'endereco', 'despesas', 'conjuge', 'locador', 'imobiliariaInformada'];
+        $lead->load($relationships);
+        $data = $lead->only([
+            'nome', 'email', 'cpf', 'tipo_locacao', 'descrever_atividade', 'tel',
+            'estado_civil', 'aceite_termos', 'observacoes',
+        ]);
+
+        foreach ($relationships as $relationship) {
+            $details = $lead->getRelation($relationship);
+            $data[$relationship] = $details === null ? null : collect($details->attributesToArray())
+                ->except(['id', 'lead_id', 'created_at', 'updated_at'])->all();
+        }
+
+        return $data;
     }
 
     /**

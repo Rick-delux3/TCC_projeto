@@ -10,6 +10,9 @@ use Illuminate\Support\Facades\Notification;
 use Mockery\MockInterface;
 
 beforeEach(function () {
+    Http::preventStrayRequests();
+    Http::fake();
+
     $this->mock(CepService::class, function (MockInterface $mock) {
         $mock->shouldReceive('find')
             ->with('01001000')
@@ -70,23 +73,20 @@ it('registers an imobiliaria using an available local tag', function () {
 
     Notification::assertSentTo($user, VerifyEmail::class);
 
+    $this->get(route('empresa.register.form'))
+        ->assertOk()
+        ->assertSee('name="company_name"', false)
+        ->assertDontSee('name="leadlovers_tag_id"', false);
+
     Http::assertNothingSent();
 });
 
-it('creates and stores a remote tag when no local tag is available', function () {
+it('registers a typed company name locally without creating a remote tag', function (bool $enabled) {
     Notification::fake();
 
     config([
-        'services.leadlovers.enabled' => true,
-        'services.leadlovers.token' => 'test-token',
-    ]);
-
-    Http::preventStrayRequests();
-    Http::fake([
-        'https://api.leadlovers.com/tags/' => Http::response([
-            'id' => 888,
-            'name' => 'Imobiliária Auditada',
-        ], 200),
+        'services.leadlovers.enabled' => $enabled,
+        'services.leadlovers.token' => null,
     ]);
 
     $response = $this->post(
@@ -105,16 +105,16 @@ it('creates and stores a remote tag when no local tag is available', function ()
 
     expect($company)
         ->name->toBe('Imobiliária Auditada')
-        ->leadlovers_tag_id->toBe(888);
+        ->leadlovers_tag_id->toBeNull()
+        ->leadlovers_tag_name->toBeNull();
 
-    $this->assertDatabaseHas('lead_lovers_tags', [
-        'leadlovers_tag_id' => 888,
-        'title' => 'Imobiliária Auditada',
-        'active' => true,
-    ]);
+    $user = User::query()->where('company_id', $company->id)->sole();
 
-    Http::assertSentCount(1);
-});
+    expect($user->name)->toBe($company->name);
+    Notification::assertSentTo($user, VerifyEmail::class);
+    $this->assertDatabaseCount('lead_lovers_tags', 0);
+    Http::assertNothingSent();
+})->with([true, false]);
 
 it('rejects fields from the inactive registration mode', function () {
     $tag = LeadLoversTag::create([
