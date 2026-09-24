@@ -346,7 +346,7 @@
                                     </div>
 
                                     <div class="fw-bold">
-                                        {{ $latestLeadAt ? $latestLeadAt->format('d/m/Y H:i') : 'Sem leads cadastrados' }}
+                                        {{ $latestLeadAt ? $latestLeadAt->copy()->setTimezone('America/Sao_Paulo')->format('d/m/Y H:i') : 'Sem leads cadastrados' }}
                                     </div>
 
                                     <hr class="border-white border-opacity-25">
@@ -901,8 +901,8 @@
                                 $leadPhone = $lead->tel ?: 'Telefone não informado';
                                 $leadCity = $lead->endereco?->cidade_imovel ?? 'Cidade não informada';
 
-                                $leadDate = $lead->created_at ? $lead->created_at->format('d/m/Y') : 'Sem data';
-                                $leadTime = $lead->created_at ? $lead->created_at->format('H:i') : '--:--';
+                                $leadDate = $lead->created_at ? $lead->created_at->copy()->setTimezone('America/Sao_Paulo')->format('d/m/Y') : 'Sem data';
+                                $leadTime = $lead->created_at ? $lead->created_at->copy()->setTimezone('America/Sao_Paulo')->format('H:i') : '--:--';
 
                                 $statusKey = \Illuminate\Support\Str::slug($lead->status ?: 'novo');
                                 $statusLabel = $statusLabels[$statusKey] ?? ucfirst(str_replace('-', ' ', $statusKey));
@@ -1206,7 +1206,7 @@
                     </h5>
 
                     <p class="text-muted small mb-0">
-                        Entrada em {{ $lead->created_at ? $lead->created_at->format('d/m/Y H:i') : 'data não informada' }}
+                        Entrada em {{ $lead->created_at ? $lead->created_at->copy()->setTimezone('America/Sao_Paulo')->format('d/m/Y H:i') : 'data não informada' }}
                     </p>
                 </div>
 

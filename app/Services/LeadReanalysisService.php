@@ -344,6 +344,9 @@ class LeadReanalysisService
                 ];
             }
 
+            $lead->data_edited_at = now();
+            $leadChanged = true;
+
             if ($corretor !== null) {
                 $lead->updated_by_corretor_id = $corretor->id;
                 $leadChanged = true;

@@ -252,7 +252,7 @@ function updateLeadDashboardListedNames(string $html): array
     return $names;
 }
 
-it('switches incompatible quick filters while preserving the company search and requester', function (bool $startWithoutResult): void {
+it('combines quick filters while preserving the company search and requester', function (bool $startWithoutResult): void {
     $this->freezeTime();
     $company = updateLeadDashboardCompany();
     $sharedFilters = ['imobiliaria' => (string) $company->id, 'lead_name' => 'Carlos', 'tipo_solicitante' => 'imobiliaria_cadastrada'];
@@ -269,7 +269,7 @@ it('switches incompatible quick filters while preserving the company search and 
         'sent_to_leadlovers_at' => null, 'leadlovers_initial_error_status' => 400,
     ]);
     $initial = $startWithoutResult ? ['resultado' => 'sem_resultado'] : ['leadlovers_sync' => 'not_sent_invalid_data'];
-    $expected = $startWithoutResult ? ['leadlovers_sync' => 'not_sent_invalid_data'] : ['resultado' => 'sem_resultado'];
+    $expected = ['leadlovers_sync' => 'not_sent_invalid_data', 'resultado' => 'sem_resultado'];
     $response = $this->actingAs(updateLeadDashboardAdmin(), 'admin')
         ->get(route('Dashboard-Admin', $sharedFilters + $initial))->assertOk();
     $xpath = updateLeadDashboardDom($response->getContent())['xpath'];
@@ -279,7 +279,7 @@ it('switches incompatible quick filters while preserving the company search and 
 
     expect($parameters)->toEqual($sharedFilters + $expected + ['page' => '1']);
     $filtered = $this->get($href)->assertOk()->assertSessionHasNoErrors();
-    expect($filtered->viewData('leads')->pluck('id')->all())->toBe([$startWithoutResult ? $failed->id : $synced->id]);
+    expect($filtered->viewData('leads')->pluck('id')->all())->toBe([$failed->id]);
 })->with([true, false]);
 
 it('renders the untouched lead filter consistently without offering it as a manual tag', function (): void {
@@ -1505,4 +1505,42 @@ it('loads the shared lead filter design with responsive and accessible interacti
         ->toContain('@media (max-width: 767.98px)')
         ->toContain('@media (prefers-reduced-motion: reduce)')
         ->toContain('@media (forced-colors: active)');
+});
+
+it('displays lead arrival in Brasilia time without changing stored timestamps', function (string $dashboard, string $utc, string $localDate, string $localTime): void {
+    $company = updateLeadDashboardCompany();
+    $lead = updateLeadDashboardLead(['company_id' => $company->id, 'tipo_solicitante' => 'imobiliaria_cadastrada']);
+    $lead->forceFill(['created_at' => $utc, 'updated_at' => $utc])->save();
+    if ($dashboard === 'admin') {
+        $this->actingAs(updateLeadDashboardAdmin(), 'admin');
+    } else {
+        $this->actingAs(updateLeadDashboardCompanyUser($company))
+            ->withSession(['company_id' => $company->id, '2fa_passed' => true]);
+    }
+    $response = $this->get(route($dashboard === 'admin' ? 'Dashboard-Admin' : 'company.dashboard'))->assertOk();
+    $response->assertSeeText($localDate)->assertSeeText($localTime)->assertSeeText($localDate.' '.$localTime);
+    expect($lead->fresh()->getRawOriginal('created_at'))->toBe($utc)
+        ->and(config('app.timezone'))->toBe('UTC');
+})->with(['admin', 'company'])->with([
+    ['2026-09-23 15:30:00', '23/09/2026', '12:30'],
+    ['2026-09-23 01:15:00', '22/09/2026', '22:15'],
+]);
+
+it('distinguishes missing commercial results from the unedited quick filter', function (): void {
+    $this->actingAs(updateLeadDashboardAdmin(), 'admin');
+    $untouched = updateLeadDashboardLead();
+    $edited = updateLeadDashboardLead(['data_edited_at' => now()]);
+    $response = $this->get(route('Dashboard-Admin'))->assertOk();
+    $xpath = updateLeadDashboardDom($response->getContent())['xpath'];
+    $label = $response->viewData('leadResultFilterOptions')['sem_resultado'];
+    expect($label)->not->toBe('Sem resultado');
+    $quick = $xpath->query('//a[contains(@class,"lead-filter-chip--sem-resultado")]')->item(0);
+    expect(trim($quick->textContent))->toBe($label);
+    $option = $xpath->query('//select[@name="resultado"]/option[@value="sem_resultado"]')->item(0);
+    expect(trim($option->textContent))->toBe($label)
+        ->and($response->viewData('leads')->pluck('id')->all())->toContain($untouched->id, $edited->id);
+    $response->assertSeeText('Sem resultado');
+    $filtered = $this->get($quick->getAttribute('href'))->assertOk();
+    expect($filtered->viewData('leads')->pluck('id')->all())->toBe([$untouched->id]);
+    $filtered->assertSeeText('Resultado: '.$label);
 });

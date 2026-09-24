@@ -661,6 +661,7 @@ it('persists locally and dispatches the ID-based update after commit', function 
     expect($result['message'])->toContain('fila')
         ->and($lead->refresh())
         ->nome->toBe('Nome atualizado')
+        ->data_edited_at->not->toBeNull()
         ->leadlovers_update_status->toBe('pending');
 });
 

@@ -154,6 +154,7 @@ final class LeadLoversInitialFailureRecoveryService
                 'leadlovers_update_requested_at' => null,
                 'leadlovers_update_at' => null,
 
+                'data_edited_at' => now(),
                 'updated_by_corretor_id' => $corretor?->id
                     ?? $lockedLead->updated_by_corretor_id,
             ])->save();

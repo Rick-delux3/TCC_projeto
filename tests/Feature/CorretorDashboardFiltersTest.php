@@ -177,22 +177,12 @@ it('recovers missing requester profiles from a known origin or registered reques
     expect($response->viewData('leads')->pluck('id')->all())->toBe([$details->id, $origin->id]);
 });
 
-it('rejects incompatible untouched and unsent filters before querying leads', function (string $result): void {
-    $queries = [];
-    Event::listen(QueryExecuted::class, function (QueryExecuted $query) use (&$queries): void {
-        $queries[] = $query->sql;
-    });
-
-    $response = $this->from(route('Dashboard-Admin'))->get(route('Dashboard-Admin', [
-        'resultado' => $result,
-        'leadlovers_sync' => LeadLoversInitialFailureCatalog::DASHBOARD_FILTER_NOT_SENT,
-    ]));
-
-    $response->assertRedirect(route('Dashboard-Admin'))
-        ->assertSessionHasErrors(['leadlovers_sync'], errorBag: 'leadFilters');
-    expect(collect($queries)->filter(fn (string $sql): bool => str_contains($sql, 'from "leads"')))->toBeEmpty();
-    $this->get(route('Dashboard-Admin'))->assertOk()
-        ->assertSee('“Sem resultado” considera apenas leads sincronizados.');
+it('allows combining without result and unsent filters', function (string $result): void {
+    $lead = dashboardFilterLead(['leadlovers_status' => 'failed', 'leadlovers_lead_id' => null, 'sent_to_leadlovers_at' => null, 'leadlovers_initial_error_status' => 400]);
+    $response = $this->get(route('Dashboard-Admin', [
+        'resultado' => $result, 'leadlovers_sync' => LeadLoversInitialFailureCatalog::DASHBOARD_FILTER_NOT_SENT,
+    ]))->assertOk()->assertSessionHasNoErrors();
+    expect($response->viewData('leads')->pluck('id')->all())->toBe([$lead->id]);
 })->with(['sem_resultado', 'no_result']);
 
 it('returns only initially synchronized untouched leads for the new filter', function (): void {
@@ -213,14 +203,7 @@ it('excludes sent leads with result or update evidence from the untouched filter
     [['tags_originais' => 'Aprovados']],
     [['tags_originais' => 'Ruim']],
     [['leadlovers_confirmed_final_tag_key' => 'em_negociacao']],
-    [['leadlovers_status' => 'pending']],
-    [['leadlovers_status' => 'failed']],
-    [['leadlovers_lead_id' => null]],
-    [['leadlovers_lead_id' => 0]],
-    [['sent_to_leadlovers_at' => null]],
-    [['leadlovers_update_version' => 1]],
-    [['leadlovers_update_status' => 'processing']],
-    [['leadlovers_update_status' => 'synced']],
+    [['data_edited_at' => '2026-09-23 10:00:00']],
     [['origem' => 'leadlovers']],
 ]);
 
@@ -346,7 +329,7 @@ it('loads at most the newest analysis per lead while keeping details available',
     }
 });
 
-it('excludes local changes after initial synchronization without relying on the editor account', function (string $relationship): void {
+it('excludes recorded data edits without relying on the editor account', function (string $relationship): void {
     $lead = dashboardFilterLead(['sent_to_leadlovers_at' => now()->subMinute(), 'created_at' => now()->subMinute(), 'updated_at' => now()->subMinute()]);
 
     if ($relationship === 'lead') {
@@ -356,6 +339,8 @@ it('excludes local changes after initial synchronization without relying on the 
     } elseif ($relationship === 'locador') {
         $lead->locador()->create(['nome' => 'Responsável alterado']);
     }
+
+    $lead->update(['data_edited_at' => now()]);
 
     $response = $this->get(route('Dashboard-Admin', ['resultado' => 'sem_resultado']))->assertOk();
     expect($response->viewData('leads')->total())->toBe(0);
@@ -380,5 +365,45 @@ it('requires the admin guard even for an authenticated company user', function (
 it('returns no matches for a nonexistent company instead of treating it as all companies', function (): void {
     dashboardFilterLead();
     $response = $this->get(route('Dashboard-Admin', ['imobiliaria' => '999999']))->assertOk();
+    expect($response->viewData('leads')->total())->toBe(0);
+});
+
+it('includes unedited leads with and without companies regardless of synchronization', function (string $status): void {
+    $company = dashboardFilterCompany();
+    $ids = [];
+    foreach ([null, $company->id] as $companyId) {
+        $lead = dashboardFilterLead([
+            'company_id' => $companyId, 'tags_originais' => $companyId ? $company->name : 'locatario',
+            'leadlovers_status' => $status, 'leadlovers_lead_id' => null, 'sent_to_leadlovers_at' => null,
+            'leadlovers_update_version' => 1, 'leadlovers_update_status' => 'synced',
+            'leadlovers_update_at' => now(), 'leadlovers_update_requested_at' => now(),
+        ]);
+        $lead->endereco()->create(['cidade_imovel' => 'Local']);
+        $ids[] = $lead->id;
+    }
+    $response = $this->get(route('Dashboard-Admin', ['resultado' => 'sem_resultado']))->assertOk();
+    expect($response->viewData('leads')->pluck('id')->all())->toBe(array_reverse($ids));
+})->with(['pending', 'processing', 'failed', 'disabled', 'sent', 'send']);
+
+it('keeps internal linking and automatic tag operations separate from data edits', function (): void {
+    $lead = dashboardFilterLead(['updated_by_corretor_id' => $this->admin->id, 'updated_at' => now()->addMinute()]);
+    $lead->activityLogs()->create([
+        'corretor_id' => $this->admin->id, 'action' => 'lead_company_link_requested',
+        'new_values' => ['status' => 'completed'],
+    ]);
+    $lead->leadLoversTagOperation()->create(['version' => 1, 'desired_source' => 'analysis', 'desired_tag_key' => 'aprovados', 'phase' => 'pending']);
+    $response = $this->get(route('Dashboard-Admin', ['resultado' => 'sem_resultado']))->assertOk();
+    expect($response->viewData('leads')->pluck('id')->all())->toBe([$lead->id]);
+    $lead->update(['data_edited_at' => now()]);
+    expect($this->get(route('Dashboard-Admin', ['resultado' => 'sem_resultado']))->viewData('leads')->total())->toBe(0);
+});
+it('removes leads after an actual data edit but not after saving unchanged data', function (): void {
+    $lead = dashboardFilterLead();
+    $service = app(\App\Services\LeadReanalysisService::class);
+    $service->updateLeadDataAndMaybeUnlock($lead, ['nome' => $lead->nome]);
+    expect($lead->fresh()->data_edited_at)->toBeNull();
+    $service->updateLeadDataAndMaybeUnlock($lead, ['nome' => 'Edited name']);
+    expect($lead->fresh()->data_edited_at)->not->toBeNull();
+    $response = $this->get(route('Dashboard-Admin', ['resultado' => 'sem_resultado']))->assertOk();
     expect($response->viewData('leads')->total())->toBe(0);
 });
