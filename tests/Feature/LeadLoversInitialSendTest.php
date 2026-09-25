@@ -1,6 +1,7 @@
 <?php
 
 use App\Events\DashboardActivityChanged;
+use App\Jobs\RetryLeadLoversOutageJob;
 use App\Jobs\SendLeadToLeadLoversJob;
 use App\Jobs\UpdateLeadOnLeadLoversJob;
 use App\Models\Imobiliaria;
@@ -144,6 +145,76 @@ function initialDashboardBroadcastMatches(
             : null)
         && $event->change === $change;
 }
+
+it('reschedules outages beyond the regular attempt limit with a ten minute delay', function (int $status) {
+    Queue::fake();
+    $this->freezeTime();
+    $lead = leadForInitialLeadLoversSend();
+    Http::fake([
+        'https://api.leadlovers.test/leads/' => Http::response([], $status),
+        'https://api.leadlovers.test/leads/search' => Http::response([], $status),
+    ]);
+
+    initialSendJob($lead, 12)->handle(app(LeadLoversApiClient::class));
+    expect($lead->refresh()->awaitingLeadLoversOutageRecovery())->toBeTrue();
+    Queue::assertPushed(RetryLeadLoversOutageJob::class, fn ($job) => $job->delay->equalTo(now()->addMinutes(10)) && $job->queue === 'leadlovers');
+
+    $recovery = (new RetryLeadLoversOutageJob($lead->id))->withFakeQueueInteractions();
+    $recovery->job->attempts = 12;
+    app(\Illuminate\Bus\UniqueLock::class)->release($recovery);
+    $recovery->handle(app(LeadLoversApiClient::class));
+    $recovery->assertNotFailed();
+    Queue::assertPushed(RetryLeadLoversOutageJob::class, 2);
+})->with([500, 501]);
+
+it('creates an absent lead after outage recovery and stops once machine membership is confirmed', function () {
+    Queue::fake();
+    $lead = leadForInitialLeadLoversSend();
+    Http::fake([
+        'https://api.leadlovers.test/leads/' => Http::sequence()->push([], 500)->push(['success' => true, 'leadId' => 501], 200),
+        'https://api.leadlovers.test/leads/search' => Http::response(searchResultForInitialSend([])),
+        'https://api.leadlovers.test/leads/move' => Http::response(['actionId' => 1, 'status' => 'pending', 'total' => 1], 202),
+        'https://api.leadlovers.test/leads/501/machines' => Http::response([machineAssociationForInitialSend()]),
+    ]);
+    initialSendJob($lead)->handle(app(LeadLoversApiClient::class));
+    $this->travel(10)->minutes();
+    $recovery = (new RetryLeadLoversOutageJob($lead->id))->withFakeQueueInteractions();
+    $recovery->handle(app(LeadLoversApiClient::class));
+    $recovery->assertReleased(15);
+    $recovery->job->attempts = 2;
+    $recovery->handle(app(LeadLoversApiClient::class));
+    expect($lead->refresh()->leadlovers_status)->toBe('sent')
+        ->and($lead->leadlovers_initial_error_status)->toBeNull();
+    $requests = count(Http::recorded());
+    (new RetryLeadLoversOutageJob($lead->id))->withFakeQueueInteractions()->handle(app(LeadLoversApiClient::class));
+    expect(Http::recorded())->toHaveCount($requests);
+    Queue::assertPushed(RetryLeadLoversOutageJob::class, 1);
+});
+
+it('does not start outage recovery for data authentication or other server errors', function (int $status) {
+    Queue::fake();
+    $lead = leadForInitialLeadLoversSend();
+    Http::fake(['https://api.leadlovers.test/leads/' => Http::response([], $status)]);
+    initialSendJob($lead)->handle(app(LeadLoversApiClient::class));
+    Queue::assertNotPushed(RetryLeadLoversOutageJob::class);
+    expect($lead->refresh()->awaitingLeadLoversOutageRecovery())->toBeFalse();
+})->with([400, 401, 422, 502]);
+
+it('resends an unaccepted machine request after outage without recreating the lead', function () {
+    Queue::fake();
+    $lead = leadForInitialLeadLoversSend(['leadlovers_lead_id' => 501]);
+    Http::fake([
+        'https://api.leadlovers.test/leads/501/machines' => Http::sequence()->push([])->push([])->push([machineAssociationForInitialSend()]),
+        'https://api.leadlovers.test/leads/move' => Http::sequence()->push([], 501)->push(['actionId' => 1, 'status' => 'pending', 'total' => 1], 202),
+    ]);
+    initialSendJob($lead)->handle(app(LeadLoversApiClient::class));
+    $recovery = (new RetryLeadLoversOutageJob($lead->id))->withFakeQueueInteractions();
+    $recovery->handle(app(LeadLoversApiClient::class));
+    $recovery->job->attempts = 2;
+    $recovery->handle(app(LeadLoversApiClient::class));
+    expect($lead->refresh()->leadlovers_status)->toBe('sent');
+    Http::assertNotSent(fn (Request $request) => str_ends_with($request->url(), '/leads/'));
+});
 
 it('adds and casts the remote lead identifier', function () {
     expect(Schema::hasColumn('leads', 'leadlovers_lead_id'))->toBeTrue();
@@ -814,6 +885,7 @@ it('fails closed when EMAIL_EXISTS search is not uniquely identifiable', functio
 ]);
 
 it('reconciles an ambiguous create on retry without posting another lead', function () {
+    Queue::fake();
     $lead = leadForInitialLeadLoversSend();
     Http::fake([
         'https://api.leadlovers.test/leads/' => function () use ($lead) {
@@ -849,7 +921,8 @@ it('reconciles an ambiguous create on retry without posting another lead', funct
 
     $firstAttempt = initialSendJob($lead);
     $firstAttempt->handle(app(LeadLoversApiClient::class));
-    $firstAttempt->assertReleased(15);
+    $firstAttempt->assertNotReleased();
+    Queue::assertPushed(RetryLeadLoversOutageJob::class, fn ($job) => $job->leadId === $lead->id && $job->delay->diffInSeconds(now(), true) >= 599);
 
     expect($lead->refresh())
         ->leadlovers_status->toBe('processing')
@@ -860,9 +933,9 @@ it('reconciles an ambiguous create on retry without posting another lead', funct
         ->not->toContain('person@example.test')
         ->not->toContain('changed@example.test');
 
-    $secondAttempt = initialSendJob($lead, 2);
+    $secondAttempt = (new RetryLeadLoversOutageJob($lead->id))->withFakeQueueInteractions();
     $secondAttempt->handle(app(LeadLoversApiClient::class));
-    $secondAttempt->assertReleased(30);
+    $secondAttempt->assertReleased(15);
 
     expect($lead->refresh()->leadlovers_lead_id)->toBe(501);
     $creationRequests = collect(Http::recorded())->filter(

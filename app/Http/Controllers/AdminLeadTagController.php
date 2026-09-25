@@ -10,6 +10,7 @@ use App\Models\CorretorActivityLog;
 use App\Models\Lead;
 use App\Models\LeadLoversTag;
 use App\Services\CorretorDashboardLeadQuery;
+use App\Services\LeadLoversResultTagService;
 use App\Services\LeadLoversTagOperationCoordinator;
 use App\Support\ManualLeadResultTags;
 use Illuminate\Http\RedirectResponse;
@@ -39,8 +40,9 @@ class AdminLeadTagController extends Controller
         }
 
         if (
-            $lead->leadlovers_status !== 'sent'
-            || $lead->sent_to_leadlovers_at === null
+            ! $lead->awaitingLeadLoversOutageRecovery()
+            && ($lead->leadlovers_status !== 'sent'
+            || $lead->sent_to_leadlovers_at === null)
         ) {
             return back()->withErrors([
                 'result' => 'Este lead ainda não foi enviado para a LeadLovers.',
@@ -48,7 +50,7 @@ class AdminLeadTagController extends Controller
                 ->withInput();
         }
 
-        if ((int) $lead->leadlovers_lead_id <= 0) {
+        if (! $lead->awaitingLeadLoversOutageRecovery() && (int) $lead->leadlovers_lead_id <= 0) {
             return back()->withErrors([
                 'result' => 'O lead não possui um ID remoto válido da LeadLovers.',
             ])->withInput();
@@ -143,11 +145,21 @@ class AdminLeadTagController extends Controller
             $result,
             $resultLabel,
             $selectedTagKey,
+            $resultTagCatalog,
             $selectedTag
         ): bool {
             $lockedLead = $this->dashboardLeadQuery->withResult(Lead::query())
                 ->lockForUpdate()
                 ->findOrFail($lead->id);
+
+            $deferRemoteTag = $lockedLead->awaitingLeadLoversOutageRecovery();
+            if (! $deferRemoteTag && ($lockedLead->leadlovers_status !== 'sent'
+                || $lockedLead->sent_to_leadlovers_at === null
+                || (int) $lockedLead->leadlovers_lead_id <= 0)) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'result' => 'Este lead ainda não foi enviado para a LeadLovers.',
+                ]);
+            }
 
             if (
                 $lockedLead->dashboard_result === $result
@@ -197,15 +209,26 @@ class AdminLeadTagController extends Controller
                     corretorId: $corretor->id,
                 );
 
-            ApplyManualLeadResultTagJob::dispatch(
-                $lockedLead->id,
-                $result,
-                $corretor->id,
-                $request->ip(),
-                $request->userAgent(),
-                $requestLog->id,
-                version: $syncState->version,
-            )->afterCommit();
+            if ($deferRemoteTag) {
+                $lockedLead->forceFill([
+                    'tags_originais' => app(LeadLoversResultTagService::class)->replaceLocalFinalTag(
+                        currentTagString: $lockedLead->tags_originais,
+                        catalog: $resultTagCatalog,
+                        selectedTag: $selectedTag,
+                    ),
+                    'updated_by_corretor_id' => $corretor->id,
+                ])->save();
+            } else {
+                ApplyManualLeadResultTagJob::dispatch(
+                    $lockedLead->id,
+                    $result,
+                    $corretor->id,
+                    $request->ip(),
+                    $request->userAgent(),
+                    $requestLog->id,
+                    version: $syncState->version,
+                )->afterCommit();
+            }
 
             DashboardActivityChanged::dispatch(
                 resource: 'lead',

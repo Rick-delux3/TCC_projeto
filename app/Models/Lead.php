@@ -304,6 +304,12 @@ class Lead extends Model
             ->where('leadlovers_initial_error_status', 400);
     }
 
+    public function awaitingLeadLoversOutageRecovery(): bool
+    {
+        return $this->leadlovers_status === 'processing'
+            && in_array((int) $this->leadlovers_initial_error_status, [500, 501], true);
+    }
+
     public function scopeExpiredRejectedRetention(Builder $query): Builder
     {
         return $query

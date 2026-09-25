@@ -8,6 +8,7 @@ use App\Models\Lead;
 use App\Models\LeadLoversTag;
 use App\Services\LeadCompanyLinkService;
 use App\Services\LeadLoversApiClient;
+use App\Services\LeadLoversTagOperationCoordinator;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Queue\Middleware\WithoutOverlapping;
@@ -44,6 +45,8 @@ class SendLeadToLeadLoversJob implements ShouldQueue
 
     public int $timeout = 120;
 
+    protected bool $recoveringOutage = false;
+
     public function __construct(
         public int $leadId
     ) {}
@@ -52,6 +55,7 @@ class SendLeadToLeadLoversJob implements ShouldQueue
     {
         return [
             (new WithoutOverlapping('leadlovers:initial:'.$this->leadId))
+                ->shared()
                 ->releaseAfter($this->confirmationDelay())
                 ->expireAfter($this->timeout + 60),
         ];
@@ -333,6 +337,24 @@ class SendLeadToLeadLoversJob implements ShouldQueue
         $match = $this->uniqueExactSearchMatch($result, $email);
 
         if ($match['outcome'] !== 'matched') {
+            $lead = $this->loadLead();
+            if ($this->recoveringOutage
+                && $lead->awaitingLeadLoversOutageRecovery()
+                && $reason === self::RECONCILIATION_AMBIGUOUS_CREATE
+                && ($result['total'] ?? null) === 0
+                && ($result['records'] ?? null) === []
+                && ($result['pagination']['current'] ?? null) === 1
+                && in_array($result['pagination']['pages'] ?? null, [0, 1], true)
+                && ($result['pagination']['next'] ?? null) === null
+                && trim((string) $lead->email) === $email
+            ) {
+                if ($this->storeProgress(self::PHASE_READY_TO_CREATE)) {
+                    return $this->resolveRemoteLead($leadLovers, $this->loadLead(), $this->mainTagIdForLead($lead));
+                }
+
+                return null;
+            }
+
             if (
                 $match['outcome'] === 'missing'
                 && $reason === self::RECONCILIATION_AMBIGUOUS_CREATE
@@ -402,7 +424,8 @@ class SendLeadToLeadLoversJob implements ShouldQueue
                 return;
             }
 
-            if ($mustOnlyConfirm) {
+            if ($mustOnlyConfirm && ! ($this->recoveringOutage
+                && $phase === self::PHASE_MACHINE_STARTED && $machines === [])) {
                 if (! $this->storeProgress(
                     $phase,
                     $this->machineProgress($remoteLeadId, $machine)
@@ -580,6 +603,22 @@ class SendLeadToLeadLoversJob implements ShouldQueue
         array $machine
     ): void {
         $pendingUpdate = $this->completeInitialSend($remoteLeadId, $machine);
+
+        $state = app(LeadLoversTagOperationCoordinator::class)->snapshot($this->leadId);
+        if ($state?->desired_source === 'manual'
+            && $state->phase === LeadLoversTagOperationCoordinator::PHASE_PENDING
+            && $state->desired_corretor_id !== null
+            && $state->desired_request_log_id !== null
+            && is_string($state->desired_result)
+        ) {
+            ApplyManualLeadResultTagJob::dispatch(
+                leadId: $this->leadId,
+                result: $state->desired_result,
+                corretorId: $state->desired_corretor_id,
+                requestLogId: $state->desired_request_log_id,
+                version: $state->version,
+            )->afterCommit();
+        }
 
         if ($pendingUpdate === null) {
             return;
@@ -1044,6 +1083,34 @@ class SendLeadToLeadLoversJob implements ShouldQueue
         array $diagnosticContext = [],
         bool $preservePreviousInitialFailure = false,
     ): void {
+        if (in_array($exception?->statusCode, [500, 501], true) && ! $exception->isConfigurationError) {
+            DB::transaction(function () use ($exception, $operation): void {
+                $lead = Lead::query()->whereKey($this->leadId)
+                    ->where('leadlovers_status', 'processing')->lockForUpdate()->first();
+
+                if ($lead === null) {
+                    return;
+                }
+
+                $lead->forceFill([
+                    'leadlovers_initial_error_status' => $exception->statusCode,
+                    'leadlovers_initial_error_code' => $exception->errorCode,
+                    'leadlovers_initial_error_operation' => $operation,
+                    'leadlovers_initial_failed_at' => now(),
+                ])->save();
+
+                RetryLeadLoversOutageJob::dispatch($this->leadId)
+                    ->onConnection($this->connection)
+                    ->onQueue($this->queue ?? 'leadlovers')
+                    ->delay(now()->addSeconds(max(600, $exception->retryAfterSeconds ?? 0)))
+                    ->afterCommit();
+
+                $this->notifyDashboard($lead, 'lead.sync.pending');
+            });
+
+            return;
+        }
+
         if ($this->attempts() >= $this->tries) {
             $this->permanentlyFail(
                 $operation,
@@ -1156,8 +1223,16 @@ class SendLeadToLeadLoversJob implements ShouldQueue
             ? ['pending', 'processing']
             : ['pending', 'tag_failed', 'sequence_failed', 'disabled'];
 
+        if ($this->recoveringOutage) {
+            $allowedStatuses = ['processing'];
+        }
+
         return Lead::query()
             ->whereKey($this->leadId)
+            ->when($this->recoveringOutage, fn ($query) => $query->whereIn('leadlovers_initial_error_status', [500, 501]))
+            ->when(! $this->recoveringOutage, fn ($query) => $query->where(function ($query): void {
+                $query->whereNull('leadlovers_initial_error_status')->orWhereNotIn('leadlovers_initial_error_status', [500, 501]);
+            }))
             ->whereIn('leadlovers_status', $allowedStatuses)
             ->update([
                 'leadlovers_status' => 'processing',
