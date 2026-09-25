@@ -288,14 +288,20 @@
             <nav class="auth-topbar__nav" aria-label="Opções de acesso">
                 <span class="auth-topbar__help">Precisa de ajuda?</span>
 
-                <button
-                    type="button"
-                    class="auth-topbar__link auth-topbar__access"
-                    data-bs-toggle="modal"
-                    data-bs-target="#companyAccessUnavailableModal"
-                >
-                    Entrar
-                </button>
+                @if (request()->routeIs('empresa.*', 'company.password.*'))
+                    <a href="{{ route('empresa.login') }}" class="auth-topbar__link auth-topbar__access">
+                        Entrar
+                    </a>
+                @else
+                    <button
+                        type="button"
+                        class="auth-topbar__link auth-topbar__access"
+                        data-bs-toggle="modal"
+                        data-bs-target="#companyAccessUnavailableModal"
+                    >
+                        Entrar
+                    </button>
+                @endif
             </nav>
         </div>
     </div>

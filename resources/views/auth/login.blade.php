@@ -1,6 +1,7 @@
 @extends('layout-inicial.app')
 
 @section('content')
+{{-- Tela de autenticação; erros retornados pelo backend são apresentados abaixo de cada campo. --}}
 <div class="client-auth-page">
     <section class="client-auth-shell">
         <aside class="client-auth-aside">
@@ -36,6 +37,7 @@
                 </div>
             @endif
 
+            {{-- O formulário usa a rota nomeada de login e preserva o e-mail informado após falhas. --}}
             <form method="POST" action="{{ route('login') }}" class="client-auth-form">
                 @csrf
 

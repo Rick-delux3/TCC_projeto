@@ -1,6 +1,10 @@
-@extends('layout-inicial.index-app')
+@extends(config('branding.active', 'tcc') === 'tcc' ? 'layout-inicial.tcc-index-app' : 'layout-inicial.index-app')
 
 @section('content')
+{{-- A home alterna o layout/conteúdo conforme a marca ativa; mantenha as duas experiências sincronizadas. --}}
+@if (config('branding.active', 'tcc') === 'tcc')
+    @include('layout-inicial.partials.tcc-index-content')
+@else
 
 <section id="hero" class="relative overflow-hidden bg-[linear-gradient(180deg,#08173f_0%,#10316b_54%,#146FB6_100%)] text-zinc-100">
     <div class="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.12),transparent_28%),radial-gradient(circle_at_82%_18%,rgba(253,30,110,0.18),transparent_18%),radial-gradient(circle_at_50%_100%,rgba(210,234,255,0.18),transparent_26%),linear-gradient(180deg,rgba(3,1,51,0.14)_0%,rgba(3,1,51,0.08)_100%)]"></div>
@@ -21,6 +25,7 @@
                     Centralize seus leads, automatize a esteira de locação e elimine o atrito operacional. Uma plataforma construída para conectar corretores, clientes e seguradoras com máxima elegância e agilidade.
                 </p>
 
+                {{-- CTAs principais: os nomes das rotas devem permanecer alinhados ao fluxo comercial. --}}
                 <div class="mt-10 flex flex-col gap-4 sm:flex-row">
                     <a href="{{ route('empresa.register.form') }}" class="showcase-cta inline-flex items-center justify-center rounded-full border border-white/12 bg-gradient-to-r from-[#030133] via-[#145ca5] to-[#146FB6] px-7 py-3.5 text-base font-semibold text-white shadow-[0_18px_45px_rgba(3,1,51,0.28)] transition hover:-translate-y-0.5 hover:brightness-105">
                         Inicie sua Operação
@@ -175,4 +180,5 @@
         <p class="text-blue-100/70">&copy; {{ now()->year }} Todos os direitos reservados.</p>
     </div>
 </footer>
+@endif
 @endsection

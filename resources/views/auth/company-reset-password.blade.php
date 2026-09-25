@@ -1,13 +1,17 @@
 @extends('layout-inicial.app')
 
+@section('body-class', config('branding.active', 'tcc') === 'tcc' ? 'tcc-company-auth-body' : '')
+@section('main-class', config('branding.active', 'tcc') === 'tcc' ? 'tcc-company-auth-main' : '')
+
 @section('content')
-<div class="password-reset-page">
-    <section class="password-reset-shell">
-        <aside class="password-reset-aside">
+@php($isTcc = config('branding.active', 'tcc') === 'tcc')
+<div @class(['password-reset-page', 'tcc-company-auth' => $isTcc])>
+    <section @class(['password-reset-shell', 'client-auth-shell' => $isTcc])>
+        <aside @class(['password-reset-aside', 'client-auth-aside' => $isTcc])>
             <img src="{{ asset('imgs/segure-chave-a-mao-ao-ar-livre.jpg') }}" alt="Nova senha da imobiliaria">
             <x-brand-logo class="auth-media-logo" />
 
-            <div class="password-reset-overlay">
+            <div @class(['password-reset-overlay', 'client-auth-overlay' => $isTcc])>
                 <span class="client-badge">Portal da imobiliaria</span>
                 <h2>Defina a nova senha da empresa</h2>
                 <p>
@@ -15,7 +19,7 @@
                     as analises de seguro fianca da imobiliaria.
                 </p>
 
-                <div class="password-reset-steps">
+                <div @class(['password-reset-steps', 'client-auth-points' => $isTcc])>
                     <span>Confirme o e-mail da empresa</span>
                     <span>Escolha uma senha forte</span>
                     <span>Volte para o login do portal</span>
@@ -23,9 +27,9 @@
             </div>
         </aside>
 
-        <div class="password-reset-card">
-            <header class="password-reset-header">
-                <span class="password-reset-kicker">Redefinicao de acesso</span>
+        <div @class(['password-reset-card', 'client-auth-card' => $isTcc])>
+            <header @class(['password-reset-header', 'client-auth-header' => $isTcc])>
+                <span @class(['password-reset-kicker', 'client-auth-kicker' => $isTcc])>Redefinicao de acesso</span>
                 <h1>Nova senha da imobiliaria</h1>
                 <p>Preencha os dados abaixo para concluir a recuperacao.</p>
             </header>

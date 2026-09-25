@@ -1,6 +1,7 @@
 @extends('layout-inicial.app')
 
 @section('content')
+{{-- Formulário de cadastro do usuário; as mensagens de validação ficam junto a cada campo. --}}
 <div class="client-register-page">
     <section class="client-register-shell client-register-shell--compact">
         <aside class="client-register-aside">
@@ -30,6 +31,7 @@
                 <p>Preencha os dados abaixo para criar seu acesso.</p>
             </header>
 
+            {{-- O endpoint e o token CSRF devem acompanhar a implementação de registro em routes/auth.php. --}}
             <form method="POST" action="{{ route('register') }}" class="client-register-form">
                 @csrf
 

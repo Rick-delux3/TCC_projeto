@@ -1,7 +1,10 @@
 @extends('layout-inicial.app')
 
+@section('body-class', config('branding.active', 'tcc') === 'tcc' ? 'tcc-company-auth-body' : '')
+@section('main-class', config('branding.active', 'tcc') === 'tcc' ? 'tcc-company-auth-main' : '')
+
 @section('content')
-<div class="client-register-page">
+<div class="client-register-page tcc-company-auth">
     <section class="client-register-shell">
         <aside class="client-register-aside">
             <img src="{{ asset('imgs/seguro-fianca-locaticia_fundo_login_cadastro.png') }}" alt="Cadastro de imobiliária">
@@ -20,6 +23,8 @@
                     <span>Painel para envio e consulta de análises</span>
                     <span>Integração com a operação da corretora</span>
                 </div>
+
+                <p class="tcc-company-auth-aside-note">&copy; {{ now()->year }} NVS Seguros. Ambiente seguro e monitorado.</p>
             </div>
         </aside>
 
