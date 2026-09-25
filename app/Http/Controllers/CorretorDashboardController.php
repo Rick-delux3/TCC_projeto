@@ -60,7 +60,7 @@ class CorretorDashboardController extends Controller
             : 0;
 
         $leads = $canViewLeads
-            ? $this->dashboardLeadQuery->approvedFirst($leadsQuery)
+            ? $leadsQuery->latest('created_at')->latest('id')
                 ->with([
                     'endereco',
                     'despesas',
