@@ -206,7 +206,7 @@ it('stores the latest manual result locally during an initial outage without dis
     $tagJob = Queue::pushed(ApplyManualLeadResultTagJob::class)->first();
     handleManualLeadTagJob($tagJob->withFakeQueueInteractions());
     expect($lead->refresh()->leadlovers_confirmed_final_tag_key)->toBe('em_negociacao');
-})->with([500, 501]);
+})->with([500, 502, 503, 504]);
 
 it('keeps manual tags blocked for leads with data failures or without an outage', function (string $status, ?int $error) {
     Queue::fake();
@@ -220,7 +220,7 @@ it('keeps manual tags blocked for leads with data failures or without an outage'
         ->assertSessionHasErrors('result');
     Queue::assertNotPushed(ApplyManualLeadResultTagJob::class);
     Http::assertNothingSent();
-})->with([['failed', 400], ['processing', null], ['processing', 502], ['failed', 500]]);
+})->with([['failed', 400], ['processing', null], ['processing', 501], ['processing', 505], ['failed', 500]]);
 
 it('allows an active member with permission to request each commercial result', function (string $result) {
     Queue::fake();

@@ -527,9 +527,11 @@ final class LeadLoversApiClient
                 ? 'A autenticação da LeadLovers foi recusada; verifique a configuração.'
                 : $this->safeResponseReason($response),
             isTransient: $transient,
-            retryAfterSeconds: $statusCode === 429
-                ? $this->retryAfterSeconds($response)
-                : null,
+            retryAfterSeconds: match ($statusCode) {
+                429 => $this->retryAfterSeconds($response),
+                503 => $this->retryAfterFallback(trim((string) $response->header('Retry-After'))),
+                default => null,
+            },
             isConfigurationError: $statusCode === 401,
         );
     }

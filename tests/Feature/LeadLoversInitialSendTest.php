@@ -165,7 +165,29 @@ it('reschedules outages beyond the regular attempt limit with a ten minute delay
     $recovery->handle(app(LeadLoversApiClient::class));
     $recovery->assertNotFailed();
     Queue::assertPushed(RetryLeadLoversOutageJob::class, 2);
-})->with([500, 501]);
+})->with([500, 502, 503, 504]);
+
+it('honors service unavailable retry after without reducing the minimum outage delay', function (string $header, int $seconds) {
+    Queue::fake();
+    $this->freezeTime();
+    $lead = leadForInitialLeadLoversSend();
+    Http::fake(['https://api.leadlovers.test/leads/' => Http::response([], 503, ['Retry-After' => $header])]);
+
+    initialSendJob($lead)->handle(app(LeadLoversApiClient::class));
+
+    Queue::assertPushed(RetryLeadLoversOutageJob::class, fn ($job) => $job->delay->equalTo(now()->addSeconds($seconds)));
+})->with([['1800', 1800], ['60', 600], ['invalid', 600]]);
+
+it('ignores obsolete outage jobs for not implemented responses', function () {
+    Queue::fake();
+    $lead = leadForInitialLeadLoversSend([
+        'leadlovers_status' => 'processing',
+        'leadlovers_initial_error_status' => 501,
+    ]);
+    (new RetryLeadLoversOutageJob($lead->id))->withFakeQueueInteractions()->handle(app(LeadLoversApiClient::class));
+    Http::assertNothingSent();
+    Queue::assertNotPushed(RetryLeadLoversOutageJob::class);
+});
 
 it('creates an absent lead after outage recovery and stops once machine membership is confirmed', function () {
     Queue::fake();
@@ -198,14 +220,14 @@ it('does not start outage recovery for data authentication or other server error
     initialSendJob($lead)->handle(app(LeadLoversApiClient::class));
     Queue::assertNotPushed(RetryLeadLoversOutageJob::class);
     expect($lead->refresh()->awaitingLeadLoversOutageRecovery())->toBeFalse();
-})->with([400, 401, 422, 502]);
+})->with([400, 401, 422, 501, 505]);
 
 it('resends an unaccepted machine request after outage without recreating the lead', function () {
     Queue::fake();
     $lead = leadForInitialLeadLoversSend(['leadlovers_lead_id' => 501]);
     Http::fake([
         'https://api.leadlovers.test/leads/501/machines' => Http::sequence()->push([])->push([])->push([machineAssociationForInitialSend()]),
-        'https://api.leadlovers.test/leads/move' => Http::sequence()->push([], 501)->push(['actionId' => 1, 'status' => 'pending', 'total' => 1], 202),
+        'https://api.leadlovers.test/leads/move' => Http::sequence()->push([], 503)->push(['actionId' => 1, 'status' => 'pending', 'total' => 1], 202),
     ]);
     initialSendJob($lead)->handle(app(LeadLoversApiClient::class));
     $recovery = (new RetryLeadLoversOutageJob($lead->id))->withFakeQueueInteractions();

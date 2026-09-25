@@ -1083,7 +1083,7 @@ class SendLeadToLeadLoversJob implements ShouldQueue
         array $diagnosticContext = [],
         bool $preservePreviousInitialFailure = false,
     ): void {
-        if (in_array($exception?->statusCode, [500, 501], true) && ! $exception->isConfigurationError) {
+        if (in_array($exception?->statusCode, LeadLoversApiException::RECOVERABLE_SERVER_STATUSES, true) && ! $exception->isConfigurationError) {
             DB::transaction(function () use ($exception, $operation): void {
                 $lead = Lead::query()->whereKey($this->leadId)
                     ->where('leadlovers_status', 'processing')->lockForUpdate()->first();
@@ -1229,9 +1229,9 @@ class SendLeadToLeadLoversJob implements ShouldQueue
 
         return Lead::query()
             ->whereKey($this->leadId)
-            ->when($this->recoveringOutage, fn ($query) => $query->whereIn('leadlovers_initial_error_status', [500, 501]))
+            ->when($this->recoveringOutage, fn ($query) => $query->whereIn('leadlovers_initial_error_status', LeadLoversApiException::RECOVERABLE_SERVER_STATUSES))
             ->when(! $this->recoveringOutage, fn ($query) => $query->where(function ($query): void {
-                $query->whereNull('leadlovers_initial_error_status')->orWhereNotIn('leadlovers_initial_error_status', [500, 501]);
+                $query->whereNull('leadlovers_initial_error_status')->orWhereNotIn('leadlovers_initial_error_status', LeadLoversApiException::RECOVERABLE_SERVER_STATUSES);
             }))
             ->whereIn('leadlovers_status', $allowedStatuses)
             ->update([
