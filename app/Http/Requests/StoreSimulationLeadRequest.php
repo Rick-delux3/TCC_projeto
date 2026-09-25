@@ -80,7 +80,7 @@ class StoreSimulationLeadRequest extends FormRequest
             'email' => ['required', 'string', 'email:rfc', 'max:255'],
             'tel' => ['required', 'string', 'min:10', 'max:11'],
 
-            'cpf' => ['bail', 'nullable', 'string', new CpfOrCnpj],
+            'cpf' => ['bail', 'required', 'string', new CpfOrCnpj],
             'tipo_locacao' => ['required', Rule::enum(TipoLocacao::class)],
             'descrever_atividade' => [
                 'exclude_unless:tipo_locacao,comercial',
@@ -212,6 +212,7 @@ class StoreSimulationLeadRequest extends FormRequest
             'tel.min' => 'O telefone deve ter pelo menos :min dígitos.',
             'tel.max' => 'O telefone não pode ter mais de :max dígitos.',
 
+            'cpf.required' => 'Informe o CPF ou CNPJ.',
             'cpf.string' => 'Informe um CPF ou CNPJ válido.',
             'tipo_locacao.required' => 'Selecione se a locação é residencial ou comercial.',
             'tipo_locacao.enum' => 'Selecione uma modalidade de locação válida.',

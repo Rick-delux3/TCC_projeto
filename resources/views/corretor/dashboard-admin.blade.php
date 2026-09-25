@@ -1889,10 +1889,11 @@
 
             $leadResultIsEligible = $manualResultRouteExists
                 && $leadLoversIntegrationEnabled
-                && $leadWasConfirmedByLeadLovers
-                && $leadHasRemoteId;
+                && (($leadWasConfirmedByLeadLovers && $leadHasRemoteId)
+                    || $lead->awaitingLeadLoversOutageRecovery());
 
             $leadResultUnavailableMessage = match (true) {
+                $leadResultIsEligible => null,
                 ! $manualResultRouteExists =>
                     'A alteração de resultado está temporariamente indisponível.',
                 ! $leadLoversIntegrationEnabled =>

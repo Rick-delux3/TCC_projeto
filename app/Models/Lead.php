@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\TipoLocacao;
+use App\Exceptions\LeadLoversApiException;
 use App\Support\ManualLeadResultTags;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -302,6 +303,12 @@ class Lead extends Model
             ->whereNull('leadlovers_lead_id')
             ->whereNull('sent_to_leadlovers_at')
             ->where('leadlovers_initial_error_status', 400);
+    }
+
+    public function awaitingLeadLoversOutageRecovery(): bool
+    {
+        return $this->leadlovers_status === 'processing'
+            && in_array((int) $this->leadlovers_initial_error_status, LeadLoversApiException::RECOVERABLE_SERVER_STATUSES, true);
     }
 
     public function scopeExpiredRejectedRetention(Builder $query): Builder

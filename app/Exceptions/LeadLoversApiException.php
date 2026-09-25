@@ -6,6 +6,8 @@ use RuntimeException;
 
 final class LeadLoversApiException extends RuntimeException
 {
+    public const RECOVERABLE_SERVER_STATUSES = [500, 502, 503, 504];
+
     public readonly ?int $httpStatus;
 
     public readonly bool $transient;

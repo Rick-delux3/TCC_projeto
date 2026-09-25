@@ -62,6 +62,35 @@ function conditionalSimulationDom(string $html): DOMXPath
     return new DOMXPath($document);
 }
 
+it('requires the shared CPF or CNPJ field before saving a public simulation', function (string $route, array $document) {
+    $payload = conditionalSimulationPayload();
+    unset($payload['cpf']);
+    $payload = array_merge($payload, $document);
+
+    if ($route === 'simulation.registered-company.store') {
+        $company = conditionalSimulationCompany();
+        $this->post(route('simulation.registered-company.verify'), ['lead_access_code' => $company->lead_access_code])->assertRedirect();
+        $payload['registered_company_context'] = $company->id;
+    } elseif ($route === 'simulation.unregistered-company.store') {
+        $payload = array_merge($payload, [
+            'responsavel_tipo' => 'locador', 'responsavel_nome' => 'Responsável teste',
+            'responsavel_email' => 'requester@example.test', 'responsavel_telefone' => '11999998888',
+        ]);
+    }
+
+    $this->post(route($route), $payload)->assertSessionHasErrors(['cpf' => 'Informe o CPF ou CNPJ.']);
+    expect(Lead::query()->count())->toBe(0);
+    Http::assertNothingSent();
+})->with(['simulation.tenant.store', 'simulation.registered-company.store', 'simulation.unregistered-company.store'])
+    ->with([
+        'missing' => [[]],
+        'null' => [['cpf' => null]],
+        'empty' => [['cpf' => '']],
+        'whitespace' => [['cpf' => '   ']],
+        'CPF mask only' => [['cpf' => '...-']],
+        'CNPJ mask only' => [['cpf' => '../-']],
+    ]);
+
 it('persists the independent document and rental choices through every public profile', function (
     string $profile,
     string $document,
@@ -270,6 +299,7 @@ it('renders the same conditional controls in all simulation views', function (st
 
     expect($dom->query('//input[@name="tipo_locacao"]')->length)->toBe(2)
         ->and($dom->query('//input[@name="cpf"]')->length)->toBe(1)
+        ->and($dom->query('//input[@name="cpf" and @required]')->length)->toBe(1)
         ->and($dom->query('//option[@value="separado"]')->length)->toBe(1)
         ->and($dom->query('//*[@data-simulation-fields]//input')->length)->toBe(0);
 })->with([
