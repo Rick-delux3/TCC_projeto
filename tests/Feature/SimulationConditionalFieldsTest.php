@@ -62,6 +62,320 @@ function conditionalSimulationDom(string $html): DOMXPath
     return new DOMXPath($document);
 }
 
+function auditedSimulationPayload(string $route, array $overrides = []): array
+{
+    $payload = conditionalSimulationPayload();
+
+    if ($route === 'simulation.registered-company.store') {
+        $company = Imobiliaria::factory()->create(['lead_access_code' => 'AUD123']);
+        test()->post(route('simulation.registered-company.verify'), ['lead_access_code' => $company->lead_access_code])
+            ->assertRedirect(route('simulation.registered-company.form'));
+        $payload['registered_company_context'] = $company->id;
+    } elseif ($route === 'simulation.unregistered-company.store') {
+        $payload = array_merge($payload, [
+            'responsavel_tipo' => 'imobiliaria_nao_cadastrada',
+            'responsavel_nome' => 'Responsável pelo imóvel',
+            'responsavel_email' => 'responsavel@example.test',
+            'responsavel_telefone' => '11999998888',
+        ]);
+    }
+
+    return array_replace($payload, $overrides);
+}
+
+it('rejects malformed public simulation amounts without persisting or dispatching', function (string $route, string $field, mixed $value) {
+    $this->postJson(route($route), auditedSimulationPayload($route, [$field => $value]))
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors($field);
+
+    $this->assertDatabaseCount('leads', 0);
+    Queue::assertNothingPushed();
+    Http::assertNothingSent();
+})->with(['simulation.tenant.store', 'simulation.unregistered-company.store', 'simulation.registered-company.store'])
+    ->with([
+        'negative rent' => ['valor_aluguel', '-1500'],
+        'negative expense' => ['valor_agua', '-10'],
+        'formatted negative expense' => ['valor_gas', 'R$ -10,50'],
+        'optional amount containing letters' => ['valor_luz', 'inválido'],
+        'letters mixed with digits' => ['valor_iptu', 'erro12'],
+        'currency without amount' => ['outras_despesas', 'R$'],
+        'array amount' => ['valor_condominio', ['10']],
+    ]);
+
+it('audits validation errors and absence of persistence in each public lead form', function (string $route, string $field, mixed $value) {
+    $formRoute = match ($route) {
+        'simulation.registered-company.store' => 'simulation.registered-company.form',
+        'simulation.unregistered-company.store' => 'simulation.unregistered-company.form',
+        default => 'simulation.tenant.form',
+    };
+    $payload = auditedSimulationPayload($route, [$field => $value]);
+
+    $this->from(route($formRoute))->post(route($route), $payload)
+        ->assertRedirect(route($formRoute))
+        ->assertSessionHasErrors($field)
+        ->assertSessionHasInput('tipo_locacao', 'residencial');
+
+    $this->assertDatabaseCount('leads', 0);
+    expect(LeadEmpresa::query()->count())->toBe(0);
+    Queue::assertNothingPushed();
+    Http::assertNothingSent();
+
+    $this->get(route($formRoute))->assertOk()->assertSee('simulation-form-errors', false);
+})->with(['simulation.tenant.store', 'simulation.unregistered-company.store', 'simulation.registered-company.store'])
+    ->with([
+        'missing name' => ['nome', null],
+        'short name' => ['nome', 'ab'],
+        'long name' => ['nome', str_repeat('a', 256)],
+        'array name' => ['nome', ['invalid']],
+        'numeric name' => ['nome', 123],
+        'missing email' => ['email', null],
+        'invalid email' => ['email', 'invalid'],
+        'long email' => ['email', str_repeat('a', 256).'@example.test'],
+        'array email' => ['email', ['invalid']],
+        'missing phone' => ['tel', null],
+        'short phone' => ['tel', '123456789'],
+        'long phone' => ['tel', '123456789012'],
+        'array phone' => ['tel', ['11988887777']],
+        'missing consent' => ['aceite_termos', null],
+        'rejected consent' => ['aceite_termos', '0'],
+        'bot honeypot' => ['website', 'bot'],
+        'missing rent' => ['valor_aluguel', null],
+        'zero rent' => ['valor_aluguel', '0'],
+        'excessive rent' => ['valor_aluguel', '1000000'],
+        'excessive water' => ['valor_agua', '100000'],
+        'excessive electricity' => ['valor_luz', '100000'],
+        'excessive gas' => ['valor_gas', '100000'],
+        'excessive property tax' => ['valor_iptu', '100000'],
+        'excessive condo' => ['valor_condominio', '100000'],
+        'excessive other expenses' => ['outras_despesas', '1000000'],
+        'missing postcode' => ['cep', null],
+        'short postcode' => ['cep', '1234567'],
+        'long postcode' => ['cep', '123456789'],
+        'array postcode' => ['cep', ['01001000']],
+        'missing street' => ['logradouro', null],
+        'long street' => ['logradouro', str_repeat('a', 256)],
+        'array street' => ['logradouro', ['invalid']],
+        'long number' => ['numero', str_repeat('a', 21)],
+        'array number' => ['numero', ['100']],
+        'long complement' => ['complemento', str_repeat('a', 101)],
+        'array complement' => ['complemento', ['invalid']],
+        'missing district' => ['bairro', null],
+        'long district' => ['bairro', str_repeat('a', 101)],
+        'array district' => ['bairro', ['invalid']],
+        'missing city' => ['cidade_imovel', null],
+        'long city' => ['cidade_imovel', str_repeat('a', 101)],
+        'array city' => ['cidade_imovel', ['invalid']],
+        'missing state' => ['estado', null],
+        'long state' => ['estado', 'SPA'],
+        'array state' => ['estado', ['SP']],
+        'invalid marital status' => ['estado_civil', 'invalid'],
+        'long notes' => ['observacoes', str_repeat('a', 2001)],
+        'array notes' => ['observacoes', ['invalid']],
+        'short filling responsible name' => ['responsavel_preenchimento', 'ab'],
+        'long filling responsible name' => ['responsavel_preenchimento', str_repeat('a', 256)],
+        'array filling responsible name' => ['responsavel_preenchimento', ['invalid']],
+        'short filling responsible phone' => ['telefone_responsavel', '123456789'],
+        'long filling responsible phone' => ['telefone_responsavel', '123456789012'],
+        'short informed company name' => ['nome_imobiliaria_informada', 'ab'],
+        'long informed company name' => ['nome_imobiliaria_informada', str_repeat('a', 256)],
+        'invalid informed company document length' => ['cnpj_imobiliaria_informada', '1234567890123'],
+        'long landlord name' => ['nome_locador', str_repeat('a', 256)],
+        'invalid landlord email' => ['email_locador', 'invalid'],
+        'short landlord phone' => ['telefone_locador', '123456789'],
+        'long landlord phone' => ['telefone_locador', '123456789012'],
+    ]);
+
+it('audits the unregistered requester dependencies without writing a lead', function (string $field, mixed $value) {
+    $route = 'simulation.unregistered-company.store';
+    $this->postJson(route($route), auditedSimulationPayload($route, [$field => $value]))
+        ->assertUnprocessable()->assertJsonValidationErrors($field);
+    $this->assertDatabaseCount('leads', 0);
+    Queue::assertNothingPushed();
+})->with([
+    'missing type' => ['responsavel_tipo', null],
+    'invalid type' => ['responsavel_tipo', 'locatario'],
+    'array type' => ['responsavel_tipo', ['locador']],
+    'missing name' => ['responsavel_nome', null],
+    'long name' => ['responsavel_nome', str_repeat('a', 256)],
+    'array name' => ['responsavel_nome', ['invalid']],
+    'missing email' => ['responsavel_email', null],
+    'invalid email' => ['responsavel_email', 'invalid'],
+    'long email' => ['responsavel_email', str_repeat('a', 256).'@example.test'],
+    'array email' => ['responsavel_email', ['invalid']],
+    'missing phone' => ['responsavel_telefone', null],
+    'long phone' => ['responsavel_telefone', str_repeat('1', 21)],
+    'array phone' => ['responsavel_telefone', ['11999998888']],
+]);
+
+it('audits valid public simulation boundaries and formatted values', function (string $route, array $overrides) {
+    $this->post(route($route), auditedSimulationPayload($route, $overrides))
+        ->assertRedirect(route('simulation.success'))->assertSessionHasNoErrors();
+
+    $lead = Lead::query()->sole();
+    expect($lead->endereco)->not->toBeNull()
+        ->and($lead->despesas)->not->toBeNull()
+        ->and($lead->email)->toBe('conditional@example.test')
+        ->and($lead->cpf)->toBe('52998224725');
+    Http::assertNothingSent();
+})->with(['simulation.tenant.store', 'simulation.unregistered-company.store', 'simulation.registered-company.store'])
+    ->with([
+        'minimum name phone and rent' => [['nome' => 'Ana', 'tel' => '1133334444', 'valor_aluguel' => '1']],
+        'maximum text lengths' => [[
+            'nome' => str_repeat('a', 255), 'logradouro' => str_repeat('b', 255),
+            'bairro' => str_repeat('c', 100), 'cidade_imovel' => str_repeat('d', 100),
+            'numero' => str_repeat('1', 20), 'complemento' => str_repeat('e', 100),
+            'observacoes' => str_repeat('f', 2000),
+        ]],
+        'maximum monetary limits' => [[
+            'valor_aluguel' => '999999.99', 'valor_agua' => '99999.999', 'valor_luz' => '99999.999',
+            'valor_gas' => '99999.999', 'valor_iptu' => '99999.999', 'valor_condominio' => '99999.999',
+            'outras_despesas' => '999999.99',
+        ]],
+        'explicit zero expenses' => [[
+            'valor_agua' => '0', 'valor_luz' => '0', 'valor_gas' => '0',
+            'valor_iptu' => '0', 'valor_condominio' => '0', 'outras_despesas' => '0',
+        ]],
+        'formatted Brazilian amounts' => [['valor_aluguel' => 'R$ 1.234,56', 'valor_agua' => '12,50']],
+        'normalized strings' => [['nome' => '  Ana   Silva ', 'email' => ' CONDITIONAL@EXAMPLE.TEST ', 'tel' => '(11) 98888-7777', 'estado' => ' sp ']],
+        'nullable optional fields' => [['estado_civil' => null, 'numero' => null, 'complemento' => null, 'observacoes' => null]],
+    ]);
+
+it('audits numeric defaults and normalized persistence without real integrations', function () {
+    $this->post(route('simulation.tenant.store'), conditionalSimulationPayload([
+        'valor_aluguel' => 'R$ 1.234,50', 'valor_agua' => '0', 'valor_luz' => null,
+        'valor_gas' => '12,50', 'estado' => 'sp', 'email' => ' CONDITIONAL@EXAMPLE.TEST ',
+    ]))->assertRedirect(route('simulation.success'))->assertSessionHasNoErrors();
+
+    $lead = Lead::query()->sole();
+    expect((float) $lead->despesas->valor_aluguel)->toBe(1234.5)
+        ->and((float) $lead->despesas->valor_agua)->toBe(0.0)
+        ->and((float) $lead->despesas->valor_luz)->toBe(123.45)
+        ->and((float) $lead->despesas->valor_gas)->toBe(12.5)
+        ->and((float) $lead->despesas->valor_total_encargos)->toBe(1370.45)
+        ->and($lead->endereco->estado)->toBe('SP')
+        ->and($lead->email)->toBe('conditional@example.test');
+    Http::assertNothingSent();
+});
+
+it('audits the public profile selection redirects', function (string $profile, string $nextRoute, array $parameters) {
+    $this->post(route('simulation.profile'), ['tipo_solicitante' => $profile])
+        ->assertRedirect(route($nextRoute, $parameters))->assertSessionHasNoErrors();
+    $this->assertDatabaseCount('leads', 0);
+    Queue::assertNothingPushed();
+})->with([
+    'registered company' => ['imobiliaria_cadastrada', 'simulation.registered-company.access', []],
+    'unregistered company' => ['imobiliaria_nao_cadastrada', 'simulation.unregistered-company.form', ['responsavel_tipo' => 'imobiliaria_nao_cadastrada']],
+    'tenant' => ['locatario', 'simulation.tenant.form', []],
+    'landlord' => ['locador', 'simulation.unregistered-company.form', ['responsavel_tipo' => 'locador']],
+]);
+
+it('audits invalid public profile selection as JSON', function (mixed $value) {
+    $this->postJson(route('simulation.profile'), ['tipo_solicitante' => $value])
+        ->assertUnprocessable()->assertJsonValidationErrors('tipo_solicitante');
+    $this->assertDatabaseCount('leads', 0);
+    Queue::assertNothingPushed();
+})->with([null, '', 'admin', [['locatario']], 123]);
+
+it('audits invalid access code inputs and safely redisplays the access form', function (mixed $code) {
+    $form = route('simulation.registered-company.access');
+    $this->from($form)->post(route('simulation.registered-company.verify'), ['lead_access_code' => $code])
+        ->assertRedirect($form)->assertSessionHasErrors('lead_access_code');
+    $this->get($form)->assertOk()->assertSee('id="code-error"', false);
+    $this->assertDatabaseCount('leads', 0);
+    Queue::assertNothingPushed();
+})->with([null, '', 'UNKNOWN', str_repeat('a', 21), [['AUD123']], 123]);
+
+it('audits inline recovery errors for malformed email values', function (mixed $email) {
+    $form = route('simulation.registered-company.code.request');
+    $this->from($form)->post(route('simulation.registered-company.code.email'), ['email' => $email])
+        ->assertRedirect($form)->assertSessionHasErrors('email');
+    $this->get($form)->assertOk()->assertSee('id="email-error"', false);
+    Queue::assertNothingPushed();
+    Http::assertNothingSent();
+})->with([null, '', 'invalid', [['invalid@example.test']], 123]);
+
+it('audits invalid requester query parameters as a missing public page', function (mixed $type) {
+    $this->get(route('simulation.unregistered-company.form', ['responsavel_tipo' => $type]))->assertNotFound();
+})->with(['locatario', 'admin', [['locador']]]);
+
+it('audits the shared required field messages for public JSON submissions', function () {
+    $this->postJson(route('simulation.tenant.store'), [])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors([
+            'aceite_termos', 'nome', 'email', 'tel', 'cpf', 'tipo_locacao',
+            'valor_aluguel', 'cep', 'logradouro', 'bairro', 'cidade_imovel', 'estado',
+        ])
+        ->assertJsonPath('errors.nome.0', 'Informe o nome completo.')
+        ->assertJsonPath('errors.cpf.0', 'Informe o CPF ou CNPJ.')
+        ->assertJsonPath('errors.aceite_termos.0', 'Você precisa aceitar os termos para continuar.');
+    $this->assertDatabaseCount('leads', 0);
+    Queue::assertNothingPushed();
+});
+
+it('audits public submission throttling without sending data externally', function () {
+    for ($attempt = 0; $attempt < 10; $attempt++) {
+        $this->postJson(route('simulation.profile'), [])->assertUnprocessable();
+    }
+
+    $this->postJson(route('simulation.profile'), [])->assertTooManyRequests();
+    $this->assertDatabaseCount('leads', 0);
+    Queue::assertNothingPushed();
+    Http::assertNothingSent();
+});
+
+it('audits the simulation postcode endpoint without calling providers for invalid input', function (string $postcode, bool $matchesRoute) {
+    $response = $this->getJson('/cep/'.$postcode);
+
+    if ($matchesRoute) {
+        $response->assertUnprocessable()->assertJsonPath('success', false);
+    } else {
+        $response->assertNotFound();
+    }
+
+    Http::assertNothingSent();
+})->with([
+    'short postcode' => ['1234567', true],
+    'long postcode' => ['123456789', true],
+    'letters' => ['abcdefgh', false],
+]);
+
+it('audits postcode autocomplete and cached responses with fake providers', function () {
+    Http::fake([
+        'https://viacep.com.br/ws/01001000/json/' => Http::response([
+            'cep' => '01001-000', 'logradouro' => 'Praça da Sé', 'bairro' => 'Sé',
+            'localidade' => 'São Paulo', 'uf' => 'SP',
+        ]),
+    ]);
+
+    foreach (['01001000', '01001-000'] as $postcode) {
+        $this->getJson('/cep/'.$postcode)->assertOk()
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('data.cep', '01001000')
+            ->assertJsonPath('data.logradouro', 'Praça da Sé')
+            ->assertJsonPath('data.cidade', 'São Paulo')
+            ->assertJsonPath('data.estado', 'SP');
+    }
+
+    Http::assertSentCount(1);
+});
+
+it('audits postcode provider fallback and not found responses', function (bool $found) {
+    Http::fake([
+        'https://viacep.com.br/ws/01001000/json/' => Http::response(['erro' => true]),
+        'https://brasilapi.com.br/api/cep/v2/01001000' => $found
+            ? Http::response(['cep' => '01001000', 'street' => 'Praça da Sé', 'neighborhood' => 'Sé', 'city' => 'São Paulo', 'state' => 'SP'])
+            : Http::response([], 404),
+    ]);
+
+    $response = $this->getJson('/cep/01001000');
+
+    if ($found) {
+        $response->assertOk()->assertJsonPath('data.source', 'brasilapi');
+    } else {
+        $response->assertNotFound()->assertJsonPath('success', false);
+    }
+})->with([true, false]);
+
 it('requires the shared CPF or CNPJ field before saving a public simulation', function (string $route, array $document) {
     $payload = conditionalSimulationPayload();
     unset($payload['cpf']);

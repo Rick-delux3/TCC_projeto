@@ -57,6 +57,7 @@ it('creates a company lead and sends it to LeadLovers without starting analyses'
             'nome' => 'Pessoa do Formulário',
             'email' => 'new-lead@example.test',
             'tel' => '11988887777',
+            'cpf' => '52998224725',
             'estado_civil' => 'solteiro',
             'valor_aluguel' => '1500',
             'cep' => '01001000',

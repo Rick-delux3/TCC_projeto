@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Corretor;
+use App\Models\Imobiliaria;
 use App\Models\User;
 use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\Route;
@@ -236,7 +237,7 @@ it('renders the public simulation gateway with the reference composition', funct
         ->assertViewIs('simulation.start')
         ->assertSeeText('Escolha seu perfil')
         ->assertSeeText('Dados da solicitação')
-        ->assertSeeText('Como podemos ajudar?')
+        ->assertSeeText('É Online, é Simples, é Seguro')
         ->assertSeeText('Qual opção descreve você?')
         ->assertSeeText('Leva menos de 1 minuto')
         ->assertSeeText('Ambiente seguro')
@@ -252,6 +253,61 @@ it('renders the public simulation gateway with the reference composition', funct
         ->toContain('name="_token"')
         ->and(substr_count($html, 'name="tipo_solicitante"'))->toBe(3);
 })->with(['tcc', 'client']);
+
+it('shares public simulation forms between brands with the correct header identity', function (string $routeName, array $session) {
+    if ($routeName === 'simulation.registered-company.form') {
+        $company = Imobiliaria::factory()->create(['lead_access_code' => 'BRAND1']);
+        $this->post(route('simulation.registered-company.verify'), ['lead_access_code' => $company->lead_access_code])
+            ->assertRedirect(route($routeName));
+    }
+
+    $formContracts = [];
+
+    foreach (['client', 'tcc'] as $profile) {
+        config(['branding.active' => $profile]);
+
+        $response = $this->withSession($session)->get(route($routeName, $routeName === 'simulation.unregistered-company.form'
+            ? ['responsavel_tipo' => 'imobiliaria_nao_cadastrada'] : []));
+
+        $response->assertOk()->assertSee('auth-layout-body simulation-public', false);
+
+        $document = new DOMDocument;
+        @$document->loadHTML('<?xml encoding="UTF-8">'.$response->getContent());
+        $xpath = new DOMXPath($document);
+        $logo = $xpath->query('//header//img[@data-brand-logo]')->item(0);
+
+        expect($logo)->not->toBeNull()
+            ->and($logo->getAttribute('data-brand-logo'))->toBe($profile)
+            ->and($logo->getAttribute('src'))->toBe(asset(config("branding.profiles.{$profile}.logo_header")))
+            ->and($logo->getAttribute('alt'))->toBe(config("branding.profiles.{$profile}.name"));
+
+        $formContracts[$profile] = [];
+
+        foreach ($xpath->query('//main//form | //main//input | //main//select | //main//button | //main//a') as $element) {
+            $formContracts[$profile][] = [
+                $element->nodeName,
+                $element->getAttribute('name'),
+                $element->getAttribute('type'),
+                $element->getAttribute('action'),
+                $element->getAttribute('method'),
+                $element->getAttribute('href'),
+                $element->hasAttribute('required'),
+            ];
+        }
+    }
+
+    expect($formContracts['tcc'])->not->toBeEmpty()->toBe($formContracts['client']);
+})->with([
+    'profile choice' => ['simulation.start', []],
+    'access code' => ['simulation.registered-company.access', []],
+    'registered form' => ['simulation.registered-company.form', []],
+    'landlord form' => ['simulation.unregistered-company.form', []],
+    'tenant form' => ['simulation.tenant.form', []],
+    'recovery form' => ['simulation.registered-company.code.request', []],
+    'recovery success' => ['simulation.registered-company.code.request', ['status' => 'Solicitação recebida']],
+    'recovery limited' => ['simulation.registered-company.code.request', ['company_code_retry_after' => 60]],
+    'submission success' => ['simulation.success', []],
+]);
 
 it('keeps the refactored simulation frontend free from unsafe dynamic html and browser storage', function () {
     $startView = file_get_contents(resource_path('views/simulation/start.blade.php'));

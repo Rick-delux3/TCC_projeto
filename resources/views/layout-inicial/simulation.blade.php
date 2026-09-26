@@ -28,7 +28,7 @@
     @stack('styles')
 </head>
 
-<body class="auth-layout-body" data-brand="{{ config('branding.active', 'tcc') }}">
+<body class="auth-layout-body{{ request()->routeIs('simulation.*') ? ' simulation-public' : '' }}" data-brand="{{ config('branding.active', 'tcc') }}">
 
     @include('layout-inicial.partials.header_simulation')
 

@@ -2,12 +2,14 @@
 
 use App\Models\Imobiliaria;
 use App\Models\Lead;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 
 beforeEach(function () {
     config(['features.insurance_analysis.enabled' => false]);
 
     Queue::fake();
+    Http::preventStrayRequests();
 });
 
 function companyWithPublicSimulationCode(array $overrides = []): Imobiliaria
@@ -32,6 +34,7 @@ function validRegisteredCompanySimulationPayload(array $overrides = []): array
         'nome' => 'Lead com acesso protegido',
         'email' => 'protected-code-lead@example.test',
         'tel' => '11988887777',
+        'cpf' => '52998224725',
         'estado_civil' => 'solteiro',
         'valor_aluguel' => '1500',
         'cep' => '01001000',
@@ -180,6 +183,8 @@ it('invalidates the session grant when company access is changed', function (arr
         ->assertSessionHasErrors('lead_access_code');
 })->with([
     'code rotation' => [['lead_access_code' => 'NEW7RT']],
+    'code removal' => [['lead_access_code' => null]],
+    'empty code' => [['lead_access_code' => '']],
     'form deactivation' => [['lead_form_active' => false]],
 ]);
 

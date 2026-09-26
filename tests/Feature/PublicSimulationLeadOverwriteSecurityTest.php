@@ -5,12 +5,14 @@ use App\Models\Corretor;
 use App\Models\Imobiliaria;
 use App\Models\Lead;
 use Illuminate\Broadcasting\BroadcastEvent;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 
 beforeEach(function () {
     config(['features.insurance_analysis.enabled' => false]);
 
     Queue::fake();
+    Http::preventStrayRequests();
 });
 
 function publicOverwriteCompany(array $overrides = []): Imobiliaria
@@ -35,6 +37,7 @@ function publicOverwritePayload(string $email, array $overrides = []): array
         'nome' => 'Dados enviados por terceiro',
         'email' => $email,
         'tel' => '11911112222',
+        'cpf' => '52998224725',
         'estado_civil' => 'solteiro',
         'valor_aluguel' => '9999',
         'cep' => '22041001',

@@ -403,10 +403,10 @@ class StoreSimulationLeadRequest extends FormRequest
         return in_array($this->input('estado_civil'), ['casado', 'uniao_estavel', 'divorciado', 'viuvo'], true);
     }
 
-    private function somenteNumeros($valor): ?string
+    private function somenteNumeros(mixed $valor): mixed
     {
-        if ($valor === null) {
-            return null;
+        if (! is_string($valor)) {
+            return $valor;
         }
 
         $valor = preg_replace('/\D/', '', (string) $valor);
@@ -414,10 +414,10 @@ class StoreSimulationLeadRequest extends FormRequest
         return $valor === '' ? null : $valor;
     }
 
-    private function limparTexto($valor): ?string
+    private function limparTexto(mixed $valor): mixed
     {
-        if ($valor === null) {
-            return null;
+        if (! is_string($valor)) {
+            return $valor;
         }
 
         $valor = trim(preg_replace('/\s+/', ' ', (string) $valor));
@@ -425,40 +425,44 @@ class StoreSimulationLeadRequest extends FormRequest
         return $valor === '' ? null : $valor;
     }
 
-    private function normalizarEmail($valor): ?string
+    private function normalizarEmail(mixed $valor): mixed
     {
         $valor = $this->limparTexto($valor);
 
-        return $valor === null ? null : mb_strtolower($valor);
+        return is_string($valor) ? mb_strtolower($valor) : $valor;
     }
 
-    private function normalizarMinusculo($valor): ?string
+    private function normalizarMinusculo(mixed $valor): mixed
     {
         $valor = $this->limparTexto($valor);
 
-        return $valor === null ? null : mb_strtolower($valor);
+        return is_string($valor) ? mb_strtolower($valor) : $valor;
     }
 
-    private function normalizarMaiusculo($valor): ?string
+    private function normalizarMaiusculo(mixed $valor): mixed
     {
         $valor = $this->limparTexto($valor);
 
-        return $valor === null ? null : mb_strtoupper($valor);
+        return is_string($valor) ? mb_strtoupper($valor) : $valor;
     }
 
-    private function normalizarDinheiro($valor): ?string
+    private function normalizarDinheiro(mixed $valor): mixed
     {
         if ($valor === null || $valor === '') {
             return null;
         }
 
-        $valor = preg_replace('/[^\d,\.]/u', '', (string) $valor);
-
-        if (str_contains($valor, ',')) {
-            $valor = str_replace('.', '', $valor);
-            $valor = str_replace(',', '.', $valor);
+        if (! is_string($valor)) {
+            return $valor;
         }
 
-        return is_numeric($valor) ? $valor : null;
+        $normalizedValue = preg_replace('/(?:R\$|\s)/u', '', $valor);
+
+        if (str_contains($normalizedValue, ',')) {
+            $normalizedValue = str_replace('.', '', $normalizedValue);
+            $normalizedValue = str_replace(',', '.', $normalizedValue);
+        }
+
+        return is_numeric($normalizedValue) ? $normalizedValue : $valor;
     }
 }

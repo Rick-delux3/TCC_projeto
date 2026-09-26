@@ -32,7 +32,7 @@
                         spellcheck="false"
                         aria-invalid="{{ $errors->has('lead_access_code') ? 'true' : 'false' }}"
                         @error('lead_access_code') aria-describedby="code-error" @enderror
-                        value="{{ old('lead_access_code') }}"
+                        value="{{ is_scalar(old('lead_access_code')) ? old('lead_access_code') : '' }}"
                         placeholder="Ex: 8K2P7A"
                         maxlength="20"
                         required

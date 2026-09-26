@@ -21,7 +21,7 @@
                 @csrf
                 <div class="flex flex-col gap-2">
                     <label for="email">E-mail cadastrado</label>
-                    <input type="email" id="email" name="email" value="{{ old('email') }}" placeholder="contato@imobiliaria.com.br" autocomplete="email" inputmode="email" autocapitalize="none" spellcheck="false" maxlength="255" required aria-invalid="{{ $errors->has('email') ? 'true' : 'false' }}" @error('email') aria-describedby="email-error" @enderror>
+                    <input type="email" id="email" name="email" value="{{ is_scalar(old('email')) ? old('email') : '' }}" placeholder="contato@imobiliaria.com.br" autocomplete="email" inputmode="email" autocapitalize="none" spellcheck="false" maxlength="255" required aria-invalid="{{ $errors->has('email') ? 'true' : 'false' }}" @error('email') aria-describedby="email-error" @enderror>
                     @error('email')
                         <p id="email-error" class="access-error" role="alert">{{ $message }}</p>
                     @enderror
