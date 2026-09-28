@@ -1,0 +1,149 @@
+body.simulation-public[data-brand="tcc"] {
+    --simulation-ink: var(--brand-primary);
+    --simulation-muted: var(--brand-text-muted);
+    --simulation-line: var(--brand-border);
+    --simulation-blue: var(--brand-primary-hover);
+    --simulation-red: var(--brand-accent);
+}
+
+body.auth-layout-body.simulation-public[data-brand="tcc"] .auth-layout-main:has(.simulation-start, .simulation-wizard, .company-access-page) {
+    background: var(--brand-background);
+}
+
+body.simulation-public[data-brand="tcc"] .auth-layout-main:has(.simulation-success) {
+    background: var(--brand-primary-dark);
+}
+
+body.simulation-public[data-brand="tcc"] .auth-topbar {
+    border-bottom: 1px solid var(--brand-border);
+    border-image: none;
+}
+
+body.simulation-public[data-brand="tcc"] .auth-topbar__brand-mark {
+    background: var(--brand-primary);
+}
+
+body.simulation-public[data-brand="tcc"] :is(.simulation-progress, .simulation-start__footer) {
+    color: var(--brand-text-muted);
+}
+
+body.simulation-public[data-brand="tcc"] .simulation-journey__aside .simulation-eyebrow {
+    color: var(--brand-surface);
+}
+
+body.simulation-public[data-brand="tcc"] :is(.simulation-option__card, .simulation-progress__number) {
+    border-color: var(--brand-border);
+}
+
+body.simulation-public[data-brand="tcc"] .simulation-option input:checked + .simulation-option__card {
+    border-color: var(--brand-accent);
+    box-shadow: 0 0 0 4px rgba(253, 30, 110, 0.17), 0 22px 44px rgba(3, 1, 51, 0.16);
+}
+
+body.simulation-public[data-brand="tcc"] .simulation-progress__step.is-active .simulation-progress__number {
+    border-color: var(--brand-accent);
+}
+
+body.simulation-public[data-brand="tcc"] :is(.simulation-sidebar, .simulation-form-card, .simulation-money, .simulation-remove-expense) {
+    border-color: var(--brand-border);
+    background-color: var(--brand-surface);
+}
+
+body.simulation-public[data-brand="tcc"] :is(.simulation-step[aria-current="step"], .simulation-context, .simulation-expense-info, .simulation-wizard #company-fields > div) {
+    background: var(--brand-primary-soft);
+}
+
+body.simulation-public[data-brand="tcc"] :is(.simulation-expense-info, .simulation-consent, .simulation-remove-expense) {
+    color: var(--brand-text-muted);
+}
+
+body.simulation-public[data-brand="tcc"] .simulation-wizard :is(input:not([type="radio"]):not([type="checkbox"]):not([type="hidden"]), select) {
+    border-color: var(--brand-border);
+}
+
+body.simulation-public[data-brand="tcc"] .simulation-wizard input::placeholder {
+    color: var(--brand-text-muted);
+}
+
+body.simulation-public[data-brand="tcc"] .simulation-wizard :is(input, select):focus,
+body.simulation-public[data-brand="tcc"] .simulation-money:focus-within {
+    border-color: var(--simulation-blue);
+    box-shadow: 0 0 0 2px var(--brand-focus-ring);
+}
+
+body.simulation-public[data-brand="tcc"] .simulation-wizard input[readonly] {
+    background: var(--brand-background);
+}
+
+body.simulation-public[data-brand="tcc"] .simulation-requester-choice:has(input:checked) {
+    background: var(--brand-primary-soft);
+    box-shadow: 0 0 0 1px var(--brand-focus-ring);
+}
+
+body.simulation-public[data-brand="tcc"] :is(.simulation-button, .simulation-step):focus-visible,
+body.simulation-public[data-brand="tcc"] .simulation-requester-choice:has(input:focus-visible) {
+    outline-color: var(--simulation-blue);
+}
+
+body.simulation-public[data-brand="tcc"] .simulation-wizard .simulation-button-primary:hover {
+    border-color: var(--brand-accent-hover);
+    background: var(--brand-accent-hover);
+}
+
+body.simulation-public[data-brand="tcc"] .simulation-wizard .simulation-button-back {
+    color: var(--brand-text-muted);
+    border-color: var(--brand-border);
+}
+
+body.simulation-public[data-brand="tcc"] .company-access-page {
+    --access-blue: var(--brand-primary-hover);
+    --access-accent: var(--brand-accent);
+    color: var(--brand-primary);
+}
+
+body.simulation-public[data-brand="tcc"] :is(.company-access-layout, .company-access-card, .company-access-card input, .access-divider) {
+    border-color: var(--brand-border);
+}
+
+body.simulation-public[data-brand="tcc"] :is(.company-access-card h1, .company-access-card input) {
+    color: var(--brand-primary);
+}
+
+body.simulation-public[data-brand="tcc"] .company-access-card p:not(.access-error),
+body.simulation-public[data-brand="tcc"] .company-access-card input::placeholder {
+    color: var(--brand-text-muted);
+}
+
+body.simulation-public[data-brand="tcc"] .company-access-card input:focus {
+    border-color: var(--access-blue);
+    box-shadow: 0 0 0 3px var(--brand-focus-ring);
+}
+
+body.simulation-public[data-brand="tcc"] .company-access-card input[aria-invalid="true"] {
+    border-color: #b42335;
+}
+
+body.simulation-public[data-brand="tcc"] .company-access-card .access-button {
+    background: var(--brand-accent);
+}
+
+body.simulation-public[data-brand="tcc"] .company-access-card .access-button:hover {
+    background: var(--brand-accent-hover);
+    filter: none;
+}
+
+body.simulation-public[data-brand="tcc"] .access-icon {
+    align-self: center;
+}
+
+@media (hover: hover) and (pointer: fine) {
+    body.simulation-public[data-brand="tcc"] .simulation-wizard :is(input, select):not(:disabled):not([readonly]):not(:focus):not([aria-invalid="true"]):hover,
+    body.simulation-public[data-brand="tcc"] .simulation-money:not(:focus-within):hover {
+        border-color: var(--simulation-blue);
+    }
+
+    body.simulation-public[data-brand="tcc"] :is(.simulation-requester-choice:hover, .simulation-step:not([aria-current="step"]):hover, .simulation-wizard .simulation-button-back:hover, .simulation-wizard .simulation-button-outline:hover) {
+        background: var(--brand-primary-soft);
+        border-color: var(--simulation-blue);
+    }
+}

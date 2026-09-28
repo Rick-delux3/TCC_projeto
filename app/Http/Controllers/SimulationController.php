@@ -483,6 +483,8 @@ class SimulationController extends Controller
 
         if (
             ! $company
+            || ! is_string($company->lead_access_code)
+            || trim($company->lead_access_code) === ''
             || ! hash_equals(
                 $grant['code_fingerprint'],
                 $this->companyCodeFingerprint($company->lead_access_code)

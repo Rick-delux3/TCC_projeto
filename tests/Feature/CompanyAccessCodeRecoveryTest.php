@@ -6,6 +6,7 @@ use App\Notifications\CompanyRecoveryAcessCodeNotification;
 use Illuminate\Contracts\Queue\ShouldBeEncrypted;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Queue;
@@ -15,6 +16,7 @@ beforeEach(function () {
     Cache::flush();
     Queue::fake();
     Notification::fake();
+    Http::preventStrayRequests();
 });
 
 function companyForCodeRecovery(array $overrides = []): Imobiliaria
