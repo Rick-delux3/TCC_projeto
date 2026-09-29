@@ -475,7 +475,7 @@
     };
 @endphp
 
-<div id="dashboardThemeRoot" class="dashboard-shell" data-dashboard-theme="light">
+<div id="dashboardThemeRoot" class="dashboard-shell admin-leads-page" data-dashboard-theme="light">
     <div class="container-fluid px-3 px-lg-4 py-4">
         <x-dashboard-realtime-notice />
 
@@ -515,7 +515,7 @@
         @endif
 
         {{-- Cabeçalho do conteúdo --}}
-        <div class="d-flex flex-column flex-xl-row justify-content-between align-items-xl-center gap-3 mb-4">
+        <div class="admin-page-heading d-flex flex-column flex-xl-row justify-content-between align-items-xl-center gap-3 mb-4">
             <div>
                 <span class="badge text-bg-primary-subtle text-primary border border-primary-subtle mb-2">
                     {{ $isCeo ? 'Dashboard do CEO' : 'Dashboard do corretor' }}
@@ -546,123 +546,60 @@
             </div>
         </div>
 
-        {{-- Hero principal --}}
-        <div class="row g-4 mb-4">
-            <div class="col-12 {{ $canAccessSimulationForms ? 'col-xl-7' : '' }}">
-                <div class="card border-0 shadow-sm rounded-5 dashboard-hero-card text-white">
-                    <div class="card-body p-4 p-lg-5">
-                        <div class="row g-4 align-items-end">
-                            <div class="col-12 col-lg-8">
-                                <span class="badge bg-white text-primary mb-3">
-                                    Visão geral
-                                </span>
-
-                                <h2 class="display-6 fw-bold dashboard-hero-title mb-3">
-                                    Base geral de clientes da corretora.
-                                </h2>
-
-                                <p class="text-white-50 mb-4">
-                                    Acompanhe os diferentes status comerciais dos leads.
-                                </p>
-
-                                <div class="d-flex flex-wrap gap-2">
-                                    <span class="badge bg-white bg-opacity-10 border border-white border-opacity-25 py-2 px-3">
-                                        {{ $totalLeads }} clientes/leads
-                                    </span>
-
-                                    <span class="badge bg-white bg-opacity-10 border border-white border-opacity-25 py-2 px-3">
-                                        {{ $totalImobiliarias }} imobiliárias
-                                    </span>
-
-                                    <span class="badge bg-white bg-opacity-10 border border-white border-opacity-25 py-2 px-3">
-                                        {{ $recentLeads }} recentes
-                                    </span>
-                                </div>
-                            </div>
-
-                            <div class="col-12 col-lg-4">
-                                <div class="bg-white bg-opacity-10 rounded-4 p-3 border border-white border-opacity-25">
-                                    <div class="small text-white-50 mb-1">
-                                        Última entrada
-                                    </div>
-
-                                    <div class="fw-bold">
-                                        {{ $latestLeadAt ? $latestLeadAt->copy()->setTimezone('America/Sao_Paulo')->format('d/m/Y H:i') : 'Sem clientes cadastrados' }}
-                                    </div>
-
-                                    <hr class="border-white border-opacity-25">
-
-                                    <div class="small text-white-50 mb-1">
-                                        Perfil de acesso
-                                    </div>
-
-                                    <span class="badge {{ $isCeo ? 'text-bg-light text-primary' : 'text-bg-secondary' }}">
-                                        {{ $corretor->role ?? 'integrante' }}
-                                    </span>
-                                </div>
-                            </div>
-                        </div>
+        <div class="admin-overview-grid mb-4">
+            <section class="dashboard-hero-card admin-leads-overview" aria-labelledby="lead-overview-title">
+                <div>
+                    <span class="badge bg-white bg-opacity-10 mb-3">Visão geral</span>
+                    <h2 id="lead-overview-title" class="fw-bold mb-2">Base geral de clientes<br>da corretora.</h2>
+                    <p class="mb-0">Acompanhe os diferentes status comerciais dos leads e o histórico de simulações com as imobiliárias parceiras.</p>
+                </div>
+                <div class="admin-overview-footer">
+                    <div class="d-flex flex-wrap gap-2">
+                        <span class="badge bg-white bg-opacity-10 border border-white border-opacity-10 py-2 px-3">{{ $totalLeads }} clientes/leads</span>
+                        <span class="badge bg-white bg-opacity-10 border border-white border-opacity-10 py-2 px-3">{{ $totalImobiliarias }} imobiliárias</span>
+                        <span class="badge bg-white bg-opacity-10 border border-white border-opacity-10 py-2 px-3">{{ $recentLeads }} recentes</span>
+                    </div>
+                    <div class="admin-latest-lead">
+                        <span>Última entrada</span>
+                        <strong>{{ $latestLeadAt ? $latestLeadAt->copy()->setTimezone('America/Sao_Paulo')->format('d/m/Y H:i') : 'Sem clientes cadastrados' }}</strong>
                     </div>
                 </div>
-            </div>
-
+            </section>
             @if ($canAccessSimulationForms)
-                <div class="col-12 col-xl-5">
-                    <div class="card border-0 shadow-sm rounded-5 h-100 dashboard-stat-card">
-                        <div class="card-body p-4 p-lg-5 d-flex flex-column">
-                            <div>
-                                <span class="badge text-bg-primary-subtle text-primary mb-3">
-                                    Acesso rápido
-                                </span>
-
-                                <h2 class="h3 fw-bold mb-3">
-                                    Novo lead
-                                </h2>
-
-                                <p class="text-muted mb-3">
-                                    Escolha o vínculo e abra o formulário adequado para cadastrar um novo lead.
-                                </p>
-
-                                <p class="small text-muted mb-4">
-                                    <i class="bi bi-shield-check me-1" aria-hidden="true"></i>
-                                    O corretor não precisa digitar nem visualizar a chave de acesso da imobiliária.
-                                </p>
-                            </div>
-
-                            <div class="mt-auto">
-                                <button
-                                    type="button"
-                                    class="btn btn-primary"
-                                    data-bs-toggle="modal"
-                                    data-bs-target="#adminSimulationModal"
-                                    @disabled(! $adminSimulationRouteExists)
-                                >
-                                    <i class="bi bi-clipboard-plus me-1" aria-hidden="true"></i>
-                                    {{ $adminSimulationRouteExists ? 'Abrir formulário' : 'Formulário indisponível' }}
-                                </button>
-
-                                @unless ($adminSimulationRouteExists)
-                                    <div class="form-text">
-                                        Recurso temporariamente indisponível.
-                                    </div>
-                                @endunless
-                            </div>
+                <section class="card dashboard-stat-card admin-new-lead" aria-labelledby="new-lead-title">
+                    <div class="card-body d-flex flex-column gap-3">
+                        <div>
+                            <span class="admin-eyebrow">Acesso rápido</span>
+                            <h2 id="new-lead-title" class="h5 fw-bold mt-1 mb-2">Novo lead</h2>
+                            <p class="text-muted mb-0">Escolha o vínculo e abra o formulário adequado para cadastrar um novo lead ou simular seguro fiança locatícia.</p>
+                        </div>
+                        <div class="admin-new-lead-action mt-auto">
+                            <p class="small text-muted mb-3">
+                                <i class="bi bi-shield-check text-success me-1" aria-hidden="true"></i>
+                                O corretor não precisa digitar nem visualizar a chave de acesso da imobiliária.
+                            </p>
+                            <button type="button" class="btn btn-primary w-100" data-bs-toggle="modal" data-bs-target="#adminSimulationModal" @disabled(! $adminSimulationRouteExists)>
+                                <i class="bi bi-clipboard-plus me-1" aria-hidden="true"></i>
+                                {{ $adminSimulationRouteExists ? 'Abrir formulário' : 'Formulário indisponível' }}
+                            </button>
+                            @unless ($adminSimulationRouteExists)
+                                <div class="form-text">Recurso temporariamente indisponível.</div>
+                            @endunless
                         </div>
                     </div>
-                </div>
+                </section>
             @endif
         </div>
 
         {{-- Métricas focadas somente em clientes --}}
         <div class="row g-3 mb-4">
             <div class="col-6 col-xl-3">
-                <div class="card border-0 shadow-sm rounded-4 dashboard-stat-card h-100">
+                <div class="card border-0 shadow-sm rounded-4 dashboard-stat-card dashboard-stat-card--clients h-100">
                     <div class="card-body">
-                        <div class="d-flex justify-content-between align-items-start mb-3">
+                        <div class="mb-3">
                             <span class="badge text-bg-primary-subtle text-primary">
                                 Clientes
                             </span>
-                            <span class="text-primary fw-bold">●</span>
                         </div>
 
                         <div class="h2 fw-bold mb-0">
@@ -677,13 +614,12 @@
             </div>
 
             <div class="col-6 col-xl-3">
-                <div class="card border-0 shadow-sm rounded-4 dashboard-stat-card h-100">
+                <div class="card border-0 shadow-sm rounded-4 dashboard-stat-card dashboard-stat-card--approved h-100">
                     <div class="card-body">
-                        <div class="d-flex justify-content-between align-items-start mb-3">
+                        <div class="mb-3">
                             <span class="badge text-bg-success-subtle text-success">
                                 Aprovados
                             </span>
-                            <span class="text-success fw-bold">●</span>
                         </div>
 
                         <div class="h2 fw-bold mb-0">
@@ -698,13 +634,12 @@
             </div>
 
             <div class="col-6 col-xl-3">
-                <div class="card border-0 shadow-sm rounded-4 dashboard-stat-card h-100">
+                <div class="card border-0 shadow-sm rounded-4 dashboard-stat-card dashboard-stat-card--rejected h-100">
                     <div class="card-body">
-                        <div class="d-flex justify-content-between align-items-start mb-3">
+                        <div class="mb-3">
                             <span class="badge text-bg-danger-subtle text-danger">
                                 Recusados
                             </span>
-                            <span class="text-danger fw-bold">●</span>
                         </div>
 
                         <div class="h2 fw-bold mb-0">
@@ -719,13 +654,12 @@
             </div>
 
             <div class="col-6 col-xl-3">
-                <div class="card border-0 shadow-sm rounded-4 dashboard-stat-card h-100">
+                <div class="card border-0 shadow-sm rounded-4 dashboard-stat-card dashboard-stat-card--companies h-100">
                     <div class="card-body">
-                        <div class="d-flex justify-content-between align-items-start mb-3">
+                        <div class="mb-3">
                             <span class="badge text-bg-info-subtle text-info">
                                 Imobiliárias
                             </span>
-                            <span class="text-info fw-bold">●</span>
                         </div>
 
                         <div class="h2 fw-bold mb-0">
@@ -741,6 +675,7 @@
         </div>
 
         {{-- Filtros --}}
+        <div class="admin-lead-directory">
         <section
             class="lead-filter-panel"
             id="leads-section"
@@ -1384,10 +1319,10 @@
                     </div>
                 </div>
             @else
-                <div class="card border-0 shadow-sm rounded-5">
+                <div class="card border-0 shadow-sm rounded-5 admin-lead-empty">
                     <div class="card-body text-center p-5">
-                        <span class="badge text-bg-light border mb-3">
-                            Nenhum lead encontrado
+                        <span class="admin-empty-icon mb-3" aria-hidden="true">
+                            <i class="bi bi-inbox"></i>
                         </span>
 
                         @if ($isFiltering)
@@ -1415,6 +1350,7 @@
                 </div>
             @endif
         @endcan
+        </div>
     </div>
 </div>
 
