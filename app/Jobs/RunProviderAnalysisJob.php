@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Models\InsuranceAnalysis;
+use App\Services\Insurance\InsuranceStatusPolling;
 use App\Services\Insurance\ProviderAnalysisStatus;
 use App\Services\Insurance\Providers\InsuranceProviderResolver;
 use Illuminate\Bus\Batchable;
@@ -87,6 +88,7 @@ class RunProviderAnalysisJob implements ShouldQueue
             ]);
 
             $this->applyResult($analysis, $result);
+            InsuranceStatusPolling::schedule($analysis->fresh(), $this->attemptId, $this->isReanalysis);
         } catch (\Throwable $e) {
             $analysis->update([
                 'status' => 'failed',
@@ -261,17 +263,19 @@ class RunProviderAnalysisJob implements ShouldQueue
 
             'response_payload' => $debugPayload,
             'error_message' => ProviderAnalysisStatus::errorMessage($internalStatus),
-            'finished_at' => now(),
+            'finished_at' => ProviderAnalysisStatus::isTerminal($internalStatus) ? now() : null,
         ]);
 
         $analysis->refresh();
 
         $analysis->events()->create([
-            'event_type' => $this->isReanalysis ? 'reanalysis_completed' : 'analysis_completed',
+            'event_type' => ProviderAnalysisStatus::isTerminal($internalStatus)
+                ? ($this->isReanalysis ? 'reanalysis_completed' : 'analysis_completed')
+                : 'analysis_waiting_provider',
             'status' => $internalStatus,
-            'message' => $this->isReanalysis
-                ? "Reanálise concluída para companhia {$analysis->provider}. HTTP {$httpStatus}."
-                : "Análise concluída para companhia {$analysis->provider}. HTTP {$httpStatus}.",
+            'message' => ProviderAnalysisStatus::isTerminal($internalStatus)
+                ? "Análise concluída para companhia {$analysis->provider}. HTTP {$httpStatus}."
+                : "Aguardando decisão da companhia {$analysis->provider}.",
             'payload' => $this->analysisSnapshot($analysis),
             'response' => [
                 'provider' => $analysis->provider,
@@ -351,8 +355,7 @@ class RunProviderAnalysisJob implements ShouldQueue
         /*
         * Status 16: pré-aprovado.
         *
-        * Como a biometria não será implementada agora,
-        * paramos como análise manual e liberamos consulta manual.
+        * A pré-aprovação não encerra a análise; as consultas continuam.
         */
         if ($tooInternalDecision === 'PreApproved') {
             $analysis->update([
@@ -363,18 +366,18 @@ class RunProviderAnalysisJob implements ShouldQueue
                     ?? 'Análise pré-aprovada',
                 'response_payload' => array_merge($currentPayload, [
                     $resultPayloadKey => $debugPayload,
-                    'too_status_check_stopped' => true,
-                    'too_manual_sync_available' => true,
-                    'too_status_check_stopped_at' => now()->toDateTimeString(),
+                    'too_status_check_stopped' => false,
+                    'too_manual_sync_available' => false,
+                    'too_status_check_stopped_at' => null,
                 ]),
                 'error_message' => null,
-                'finished_at' => now(),
+                'finished_at' => null,
             ]);
 
             $analysis->events()->create([
-                'event_type' => $this->isReanalysis ? 'reanalysis_completed' : 'analysis_completed',
+                'event_type' => 'analysis_waiting_provider',
                 'status' => 'manual_review',
-                'message' => 'A Too retornou análise pré-aprovada. Como a biometria não será tratada agora, a análise ficou em revisão manual.',
+                'message' => 'A Too retornou pré-aprovação. Aguardando decisão final nas próximas consultas.',
                 'payload' => $this->analysisSnapshot($analysis),
                 'response' => $debugPayload,
             ]);
@@ -496,11 +499,11 @@ class RunProviderAnalysisJob implements ShouldQueue
                 'too_manual_sync_available' => true,
             ]),
             'error_message' => null,
-            'finished_at' => now(),
+            'finished_at' => null,
         ]);
 
         $analysis->events()->create([
-            'event_type' => $this->isReanalysis ? 'reanalysis_completed' : 'analysis_completed',
+            'event_type' => 'analysis_waiting_provider',
             'status' => 'manual_review',
             'message' => 'A Too retornou um status não finalizado ou não reconhecido. A análise ficou em revisão manual.',
             'payload' => $this->analysisSnapshot($analysis),

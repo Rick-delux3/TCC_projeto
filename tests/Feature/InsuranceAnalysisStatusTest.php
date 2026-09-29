@@ -56,8 +56,8 @@ dataset('insurance provider decisions', [
     'explicit refusal' => [['status' => 'Refused'], true, 'rejected'],
     'nested approval' => [['data' => ['status' => 'Approved']], true, 'approved'],
     'preapproval' => [['status' => 'PreApproved'], true, 'manual_review'],
-    'under analysis' => [['status' => 'UnderAnalysis'], true, 'manual_review'],
-    'pending' => [['status' => 'Pending'], true, 'manual_review'],
+    'under analysis' => [['status' => 'UnderAnalysis'], true, 'processing'],
+    'pending' => [['status' => 'Pending'], true, 'processing'],
     'unknown status with quote' => [['status' => 'Unexpected', 'quoteId' => 'test-quote'], true, 'failed'],
     'quoted is not approved' => [['status' => 'Quoted', 'premiumAmount' => 100], true, 'failed'],
     'approval substring is not approval' => [['status' => 'NotApproved'], true, 'failed'],
@@ -105,7 +105,7 @@ it('persists only explicit provider decisions across creation reanalysis and syn
 
     $analysis->refresh();
     expect($analysis->status)->toBe($expectedStatus)
-        ->and($analysis->result)->toBe($expectedStatus === 'failed' ? null : $expectedStatus)
+        ->and($analysis->result)->toBe(in_array($expectedStatus, ['failed', 'processing'], true) ? null : $expectedStatus)
         ->and($analysis->isApprovedResult())->toBe($expectedStatus === 'approved')
         ->and($analysis->events()->latest('id')->first()->status)->toBe($expectedStatus);
 

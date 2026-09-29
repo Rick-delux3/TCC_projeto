@@ -12,14 +12,20 @@ class SyncTooAnalysisStatusJob implements ShouldQueue
     use Queueable;
 
     public int $tries = 3;
+
     public int $timeout = 180;
+
+    public int $consecutiveFailures = 0;
 
     public function __construct(
         public int $analysisId,
         public string $attemptId,
         public bool $isReanalysis = false,
-        public int $attemptNumber = 1
-    ) {}
+        public int $attemptNumber = 1,
+        int $consecutiveFailures = 0,
+    ) {
+        $this->consecutiveFailures = $consecutiveFailures;
+    }
 
     public function handle(TooInsuranceProvider $provider): void
     {
@@ -40,6 +46,12 @@ class SyncTooAnalysisStatusJob implements ShouldQueue
             return;
         }
 
+        $attempt = $analysis->currentAttemptContext();
+
+        if ($attempt !== null && $attempt['attempt_id'] !== $this->attemptId) {
+            return;
+        }
+
         if (in_array(
             $analysis->status,
             ['approved', 'rejected', 'failed'],
@@ -48,18 +60,18 @@ class SyncTooAnalysisStatusJob implements ShouldQueue
             return;
         }
 
-        $result = $provider->getStatus($analysis);
+        try {
+            $result = $provider->getStatus($analysis);
+        } catch (\Throwable $exception) {
+            report($exception);
+            $result = ['success' => false, 'error' => 'Falha temporária ao consultar a Too.', 'response' => []];
+        }
 
         $analysis->refresh();
 
         $response = $result['response'] ?? [];
 
         $providerStatus = data_get($response, 'status');
-        $tooInternalDecision = data_get(
-            $response,
-            'too_internal_decision'
-        );
-
         $providerOriginalStatus = data_get(
             $response,
             'provider_original_status'
@@ -75,10 +87,10 @@ class SyncTooAnalysisStatusJob implements ShouldQueue
             20
         );
 
-        $maxAttempts = (int) config(
-            'services.too.status_check_max_attempts',
+        $maxFailures = max(1, (int) config(
+            'services.too.status_check_max_failures',
             15
-        );
+        ));
 
         $currentPayload = $this->payloadAsArray(
             $analysis->response_payload
@@ -96,6 +108,9 @@ class SyncTooAnalysisStatusJob implements ShouldQueue
 
         if (! ($result['success'] ?? false)) {
             $analysis->forceFill([
+                'status' => 'processing',
+                'result' => null,
+                'finished_at' => null,
                 'response_payload' => array_merge($currentPayload, [
                     $resultKey => $result,
                     'too_status_check_attempts' => $this->attemptNumber,
@@ -113,16 +128,16 @@ class SyncTooAnalysisStatusJob implements ShouldQueue
                 'response' => $result,
             ]);
 
-            if ($this->attemptNumber < $maxAttempts) {
-                $this->dispatchNext($analysis, $delaySeconds);
+            if ($this->consecutiveFailures + 1 < $maxFailures) {
+                $this->dispatchNext($analysis, $delaySeconds, $this->consecutiveFailures + 1);
 
                 return;
             }
 
-            $this->finishAsManualReview(
+            $this->finishAsFailed(
                 analysis: $analysis,
                 result: $result,
-                message: 'As verificações automáticas da Too falharam. A consulta manual foi liberada.'
+                message: 'As consultas da Too falharam repetidamente. Não foi possível obter uma decisão de crédito.'
             );
 
             return;
@@ -133,16 +148,6 @@ class SyncTooAnalysisStatusJob implements ShouldQueue
         | Pré-aprovado
         |--------------------------------------------------------------------------
         */
-
-        if ($tooInternalDecision === 'PreApproved') {
-            $this->finishAsManualReview(
-                analysis: $analysis,
-                result: $result,
-                message: 'A Too retornou análise pré-aprovada. A análise ficou em revisão manual.'
-            );
-
-            return;
-        }
 
         /*
         |--------------------------------------------------------------------------
@@ -182,17 +187,7 @@ class SyncTooAnalysisStatusJob implements ShouldQueue
                 'response' => $result,
             ]);
 
-            if ($this->attemptNumber < $maxAttempts) {
-                $this->dispatchNext($analysis, $delaySeconds);
-
-                return;
-            }
-
-            $this->finishAsManualReview(
-                analysis: $analysis,
-                result: $result,
-                message: 'A Too continuou em análise após todas as verificações automáticas. A consulta manual foi liberada.'
-            );
+            $this->dispatchNext($analysis, $delaySeconds);
 
             return;
         }
@@ -306,26 +301,28 @@ class SyncTooAnalysisStatusJob implements ShouldQueue
         |--------------------------------------------------------------------------
         */
 
-        $this->finishAsManualReview(
+        $this->finishAsFailed(
             analysis: $analysis,
             result: $result,
-            message: 'A Too retornou um status não reconhecido. A consulta manual foi liberada.'
+            message: 'A Too retornou um status não reconhecido.'
         );
     }
 
     private function dispatchNext(
         InsuranceAnalysis $analysis,
-        int $delaySeconds
+        int $delaySeconds,
+        int $consecutiveFailures = 0,
     ): void {
         self::dispatch(
             analysisId: $analysis->id,
             attemptId: $this->attemptId,
             isReanalysis: $this->isReanalysis,
-            attemptNumber: $this->attemptNumber + 1
-        )->delay(now()->addSeconds($delaySeconds));
+            attemptNumber: $this->attemptNumber + 1,
+            consecutiveFailures: $consecutiveFailures,
+        )->delay(now()->addSeconds(max(1, $delaySeconds)))->afterCommit();
     }
 
-    private function finishAsManualReview(
+    private function finishAsFailed(
         InsuranceAnalysis $analysis,
         array $result,
         string $message
@@ -335,13 +332,14 @@ class SyncTooAnalysisStatusJob implements ShouldQueue
         );
 
         $analysis->forceFill([
-            'status' => 'manual_review',
-            'result' => 'manual_review',
+            'status' => 'failed',
+            'result' => null,
+            'error_message' => $message,
             'provider_status' => $message,
 
             'response_payload' => array_merge($currentPayload, [
                 'too_status_check_stopped' => true,
-                'too_manual_sync_available' => true,
+                'too_manual_sync_available' => false,
                 'too_status_check_attempts' => $this->attemptNumber,
                 'too_last_auto_check_at' => now()->toDateTimeString(),
                 'too_status_check_stopped_at' => now()->toDateTimeString(),
@@ -353,7 +351,7 @@ class SyncTooAnalysisStatusJob implements ShouldQueue
         $this->createCompletedEvent(
             analysis: $analysis,
             result: $result,
-            status: 'manual_review',
+            status: 'failed',
             message: $message
         );
 

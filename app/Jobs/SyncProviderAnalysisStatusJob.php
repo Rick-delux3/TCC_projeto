@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Models\InsuranceAnalysis;
+use App\Services\Insurance\InsuranceStatusPolling;
 use App\Services\Insurance\ProviderAnalysisStatus;
 use App\Services\Insurance\Providers\InsuranceProviderResolver;
 use Illuminate\Bus\Queueable;
@@ -27,6 +28,10 @@ class SyncProviderAnalysisStatusJob implements ShouldQueue
      */
     public int $timeout = 180;
 
+    public bool $automatic = false;
+
+    public int $consecutiveFailures = 0;
+
     /**
      * Recebe o ID da análise específica.
      *
@@ -36,8 +41,13 @@ class SyncProviderAnalysisStatusJob implements ShouldQueue
     public function __construct(
         public int $analysisId,
         public string $attemptId,
-        public bool $isReanalysis = false
-    ) {}
+        public bool $isReanalysis = false,
+        bool $automatic = false,
+        int $consecutiveFailures = 0,
+    ) {
+        $this->automatic = $automatic;
+        $this->consecutiveFailures = $consecutiveFailures;
+    }
 
     /**
      * Executa a sincronização do status com a companhia.
@@ -71,6 +81,13 @@ class SyncProviderAnalysisStatusJob implements ShouldQueue
             'batch',
         ])->findOrFail($this->analysisId);
 
+        $attempt = $analysis->currentAttemptContext();
+
+        if (($attempt !== null && $attempt['attempt_id'] !== $this->attemptId)
+            || ($this->automatic && ProviderAnalysisStatus::isTerminal($analysis->status))) {
+            return;
+        }
+
         /*
          * Para consultar status na companhia, normalmente precisamos do quote_id
          * retornado na primeira solicitação da análise.
@@ -87,9 +104,10 @@ class SyncProviderAnalysisStatusJob implements ShouldQueue
             ]);
 
             $analysis->events()->create([
-                'event_type' => 'sync_failed',
+                'event_type' => $this->isReanalysis ? 'reanalysis_failed' : 'failed',
                 'status' => 'failed',
                 'message' => 'Não foi possível sincronizar o status porque a análise não possui quote_id.',
+                'payload' => ['attempt_id' => $this->attemptId, 'is_reanalysis' => $this->isReanalysis],
             ]);
 
             $this->dispatchBatchCompletionCheck($analysis);
@@ -97,17 +115,19 @@ class SyncProviderAnalysisStatusJob implements ShouldQueue
             return;
         }
 
-        if ($isToo && ! $analysis->proposal_id) {
+        if ($isToo && ! $analysis->tooNumeroProposta()) {
             $analysis->update([
                 'status' => 'failed',
+                'result' => null,
                 'error_message' => 'Não foi possível sincronizar: proposal_id não encontrado.',
                 'finished_at' => now(),
             ]);
 
             $analysis->events()->create([
-                'event_type' => 'sync_failed',
+                'event_type' => $this->isReanalysis ? 'reanalysis_failed' : 'failed',
                 'status' => 'failed',
                 'message' => 'Não foi possível sincronizar o status porque a análise não possui proposal_id.',
+                'payload' => ['attempt_id' => $this->attemptId, 'is_reanalysis' => $this->isReanalysis],
             ]);
 
             $this->dispatchBatchCompletionCheck($analysis);
@@ -126,7 +146,9 @@ class SyncProviderAnalysisStatusJob implements ShouldQueue
                 'provider' => $analysis->provider,
                 'quote_id' => $analysis->quote_id,
                 'proposal_id' => $analysis->proposal_id,
-                'manual_sync' => true,
+                'manual_sync' => ! $this->automatic,
+                'attempt_id' => $this->attemptId,
+                'is_reanalysis' => $this->isReanalysis,
             ],
         ]);
 
@@ -153,18 +175,27 @@ class SyncProviderAnalysisStatusJob implements ShouldQueue
              */
             $result = $provider->getStatus($analysis);
 
+            if (! ($result['success'] ?? false) && $this->retryPollingFailure($analysis)) {
+                return;
+            }
+
             /*
              * Aplica o resultado recebido no banco.
              */
 
             if ($isToo) {
                 $this->applyTooResult($analysis, $result);
+                InsuranceStatusPolling::schedule($analysis->fresh(), $this->attemptId, $this->isReanalysis);
 
                 return;
             }
 
             $this->applyResult($analysis, $result);
+            InsuranceStatusPolling::schedule($analysis->fresh(), $this->attemptId, $this->isReanalysis);
         } catch (\Throwable $e) {
+            if ($this->retryPollingFailure($analysis)) {
+                return;
+            }
             /*
              * Se der erro inesperado, não quebra o sistema inteiro.
              * Salva a falha na análise e registra no log.
@@ -177,10 +208,12 @@ class SyncProviderAnalysisStatusJob implements ShouldQueue
             ]);
 
             $analysis->events()->create([
-                'event_type' => 'sync_failed',
+                'event_type' => $this->isReanalysis ? 'reanalysis_failed' : 'failed',
                 'status' => 'failed',
                 'message' => $e->getMessage(),
                 'payload' => [
+                    'attempt_id' => $this->attemptId,
+                    'is_reanalysis' => $this->isReanalysis,
                     'provider' => $analysis->provider,
                     'quote_id' => $analysis->quote_id,
                 ],
@@ -204,11 +237,7 @@ class SyncProviderAnalysisStatusJob implements ShouldQueue
     {
         $response = $result['response'] ?? [];
 
-        $currentPayload = $analysis->response_payload ?? [];
-
-        if (is_string($currentPayload)) {
-            $currentPayload = json_decode($currentPayload, true) ?: [];
-        }
+        $currentPayload = $analysis->providerResponsePayload();
 
         /*
          * Se a API retornou erro ou o provider sinalizou success false,
@@ -226,9 +255,10 @@ class SyncProviderAnalysisStatusJob implements ShouldQueue
             ]);
 
             $analysis->events()->create([
-                'event_type' => 'sync_failed',
+                'event_type' => $this->isReanalysis ? 'reanalysis_failed' : 'failed',
                 'status' => 'failed',
                 'message' => 'Falha ao sincronizar status com a companhia.',
+                'payload' => ['attempt_id' => $this->attemptId, 'is_reanalysis' => $this->isReanalysis],
                 'response' => $result,
             ]);
 
@@ -308,7 +338,7 @@ class SyncProviderAnalysisStatusJob implements ShouldQueue
              * Como essa sincronização trouxe uma resposta atualizada,
              * consideramos essa tentativa finalizada.
              */
-            'finished_at' => now(),
+            'finished_at' => ProviderAnalysisStatus::isTerminal($internalStatus) ? now() : null,
 
             /*
              * Limpa mensagem de erro anterior, se a sincronização deu certo.
@@ -317,7 +347,9 @@ class SyncProviderAnalysisStatusJob implements ShouldQueue
         ]);
 
         $analysis->events()->create([
-            'event_type' => 'status_synced',
+            'event_type' => ProviderAnalysisStatus::isTerminal($internalStatus)
+                ? ($this->isReanalysis ? 'reanalysis_completed' : 'analysis_completed')
+                : 'status_synced',
             'status' => $internalStatus,
             'message' => "Status sincronizado com {$analysis->provider}.",
             'payload' => [
@@ -346,15 +378,13 @@ class SyncProviderAnalysisStatusJob implements ShouldQueue
     {
         $response = $result['response'] ?? [];
 
-        $currentPayload = $analysis->response_payload ?? [];
-
-        if (is_string($currentPayload)) {
-            $currentPayload = json_decode($currentPayload, true) ?: [];
-        }
+        $currentPayload = $analysis->providerResponsePayload();
 
         if (! ($result['success'] ?? false)) {
             $analysis->update([
                 'status' => 'manual_review',
+                'result' => 'manual_review',
+                'finished_at' => null,
                 'provider_status' => 'Erro ao verificar status manual da Too',
                 'error_message' => data_get($response, 'message')
                     ?? data_get($result, 'error')
@@ -371,6 +401,10 @@ class SyncProviderAnalysisStatusJob implements ShouldQueue
                 'event_type' => 'too_manual_sync_failed',
                 'status' => 'manual_review',
                 'message' => 'Falha ao verificar manualmente o status da Too.',
+                'payload' => [
+                    'attempt_id' => $this->attemptId,
+                    'is_reanalysis' => $this->isReanalysis,
+                ],
                 'response' => $result,
             ]);
 
@@ -387,15 +421,16 @@ class SyncProviderAnalysisStatusJob implements ShouldQueue
         */
         if (in_array($providerStatus, ['UnderAnalysis', 'Pending'], true)) {
             $analysis->update([
-                'status' => 'manual_review',
-                'result' => 'manual_review',
+                'status' => 'processing',
+                'result' => null,
                 'provider_status' => $providerOriginalDescription
                     ?? $providerOriginalStatus
                     ?? 'Em Análise de Crédito',
                 'error_message' => null,
+                'finished_at' => null,
                 'response_payload' => array_merge($currentPayload, [
-                    'too_status_check_stopped' => true,
-                    'too_manual_sync_available' => true,
+                    'too_status_check_stopped' => false,
+                    'too_manual_sync_available' => false,
                     'too_last_manual_check_at' => now()->toDateTimeString(),
                     'too_manual_status_latest' => $result,
                 ]),
@@ -403,9 +438,11 @@ class SyncProviderAnalysisStatusJob implements ShouldQueue
 
             $analysis->events()->create([
                 'event_type' => 'too_manual_status_synced',
-                'status' => 'manual_review',
+                'status' => 'processing',
                 'message' => 'A Too ainda retornou Em Análise de Crédito na verificação manual.',
                 'payload' => [
+                    'attempt_id' => $this->attemptId,
+                    'is_reanalysis' => $this->isReanalysis,
                     'provider' => 'too',
                     'proposal_id' => $analysis->proposal_id,
                     'provider_status' => $providerStatus,
@@ -439,10 +476,12 @@ class SyncProviderAnalysisStatusJob implements ShouldQueue
             ]);
 
             $analysis->events()->create([
-                'event_type' => 'too_manual_status_synced',
+                'event_type' => $this->isReanalysis ? 'reanalysis_completed' : 'analysis_completed',
                 'status' => 'rejected',
                 'message' => 'Status da Too sincronizado manualmente: análise recusada.',
                 'payload' => [
+                    'attempt_id' => $this->attemptId,
+                    'is_reanalysis' => $this->isReanalysis,
                     'provider' => 'too',
                     'proposal_id' => $analysis->proposal_id,
                     'provider_status' => $providerStatus,
@@ -487,10 +526,12 @@ class SyncProviderAnalysisStatusJob implements ShouldQueue
             ]);
 
             $analysis->events()->create([
-                'event_type' => 'too_manual_status_synced',
+                'event_type' => $this->isReanalysis ? 'reanalysis_completed' : 'analysis_completed',
                 'status' => 'approved',
                 'message' => 'Status da Too sincronizado manualmente: análise aprovada e cotação atualizada.',
                 'payload' => [
+                    'attempt_id' => $this->attemptId,
+                    'is_reanalysis' => $this->isReanalysis,
                     'provider' => 'too',
                     'proposal_id' => $analysis->proposal_id,
                     'quote_id' => $quoteId,
@@ -514,6 +555,7 @@ class SyncProviderAnalysisStatusJob implements ShouldQueue
         $analysis->update([
             'status' => 'manual_review',
             'result' => 'manual_review',
+            'finished_at' => null,
             'provider_status' => $providerOriginalDescription
                 ?? $providerOriginalStatus
                 ?? $providerStatus
@@ -531,6 +573,8 @@ class SyncProviderAnalysisStatusJob implements ShouldQueue
             'status' => 'manual_review',
             'message' => 'Status manual da Too sincronizado, mas ainda não houve decisão final.',
             'payload' => [
+                'attempt_id' => $this->attemptId,
+                'is_reanalysis' => $this->isReanalysis,
                 'provider' => 'too',
                 'proposal_id' => $analysis->proposal_id,
                 'provider_status' => $providerStatus,
@@ -702,5 +746,27 @@ class SyncProviderAnalysisStatusJob implements ShouldQueue
             attemptId: $this->attemptId,
             isReanalysis: $this->isReanalysis
         );
+    }
+
+    private function retryPollingFailure(InsuranceAnalysis $analysis): bool
+    {
+        $maxFailures = max(1, (int) config("services.{$analysis->provider}.status_check_max_failures", 3));
+
+        if (! $this->automatic || $this->consecutiveFailures + 1 >= $maxFailures) {
+            return false;
+        }
+
+        $analysis->update([
+            'status' => 'processing',
+            'result' => null,
+            'finished_at' => null,
+            'error_message' => 'Falha temporária na consulta. Uma nova verificação foi agendada.',
+        ]);
+
+        self::dispatch($analysis->id, $this->attemptId, $this->isReanalysis, true, $this->consecutiveFailures + 1)
+            ->delay(now()->addSeconds(max(1, (int) config("services.{$analysis->provider}.status_check_delay_seconds", 30))))
+            ->afterCommit();
+
+        return true;
     }
 }

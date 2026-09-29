@@ -193,9 +193,9 @@ class InsuranceAnalysisService
 
             'error_message' => ProviderAnalysisStatus::errorMessage($internalStatus),
 
-            'finished_at' => in_array($internalStatus, ['approved', 'rejected', 'failed'])
+            'finished_at' => ProviderAnalysisStatus::isTerminal($internalStatus)
                 ? now()
-                : $analysis->finished_at,
+                : null,
         ]);
 
         $analysis->events()->create([

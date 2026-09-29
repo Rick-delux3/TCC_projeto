@@ -9,7 +9,8 @@ final class ProviderAnalysisStatus
         return match (mb_strtolower(trim((string) $status))) {
             'approved' => 'approved',
             'denied', 'rejected', 'refused', 'recused' => 'rejected',
-            'underanalysis', 'under_analysis', 'pending', 'manual_review', 'preapproved' => 'manual_review',
+            'underanalysis', 'under_analysis', 'pending' => 'processing',
+            'manual_review', 'preapproved' => 'manual_review',
             default => 'failed',
         };
     }
@@ -19,6 +20,11 @@ final class ProviderAnalysisStatus
         return in_array($status, ['approved', 'rejected', 'manual_review'], true)
             ? $status
             : null;
+    }
+
+    public static function isTerminal(?string $status): bool
+    {
+        return in_array($status, ['approved', 'rejected', 'failed'], true);
     }
 
     public static function errorMessage(string $status): ?string

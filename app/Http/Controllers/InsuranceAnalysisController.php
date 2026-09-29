@@ -571,11 +571,7 @@ class InsuranceAnalysisController extends Controller
      */
     private function syncAnalysisStatus(InsuranceAnalysis $analysis, string $requestedBy)
     {
-        $responsePayload = $analysis->response_payload ?? [];
-
-        if (is_string($responsePayload)) {
-            $responsePayload = json_decode($responsePayload, true) ?: [];
-        }
+        $responsePayload = $analysis->providerResponsePayload();
 
         $isToo = mb_strtolower((string) $analysis->provider) === 'too';
         $normalizedStatus = mb_strtolower((string) $analysis->status);
@@ -599,7 +595,7 @@ class InsuranceAnalysisController extends Controller
         $canSyncByQuote = ! $isToo && filled($analysis->quote_id);
 
         $canSyncTooManually = $isToo
-            && filled($analysis->proposal_id)
+            && filled($analysis->tooNumeroProposta())
             && $tooAutoStopped
             && $tooManualSyncAvailable
             && ! in_array($normalizedStatus, $finalStatuses, true);
@@ -613,6 +609,12 @@ class InsuranceAnalysisController extends Controller
 
         $isAdmin = $requestedBy === 'admin';
 
+        $attempt = $analysis->currentAttemptContext();
+
+        if ($attempt === null) {
+            return back()->with('error', 'Não foi possível identificar a rodada desta análise para consultar o status.');
+        }
+
         $analysis->events()->create([
             'event_type' => $canSyncTooManually ? 'too_manual_sync_requested' : 'sync_requested',
             'status' => $analysis->status,
@@ -624,6 +626,8 @@ class InsuranceAnalysisController extends Controller
                     ? 'Sincronização de status solicitada pelo admin/corretor.'
                     : 'Sincronização de status solicitada pela imobiliária.'),
             'payload' => [
+                'attempt_id' => $attempt['attempt_id'],
+                'is_reanalysis' => $attempt['is_reanalysis'],
                 'requested_by' => $requestedBy,
                 'requested_at' => now()->toDateTimeString(),
                 'provider' => $analysis->provider,
@@ -632,7 +636,11 @@ class InsuranceAnalysisController extends Controller
             ],
         ]);
 
-        SyncProviderAnalysisStatusJob::dispatch($analysis->id);
+        SyncProviderAnalysisStatusJob::dispatch(
+            analysisId: $analysis->id,
+            attemptId: $attempt['attempt_id'],
+            isReanalysis: $attempt['is_reanalysis'],
+        );
 
         return back()->with(
             'success',

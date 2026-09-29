@@ -30,52 +30,55 @@ class CompleteInsuranceAnalysesBatchJob implements ShouldQueue
             return;
         }
 
-        $batch = InsuranceAnalysisBatch::with(['analyses.events'])->findOrFail($this->batchId);
+        DB::transaction(function (): void {
+            $batch = InsuranceAnalysisBatch::query()->lockForUpdate()->findOrFail($this->batchId);
+            $analyses = $batch->analyses()->lockForUpdate()->get();
 
-        /*
-        |--------------------------------------------------------------------------
-        | Uma análise por provider dentro do lote
-        |--------------------------------------------------------------------------
-        | Como a reanálise reaproveita as análises existentes, o status atual de
-        | cada análise representa a rodada atual.
-        */
-        $completed = $batch->analyses()
-            ->whereIn('status', ['quoted', 'approved', 'rejected', 'manual_review'])
-            ->count();
+            /*
+            |--------------------------------------------------------------------------
+            | Uma análise por provider dentro do lote
+            |--------------------------------------------------------------------------
+            | Como a reanálise reaproveita as análises existentes, o status atual de
+            | cada análise representa a rodada atual.
+            */
+            $completed = $analyses
+                ->whereIn('status', ['approved', 'rejected'])
+                ->count();
 
-        $failed = $batch->analyses()
-            ->where('status', 'failed')
-            ->count();
+            $failed = $analyses
+                ->where('status', 'failed')
+                ->count();
 
-        $total = $batch->analyses()->count();
+            $total = max($batch->total_providers, $analyses->count());
 
-        $status = $failed > 0 && ($completed + $failed) >= $total
-            ? 'completed_with_errors'
-            : 'completed';
+            $status = $failed > 0 && ($completed + $failed) >= $total
+                ? 'completed_with_errors'
+                : 'completed';
 
-        if (($completed + $failed) < $total) {
-            $status = 'processing';
-        }
+            if ($total === 0 || ($completed + $failed) < $total) {
+                $status = 'processing';
+            }
 
-        $batch->update([
-            'status' => $status,
-            'completed_providers' => $completed,
-            'failed_providers' => $failed,
-            'finished_at' => $status !== 'processing' ? now() : null,
-        ]);
+            $batch->update([
+                'status' => $status,
+                'completed_providers' => $completed,
+                'failed_providers' => $failed,
+                'finished_at' => $status !== 'processing' ? ($batch->finished_at ?? now()) : null,
+            ]);
 
-        if ($status === 'processing') {
-            return;
-        }
+            if ($status === 'processing') {
+                return;
+            }
 
-        /*
-        |--------------------------------------------------------------------------
-        | Evita e-mail/tag duplicados
-        |--------------------------------------------------------------------------
-        | Este Job pode ser disparado pelo RunProviderAnalysisJob e pelo finally()
-        | do Bus::batch. O evento email_queued funciona como trava da rodada.
-        */
-        $this->queueCompletionJobs($batch);
+            /*
+            |--------------------------------------------------------------------------
+            | Evita e-mail/tag duplicados
+            |--------------------------------------------------------------------------
+            | Este Job pode ser disparado pelo RunProviderAnalysisJob e pelo finally()
+            | do Bus::batch. O evento email_queued funciona como trava da rodada.
+            */
+            $this->queueCompletionJobs($batch);
+        });
     }
 
     /**
