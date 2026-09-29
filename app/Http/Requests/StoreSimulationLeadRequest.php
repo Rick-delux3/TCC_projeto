@@ -77,6 +77,7 @@ class StoreSimulationLeadRequest extends FormRequest
             'aceite_termos' => ['accepted'],
 
             'nome' => ['required', 'string', 'min:3', 'max:255'],
+            'data_nascimento' => ['bail', 'required', 'string', 'date_format:Y-m-d', 'before_or_equal:today'],
             'email' => ['required', 'string', 'email:rfc', 'max:255'],
             'tel' => ['required', 'string', 'min:10', 'max:11'],
 
@@ -198,6 +199,10 @@ class StoreSimulationLeadRequest extends FormRequest
         */
 
             'nome.required' => 'Informe o nome completo.',
+            'data_nascimento.required' => 'Informe a data de nascimento.',
+            'data_nascimento.string' => 'Informe uma data de nascimento válida.',
+            'data_nascimento.date_format' => 'Informe uma data de nascimento válida.',
+            'data_nascimento.before_or_equal' => 'A data de nascimento não pode estar no futuro.',
             'nome.string' => 'O nome deve ser um texto válido.',
             'nome.min' => 'O nome deve ter pelo menos :min caracteres.',
             'nome.max' => 'O nome não pode ter mais de :max caracteres.',

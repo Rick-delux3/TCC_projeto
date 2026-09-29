@@ -31,6 +31,7 @@ class Lead extends Model
         'company_id',
         'tipo_solicitante',
         'cpf',
+        'data_nascimento',
         'tipo_locacao',
         'descrever_atividade',
         'estado_civil',
@@ -71,6 +72,7 @@ class Lead extends Model
     ];
 
     protected $casts = [
+        'data_nascimento' => 'date:Y-m-d',
         'data_edited_at' => 'datetime',
         'tipo_locacao' => TipoLocacao::class,
         'leadlovers_lead_id' => 'integer',

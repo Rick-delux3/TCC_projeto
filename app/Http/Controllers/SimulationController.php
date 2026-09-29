@@ -573,6 +573,7 @@ class SimulationController extends Controller
             'nome' => $data['nome'],
             'email' => $data['email'],
             'cpf' => $request->hasCompanyDocument() ? null : ($data['cpf'] ?? null),
+            'data_nascimento' => $data['data_nascimento'],
             'tipo_locacao' => $data['tipo_locacao'],
             'descrever_atividade' => $data['descrever_atividade'] ?? null,
             'tel' => $data['tel'] ?? null,
@@ -743,9 +744,10 @@ class SimulationController extends Controller
         $relationships = ['lead_empresa', 'endereco', 'despesas', 'conjuge', 'locador', 'imobiliariaInformada'];
         $lead->load($relationships);
         $data = $lead->only([
-            'nome', 'email', 'cpf', 'tipo_locacao', 'descrever_atividade', 'tel',
+            'nome', 'email', 'cpf', 'data_nascimento', 'tipo_locacao', 'descrever_atividade', 'tel',
             'estado_civil', 'aceite_termos', 'observacoes',
         ]);
+        $data['data_nascimento'] = $lead->data_nascimento?->toDateString();
 
         foreach ($relationships as $relationship) {
             $details = $lead->getRelation($relationship);

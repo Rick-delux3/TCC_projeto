@@ -38,6 +38,7 @@ function publicOverwritePayload(string $email, array $overrides = []): array
         'email' => $email,
         'tel' => '11911112222',
         'cpf' => '52998224725',
+        'data_nascimento' => '1992-02-29',
         'estado_civil' => 'solteiro',
         'valor_aluguel' => '9999',
         'cep' => '22041001',
@@ -103,6 +104,7 @@ function assertPublicSubmissionDidNotOverwrite(Lead $lead): void
 
     expect($lead)
         ->nome->toBe('Nome protegido')
+        ->data_nascimento->toBeNull()
         ->tel->toBe('11988887777')
         ->estado_civil->toBe('casado')
         ->status->toBe('em_analise')
@@ -338,7 +340,7 @@ it('marks only actual simulation data edits and keeps filter membership consiste
         'responsavel_telefone' => '11912345678',
     ]);
     if ($change === 'remove spouse') {
-        $payload = array_merge($payload, ['estado_civil' => 'casado', 'conjuge_nome' => 'Spouse', 'conjuge_cpf' => '52998224725']);
+        $payload = array_merge($payload, ['estado_civil' => 'casado', 'conjuge_nome' => 'Spouse', 'conjuge_cpf' => '11144477735']);
     }
     if ($change === 'company document') {
         $payload = array_merge($payload, ['cpf' => '11222333000181', 'cpf_responsavel' => '52998224725', 'nome_responsavel' => 'Representative']);
@@ -357,7 +359,7 @@ it('marks only actual simulation data edits and keeps filter membership consiste
         'name' => ['nome' => 'Changed Name'],
         'address' => ['numero' => '1234'],
         'expenses' => ['valor_aluguel' => '2000'],
-        'add spouse' => ['estado_civil' => 'casado', 'conjuge_nome' => 'Spouse', 'conjuge_cpf' => '52998224725'],
+        'add spouse' => ['estado_civil' => 'casado', 'conjuge_nome' => 'Spouse', 'conjuge_cpf' => '11144477735'],
         'remove spouse' => ['estado_civil' => 'solteiro', 'conjuge_nome' => null, 'conjuge_cpf' => null],
         'company document' => ['nome_responsavel' => 'Another Representative'],
         'responsible' => ['responsavel_telefone' => '21912345678'],
