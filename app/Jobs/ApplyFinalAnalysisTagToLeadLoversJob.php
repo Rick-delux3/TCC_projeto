@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Events\DashboardActivityChanged;
 use App\Exceptions\LeadLoversApiException;
 use App\Exceptions\PermanentLeadTagException;
 use App\Models\InsuranceAnalysis;
@@ -14,7 +15,6 @@ use App\Services\LeadLoversApiClient;
 use App\Services\LeadLoversResultTagService;
 use App\Services\LeadLoversTagOperationCoordinator;
 use App\Services\RejectedLeadRetentionService;
-use App\Events\DashboardActivityChanged;
 use App\Support\ManualLeadResultTags;
 use DateTimeInterface;
 use Illuminate\Contracts\Queue\ShouldBeUniqueUntilProcessing;
@@ -413,17 +413,16 @@ class ApplyFinalAnalysisTagToLeadLoversJob implements ShouldBeUniqueUntilProcess
             $coordinator->completeCurrent(
                 $lead->id,
                 $state->version,
-                fn (LeadLoversTagOperation $lockedState): bool =>
-                    $this->persistConfirmedTag(
-                        batch: $batch,
-                        resultTags: $resultTags,
-                        catalog: $catalog,
-                        selectedTag: $selectedTag,
-                        tagKey: $operationTagKey,
-                        retention: $retention,
-                        remoteTags: $remoteTags,
-                        operationVersion: $lockedState->version,
-                    )
+                fn (LeadLoversTagOperation $lockedState): bool => $this->persistConfirmedTag(
+                    batch: $batch,
+                    resultTags: $resultTags,
+                    catalog: $catalog,
+                    selectedTag: $selectedTag,
+                    tagKey: $operationTagKey,
+                    retention: $retention,
+                    remoteTags: $remoteTags,
+                    operationVersion: $lockedState->version,
+                )
             );
 
             return;
@@ -587,7 +586,6 @@ class ApplyFinalAnalysisTagToLeadLoversJob implements ShouldBeUniqueUntilProcess
                 $resourceId = (int) $lead->id;
 
                 $companyId = $lead->company_id !== null ? (int) $lead->company_id : null;
-
 
                 DashboardActivityChanged::dispatch(
                     'lead',
@@ -843,22 +841,11 @@ class ApplyFinalAnalysisTagToLeadLoversJob implements ShouldBeUniqueUntilProcess
     ): ?string {
         $statuses = $batch->analyses
             ->pluck('status')
-            ->filter()
-            ->map(fn (mixed $status): string => mb_strtolower((string) $status))
+            ->map(fn (mixed $status): string => mb_strtolower(trim((string) $status)))
             ->values();
 
         if ($statuses->isEmpty()) {
             return null;
-        }
-
-        if ($statuses->contains(fn (string $status): bool => in_array(
-            $status,
-            ['approved', 'quoted'],
-            true
-        ))) {
-            return ManualLeadResultTags::leadloversKey(
-                ManualLeadResultTags::APPROVED
-            );
         }
 
         if ($statuses->contains(fn (string $status): bool => in_array(
@@ -870,13 +857,17 @@ class ApplyFinalAnalysisTagToLeadLoversJob implements ShouldBeUniqueUntilProcess
                 'running',
                 'manual_review',
                 'underanalysis',
-                'failed',
-                'error',
+                'under_analysis',
+                'preapproved',
             ],
             true
         ))) {
+            return null;
+        }
+
+        if ($statuses->contains('approved')) {
             return ManualLeadResultTags::leadloversKey(
-                ManualLeadResultTags::IN_NEGOTIATION
+                ManualLeadResultTags::APPROVED
             );
         }
 

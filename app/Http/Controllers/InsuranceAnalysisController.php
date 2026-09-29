@@ -49,7 +49,7 @@ class InsuranceAnalysisController extends Controller
             ->count();
 
         $approvedAnalyses = InsuranceAnalysis::where('company_id', $companyId)
-            ->whereIn('status', ['approved', 'Approved', 'quoted'])
+            ->whereIn('status', ['approved', 'Approved'])
             ->count();
 
         $rejectedAnalyses = InsuranceAnalysis::where('company_id', $companyId)
@@ -281,7 +281,7 @@ class InsuranceAnalysisController extends Controller
                 ->count(),
 
             'approvedAnalyses' => (clone $analysisStatsQuery)
-                ->whereIn('status', ['approved', 'Approved', 'quoted'])
+                ->whereIn('status', ['approved', 'Approved'])
                 ->count(),
 
             'rejectedAnalyses' => (clone $analysisStatsQuery)

@@ -2,10 +2,10 @@
 
 namespace App\Services\Insurance;
 
-use App\Models\Lead;
 use App\Models\InsuranceAnalysis;
-use App\Services\PottencialService;
+use App\Models\Lead;
 use App\Services\Insurance\Payloads\RentalGuaranteeQuotePayloadBuilder;
+use App\Services\PottencialService;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
 
@@ -115,7 +115,7 @@ class InsuranceAnalysisService
 
     public function syncStatus(InsuranceAnalysis $analysis): InsuranceAnalysis
     {
-        if (!$analysis->quote_id) {
+        if (! $analysis->quote_id) {
             $analysis->events()->create([
                 'event_type' => 'failed',
                 'status' => 'failed',
@@ -139,7 +139,7 @@ class InsuranceAnalysisService
     ): void {
         $response = $result['response'] ?? [];
 
-        if (!($result['success'] ?? false)) {
+        if (! ($result['success'] ?? false)) {
             $analysis->update([
                 'status' => 'failed',
                 'result' => null,
@@ -167,8 +167,8 @@ class InsuranceAnalysisService
 
         $pottencialStatus = $this->extractProviderStatus($response);
 
-        $internalStatus = $this->mapInternalStatus($pottencialStatus);
-        $resultStatus = $this->mapResultStatus($pottencialStatus);
+        $internalStatus = ProviderAnalysisStatus::fromProviderStatus($pottencialStatus);
+        $resultStatus = ProviderAnalysisStatus::result($internalStatus);
 
         $analysis->update([
             'status' => $internalStatus,
@@ -191,6 +191,8 @@ class InsuranceAnalysisService
 
             'response_payload' => $response,
 
+            'error_message' => ProviderAnalysisStatus::errorMessage($internalStatus),
+
             'finished_at' => in_array($internalStatus, ['approved', 'rejected', 'failed'])
                 ? now()
                 : $analysis->finished_at,
@@ -204,26 +206,6 @@ class InsuranceAnalysisService
                 : 'Retorno da análise recebido da Pottencial.',
             'response' => $response,
         ]);
-    }
-
-    private function mapInternalStatus(?string $pottencialStatus): string
-    {
-        return match ($pottencialStatus) {
-            'Approved' => 'approved',
-            'Denied' => 'rejected',
-            'UnderAnalysis', 'Pending' => 'manual_review',
-            default => 'quoted',
-        };
-    }
-
-    private function mapResultStatus(?string $pottencialStatus): ?string
-    {
-        return match ($pottencialStatus) {
-            'Approved' => 'approved',
-            'Denied' => 'rejected',
-            'UnderAnalysis', 'Pending' => 'manual_review',
-            default => null,
-        };
     }
 
     private function ensureEnabled(): void
@@ -368,7 +350,7 @@ class InsuranceAnalysisService
             'data.status',
         ]);
 
-        return $value !== null ? (string) $value : null;
+        return is_string($value) ? $value : null;
     }
 
     private function extractQuoteIdFromResponse(array $response): ?string

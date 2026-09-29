@@ -2,13 +2,8 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use App\Models\Lead;
-use App\Models\Imobiliaria;
-use App\Models\InsuranceAnalysisEvent;
-use App\Models\InsuranceAnalysisBatch;
-
+use Illuminate\Database\Eloquent\Model;
 
 class InsuranceAnalysis extends Model
 {
@@ -85,8 +80,8 @@ class InsuranceAnalysis extends Model
 
     ];
 
-
-    public function batch(){
+    public function batch()
+    {
         return $this->lote();
     }
 
@@ -94,12 +89,14 @@ class InsuranceAnalysis extends Model
     {
         return $this->belongsTo(InsuranceAnalysisBatch::class, 'insurance_analysis_batch_id');
     }
-    
-    public function lead(){
+
+    public function lead()
+    {
         return $this->belongsTo(Lead::class);
     }
 
-    public function company(){
+    public function company()
+    {
         return $this->imobiliaria();
     }
 
@@ -108,7 +105,8 @@ class InsuranceAnalysis extends Model
         return $this->belongsTo(Imobiliaria::class, 'company_id');
     }
 
-    public function events(){
+    public function events()
+    {
         return $this->eventos();
     }
 
@@ -119,20 +117,17 @@ class InsuranceAnalysis extends Model
 
     public function isApprovedResult(): bool
     {
-        return in_array(mb_strtolower((string) $this->status),
-        [
-            'approved',
-            'quoted',
-        ], true);
+        return mb_strtolower(trim((string) $this->status)) === 'approved';
     }
+
     public function isRejectedResult(): bool
     {
         return in_array(mb_strtolower((string) $this->status),
-        [
-            'rejected',
-            'denied',
-            'refused',
-        ], true);
+            [
+                'rejected',
+                'denied',
+                'refused',
+            ], true);
     }
 
     public function hasFinalResultForReanalysis(): bool
@@ -162,6 +157,4 @@ class InsuranceAnalysis extends Model
             ?? data_get($this->response_payload, 'numeroProposta')
             ?? $this->proposal_id;
     }
-
-
 }

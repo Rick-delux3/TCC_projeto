@@ -3,20 +3,22 @@
 namespace App\Jobs;
 
 use App\Models\InsuranceAnalysis;
+use App\Services\Insurance\ProviderAnalysisStatus;
 use App\Services\Insurance\Providers\InsuranceProviderResolver;
 use Illuminate\Bus\Batchable;
 use Illuminate\Bus\Queueable;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\Log;
 
 class RunProviderAnalysisJob implements ShouldQueue
 {
-    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels, Batchable;
+    use Batchable, Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public int $tries = 3;
+
     public int $timeout = 180;
 
     public function __construct(
@@ -34,8 +36,6 @@ class RunProviderAnalysisJob implements ShouldQueue
             return;
         }
 
-        
-
         $analysis = InsuranceAnalysis::with([
             'lead.company',
             'lead.endereco',
@@ -46,7 +46,6 @@ class RunProviderAnalysisJob implements ShouldQueue
             'batch',
         ])->findOrFail($this->analysisId);
 
-        
         $analysis->update([
             'status' => 'processing',
             'requested_at' => now(),
@@ -64,14 +63,14 @@ class RunProviderAnalysisJob implements ShouldQueue
 
         try {
             $provider = $resolver->resolve($analysis->provider);
-            
-            if($this->isReanalysis) {
+
+            if ($this->isReanalysis) {
                 $result = $provider->requestReanalysis(
                     analysis: $analysis,
                     attemptId: $this->attemptId,
                     options: $this->options ?? []
 
-                ); 
+                );
             } else {
                 $result = $provider->requestAnalysis(
                     analysis: $analysis,
@@ -91,6 +90,7 @@ class RunProviderAnalysisJob implements ShouldQueue
         } catch (\Throwable $e) {
             $analysis->update([
                 'status' => 'failed',
+                'result' => null,
                 'error_message' => $e->getMessage(),
                 'finished_at' => now(),
             ]);
@@ -133,10 +133,10 @@ class RunProviderAnalysisJob implements ShouldQueue
             'error' => $result['error'] ?? null,
         ];
 
-        if (!($result['success'] ?? false)) {
+        if (! ($result['success'] ?? false)) {
             $currentPayload = $this->payloadAsArray(
-            $analysis->response_payload
-        );
+                $analysis->response_payload
+            );
 
             $responsePayload = $isToo
                 ? array_merge($currentPayload, [
@@ -149,6 +149,7 @@ class RunProviderAnalysisJob implements ShouldQueue
 
             $analysis->update([
                 'status' => 'failed',
+                'result' => null,
                 'response_payload' => $responsePayload,
                 'error_message' => $result['error']
                     ?? (
@@ -177,7 +178,7 @@ class RunProviderAnalysisJob implements ShouldQueue
             return;
         }
 
-        if($isToo) {
+        if ($isToo) {
             $this->applyTooResult($analysis, $result, $debugPayload);
 
             return;
@@ -186,14 +187,14 @@ class RunProviderAnalysisJob implements ShouldQueue
         $providerStatus = $this->extractProviderStatus($response);
         $quoteId = $this->extractQuoteIdFromResponse($response);
 
-        if (!$quoteId) {
+        if (! $quoteId) {
             $quoteId = $this->extractQuoteIdFromHeaders($headers);
         }
 
         if (empty($response)) {
             $analysis->update([
-                'status' => 'manual_review',
-                'result' => 'manual_review',
+                'status' => 'failed',
+                'result' => null,
                 'provider_status' => 'CreatedWithoutBody',
                 'quote_id' => $quoteId,
 
@@ -204,8 +205,8 @@ class RunProviderAnalysisJob implements ShouldQueue
 
             $analysis->events()->create([
                 'event_type' => $this->isReanalysis ? 'reanalysis_created_without_body' : 'created_without_body',
-                'status' => 'manual_review',
-                'message' => "A API retornou HTTP {$httpStatus}, mas sem JSON útil. A análise foi marcada como em negociação.",
+                'status' => 'failed',
+                'message' => "A API retornou HTTP {$httpStatus}, mas sem JSON útil. Não foi possível identificar a decisão da análise.",
                 'payload' => $this->analysisSnapshot($analysis),
                 'response' => $debugPayload,
             ]);
@@ -215,9 +216,10 @@ class RunProviderAnalysisJob implements ShouldQueue
             return;
         }
 
-        if (!$providerStatus && !$quoteId) {
+        if (! $providerStatus && ! $quoteId) {
             $analysis->update([
                 'status' => 'failed',
+                'result' => null,
                 'response_payload' => $debugPayload,
                 'error_message' => 'Resposta recebida, mas sem status e sem quoteId.',
                 'finished_at' => now(),
@@ -236,19 +238,12 @@ class RunProviderAnalysisJob implements ShouldQueue
             return;
         }
 
-        $internalStatus = match ($providerStatus) {
-            'Approved' => 'approved',
-            'Denied' => 'rejected',
-            'UnderAnalysis', 'Pending' => 'manual_review',
-            default => 'quoted',
-        };
+        $internalStatus = ProviderAnalysisStatus::fromProviderStatus($providerStatus);
 
         $analysis->update([
             'status' => $internalStatus,
 
-            'result' => in_array($internalStatus, ['approved', 'rejected', 'manual_review'], true)
-                ? $internalStatus
-                : null,
+            'result' => ProviderAnalysisStatus::result($internalStatus),
 
             'provider_status' => $providerStatus,
             'quote_id' => $quoteId ?? $analysis->quote_id,
@@ -265,7 +260,7 @@ class RunProviderAnalysisJob implements ShouldQueue
             'insured_amount' => $this->extractInsuredAmount($response) ?? $analysis->insured_amount,
 
             'response_payload' => $debugPayload,
-            'error_message' => null,
+            'error_message' => ProviderAnalysisStatus::errorMessage($internalStatus),
             'finished_at' => now(),
         ]);
 
@@ -550,7 +545,7 @@ class RunProviderAnalysisJob implements ShouldQueue
 
     private function dispatchBatchCompletionCheck(InsuranceAnalysis $analysis): void
     {
-        if (!$analysis->insurance_analysis_batch_id) {
+        if (! $analysis->insurance_analysis_batch_id) {
             return;
         }
 
@@ -598,7 +593,7 @@ class RunProviderAnalysisJob implements ShouldQueue
             'too.status.response.statusProposta',
         ]);
 
-        return $value !== null ? (string) $value : null;
+        return is_string($value) ? $value : null;
     }
 
     private function extractQuoteIdFromResponse(array $response): ?string
@@ -725,7 +720,7 @@ class RunProviderAnalysisJob implements ShouldQueue
             ?? $headers['location'][0]
             ?? null;
 
-        if (!$location) {
+        if (! $location) {
             return null;
         }
 

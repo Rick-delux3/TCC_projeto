@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Models\InsuranceAnalysis;
+use App\Services\Insurance\ProviderAnalysisStatus;
 use App\Services\Insurance\Providers\InsuranceProviderResolver;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -77,10 +78,10 @@ class SyncProviderAnalysisStatusJob implements ShouldQueue
 
         $isToo = strtolower((string) $analysis->provider) === 'too';
 
-
-        if (!$isToo && !$analysis->quote_id) {
+        if (! $isToo && ! $analysis->quote_id) {
             $analysis->update([
                 'status' => 'failed',
+                'result' => null,
                 'error_message' => 'Não foi possível sincronizar: quote_id não encontrado.',
                 'finished_at' => now(),
             ]);
@@ -96,7 +97,7 @@ class SyncProviderAnalysisStatusJob implements ShouldQueue
             return;
         }
 
-        if($isToo && !$analysis->proposal_id){
+        if ($isToo && ! $analysis->proposal_id) {
             $analysis->update([
                 'status' => 'failed',
                 'error_message' => 'Não foi possível sincronizar: proposal_id não encontrado.',
@@ -156,11 +157,11 @@ class SyncProviderAnalysisStatusJob implements ShouldQueue
              * Aplica o resultado recebido no banco.
              */
 
-            if($isToo){
+            if ($isToo) {
                 $this->applyTooResult($analysis, $result);
-                return;
-            } 
 
+                return;
+            }
 
             $this->applyResult($analysis, $result);
         } catch (\Throwable $e) {
@@ -170,6 +171,7 @@ class SyncProviderAnalysisStatusJob implements ShouldQueue
              */
             $analysis->update([
                 'status' => 'failed',
+                'result' => null,
                 'error_message' => $e->getMessage(),
                 'finished_at' => now(),
             ]);
@@ -212,9 +214,10 @@ class SyncProviderAnalysisStatusJob implements ShouldQueue
          * Se a API retornou erro ou o provider sinalizou success false,
          * marcamos a análise como failed.
          */
-        if (!($result['success'] ?? false)) {
+        if (! ($result['success'] ?? false)) {
             $analysis->update([
                 'status' => 'failed',
+                'result' => null,
                 'response_payload' => $response,
                 'error_message' => is_array($response)
                     ? json_encode($response, JSON_UNESCAPED_UNICODE)
@@ -248,13 +251,13 @@ class SyncProviderAnalysisStatusJob implements ShouldQueue
         /*
          * Converte o status da companhia para status interno do seu sistema.
          */
-        $internalStatus = $this->mapInternalStatus($providerStatus);
+        $internalStatus = ProviderAnalysisStatus::fromProviderStatus($providerStatus);
 
         /*
          * Resultado final simplificado.
          * Esse campo é usado para dashboard e regras de negócio.
          */
-        $resultStatus = $this->mapResultStatus($internalStatus);
+        $resultStatus = ProviderAnalysisStatus::result($internalStatus);
 
         $analysis->update([
             /*
@@ -297,7 +300,7 @@ class SyncProviderAnalysisStatusJob implements ShouldQueue
             /*
              * Salva a resposta completa para auditoria/debug.
              */
-            'response_payload' => array_merge($currentPayload,[
+            'response_payload' => array_merge($currentPayload, [
                 'sync_latest' => $response,
             ]),
 
@@ -310,7 +313,7 @@ class SyncProviderAnalysisStatusJob implements ShouldQueue
             /*
              * Limpa mensagem de erro anterior, se a sincronização deu certo.
              */
-            'error_message' => null,
+            'error_message' => ProviderAnalysisStatus::errorMessage($internalStatus),
         ]);
 
         $analysis->events()->create([
@@ -349,7 +352,7 @@ class SyncProviderAnalysisStatusJob implements ShouldQueue
             $currentPayload = json_decode($currentPayload, true) ?: [];
         }
 
-        if (!($result['success'] ?? false)) {
+        if (! ($result['success'] ?? false)) {
             $analysis->update([
                 'status' => 'manual_review',
                 'provider_status' => 'Erro ao verificar status manual da Too',
@@ -539,48 +542,6 @@ class SyncProviderAnalysisStatusJob implements ShouldQueue
     }
 
     /**
-     * Converte status da companhia para status interno do sistema.
-     */
-    private function mapInternalStatus(?string $providerStatus): string
-    {
-        return match ($providerStatus) {
-            /*
-             * Status da Pottencial.
-             */
-            'Approved' => 'approved',
-            'Denied' => 'rejected',
-            'UnderAnalysis', 'Pending' => 'manual_review',
-
-            /*
-             * Caso outras companhias retornem status já parecidos.
-             */
-            'approved' => 'approved',
-            'rejected', 'denied' => 'rejected',
-            'manual_review', 'under_analysis', 'pending' => 'manual_review',
-            'failed' => 'failed',
-
-            /*
-             * Se não reconheceu, mas a chamada foi sucesso,
-             * consideramos como cotado/recebido.
-             */
-            default => 'quoted',
-        };
-    }
-
-    /**
-     * Converte status interno para resultado final simplificado.
-     */
-    private function mapResultStatus(string $internalStatus): ?string
-    {
-        return match ($internalStatus) {
-            'approved' => 'approved',
-            'rejected' => 'rejected',
-            'manual_review' => 'manual_review',
-            default => null,
-        };
-    }
-
-    /**
      * Tenta extrair o valor do orçamento/prêmio da resposta.
      *
      * Como cada companhia pode retornar nomes diferentes,
@@ -610,7 +571,7 @@ class SyncProviderAnalysisStatusJob implements ShouldQueue
             'data.status',
         ]);
 
-        return $value !== null ? (string) $value : null;
+        return is_string($value) ? $value : null;
     }
 
     private function extractQuoteIdFromResponse(array $response): ?string
@@ -732,7 +693,7 @@ class SyncProviderAnalysisStatusJob implements ShouldQueue
      */
     private function dispatchBatchCompletionCheck(InsuranceAnalysis $analysis): void
     {
-        if (!$analysis->insurance_analysis_batch_id) {
+        if (! $analysis->insurance_analysis_batch_id) {
             return;
         }
 
