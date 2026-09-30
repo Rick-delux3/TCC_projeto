@@ -35,6 +35,22 @@ function workspaceDocument(string $html): DOMXPath
     return new DOMXPath($document);
 }
 
+it('offers the shared theme control on every admin page for both brands', function (string $brand): void {
+    config(['branding.active' => $brand]);
+    $this->actingAs(workspaceAdmin(), 'admin');
+    $member = workspaceAdmin(['role' => Corretor::ROLE_INTEGRANTE]);
+
+    foreach (['Dashboard-Admin', 'admin.config-equipe.index', 'admin.config-equipe.create', 'admin.config-equipe.edit', 'admin.imobiliarias.index', 'admin.imobiliarias.create'] as $route) {
+        $parameters = $route === 'admin.config-equipe.edit' ? [$member] : [];
+        $response = $this->get(route($route, $parameters))->assertOk();
+        $xpath = workspaceDocument($response->getContent());
+
+        expect($xpath->query('//body[@data-brand="'.$brand.'"]')->length)->toBe(1)
+            ->and($xpath->query('//header//button[@data-dashboard-theme-toggle][@type="button"][@aria-label="Modo escuro"]')->length)->toBe(1)
+            ->and($xpath->query('//div[contains(concat(" ", normalize-space(@class), " "), " dashboard-shell ")]')->length)->toBe(1);
+    }
+})->with(['tcc', 'client']);
+
 it('renders real navigation and the active section on each redesigned page', function (string $route, string $title, string $active): void {
     $this->actingAs(workspaceAdmin(), 'admin');
     $response = $this->get(route($route))->assertOk()->assertSee($title);

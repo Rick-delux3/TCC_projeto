@@ -121,6 +121,17 @@
             </a>
 
             <div class="dashboard-header-actions">
+                <button
+                    type="button"
+                    class="btn dashboard-header-theme-toggle"
+                    data-dashboard-theme-toggle
+                    aria-label="Modo escuro"
+                    aria-pressed="false"
+                    title="Modo escuro"
+                >
+                    <i class="bi bi-moon" data-dashboard-theme-icon aria-hidden="true"></i>
+                </button>
+
                 @if ($brandProfile === 'tcc')
                     @include('layout-inicial.partials.dashboard-header-notifications', [
                         'notificationCount' => $notificationCount,

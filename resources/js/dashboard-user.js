@@ -1,7 +1,9 @@
 import { initializeAdminLeadFields } from './admin-lead-fields';
 import { initializeLeadCompanyLink } from './admin-lead-company';
+import { initializeDashboardTheme } from './dashboard-theme';
 
 document.addEventListener('DOMContentLoaded', function () {
+    initializeDashboardTheme();
     document.querySelectorAll('[data-admin-lead-fields]').forEach(initializeAdminLeadFields);
     initializeLeadCompanyLink();
     const configElement = document.getElementById('dashboardUserConfig');
@@ -22,10 +24,6 @@ document.addEventListener('DOMContentLoaded', function () {
     const serverHasUnsavedInput =
         realtimeConfig?.hasUnsavedInput === true;
 
-    const dashboardThemeRoot = document.getElementById('dashboardThemeRoot');
-    const dashboardThemeToggle = document.getElementById('dashboardThemeToggle');
-    const dashboardThemeStorageKey = 'dashboard-theme';
-
     const dashboardLeadAccessCodeCopyButton = document.getElementById('dashboardLeadAccessCodeCopyButton');
     const dashboardLeadAccessCodeInput = document.getElementById('dashboardLeadAccessCode');
 
@@ -33,50 +31,6 @@ document.addEventListener('DOMContentLoaded', function () {
     const dashboardLeadFormInput = document.getElementById('dashboardLeadFormLink');
     const dashboardLeadFormCopyStatus = document.getElementById('dashboardLeadFormCopyStatus');
     const dashboardLeadFormOpenButton = document.getElementById('dashboardLeadFormOpenButton');
-
-    /*
-    |--------------------------------------------------------------------------
-    | Tema claro/escuro do dashboard
-    |--------------------------------------------------------------------------
-    */
-    function applyDashboardTheme(theme) {
-        if(!dashboardThemeRoot || !dashboardThemeToggle) {
-            return;
-        }
-
-
-        const normalizeTheme = (theme === 'dark' ? 'dark' : 'light');
-        dashboardThemeRoot.setAttribute('data-dashboard-theme', normalizeTheme);
-
-        dashboardThemeToggle.textContent = normalizeTheme === 'dark' ? 'Modo claro' : 'Modo escuro';
-        dashboardThemeToggle.classList.toggle('btn-outline-light', normalizeTheme === 'dark');
-        dashboardThemeToggle.classList.toggle('btn-outline-secondary', normalizeTheme !== 'dark');
-    } 
-
-    if (dashboardThemeRoot && dashboardThemeToggle) {
-        let savedTheme = 'light';
-
-        try {
-            savedTheme = localStorage.getItem(dashboardThemeStorageKey) || 'light';
-        } catch (error) {
-            savedTheme = 'light';
-        }
-
-        applyDashboardTheme(savedTheme);
-
-        dashboardThemeToggle.addEventListener('click', function () {
-            const currentTheme = dashboardThemeRoot.getAttribute('data-dashboard-theme') || 'light';
-            const nextTheme = currentTheme === 'dark' ? 'light' : 'dark';
-
-            try {
-                localStorage.setItem(dashboardThemeStorageKey, nextTheme);
-            } catch (error) {
-                console.warn('Não foi possível salvar o tema no navegador.', error);
-            }
-
-            applyDashboardTheme(nextTheme);
-        });
-    }
 
     /*
     |--------------------------------------------------------------------------
