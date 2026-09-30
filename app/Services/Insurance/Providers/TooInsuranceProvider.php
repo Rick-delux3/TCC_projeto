@@ -43,7 +43,7 @@ class TooInsuranceProvider implements InsuranceProviderInterface
             );
         }
 
-        $cpf = $this->onlyNumbers($lead->cpf);
+        $cpf = $lead->rentalApplicantCpf();
 
         if (! $cpf) {
             return $this->failResult(
@@ -54,7 +54,7 @@ class TooInsuranceProvider implements InsuranceProviderInterface
 
         if (! $lead->canBeSentToToo()) {
             return $this->failResult(
-                message: 'Lead não enviado para Too: tipo_solicitante ou CPF incompatível com o fluxo da Too.',
+                message: 'CPF do pretendente/responsável ou finalidade da locação inválidos para a Too.',
                 step: 'validate_eligibility',
             );
         }
@@ -224,7 +224,7 @@ class TooInsuranceProvider implements InsuranceProviderInterface
             );
         }
 
-        $cpf = $this->onlyNumbers($lead->cpf);
+        $cpf = $lead->rentalApplicantCpf();
 
         if (! $cpf) {
             return $this->failResult(
@@ -247,6 +247,8 @@ class TooInsuranceProvider implements InsuranceProviderInterface
                 ]
             );
         }
+
+        $basicDataPayload = $this->payloadBuilder->buildBasicDataPayload($analysis);
 
         $statusBeforeResponse = $this->tooService->getProposalStatus(
             cpf: $cpf,
@@ -281,8 +283,6 @@ class TooInsuranceProvider implements InsuranceProviderInterface
                 ]
             );
         }
-
-        $basicDataPayload = $this->payloadBuilder->buildBasicDataPayload($analysis);
 
         $updateBasicDataResponse = $this->tooService->updateProposalBasicData(
             numeroFicha: $numeroFicha,
@@ -401,7 +401,7 @@ class TooInsuranceProvider implements InsuranceProviderInterface
 
         $lead = $analysis->lead;
 
-        $cpf = $this->onlyNumbers($lead?->cpf);
+        $cpf = $lead?->rentalApplicantCpf() ?? '';
 
         $currentPayload = $analysis->providerResponsePayload();
         $numeroProposta = $analysis->tooNumeroProposta();
@@ -409,7 +409,7 @@ class TooInsuranceProvider implements InsuranceProviderInterface
 
         if (
             ! $lead
-            || blank($cpf)
+            || preg_match('/^[0-9]{11}$/D', $cpf) !== 1
             || blank($numeroProposta)
         ) {
             return $this->failResult(
@@ -737,6 +737,7 @@ class TooInsuranceProvider implements InsuranceProviderInterface
     private function loadTooRelations(InsuranceAnalysis $analysis): void
     {
         $analysis->loadMissing([
+            'lead.lead_empresa',
             'lead.company',
             'lead.endereco',
             'lead.despesas',

@@ -263,21 +263,30 @@ class Lead extends Model
         return $this->reanalysis_unlocked_at->gt($lastAnalysis->created_at);
     }
 
-    public function canBeSentToToo()
+    public function rentalApplicantDocument(): string
     {
-        if (! filled($this->cpf)) {
-            return false;
-        }
+        return (string) \App\Rules\CpfOrCnpj::normalize($this->lead_empresa ? ($this->lead_empresa->cnpj ?? '') : ($this->cpf ?? ''));
+    }
 
-        if ($this->tipo_solicitante === 'locador') {
-            return false;
-        }
+    public function rentalApplicantCpf(): string
+    {
+        return (string) \App\Rules\CpfOrCnpj::normalize($this->lead_empresa ? $this->lead_empresa->cpf_responsavel : ($this->cpf ?? ''));
+    }
 
-        return in_array($this->tipo_solicitante, [
-            'imobiliaria_cadastrada',
-            'imobiliaria_nao_cadastrada',
-            'locatario',
-        ], true);
+    public function rentalApplicantNameForCpf(): string
+    {
+        return trim((string) ($this->lead_empresa ? $this->lead_empresa->nome_responsavel : $this->nome));
+    }
+
+    public function rentalGuaranteeProduct(): string
+    {
+        return 'fianca_locaticia'.($this->tipo_locacao ? '_'.$this->tipo_locacao->value : '');
+    }
+
+    public function canBeSentToToo(): bool
+    {
+        return preg_match('/^[0-9]{11}$/D', $this->rentalApplicantCpf()) === 1
+            && $this->tipo_locacao !== null;
     }
 
     public function hasFinalInsuranceResultForReanalysis(): bool

@@ -26,8 +26,6 @@ class StartInsuranceAnalysesBatchJob implements ShouldQueue
 
     public int $timeout = 120;
 
-    private const PRODUCT_KEY = 'fianca_locaticia_residencial';
-
     public function __construct(
         public int $leadId,
         public bool $isReanalysis = false
@@ -155,7 +153,7 @@ class StartInsuranceAnalysesBatchJob implements ShouldQueue
                     ->where('insurance_analysis_batch_id', $batchModel->id)
                     ->where('lead_id', $lead->id)
                     ->where('provider', $provider)
-                    ->where('product', self::PRODUCT_KEY)
+                    ->where('product', $lead->rentalGuaranteeProduct())
                     ->first();
 
                 if (! $analysis) {
@@ -165,7 +163,7 @@ class StartInsuranceAnalysesBatchJob implements ShouldQueue
                         'company_id' => $lead->company_id,
 
                         'provider' => $provider,
-                        'product' => self::PRODUCT_KEY,
+                        'product' => $lead->rentalGuaranteeProduct(),
 
                         'status' => 'pending',
 

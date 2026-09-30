@@ -63,6 +63,7 @@ class RunProviderAnalysisJob implements ShouldQueue
         ]);
 
         try {
+            $analysis->update(['product' => $analysis->lead->rentalGuaranteeProduct()]);
             $provider = $resolver->resolve($analysis->provider);
 
             if ($this->isReanalysis) {

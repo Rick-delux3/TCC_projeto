@@ -35,6 +35,7 @@ function waitingProviderAnalysis(string $provider, string $status = 'pending'): 
     $lead = Lead::query()->create([
         'nome' => 'Teste de acompanhamento', 'email' => 'polling@example.test',
         'tipo_solicitante' => 'locatario', 'cpf' => '52998224725',
+        'tipo_locacao' => 'residencial',
     ]);
     $batch = InsuranceAnalysisBatch::query()->create([
         'lead_id' => $lead->id, 'status' => 'processing', 'total_providers' => 4,
@@ -196,7 +197,7 @@ it('keeps Too preapproval open and schedules its next consultation after creatio
 
 it('records an ineligible Too submission as a failure instead of leaving it processing forever', function () {
     $analysis = waitingProviderAnalysis('too');
-    $analysis->lead->update(['tipo_solicitante' => 'locador']);
+    $analysis->lead->update(['cpf' => null]);
     $this->mock(TooService::class)->shouldNotReceive('registerProposalFicha');
 
     (new RunProviderAnalysisJob($analysis->id, 'polling-attempt'))->handle(app(InsuranceProviderResolver::class));

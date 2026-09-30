@@ -2,9 +2,12 @@
 
 namespace App\Services\Insurance\Payloads;
 
+use App\Enums\TipoLocacao;
 use App\Models\InsuranceAnalysis;
 use App\Models\Lead;
+use App\Rules\CpfOrCnpj;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Validator;
 
 class RentalGuaranteeQuotePayloadBuilder
 {
@@ -16,6 +19,7 @@ class RentalGuaranteeQuotePayloadBuilder
          * imobiliariaVinculada() definido no model Lead.
          */
         $relations = [
+            'lead.lead_empresa',
             'lead.endereco',
             'lead.despesas',
             'lead.conjuge',
@@ -29,15 +33,21 @@ class RentalGuaranteeQuotePayloadBuilder
 
         $lead = $analysis->lead;
 
-        if (!$lead) {
+        if (! $lead) {
             throw new \RuntimeException('Lead não encontrado para montar o payload da Pottencial.');
         }
 
-        $policyHolderDocument = \only_numbers($lead->cpf ?? '');
+        $policyHolderDocument = $lead->rentalApplicantDocument();
 
-        if (!$policyHolderDocument) {
-            throw new \RuntimeException('CPF do solicitante não encontrado para envio da cotação.');
+        if (Validator::make(['document' => $policyHolderDocument], ['document' => ['required', new CpfOrCnpj]])->fails()) {
+            throw new \RuntimeException('CPF/CNPJ do pretendente inválido para envio da cotação à Pottencial.');
         }
+
+        $occupation = match ($lead->tipo_locacao) {
+            TipoLocacao::RESIDENCIAL => 'Residencial',
+            TipoLocacao::COMERCIAL => 'Commercial',
+            default => throw new \RuntimeException('Informe a finalidade residencial ou comercial da locação para a Pottencial.'),
+        };
 
         $this->validateRequiredLeadData($lead);
 
@@ -99,7 +109,7 @@ class RentalGuaranteeQuotePayloadBuilder
                         ?? config('services.pottencial.default_plan_key', 'traditional'),
 
                     'multiple' => $leaseMonths,
-                    'occupation' => 'Residencial',
+                    'occupation' => $occupation,
                     'inhabited' => (bool) $analysis->inhabited,
 
                     'tenantDocumentNumber' => $policyHolderDocument,
@@ -124,7 +134,7 @@ class RentalGuaranteeQuotePayloadBuilder
 
         $brokerDocument = \only_numbers(config('services.pottencial.broker_document'));
 
-        if (!$brokerDocument) {
+        if (! $brokerDocument) {
             throw new \RuntimeException('Documento do broker não configurado para envio da cotação.');
         }
 
@@ -235,7 +245,7 @@ class RentalGuaranteeQuotePayloadBuilder
             'zipCode' => \only_numbers($endereco?->cep ?? ''),
             'complement' => $endereco?->complemento ?? '',
             'country' => 'BRA',
-            'type' => 'Residential',
+            'type' => $lead->tipo_locacao === TipoLocacao::COMERCIAL ? 'Commercial' : 'Residential',
         ];
     }
 
@@ -355,11 +365,11 @@ class RentalGuaranteeQuotePayloadBuilder
 
     private function validateRequiredLeadData(Lead $lead): void
     {
-        if (!filled($lead->nome)) {
+        if (! filled($lead->nome)) {
             throw new \RuntimeException('Nome do solicitante não informado para envio da cotação.');
         }
 
-        if (!filled($lead->email)) {
+        if (! filled($lead->email)) {
             throw new \RuntimeException('E-mail do solicitante não informado para envio da cotação.');
         }
 
@@ -371,7 +381,7 @@ class RentalGuaranteeQuotePayloadBuilder
 
         $endereco = $lead->endereco;
 
-        if (!$endereco) {
+        if (! $endereco) {
             throw new \RuntimeException('Endereço do imóvel não encontrado para envio da cotação.');
         }
 
@@ -384,13 +394,11 @@ class RentalGuaranteeQuotePayloadBuilder
         ];
 
         foreach ($requiredAddressFields as $field => $label) {
-            if (!filled($endereco->{$field} ?? null)) {
+            if (! filled($endereco->{$field} ?? null)) {
                 throw new \RuntimeException("Campo de endereço obrigatório ausente: {$label}.");
             }
         }
     }
-
-
 
     private function dateValue(mixed $value): Carbon
     {

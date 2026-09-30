@@ -47,7 +47,7 @@ class InsuranceAnalysisService
             'company_id' => $lead->company_id,
 
             'provider' => 'pottencial',
-            'product' => 'fianca_locaticia_residencial',
+            'product' => $lead->rentalGuaranteeProduct(),
 
             'status' => 'pending',
             'result' => null,
