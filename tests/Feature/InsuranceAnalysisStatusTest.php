@@ -78,6 +78,10 @@ it('persists only explicit provider decisions across creation reanalysis and syn
 ) {
     $analysis = insuranceStatusAnalysis();
     $result = ['success' => $success, 'http_status' => $success ? 200 : 500, 'response' => $response];
+    $analysis->events()->create(['event_type' => 'created', 'payload' => ['attempt_id' => 'status-test']]);
+    if (in_array($operation, ['create', 'reanalyze'], true)) {
+        $analysis->update(['status' => 'pending']);
+    }
 
     if ($operation === 'legacy_sync') {
         $this->mock(PottencialService::class)
@@ -148,7 +152,8 @@ it('counts only explicit approvals in company and broker dashboards', function (
 
 it('keeps Too preapproval distinct from approval', function (array $response, string $status) {
     $analysis = insuranceStatusAnalysis();
-    $analysis->update(['provider' => 'too']);
+    $analysis->update(['provider' => 'too', 'status' => 'pending']);
+    $analysis->events()->create(['event_type' => 'created', 'payload' => ['attempt_id' => 'too-decision']]);
     $provider = Mockery::mock(InsuranceProviderInterface::class);
     $provider->shouldReceive('requestAnalysis')->once()->andReturn([
         'success' => true,

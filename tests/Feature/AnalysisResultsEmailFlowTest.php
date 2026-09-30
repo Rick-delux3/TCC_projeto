@@ -44,6 +44,7 @@ function analysisResultsEmailFixture(
         'status' => $analysisStatus,
     ]);
 
+    $analysis->events()->create(['event_type' => 'created', 'payload' => ['attempt_id' => $attemptId]]);
     $analysis->events()->create([
         'event_type' => 'analysis_completed',
         'status' => $analysisStatus,
@@ -161,4 +162,23 @@ it('does not expose provider exception details in the external email body', func
         ->toContain('Não foi possível concluir esta consulta.')
         ->not->toContain($secretTechnicalMessage)
         ->not->toContain('Erro técnico:');
+});
+
+it('does not overwrite the new email state with an old failure or deferred job', function () {
+    Mail::fake();
+    ['batch' => $batch, 'analysis' => $analysis] = analysisResultsEmailFixture('old-email');
+    $analysis->events()->create(['event_type' => 'reanalysis_requested', 'payload' => ['attempt_id' => 'new-email']]);
+    $batch->update(['status' => 'processing', 'email_status' => 'pending']);
+    $job = new SendAnalysisResultsEmailJob($batch->id, 'old-email');
+
+    $method = new ReflectionMethod(SendAnalysisResultsEmailJob::class, 'recordTerminalFailure');
+    expect(fn () => $method->invoke($job, $batch, 'Old failure', []))
+        ->toThrow(\App\Exceptions\ObsoleteInsuranceAnalysisAttempt::class);
+    $job->failed(new RuntimeException('Old worker failure'));
+    config(['features.insurance_analysis.enabled' => false]);
+    $job->handle();
+    expect($batch->fresh()->email_status)->toBe('pending')
+        ->and($batch->fresh()->email_error)->toBeNull()
+        ->and($analysis->events()->whereIn('event_type', ['email_failed', 'email_deferred'])->count())->toBe(0);
+    Mail::assertNothingSent();
 });

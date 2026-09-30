@@ -9,6 +9,17 @@ class InsuranceAnalysis extends Model
 {
     use HasFactory;
 
+    public ?string $executionAttemptId = null;
+
+    public function updateForAttempt(array $attributes): void
+    {
+        \App\Services\Insurance\InsuranceAnalysisAttempt::run(
+            $this,
+            $this->executionAttemptId ?? '',
+            fn () => $this->forceFill($attributes)->save(),
+        );
+    }
+
     protected $table = 'analises_seguro';
 
     protected $fillable = [
@@ -170,7 +181,7 @@ class InsuranceAnalysis extends Model
     }
 
     /** @return array{attempt_id: string, is_reanalysis: bool}|null */
-    public function currentAttemptContext(): ?array
+    public function currentAttemptContext(bool $lock = false): ?array
     {
         $event = $this->events()
             ->whereIn('event_type', [
@@ -181,6 +192,7 @@ class InsuranceAnalysis extends Model
                 'reanalysis_started',
                 'technical_retry_requested',
             ])
+            ->when($lock, fn ($query) => $query->lockForUpdate())
             ->latest('id')
             ->first();
 

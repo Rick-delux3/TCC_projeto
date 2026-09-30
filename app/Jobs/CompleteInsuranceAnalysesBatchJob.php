@@ -33,6 +33,10 @@ class CompleteInsuranceAnalysesBatchJob implements ShouldQueue
         DB::transaction(function (): void {
             $batch = InsuranceAnalysisBatch::query()->lockForUpdate()->findOrFail($this->batchId);
             $analyses = $batch->analyses()->lockForUpdate()->get();
+            $context = \App\Services\Insurance\InsuranceAnalysisAttempt::batchContext($batch->id, true);
+            if (($context['attempt_id'] ?? null) !== $this->attemptId) {
+                return;
+            }
 
             /*
             |--------------------------------------------------------------------------
@@ -146,14 +150,14 @@ class CompleteInsuranceAnalysesBatchJob implements ShouldQueue
                     batchId: $batch->id,
                     attemptId: $this->attemptId,
                     isReanalysis: $this->isReanalysis
-                )->beforeCommit();
+                )->afterCommit();
             }
 
             SendAnalysisResultsEmailJob::dispatch(
                 batchId: $batch->id,
                 attemptId: $this->attemptId,
                 isReanalysis: $this->isReanalysis
-            )->beforeCommit();
+            )->afterCommit();
 
             return true;
         });

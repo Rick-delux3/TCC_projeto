@@ -10,7 +10,8 @@ final class InsuranceStatusPolling
 {
     public static function schedule(InsuranceAnalysis $analysis, string $attemptId, bool $isReanalysis): void
     {
-        if (ProviderAnalysisStatus::isTerminal($analysis->status)) {
+        if (ProviderAnalysisStatus::isTerminal($analysis->status)
+            || ($analysis->currentAttemptContext()['attempt_id'] ?? null) !== $attemptId) {
             return;
         }
 

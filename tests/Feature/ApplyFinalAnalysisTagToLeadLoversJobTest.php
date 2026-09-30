@@ -161,6 +161,33 @@ function finalAnalysisRemoteTag(int $id, string $name): array
     ];
 }
 
+it('does not persist a remote tag confirmation after a reanalysis starts during the request', function () {
+    Queue::fake();
+    finalAnalysisTagCatalog();
+    ['lead' => $lead, 'batch' => $batch, 'analysis' => $analysis] = finalAnalysisTagFixture();
+    finalAnalysisAttempt($analysis, 'old-http-attempt');
+    $originalTags = $lead->tags_originais;
+    Http::fake([
+        FINAL_ANALYSIS_TAG_API_URL.'/leads/501/tags' => function () use ($lead, $batch, $analysis) {
+            $analysis->events()->create(['event_type' => 'reanalysis_requested', 'payload' => ['attempt_id' => 'new-http-attempt']]);
+            $analysis->update(['status' => 'pending', 'result' => null]);
+            $batch->update(['status' => 'processing', 'finished_at' => null]);
+            $lead->forceFill(['analysis_final_status' => null, 'analysis_finalized_at' => null])->save();
+
+            return Http::response([finalAnalysisRemoteTag(101, 'Aprovados')]);
+        },
+    ]);
+
+    handleFinalAnalysisTagJob(new ApplyFinalAnalysisTagToLeadLoversJob($batch->id, 'old-http-attempt'));
+
+    expect($lead->fresh()->analysis_final_status)->toBeNull()
+        ->and($lead->fresh()->analysis_finalized_at)->toBeNull()
+        ->and($lead->fresh()->tags_originais)->toBe($originalTags)
+        ->and($analysis->events()->where('event_type', 'leadlovers_final_tag_applied')->count())->toBe(0);
+    Http::assertSentCount(1);
+    Queue::assertNothingPushed();
+});
+
 it('does not access LeadLovers or dispatch confirmation while analyses are disabled', function () {
     Queue::fake();
 

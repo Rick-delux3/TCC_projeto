@@ -3,6 +3,7 @@
 namespace App\Services\Insurance\Providers;
 
 use App\Models\InsuranceAnalysis;
+use App\Services\Insurance\InsuranceAnalysisAttempt;
 use App\Services\Insurance\Payloads\TooRentalGuaranteePayloadBuilder;
 use App\Services\TooService;
 use Illuminate\Support\Facades\Log;
@@ -31,6 +32,8 @@ class TooInsuranceProvider implements InsuranceProviderInterface
     public function requestAnalysis(InsuranceAnalysis $analysis, string $attemptId): array
     {
         $this->ensureEnabled();
+        $analysis->executionAttemptId = $attemptId;
+        InsuranceAnalysisAttempt::assertCurrent($analysis, $analysis->executionAttemptId);
 
         $this->loadTooRelations($analysis);
 
@@ -66,7 +69,7 @@ class TooInsuranceProvider implements InsuranceProviderInterface
         */
         $fichaPayload = $this->payloadBuilder->buildFichaPayload($analysis);
 
-        $analysis->update([
+        $analysis->updateForAttempt([
             'request_payload' => [
                 'provider' => 'too',
                 'step' => 'ficha',
@@ -123,7 +126,7 @@ class TooInsuranceProvider implements InsuranceProviderInterface
             );
         }
 
-        $analysis->update([
+        $analysis->updateForAttempt([
             'proposal_id' => (string) $numeroProposta,
             'response_payload' => [
                 'provider' => 'too',
@@ -166,6 +169,7 @@ class TooInsuranceProvider implements InsuranceProviderInterface
         | 3. Consulta status da proposta
         |--------------------------------------------------------------------------
         */
+        InsuranceAnalysisAttempt::assertCurrent($analysis, $analysis->executionAttemptId);
         $statusResponse = $this->tooService->getProposalStatus(
             cpf: $cpf,
             numeroProposta: $numeroProposta
@@ -212,6 +216,8 @@ class TooInsuranceProvider implements InsuranceProviderInterface
         array $options = [],
     ): array {
         $this->ensureEnabled();
+        $analysis->executionAttemptId = $attemptId;
+        InsuranceAnalysisAttempt::assertCurrent($analysis, $analysis->executionAttemptId);
 
         $this->loadTooRelations($analysis);
 
@@ -284,6 +290,7 @@ class TooInsuranceProvider implements InsuranceProviderInterface
             );
         }
 
+        InsuranceAnalysisAttempt::assertCurrent($analysis, $analysis->executionAttemptId);
         $updateBasicDataResponse = $this->tooService->updateProposalBasicData(
             numeroFicha: $numeroFicha,
             payload: $basicDataPayload
@@ -314,6 +321,7 @@ class TooInsuranceProvider implements InsuranceProviderInterface
             'observacoes' => $observacoes,
         ];
 
+        InsuranceAnalysisAttempt::assertCurrent($analysis, $analysis->executionAttemptId);
         $reanalysisResponse = $this->tooService->submitReanalysis(
             cpf: $cpf,
             numeroProposta: $numeroProposta,
@@ -343,7 +351,7 @@ class TooInsuranceProvider implements InsuranceProviderInterface
             $currentPayload = json_decode($currentPayload, true) ?: [];
         }
 
-        $analysis->forceFill([
+        $analysis->updateForAttempt([
             'status' => 'processing',
             'result' => null,
             'provider_status' => 'Reanálise solicitada - aguardando processamento da Too',
@@ -368,7 +376,7 @@ class TooInsuranceProvider implements InsuranceProviderInterface
 
             'error_message' => null,
             'finished_at' => null,
-        ])->save();
+        ]);
 
         return $this->successResult(
             status: 'UnderAnalysis',
@@ -397,6 +405,8 @@ class TooInsuranceProvider implements InsuranceProviderInterface
         InsuranceAnalysis $analysis
     ): array {
         $this->ensureEnabled();
+        $analysis->executionAttemptId ??= $analysis->currentAttemptContext()['attempt_id'] ?? null;
+        InsuranceAnalysisAttempt::assertCurrent($analysis, $analysis->executionAttemptId);
         $this->loadTooRelations($analysis);
 
         $lead = $analysis->lead;
@@ -424,6 +434,7 @@ class TooInsuranceProvider implements InsuranceProviderInterface
             );
         }
 
+        InsuranceAnalysisAttempt::assertCurrent($analysis, $analysis->executionAttemptId);
         $statusResponse = $this->tooService->getProposalStatus(
             cpf: $cpf,
             numeroProposta: $numeroProposta
@@ -502,6 +513,7 @@ class TooInsuranceProvider implements InsuranceProviderInterface
         $this->ensureEnabled();
 
         $statusData = $statusResponse['response'] ?? [];
+        InsuranceAnalysisAttempt::assertCurrent($analysis, $analysis->executionAttemptId);
         $statusInfo = $this->tooCreditDecision($statusData);
 
         $numeroFicha = $baseExtra['numeroFicha']
@@ -524,7 +536,7 @@ class TooInsuranceProvider implements InsuranceProviderInterface
          * Status 6/11/12/14/15 = recusado/cancelado/expirado
          */
         if (! $statusInfo['can_quote']) {
-            $analysis->update([
+            $analysis->updateForAttempt([
                 'provider_status' => $statusInfo['status_description'] ?? $statusInfo['status_code'],
                 'response_payload' => array_merge($analysis->providerResponsePayload(), [
                     'status_latest' => $statusResponse,
@@ -588,7 +600,7 @@ class TooInsuranceProvider implements InsuranceProviderInterface
             numeroFicha: $numeroFicha
         );
 
-        $analysis->update([
+        $analysis->updateForAttempt([
             'request_payload' => array_merge($analysis->request_payload ?? [], [
                 'quote_payload' => $quotePayload,
             ]),
@@ -616,7 +628,7 @@ class TooInsuranceProvider implements InsuranceProviderInterface
         $paymentConditions = $this->extractPaymentConditions($quoteData);
         $coverages = $this->extractQuoteCoverages($quoteData);
 
-        $analysis->update([
+        $analysis->updateForAttempt([
             'quote_id' => $numeroCotacao ? (string) $numeroCotacao : $analysis->quote_id,
             'quote_number' => $numeroCotacao ? (string) $numeroCotacao : $analysis->quote_number,
             'premium_amount' => $premiumAmount ?? $analysis->premium_amount,

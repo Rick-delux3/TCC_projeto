@@ -118,6 +118,10 @@ class StartInsuranceAnalysesBatchJob implements ShouldQueue
                 ->latest('id')
                 ->first();
 
+            if ($batchModel) {
+                return null;
+            }
+
             if (! $batchModel) {
                 $batchModel = InsuranceAnalysisBatch::create([
                     'lead_id' => $lead->id,
@@ -345,6 +349,10 @@ class StartInsuranceAnalysesBatchJob implements ShouldQueue
                 'analysis_ids' => $analysisIds,
             ];
         });
+
+        if ($batchData === null) {
+            return;
+        }
 
         $jobs = collect($batchData['analysis_ids'])
             ->map(fn (int $analysisId) => new RunProviderAnalysisJob(

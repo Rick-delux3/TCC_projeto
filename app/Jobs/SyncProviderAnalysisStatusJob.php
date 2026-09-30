@@ -2,7 +2,9 @@
 
 namespace App\Jobs;
 
+use App\Exceptions\ObsoleteInsuranceAnalysisAttempt;
 use App\Models\InsuranceAnalysis;
+use App\Services\Insurance\InsuranceAnalysisAttempt;
 use App\Services\Insurance\InsuranceStatusPolling;
 use App\Services\Insurance\ProviderAnalysisStatus;
 use App\Services\Insurance\Providers\InsuranceProviderResolver;
@@ -10,6 +12,7 @@ use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
+use Illuminate\Queue\Middleware\WithoutOverlapping;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
 
@@ -21,7 +24,7 @@ class SyncProviderAnalysisStatusJob implements ShouldQueue
      * Quantas vezes o Laravel pode tentar executar novamente esse job
      * caso ocorra falha temporária.
      */
-    public int $tries = 3;
+    public int $tries = 10;
 
     /**
      * Tempo máximo de execução do job em segundos.
@@ -60,6 +63,20 @@ class SyncProviderAnalysisStatusJob implements ShouldQueue
      */
     public function handle(InsuranceProviderResolver $resolver): void
     {
+        try {
+            $this->execute($resolver);
+        } catch (ObsoleteInsuranceAnalysisAttempt) {
+            return;
+        }
+    }
+
+    public function middleware(): array
+    {
+        return [(new WithoutOverlapping("insurance-analysis:{$this->analysisId}"))->shared()->releaseAfter(30)->expireAfter(210)];
+    }
+
+    private function execute(InsuranceProviderResolver $resolver): void
+    {
         if (! config('features.insurance_analysis.enabled', false)) {
             logger()->notice('Job de análise ignorado porque o módulo está desativado.', ['job' => static::class]);
 
@@ -81,10 +98,9 @@ class SyncProviderAnalysisStatusJob implements ShouldQueue
             'batch',
         ])->findOrFail($this->analysisId);
 
-        $attempt = $analysis->currentAttemptContext();
-
-        if (($attempt !== null && $attempt['attempt_id'] !== $this->attemptId)
-            || ($this->automatic && ProviderAnalysisStatus::isTerminal($analysis->status))) {
+        InsuranceAnalysisAttempt::assertCurrent($analysis, $this->attemptId);
+        $analysis->executionAttemptId = $this->attemptId;
+        if ($this->automatic && ProviderAnalysisStatus::isTerminal($analysis->status)) {
             return;
         }
 
@@ -94,63 +110,70 @@ class SyncProviderAnalysisStatusJob implements ShouldQueue
          */
 
         $isToo = strtolower((string) $analysis->provider) === 'too';
+        $ready = InsuranceAnalysisAttempt::run($analysis, $this->attemptId, function () use ($analysis, $isToo): bool {
 
-        if (! $isToo && ! $analysis->quote_id) {
-            $analysis->update([
-                'status' => 'failed',
-                'result' => null,
-                'error_message' => 'Não foi possível sincronizar: quote_id não encontrado.',
-                'finished_at' => now(),
-            ]);
+            if (! $isToo && ! $analysis->quote_id) {
+                $analysis->update([
+                    'status' => 'failed',
+                    'result' => null,
+                    'error_message' => 'Não foi possível sincronizar: quote_id não encontrado.',
+                    'finished_at' => now(),
+                ]);
 
+                $analysis->events()->create([
+                    'event_type' => $this->isReanalysis ? 'reanalysis_failed' : 'failed',
+                    'status' => 'failed',
+                    'message' => 'Não foi possível sincronizar o status porque a análise não possui quote_id.',
+                    'payload' => ['attempt_id' => $this->attemptId, 'is_reanalysis' => $this->isReanalysis],
+                ]);
+
+                $this->dispatchBatchCompletionCheck($analysis);
+
+                return false;
+            }
+
+            if ($isToo && ! $analysis->tooNumeroProposta()) {
+                $analysis->update([
+                    'status' => 'failed',
+                    'result' => null,
+                    'error_message' => 'Não foi possível sincronizar: proposal_id não encontrado.',
+                    'finished_at' => now(),
+                ]);
+
+                $analysis->events()->create([
+                    'event_type' => $this->isReanalysis ? 'reanalysis_failed' : 'failed',
+                    'status' => 'failed',
+                    'message' => 'Não foi possível sincronizar o status porque a análise não possui proposal_id.',
+                    'payload' => ['attempt_id' => $this->attemptId, 'is_reanalysis' => $this->isReanalysis],
+                ]);
+
+                $this->dispatchBatchCompletionCheck($analysis);
+
+                return false;
+            }
+
+            /*
+             * Registra no histórico que a sincronização começou.
+             */
             $analysis->events()->create([
-                'event_type' => $this->isReanalysis ? 'reanalysis_failed' : 'failed',
-                'status' => 'failed',
-                'message' => 'Não foi possível sincronizar o status porque a análise não possui quote_id.',
-                'payload' => ['attempt_id' => $this->attemptId, 'is_reanalysis' => $this->isReanalysis],
+                'event_type' => 'sync_started',
+                'status' => $analysis->status,
+                'message' => "Iniciando sincronização de status com {$analysis->provider}.",
+                'payload' => [
+                    'provider' => $analysis->provider,
+                    'quote_id' => $analysis->quote_id,
+                    'proposal_id' => $analysis->proposal_id,
+                    'manual_sync' => ! $this->automatic,
+                    'attempt_id' => $this->attemptId,
+                    'is_reanalysis' => $this->isReanalysis,
+                ],
             ]);
 
-            $this->dispatchBatchCompletionCheck($analysis);
-
+            return true;
+        });
+        if (! $ready) {
             return;
         }
-
-        if ($isToo && ! $analysis->tooNumeroProposta()) {
-            $analysis->update([
-                'status' => 'failed',
-                'result' => null,
-                'error_message' => 'Não foi possível sincronizar: proposal_id não encontrado.',
-                'finished_at' => now(),
-            ]);
-
-            $analysis->events()->create([
-                'event_type' => $this->isReanalysis ? 'reanalysis_failed' : 'failed',
-                'status' => 'failed',
-                'message' => 'Não foi possível sincronizar o status porque a análise não possui proposal_id.',
-                'payload' => ['attempt_id' => $this->attemptId, 'is_reanalysis' => $this->isReanalysis],
-            ]);
-
-            $this->dispatchBatchCompletionCheck($analysis);
-
-            return;
-        }
-
-        /*
-         * Registra no histórico que a sincronização começou.
-         */
-        $analysis->events()->create([
-            'event_type' => 'sync_started',
-            'status' => $analysis->status,
-            'message' => "Iniciando sincronização de status com {$analysis->provider}.",
-            'payload' => [
-                'provider' => $analysis->provider,
-                'quote_id' => $analysis->quote_id,
-                'proposal_id' => $analysis->proposal_id,
-                'manual_sync' => ! $this->automatic,
-                'attempt_id' => $this->attemptId,
-                'is_reanalysis' => $this->isReanalysis,
-            ],
-        ]);
 
         try {
             /*
@@ -175,58 +198,64 @@ class SyncProviderAnalysisStatusJob implements ShouldQueue
              */
             $result = $provider->getStatus($analysis);
 
-            if (! ($result['success'] ?? false) && $this->retryPollingFailure($analysis)) {
-                return;
-            }
+            InsuranceAnalysisAttempt::run($analysis, $this->attemptId, function () use ($analysis, $result, $isToo): void {
+                if (! ($result['success'] ?? false) && $this->retryPollingFailure($analysis)) {
+                    return;
+                }
 
-            /*
-             * Aplica o resultado recebido no banco.
-             */
+                /*
+                 * Aplica o resultado recebido no banco.
+                 */
 
-            if ($isToo) {
-                $this->applyTooResult($analysis, $result);
+                if ($isToo) {
+                    $this->applyTooResult($analysis, $result);
+                    InsuranceStatusPolling::schedule($analysis->fresh(), $this->attemptId, $this->isReanalysis);
+
+                    return;
+                }
+
+                $this->applyResult($analysis, $result);
                 InsuranceStatusPolling::schedule($analysis->fresh(), $this->attemptId, $this->isReanalysis);
-
-                return;
-            }
-
-            $this->applyResult($analysis, $result);
-            InsuranceStatusPolling::schedule($analysis->fresh(), $this->attemptId, $this->isReanalysis);
+            });
+        } catch (ObsoleteInsuranceAnalysisAttempt $obsolete) {
+            throw $obsolete;
         } catch (\Throwable $e) {
-            if ($this->retryPollingFailure($analysis)) {
-                return;
-            }
-            /*
-             * Se der erro inesperado, não quebra o sistema inteiro.
-             * Salva a falha na análise e registra no log.
-             */
-            $analysis->update([
-                'status' => 'failed',
-                'result' => null,
-                'error_message' => $e->getMessage(),
-                'finished_at' => now(),
-            ]);
+            InsuranceAnalysisAttempt::run($analysis, $this->attemptId, function () use ($analysis, $e): void {
+                if ($this->retryPollingFailure($analysis)) {
+                    return;
+                }
+                /*
+                 * Se der erro inesperado, não quebra o sistema inteiro.
+                 * Salva a falha na análise e registra no log.
+                 */
+                $analysis->update([
+                    'status' => 'failed',
+                    'result' => null,
+                    'error_message' => $e->getMessage(),
+                    'finished_at' => now(),
+                ]);
 
-            $analysis->events()->create([
-                'event_type' => $this->isReanalysis ? 'reanalysis_failed' : 'failed',
-                'status' => 'failed',
-                'message' => $e->getMessage(),
-                'payload' => [
-                    'attempt_id' => $this->attemptId,
-                    'is_reanalysis' => $this->isReanalysis,
+                $analysis->events()->create([
+                    'event_type' => $this->isReanalysis ? 'reanalysis_failed' : 'failed',
+                    'status' => 'failed',
+                    'message' => $e->getMessage(),
+                    'payload' => [
+                        'attempt_id' => $this->attemptId,
+                        'is_reanalysis' => $this->isReanalysis,
+                        'provider' => $analysis->provider,
+                        'quote_id' => $analysis->quote_id,
+                    ],
+                ]);
+
+                Log::error('Erro ao sincronizar status da análise', [
+                    'analysis_id' => $analysis->id,
                     'provider' => $analysis->provider,
                     'quote_id' => $analysis->quote_id,
-                ],
-            ]);
+                    'message' => $e->getMessage(),
+                ]);
 
-            Log::error('Erro ao sincronizar status da análise', [
-                'analysis_id' => $analysis->id,
-                'provider' => $analysis->provider,
-                'quote_id' => $analysis->quote_id,
-                'message' => $e->getMessage(),
-            ]);
-
-            $this->dispatchBatchCompletionCheck($analysis);
+                $this->dispatchBatchCompletionCheck($analysis);
+            });
         }
     }
 
@@ -741,11 +770,7 @@ class SyncProviderAnalysisStatusJob implements ShouldQueue
             return;
         }
 
-        CompleteInsuranceAnalysesBatchJob::dispatch(
-            batchId: $analysis->insurance_analysis_batch_id,
-            attemptId: $this->attemptId,
-            isReanalysis: $this->isReanalysis
-        );
+        InsuranceAnalysisAttempt::dispatchCompletion($analysis);
     }
 
     private function retryPollingFailure(InsuranceAnalysis $analysis): bool

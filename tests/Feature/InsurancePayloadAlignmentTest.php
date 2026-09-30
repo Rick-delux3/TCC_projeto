@@ -54,10 +54,13 @@ function alignedInsuranceAnalysis(bool $company = false, ?string $rentalType = '
     ]);
     $lead->despesas()->create(['valor_aluguel' => 1500, 'valor_agua' => 0, 'valor_luz' => 0]);
 
-    return InsuranceAnalysis::query()->create([
+    $analysis = InsuranceAnalysis::query()->create([
         'lead_id' => $lead->id, 'provider' => 'too', 'status' => 'pending',
         'product' => $lead->rentalGuaranteeProduct(),
     ]);
+    $analysis->events()->create(['event_type' => 'created', 'payload' => ['attempt_id' => 'alignment-attempt']]);
+
+    return $analysis;
 }
 
 it('aligns both insurers with the document and rental purpose selected on the form', function (bool $company, string $rentalType) {
@@ -105,6 +108,7 @@ it('uses the representative CPF through Too creation credit analysis and status 
 it('uses the same representative and purpose when updating and reanalyzing Too', function () {
     $analysis = alignedInsuranceAnalysis(true, 'comercial');
     $analysis->update(['proposal_id' => '123', 'response_payload' => ['numeroFicha' => 456]]);
+    $analysis->events()->create(['event_type' => 'reanalysis_requested', 'payload' => ['attempt_id' => 'new-attempt', 'is_reanalysis' => true]]);
     $service = $this->mock(TooService::class);
     $service->shouldReceive('getProposalStatus')->once()->with('07234828702', '123')
         ->andReturn(['success' => true, 'response' => ['proposta' => ['status' => 8]]]);
@@ -131,7 +135,7 @@ it('fails Too locally for incomplete or invalid applicant data instead of sendin
         'small expense' => $analysis->lead->despesas->update(['valor_agua' => 10]),
     };
     $this->mock(TooService::class)->shouldNotReceive('registerProposalFicha');
-    (new RunProviderAnalysisJob($analysis->id, 'invalid-attempt'))->handle(app(InsuranceProviderResolver::class));
+    (new RunProviderAnalysisJob($analysis->id, 'alignment-attempt'))->handle(app(InsuranceProviderResolver::class));
 
     expect($analysis->fresh()->status)->toBe('failed')
         ->and($analysis->fresh()->finished_at)->not->toBeNull();

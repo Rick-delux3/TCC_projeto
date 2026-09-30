@@ -2,8 +2,10 @@
 
 namespace App\Jobs;
 
+use App\Exceptions\ObsoleteInsuranceAnalysisAttempt;
 use App\Models\InsuranceAnalysisBatch;
 use App\Models\InsuranceAnalysisEvent;
+use App\Services\Insurance\InsuranceAnalysisAttempt;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -41,6 +43,19 @@ class SendAnalysisResultsEmailJob implements ShouldQueue
 
     public function handle(): void
     {
+        try {
+            $this->execute();
+        } catch (ObsoleteInsuranceAnalysisAttempt) {
+            return;
+        }
+    }
+
+    private function execute(): void
+    {
+        if (! $this->attemptId || (InsuranceAnalysisAttempt::batchContext($this->batchId)['attempt_id'] ?? null) !== $this->attemptId) {
+            return;
+        }
+
         if (! config('features.insurance_analysis.enabled', false)) {
             logger()->notice('Job de análise ignorado porque o módulo está desativado.', ['job' => static::class]);
 
@@ -110,6 +125,9 @@ class SendAnalysisResultsEmailJob implements ShouldQueue
             $body = $this->buildMessage($batch, $resultEvents);
             $attachments = $this->generatePdfAttachments($batch, $resultEvents);
 
+            if ((InsuranceAnalysisAttempt::batchContext($batch->id)['attempt_id'] ?? null) !== $this->attemptId) {
+                return;
+            }
             Mail::raw($body, function ($message) use ($recipients, $attachments) {
                 $subject = $this->isReanalysis
                     ? 'Resultado da sua reanálise de Seguro Fiança'
@@ -137,29 +155,33 @@ class SendAnalysisResultsEmailJob implements ShouldQueue
             | email_sent_at representa o último e-mail enviado, não bloqueia
             | reanálises futuras.
             */
-            $batch->update([
-                'email_sent_at' => now(),
-                'email_status' => 'sent',
-                'email_failed_at' => null,
-                'email_error' => null,
-            ]);
+            InsuranceAnalysisAttempt::runBatch($batch, $this->attemptId, function () use ($batch, $lead, $recipients, $attachments, $resultEvents): void {
+                $batch->update([
+                    'email_sent_at' => now(),
+                    'email_status' => 'sent',
+                    'email_failed_at' => null,
+                    'email_error' => null,
+                ]);
 
-            $this->registerEmailEvent(
-                batch: $batch,
-                eventType: 'email_sent',
-                message: $this->isReanalysis
-                    ? 'E-mail de resultado da reanálise enviado ao lead.'
-                    : 'E-mail de resultado da análise enviado ao lead.',
-                payload: [
-                    'attempt_id' => $this->attemptId,
-                    'is_reanalysis' => $this->isReanalysis,
-                    'lead_id' => $lead->id,
-                    'recipients' => $recipients,
-                    'email' => $lead->email,
-                    'attachments' => collect($attachments)->pluck('name')->values()->all(),
-                ],
-                resultEvents: $resultEvents
-            );
+                $this->registerEmailEvent(
+                    batch: $batch,
+                    eventType: 'email_sent',
+                    message: $this->isReanalysis
+                        ? 'E-mail de resultado da reanálise enviado ao lead.'
+                        : 'E-mail de resultado da análise enviado ao lead.',
+                    payload: [
+                        'attempt_id' => $this->attemptId,
+                        'is_reanalysis' => $this->isReanalysis,
+                        'lead_id' => $lead->id,
+                        'recipients' => $recipients,
+                        'email' => $lead->email,
+                        'attachments' => collect($attachments)->pluck('name')->values()->all(),
+                    ],
+                    resultEvents: $resultEvents
+                );
+            });
+        } catch (ObsoleteInsuranceAnalysisAttempt $obsolete) {
+            throw $obsolete;
         } catch (Throwable $e) {
             if ($this->attempts() >= $this->tries) {
                 $this->recordTerminalFailure(
@@ -194,14 +216,18 @@ class SendAnalysisResultsEmailJob implements ShouldQueue
             return;
         }
 
-        $this->recordTerminalFailure(
-            batch: $batch,
-            message: 'Não foi possível enviar o e-mail de resultado.',
-            payload: [
-                'attempt_id' => $this->attemptId,
-                'is_reanalysis' => $this->isReanalysis,
-            ]
-        );
+        try {
+            $this->recordTerminalFailure(
+                batch: $batch,
+                message: 'Não foi possível enviar o e-mail de resultado.',
+                payload: [
+                    'attempt_id' => $this->attemptId,
+                    'is_reanalysis' => $this->isReanalysis,
+                ]
+            );
+        } catch (ObsoleteInsuranceAnalysisAttempt) {
+            return;
+        }
     }
 
     private function emailAlreadySent(InsuranceAnalysisBatch $batch): bool
@@ -421,24 +447,26 @@ class SendAnalysisResultsEmailJob implements ShouldQueue
         array $payload,
         ?Collection $resultEvents = null
     ): void {
-        $latestQueuedId = $this->latestAttemptEventId($batch, 'email_queued');
-        $latestFailedId = $this->latestAttemptEventId($batch, 'email_failed');
+        InsuranceAnalysisAttempt::runBatch($batch, $this->attemptId, function () use ($batch, $message, $payload, $resultEvents): void {
+            $latestQueuedId = $this->latestAttemptEventId($batch, 'email_queued');
+            $latestFailedId = $this->latestAttemptEventId($batch, 'email_failed');
 
-        if (! $latestFailedId || ($latestQueuedId && $latestFailedId < $latestQueuedId)) {
-            $this->registerEmailEvent(
-                batch: $batch,
-                eventType: 'email_failed',
-                message: $message,
-                payload: $payload,
-                resultEvents: $resultEvents
-            );
-        }
+            if (! $latestFailedId || ($latestQueuedId && $latestFailedId < $latestQueuedId)) {
+                $this->registerEmailEvent(
+                    batch: $batch,
+                    eventType: 'email_failed',
+                    message: $message,
+                    payload: $payload,
+                    resultEvents: $resultEvents
+                );
+            }
 
-        $batch->update([
-            'email_status' => 'failed',
-            'email_failed_at' => now(),
-            'email_error' => $message,
-        ]);
+            $batch->update([
+                'email_status' => 'failed',
+                'email_failed_at' => now(),
+                'email_error' => $message,
+            ]);
+        });
     }
 
     private function markEmailAsDeferredWhileDisabled(): void
@@ -449,26 +477,28 @@ class SendAnalysisResultsEmailJob implements ShouldQueue
             return;
         }
 
-        $latestQueuedId = $this->latestAttemptEventId($batch, 'email_queued');
-        $latestDeferredId = $this->latestAttemptEventId($batch, 'email_deferred');
+        InsuranceAnalysisAttempt::runBatch($batch, $this->attemptId, function () use ($batch): void {
+            $latestQueuedId = $this->latestAttemptEventId($batch, 'email_queued');
+            $latestDeferredId = $this->latestAttemptEventId($batch, 'email_deferred');
 
-        if (! $latestDeferredId || ($latestQueuedId && $latestDeferredId < $latestQueuedId)) {
-            $this->registerEmailEvent(
-                batch: $batch,
-                eventType: 'email_deferred',
-                message: 'Envio adiado porque o módulo de análise está desativado.',
-                payload: [
-                    'attempt_id' => $this->attemptId,
-                    'is_reanalysis' => $this->isReanalysis,
-                ]
-            );
-        }
+            if (! $latestDeferredId || ($latestQueuedId && $latestDeferredId < $latestQueuedId)) {
+                $this->registerEmailEvent(
+                    batch: $batch,
+                    eventType: 'email_deferred',
+                    message: 'Envio adiado porque o módulo de análise está desativado.',
+                    payload: [
+                        'attempt_id' => $this->attemptId,
+                        'is_reanalysis' => $this->isReanalysis,
+                    ]
+                );
+            }
 
-        $batch->update([
-            'email_status' => 'pending',
-            'email_failed_at' => null,
-            'email_error' => null,
-        ]);
+            $batch->update([
+                'email_status' => 'pending',
+                'email_failed_at' => null,
+                'email_error' => null,
+            ]);
+        });
     }
 
     private function latestAttemptEventId(

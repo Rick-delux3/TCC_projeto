@@ -2,7 +2,9 @@
 
 namespace App\Jobs;
 
+use App\Exceptions\ObsoleteInsuranceAnalysisAttempt;
 use App\Models\InsuranceAnalysis;
+use App\Services\Insurance\InsuranceAnalysisAttempt;
 use App\Services\Insurance\InsuranceStatusPolling;
 use App\Services\Insurance\ProviderAnalysisStatus;
 use App\Services\Insurance\Providers\InsuranceProviderResolver;
@@ -11,6 +13,7 @@ use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
+use Illuminate\Queue\Middleware\WithoutOverlapping;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
 
@@ -18,7 +21,7 @@ class RunProviderAnalysisJob implements ShouldQueue
 {
     use Batchable, Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    public int $tries = 3;
+    public int $tries = 10;
 
     public int $timeout = 180;
 
@@ -30,6 +33,20 @@ class RunProviderAnalysisJob implements ShouldQueue
     ) {}
 
     public function handle(InsuranceProviderResolver $resolver): void
+    {
+        try {
+            $this->execute($resolver);
+        } catch (ObsoleteInsuranceAnalysisAttempt) {
+            return;
+        }
+    }
+
+    public function middleware(): array
+    {
+        return [(new WithoutOverlapping("insurance-analysis:{$this->analysisId}"))->shared()->releaseAfter(30)->expireAfter(210)];
+    }
+
+    private function execute(InsuranceProviderResolver $resolver): void
     {
         if (! config('features.insurance_analysis.enabled', false)) {
             logger()->notice('Job de análise ignorado porque o módulo está desativado.', ['job' => static::class]);
@@ -47,23 +64,29 @@ class RunProviderAnalysisJob implements ShouldQueue
             'batch',
         ])->findOrFail($this->analysisId);
 
-        $analysis->update([
-            'status' => 'processing',
-            'requested_at' => now(),
-            'error_message' => null,
-        ]);
+        InsuranceAnalysisAttempt::run($analysis, $this->attemptId, function () use ($analysis): void {
+            if ($analysis->status !== 'pending' && ! ($analysis->status === 'processing' && $this->attempts() > 1)) {
+                throw new ObsoleteInsuranceAnalysisAttempt('Esta execução já foi iniciada.');
+            }
+            $analysis->update([
+                'status' => 'processing',
+                'requested_at' => now(),
+                'error_message' => null,
+            ]);
 
-        $analysis->events()->create([
-            'event_type' => $this->isReanalysis ? 'reanalysis_sent_to_api' : 'sent_to_api',
-            'status' => 'processing',
-            'message' => $this->isReanalysis
-                ? "Enviando reanálise para {$analysis->provider}."
-                : "Enviando análise para {$analysis->provider}.",
-            'payload' => $this->analysisSnapshot($analysis),
-        ]);
+            $analysis->events()->create([
+                'event_type' => $this->isReanalysis ? 'reanalysis_sent_to_api' : 'sent_to_api',
+                'status' => 'processing',
+                'message' => $this->isReanalysis
+                    ? "Enviando reanálise para {$analysis->provider}."
+                    : "Enviando análise para {$analysis->provider}.",
+                'payload' => $this->analysisSnapshot($analysis),
+            ]);
+
+        });
 
         try {
-            $analysis->update(['product' => $analysis->lead->rentalGuaranteeProduct()]);
+            $analysis->updateForAttempt(['product' => $analysis->lead->rentalGuaranteeProduct()]);
             $provider = $resolver->resolve($analysis->provider);
 
             if ($this->isReanalysis) {
@@ -88,32 +111,38 @@ class RunProviderAnalysisJob implements ShouldQueue
                 'result' => $result,
             ]);
 
-            $this->applyResult($analysis, $result);
-            InsuranceStatusPolling::schedule($analysis->fresh(), $this->attemptId, $this->isReanalysis);
+            InsuranceAnalysisAttempt::run($analysis, $this->attemptId, function () use ($analysis, $result): void {
+                $this->applyResult($analysis, $result);
+                InsuranceStatusPolling::schedule($analysis->fresh(), $this->attemptId, $this->isReanalysis);
+            });
+        } catch (ObsoleteInsuranceAnalysisAttempt $obsolete) {
+            throw $obsolete;
         } catch (\Throwable $e) {
-            $analysis->update([
-                'status' => 'failed',
-                'result' => null,
-                'error_message' => $e->getMessage(),
-                'finished_at' => now(),
-            ]);
+            InsuranceAnalysisAttempt::run($analysis, $this->attemptId, function () use ($analysis, $e): void {
+                $analysis->update([
+                    'status' => 'failed',
+                    'result' => null,
+                    'error_message' => $e->getMessage(),
+                    'finished_at' => now(),
+                ]);
 
-            $analysis->events()->create([
-                'event_type' => $this->isReanalysis ? 'reanalysis_failed' : 'failed',
-                'status' => 'failed',
-                'message' => $e->getMessage(),
-                'payload' => $this->analysisSnapshot($analysis),
-            ]);
+                $analysis->events()->create([
+                    'event_type' => $this->isReanalysis ? 'reanalysis_failed' : 'failed',
+                    'status' => 'failed',
+                    'message' => $e->getMessage(),
+                    'payload' => $this->analysisSnapshot($analysis),
+                ]);
 
-            Log::error('Erro ao executar análise de provider', [
-                'analysis_id' => $analysis->id,
-                'attempt_id' => $this->attemptId,
-                'is_reanalysis' => $this->isReanalysis,
-                'provider' => $analysis->provider,
-                'message' => $e->getMessage(),
-            ]);
+                Log::error('Erro ao executar análise de provider', [
+                    'analysis_id' => $analysis->id,
+                    'attempt_id' => $this->attemptId,
+                    'is_reanalysis' => $this->isReanalysis,
+                    'provider' => $analysis->provider,
+                    'message' => $e->getMessage(),
+                ]);
 
-            $this->dispatchBatchCompletionCheck($analysis);
+                $this->dispatchBatchCompletionCheck($analysis);
+            });
         }
     }
 
@@ -553,11 +582,7 @@ class RunProviderAnalysisJob implements ShouldQueue
             return;
         }
 
-        CompleteInsuranceAnalysesBatchJob::dispatch(
-            batchId: $analysis->insurance_analysis_batch_id,
-            attemptId: $this->attemptId,
-            isReanalysis: $this->isReanalysis
-        );
+        InsuranceAnalysisAttempt::dispatchCompletion($analysis);
     }
 
     private function extractPremiumAmount(array $response): ?float

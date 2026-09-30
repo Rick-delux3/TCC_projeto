@@ -252,27 +252,42 @@ class ApplyFinalAnalysisTagToLeadLoversJob implements ShouldBeUniqueUntilProcess
         }
 
         if ($attemptIsCurrent && is_string($tagKey)) {
-            $state = $coordinator->registerAnalysisDesired(
-                leadId: $lead->id,
-                tagKey: $tagKey,
-                batchId: $batch->id,
-                attemptId: $this->attemptId,
-                isReanalysis: $this->isReanalysis,
-            );
+            $state = DB::transaction(function () use ($batch, $coordinator, $lead, $tagKey, $attemptIsCurrent) {
+                Lead::query()->lockForUpdate()->findOrFail($lead->id);
+                InsuranceAnalysisBatch::query()->lockForUpdate()->findOrFail($batch->id);
+                $batch->setRelation('analyses', $batch->analyses()->lockForUpdate()->with('events')->get());
+                if (! $this->attemptIsCurrent($batch) || $this->resolveFinalTagKey($batch) !== $tagKey) {
+                    return null;
+                }
+                if ($attemptIsCurrent && is_string($tagKey)) {
+                    $state = $coordinator->registerAnalysisDesired(
+                        leadId: $lead->id,
+                        tagKey: $tagKey,
+                        batchId: $batch->id,
+                        attemptId: $this->attemptId,
+                        isReanalysis: $this->isReanalysis,
+                    );
 
-            if ($this->stateDesiresThisAnalysis($state, $batch)) {
-                $lead->forceFill([
-                    'analysis_final_status' => match ($tagKey) {
-                        'aprovados' => 'approved',
-                        'ruim' => 'rejected',
-                        'em_negociacao' => 'negotiation',
-                        default => null,
-                    },
-                    'analysis_final_tag_key' => $tagKey,
-                    'last_analysis_batch_id' => $batch->id,
-                    'analysis_finalized_at' => now(),
-                ])->save();
-            } elseif (! $this->ownsAnalysisInflight($state, $batch)) {
+                    if ($this->stateDesiresThisAnalysis($state, $batch)) {
+                        $lead->forceFill([
+                            'analysis_final_status' => match ($tagKey) {
+                                'aprovados' => 'approved',
+                                'ruim' => 'rejected',
+                                'em_negociacao' => 'negotiation',
+                                default => null,
+                            },
+                            'analysis_final_tag_key' => $tagKey,
+                            'last_analysis_batch_id' => $batch->id,
+                            'analysis_finalized_at' => now(),
+                        ])->save();
+                    } elseif (! $this->ownsAnalysisInflight($state, $batch)) {
+                        return null;
+                    }
+                }
+
+                return $state;
+            });
+            if ($state === null) {
                 return;
             }
         }
@@ -542,7 +557,9 @@ class ApplyFinalAnalysisTagToLeadLoversJob implements ShouldBeUniqueUntilProcess
                 ->lockForUpdate()
                 ->findOrFail((int) $batch->lead_id);
 
-            if (! $this->attemptIsCurrent($batch)) {
+            InsuranceAnalysisBatch::query()->lockForUpdate()->findOrFail($batch->id);
+            $batch->setRelation('analyses', $batch->analyses()->lockForUpdate()->with('events')->get());
+            if (! $this->attemptIsCurrent($batch) || $this->resolveFinalTagKey($batch) !== $tagKey) {
                 return false;
             }
 
@@ -629,6 +646,12 @@ class ApplyFinalAnalysisTagToLeadLoversJob implements ShouldBeUniqueUntilProcess
         array $plan,
         int $inflightVersion
     ): void {
+        if (! $this->attemptIsCurrent($batch)) {
+            $coordinator->markDefiniteRejection($batch->lead_id, $inflightVersion);
+
+            return;
+        }
+
         try {
             $bulkAction = $leadLovers->mutateLeadTags($plan['payload']);
         } catch (LeadLoversApiException $exception) {
