@@ -8,7 +8,6 @@ use App\Models\InsuranceAnalysisEvent;
 use App\Models\Lead;
 use App\Services\Insurance\AnalysisResultPreparationService;
 use App\Services\Insurance\AnalysisResultRecipients;
-use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Mail\Message;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Mail;
@@ -155,20 +154,13 @@ it('uses the saved recipient and final results in the queued email', function ()
     app(AnalysisResultPreparationService::class)->prepare($batch, 'prepare');
     $batch->lead->update(['email' => 'changed@example.test', 'nome' => 'Changed']);
     $batch->analyses()->update(['premium_amount' => 9999]);
-    $pdf = Mockery::mock(\Barryvdh\DomPDF\PDF::class);
-    $pdf->shouldReceive('output')->twice()->andReturn('mock-pdf');
-    Pdf::shouldReceive('loadView')->twice()->withArgs(function ($view, $data): bool {
-        expect($data['lead']->nome)->toBe('Tenant')
-            ->and($data['analysis']->premium_amount)->toBe('900.00');
-
-        return true;
-    })->andReturn($pdf);
+    $this->mock(\App\Services\Insurance\AnalysisDocumentService::class)->shouldReceive('generate')->once()->andReturn([]);
     Mail::shouldReceive('raw')->once()->withArgs(function (string $body, Closure $callback): bool {
         $email = new Email;
         $callback(new Message($email));
         expect($email->getTo()[0]->getAddress())->toBe('tenant@example.test')
             ->and($email->getCc())->toBe([])
-            ->and($email->getAttachments())->toHaveCount(2);
+            ->and($body)->toContain('Tenant', '900,00')->not->toContain('9.999,00');
 
         return true;
     });

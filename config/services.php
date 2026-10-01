@@ -83,6 +83,8 @@ return [
     ],
 
     'pottencial' => [
+        'letters_endpoint' => env('POTTENCIAL_LETTERS_ENDPOINT', '/insurance/v1/fianca-locaticia/quotes/{quote_id}/letters'),
+        'document_download_hosts' => array_filter(explode(',', (string) env('POTTENCIAL_DOCUMENT_DOWNLOAD_HOSTS', ''))),
         'enabled' => env('POTTENCIAL_ENABLED', false),
         'status_check_delay_seconds' => (int) env('POTTENCIAL_STATUS_CHECK_DELAY_SECONDS', 30),
         'status_check_max_failures' => (int) env('POTTENCIAL_STATUS_CHECK_MAX_FAILURES', 3),
@@ -107,6 +109,7 @@ return [
     ],
 
     'too' => [
+        'document_download_hosts' => array_filter(explode(',', (string) env('TOO_DOCUMENT_DOWNLOAD_HOSTS', ''))),
         'enabled' => env('TOO_ENABLED', false),
         'base_url' => env('TOO_BASE_URL', 'https://openapi-uat.tooseguros.com.br'),
         'client_id' => env('TOO_CLIENT_ID'),

@@ -9,7 +9,9 @@ use Illuminate\Support\Facades\Log;
 class TooService
 {
     private string $baseUrl;
+
     private ?string $clientId;
+
     private ?string $clientSecret;
 
     public function __construct()
@@ -38,19 +40,19 @@ class TooService
         $this->ensureEnabled();
 
         return Cache::remember('too_access_token', now()->addMinutes(55), function () {
-            if (!$this->baseUrl) {
+            if (! $this->baseUrl) {
                 Log::error('Base URL da Too não configurada.');
 
                 return null;
             }
 
-            if (!$this->clientId || !$this->clientSecret) {
+            if (! $this->clientId || ! $this->clientSecret) {
                 Log::error('Credenciais da Too não configuradas.');
 
                 return null;
             }
 
-            $url = $this->baseUrl . '/authentication';
+            $url = $this->baseUrl.'/authentication';
 
             $response = Http::withBasicAuth($this->clientId, $this->clientSecret)
                 ->asForm()
@@ -60,7 +62,7 @@ class TooService
                     'grant_type' => 'client_credentials',
                 ]);
 
-            if (!$response->successful()) {
+            if (! $response->successful()) {
                 Log::warning('Erro ao gerar access_token da Too', [
                     'url' => $url,
                     'status' => $response->status(),
@@ -97,14 +99,14 @@ class TooService
     {
         $token = $this->getAccessToken();
 
-        if (!$token) {
+        if (! $token) {
             throw new \RuntimeException('Não foi possível autenticar na API da Too.');
         }
 
         return [
             'clientid' => $this->clientId,
             'clientsecret' => $this->clientSecret,
-            'Authorization' => 'Bearer ' . $token,
+            'Authorization' => 'Bearer '.$token,
         ];
     }
 
@@ -116,7 +118,7 @@ class TooService
     {
         $token = $this->getAccessToken();
 
-        if (!$token) {
+        if (! $token) {
             return [
                 'success' => false,
                 'message' => 'Não foi possível gerar o access_token da Too.',
@@ -126,7 +128,7 @@ class TooService
         return [
             'success' => true,
             'message' => 'Access token da Too gerado com sucesso.',
-            'token_preview' => substr($token, 0, 8) . '...',
+            'token_preview' => substr($token, 0, 8).'...',
         ];
     }
 
@@ -157,7 +159,6 @@ class TooService
         );
     }
 
-    
     /**
      * 3. Consultar status da proposta/análise.
      *
@@ -173,7 +174,7 @@ class TooService
         );
     }
 
-    //3.1 Atualizar dados básicos da ficha
+    // 3.1 Atualizar dados básicos da ficha
 
     public function updateProposalBasicData(string|int $numeroFicha, array $payload): array
     {
@@ -183,14 +184,14 @@ class TooService
         );
     }
 
-    //3.2 Obter motivos de reanálise
+    // 3.2 Obter motivos de reanálise
 
     public function getReanalysisReasons(): array
     {
         return $this->getJson('/fianca/credito/motivos-reanalise');
     }
 
-    //3.3 Solicitar Reanálise
+    // 3.3 Solicitar Reanálise
 
     public function submitReanalysis(
         string $cpf,
@@ -231,6 +232,21 @@ class TooService
         );
     }
 
+    public function getCreditOpinionPdf(string $cpf, string $numeroProposta): string
+    {
+        $this->ensureEnabled();
+        $cpf = $this->onlyNumbers($cpf);
+        if (strlen($cpf) !== 11 || $numeroProposta === '') {
+            throw new \RuntimeException('Identificação da proposta da Too incompleta.');
+        }
+
+        return app(\App\Services\Insurance\ProviderDocumentDownload::class)->fetch(
+            $this->baseUrl.'/fianca/credito/'.$cpf.'/'.rawurlencode($numeroProposta).'/parecer',
+            $this->authHeaders(),
+            config('services.too.document_download_hosts', []),
+        );
+    }
+
     /**
      * Futuro: consultar PDF da cotação.
      *
@@ -248,9 +264,9 @@ class TooService
     {
         $this->ensureEnabled();
 
-        $url = $this->baseUrl . $endpoint;
+        $url = $this->baseUrl.$endpoint;
 
-        if (!$this->baseUrl) {
+        if (! $this->baseUrl) {
             return [
                 'success' => false,
                 'http_status' => null,
@@ -302,9 +318,9 @@ class TooService
     {
         $this->ensureEnabled();
 
-        $url = $this->baseUrl . $endpoint;
+        $url = $this->baseUrl.$endpoint;
 
-        if (!$this->baseUrl) {
+        if (! $this->baseUrl) {
             return [
                 'success' => false,
                 'http_status' => null,
@@ -352,9 +368,9 @@ class TooService
     {
         $this->ensureEnabled();
 
-        $url = $this->baseUrl . $endpoint;
+        $url = $this->baseUrl.$endpoint;
 
-        if (!$this->baseUrl) {
+        if (! $this->baseUrl) {
             return [
                 'success' => false,
                 'http_status' => null,

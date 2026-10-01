@@ -2,12 +2,13 @@
 
 namespace App\Jobs;
 
+use App\Exceptions\AnalysisDocumentsNotReady;
 use App\Exceptions\ObsoleteInsuranceAnalysisAttempt;
 use App\Models\InsuranceAnalysisBatch;
 use App\Models\InsuranceAnalysisEvent;
+use App\Services\Insurance\AnalysisDocumentService;
 use App\Services\Insurance\AnalysisResultPreparationService;
 use App\Services\Insurance\InsuranceAnalysisAttempt;
-use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -16,7 +17,6 @@ use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
-use Illuminate\Support\Facades\Storage;
 use RuntimeException;
 use Throwable;
 
@@ -26,7 +26,7 @@ class SendAnalysisResultsEmailJob implements ShouldQueue
 
     public int $tries = 3;
 
-    public int $timeout = 120;
+    public int $timeout = 180;
 
     /**
      * @return array<int, int>
@@ -139,7 +139,7 @@ class SendAnalysisResultsEmailJob implements ShouldQueue
 
         try {
             $body = $this->buildMessage($batch, $resultEvents);
-            $attachments = $this->generatePdfAttachments($batch, $resultEvents);
+            $attachments = app(AnalysisDocumentService::class)->generate($batch, $this->attemptId);
 
             if ((InsuranceAnalysisAttempt::batchContext($batch->id)['attempt_id'] ?? null) !== $this->attemptId) {
                 return;
@@ -198,6 +198,17 @@ class SendAnalysisResultsEmailJob implements ShouldQueue
             });
         } catch (ObsoleteInsuranceAnalysisAttempt $obsolete) {
             throw $obsolete;
+        } catch (AnalysisDocumentsNotReady $exception) {
+            InsuranceAnalysisAttempt::runBatch($batch, $this->attemptId, function () use ($batch, $exception): void {
+                $this->registerEmailEvent($batch, 'email_deferred', $exception->getMessage(), [
+                    'attempt_id' => $this->attemptId,
+                    'is_reanalysis' => $this->isReanalysis,
+                    'stage' => 'documents',
+                ]);
+                $batch->update(['email_status' => 'pending', 'email_error' => $exception->getMessage(), 'email_failed_at' => null]);
+            });
+
+            return;
         } catch (Throwable $e) {
             if ($this->attempts() >= $this->tries) {
                 $this->recordTerminalFailure(
@@ -300,82 +311,6 @@ class SendAnalysisResultsEmailJob implements ShouldQueue
 
             return $event;
         });
-    }
-
-    private function generatePdfAttachments(InsuranceAnalysisBatch $batch, Collection $resultEvents): array
-    {
-        /*
-        |--------------------------------------------------------------------------
-        | PDF opcional com DomPDF
-        |--------------------------------------------------------------------------
-        | Instale se ainda não tiver:
-        | composer require barryvdh/laravel-dompdf
-        |
-        | Crie a view:
-        | resources/views/emails/analysis-result-pdf.blade.php
-        */
-
-        $attachments = [];
-
-        foreach ($resultEvents as $event) {
-            $analysis = $event->analysis;
-
-            if (! $analysis) {
-                continue;
-            }
-
-            $type = $this->isReanalysis ? 'reanálise' : 'análise';
-
-            $fileName = sprintf(
-                'lead-%s-%s-%s.pdf',
-                $batch->lead_id,
-                $analysis->provider,
-                $this->isReanalysis ? 'reanalise' : 'analise'
-            );
-
-            $directory = sprintf(
-                'analysis-results/lead-%s/%s',
-                $batch->lead_id,
-                $this->attemptId ?: now()->format('YmdHis')
-            );
-
-            $relativePath = "{$directory}/{$fileName}";
-
-            $pdf = Pdf::loadView('emails.analysis-result-pdf', [
-                'batch' => $batch,
-                'lead' => $batch->lead,
-                'event' => $event,
-                'analysis' => $analysis,
-                'isReanalysis' => $this->isReanalysis,
-                'type' => $type,
-            ]);
-
-            Storage::disk('local')->put($relativePath, $pdf->output());
-
-            $fullPath = Storage::disk('local')->path($relativePath);
-
-            InsuranceAnalysisAttempt::runBatch($batch, $this->attemptId, function () use ($analysis, $event, $type, $relativePath, $fileName): void {
-                $analysis->events()->create([
-                    'event_type' => 'pdf_generated',
-                    'status' => $event->status,
-                    'message' => "PDF de {$type} gerado para {$analysis->provider}.",
-                    'payload' => [
-                        'attempt_id' => $this->attemptId,
-                        'is_reanalysis' => $this->isReanalysis,
-                        'source_event_id' => $event->id,
-                        'pdf_path' => $relativePath,
-                        'file_name' => $fileName,
-                    ],
-                ]);
-            });
-
-            $attachments[] = [
-                'path' => $fullPath,
-                'name' => $fileName,
-            ];
-        }
-
-        return $attachments;
     }
 
     private function registerEmailEvent(
