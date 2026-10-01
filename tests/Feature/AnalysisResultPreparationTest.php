@@ -155,6 +155,8 @@ it('uses the saved recipient and final results in the queued email', function ()
     $batch->lead->update(['email' => 'changed@example.test', 'nome' => 'Changed']);
     $batch->analyses()->update(['premium_amount' => 9999]);
     $this->mock(\App\Services\Insurance\AnalysisDocumentService::class)->shouldReceive('generate')->once()->andReturn([]);
+    $confirmation = Mockery::mock(\Illuminate\Mail\SentMessage::class);
+    $confirmation->shouldReceive('getMessageId')->andReturn('prepared-message');
     Mail::shouldReceive('raw')->once()->withArgs(function (string $body, Closure $callback): bool {
         $email = new Email;
         $callback(new Message($email));
@@ -163,7 +165,7 @@ it('uses the saved recipient and final results in the queued email', function ()
             ->and($body)->toContain('Tenant', '900,00')->not->toContain('9.999,00');
 
         return true;
-    });
+    })->andReturn($confirmation);
 
     (new SendAnalysisResultsEmailJob($batch->id, 'prepare'))->handle();
     expect($batch->fresh()->email_status)->toBe('sent');

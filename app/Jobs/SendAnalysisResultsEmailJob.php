@@ -7,6 +7,7 @@ use App\Exceptions\ObsoleteInsuranceAnalysisAttempt;
 use App\Models\InsuranceAnalysisBatch;
 use App\Models\InsuranceAnalysisEvent;
 use App\Services\Insurance\AnalysisDocumentService;
+use App\Services\Insurance\AnalysisEmailDeliveryService;
 use App\Services\Insurance\AnalysisResultPreparationService;
 use App\Services\Insurance\InsuranceAnalysisAttempt;
 use Illuminate\Bus\Queueable;
@@ -16,7 +17,6 @@ use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Mail;
 use RuntimeException;
 use Throwable;
 
@@ -144,25 +144,7 @@ class SendAnalysisResultsEmailJob implements ShouldQueue
             if ((InsuranceAnalysisAttempt::batchContext($batch->id)['attempt_id'] ?? null) !== $this->attemptId) {
                 return;
             }
-            Mail::raw($body, function ($message) use ($recipients, $attachments) {
-                $subject = $this->isReanalysis
-                    ? 'Resultado da sua reanálise de Seguro Fiança'
-                    : 'Resultado da sua análise de Seguro Fiança';
-
-                $message->to($recipients['to'])
-                    ->subject($subject);
-
-                if (! empty($recipients['cc'])) {
-                    $message->cc($recipients['cc']);
-                }
-
-                foreach ($attachments as $attachment) {
-                    $message->attach($attachment['path'], [
-                        'as' => $attachment['name'],
-                        'mime' => 'application/pdf',
-                    ]);
-                }
-            });
+            app(AnalysisEmailDeliveryService::class)->send($batch, $this->attemptId, $body, $attachments);
 
             /*
             |--------------------------------------------------------------------------
@@ -172,6 +154,9 @@ class SendAnalysisResultsEmailJob implements ShouldQueue
             | reanálises futuras.
             */
             InsuranceAnalysisAttempt::runBatch($batch, $this->attemptId, function () use ($batch, $lead, $recipients, $attachments, $resultEvents): void {
+                if ($this->emailAlreadySent($batch)) {
+                    return;
+                }
                 $batch->update([
                     'email_sent_at' => now(),
                     'email_status' => 'sent',
@@ -368,6 +353,17 @@ class SendAnalysisResultsEmailJob implements ShouldQueue
         ?Collection $resultEvents = null
     ): void {
         InsuranceAnalysisAttempt::runBatch($batch, $this->attemptId, function () use ($batch, $message, $payload, $resultEvents): void {
+            if ($this->emailAlreadySent($batch)) {
+                return;
+            }
+            $delivery = app(AnalysisEmailDeliveryService::class);
+            if ($delivery->allSent($batch, $this->attemptId)) {
+                $batch->update(['email_status' => 'sent', 'email_sent_at' => $batch->email_sent_at ?? now(), 'email_failed_at' => null, 'email_error' => null]);
+                $this->registerEmailEvent($batch, 'email_sent', 'Envio confirmado para todos os destinatários.', $payload, $resultEvents);
+
+                return;
+            }
+            $delivery->failRemaining($batch, $this->attemptId);
             $latestQueuedId = $this->latestAttemptEventId($batch, 'email_queued');
             $latestFailedId = $this->latestAttemptEventId($batch, 'email_failed');
 

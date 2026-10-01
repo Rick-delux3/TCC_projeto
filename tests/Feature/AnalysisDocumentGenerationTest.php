@@ -98,6 +98,31 @@ it('reuses a successful refusal letter when the next company fails and retries o
     Http::assertSentCount(3);
 });
 
+it('sends all refusal letters through the job only after every document is available', function () {
+    Http::fake([
+        'pottencial.example.test/*' => Http::response(testLetterPdf()),
+        'too.example.test/*' => Http::sequence()->push('', 503)->push(testLetterPdf()),
+    ]);
+    $batch = documentBatch();
+    $confirmation = Mockery::mock(\Illuminate\Mail\SentMessage::class);
+    $confirmation->shouldReceive('getMessageId')->andReturn('refusal-message');
+    Mail::shouldReceive('raw')->once()->withArgs(function (string $body, Closure $callback): bool {
+        $email = new \Symfony\Component\Mime\Email;
+        $callback(new \Illuminate\Mail\Message($email));
+        expect($email->getAttachments())->toHaveCount(2)
+            ->and($email->getTo()[0]->getAddress())->toBe('documents@example.test');
+
+        return true;
+    })->andReturn($confirmation);
+    $job = new SendAnalysisResultsEmailJob($batch->id, 'documents');
+    expect(fn () => $job->handle())->toThrow(RuntimeException::class)
+        ->and($batch->fresh()->email_sent_at)->toBeNull();
+    $job->handle();
+    $job->handle();
+    expect($batch->fresh()->email_status)->toBe('sent');
+    Http::assertSentCount(3);
+});
+
 it('never fetches refusal letters with an approval or a technical failure', function (array $statuses) {
     $batch = documentBatch($statuses);
     expect(fn () => app(ProviderRefusalLetterService::class)->fetch($batch, 'documents', $batch->analyses()->first()->id))
