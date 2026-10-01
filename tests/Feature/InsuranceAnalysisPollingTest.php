@@ -75,7 +75,9 @@ it('keeps a four-company batch open for every nonfinal state', function (string 
 })->with(['pending', 'processing', 'Pending', 'UnderAnalysis', 'manual_review', 'quoted']);
 
 it('polls until the last provider decides and only then finishes the batch', function (string $providerName) {
+    config(['services.leadlovers.enabled' => true]);
     $analysis = waitingProviderAnalysis($providerName);
+    $analysis->lead->update(['leadlovers_lead_id' => 501]);
     $provider = Mockery::mock(InsuranceProviderInterface::class);
     $provider->shouldReceive('requestAnalysis')->once()->andReturn([
         'success' => true, 'response' => ['status' => 'Pending', 'quoteId' => 'quote-test'],

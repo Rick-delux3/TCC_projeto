@@ -26,7 +26,7 @@ class TooRentalGuaranteePayloadBuilder
         $lead = $analysis->lead;
 
         if (! $lead) {
-            throw new \RuntimeException('Lead não encontrado para montar payload da Too.');
+            throw new \App\Exceptions\InvalidInsuranceAnalysisPayload('Lead não encontrado para montar payload da Too.');
         }
 
         $this->validateBaseLeadData($lead);
@@ -50,7 +50,7 @@ class TooRentalGuaranteePayloadBuilder
         $lead = $analysis->lead;
 
         if (! $lead) {
-            throw new \RuntimeException('Lead não encontrado para montar payload de atualização de dados básicos da Too.');
+            throw new \App\Exceptions\InvalidInsuranceAnalysisPayload('Lead não encontrado para montar payload de atualização de dados básicos da Too.');
         }
 
         $this->validateBaseLeadData($lead);
@@ -81,7 +81,7 @@ class TooRentalGuaranteePayloadBuilder
         $lead = $analysis->lead;
 
         if (! $lead) {
-            throw new \RuntimeException('Lead não encontrado para montar payload de cotação da Too.');
+            throw new \App\Exceptions\InvalidInsuranceAnalysisPayload('Lead não encontrado para montar payload de cotação da Too.');
         }
 
         $this->validateBaseLeadData($lead);
@@ -142,7 +142,7 @@ class TooRentalGuaranteePayloadBuilder
             'finalidadeLocacao' => match ($lead->tipo_locacao) {
                 TipoLocacao::RESIDENCIAL => 'Residencial',
                 TipoLocacao::COMERCIAL => 'Comercial',
-                default => throw new \RuntimeException('Informe a finalidade residencial ou comercial da locação para a Too.'),
+                default => throw new \App\Exceptions\InvalidInsuranceAnalysisPayload('Informe a finalidade residencial ou comercial da locação para a Too.'),
             },
             'cep' => $this->onlyNumbers($lead->endereco?->cep),
             'logradouro' => $lead->endereco?->logradouro,
@@ -231,7 +231,7 @@ class TooRentalGuaranteePayloadBuilder
         }
 
         if ($value < 15) {
-            throw new \RuntimeException('Encargos opcionais da Too devem ser zero ou pelo menos 15. Corrija os valores informados.');
+            throw new \App\Exceptions\InvalidInsuranceAnalysisPayload('Encargos opcionais da Too devem ser zero ou pelo menos 15. Corrija os valores informados.');
         }
 
         return $this->money($value);
@@ -275,14 +275,14 @@ class TooRentalGuaranteePayloadBuilder
     private function validateBaseLeadData(Lead $lead): void
     {
         if (! filled($lead->rentalApplicantNameForCpf())) {
-            throw new \RuntimeException('Nome do pretendente não informado para envio à Too.');
+            throw new \App\Exceptions\InvalidInsuranceAnalysisPayload('Nome do pretendente não informado para envio à Too.');
         }
 
         if (Validator::make(
             ['cpf' => $lead->rentalApplicantCpf()],
             ['cpf' => ['bail', 'required', 'string', 'size:11', new CpfOrCnpj]],
         )->fails()) {
-            throw new \RuntimeException('CPF do pretendente/responsável inválido para envio à Too.');
+            throw new \App\Exceptions\InvalidInsuranceAnalysisPayload('CPF do pretendente/responsável inválido para envio à Too.');
         }
 
         $this->birthdateForToo($lead);
@@ -292,11 +292,11 @@ class TooRentalGuaranteePayloadBuilder
         $this->coverages($lead);
 
         if (! $lead->endereco) {
-            throw new \RuntimeException('Endereço do imóvel não encontrado para envio à Too.');
+            throw new \App\Exceptions\InvalidInsuranceAnalysisPayload('Endereço do imóvel não encontrado para envio à Too.');
         }
 
         if (! filled($lead->endereco?->numero)) {
-            throw new \RuntimeException('Número do imóvel não informado para envio à Too.');
+            throw new \App\Exceptions\InvalidInsuranceAnalysisPayload('Número do imóvel não informado para envio à Too.');
         }
 
         $requiredAddressFields = [
@@ -310,20 +310,20 @@ class TooRentalGuaranteePayloadBuilder
 
         foreach ($requiredAddressFields as $field => $label) {
             if (! filled($lead->endereco->{$field} ?? null)) {
-                throw new \RuntimeException("Campo obrigatório ausente para Too: {$label}.");
+                throw new \App\Exceptions\InvalidInsuranceAnalysisPayload("Campo obrigatório ausente para Too: {$label}.");
             }
         }
 
         $aluguel = $this->expenseValue($lead, 'valor_aluguel') ?? 0.0;
 
         if ($aluguel < 200) {
-            throw new \RuntimeException('Valor do aluguel para Too deve ser no mínimo 200.');
+            throw new \App\Exceptions\InvalidInsuranceAnalysisPayload('Valor do aluguel para Too deve ser no mínimo 200.');
         }
 
         $rendaMensal = $this->monthlyIncomeForToo($lead);
 
         if ($rendaMensal <= 0) {
-            throw new \RuntimeException('Renda fixa mensal inválida para envio à Too.');
+            throw new \App\Exceptions\InvalidInsuranceAnalysisPayload('Renda fixa mensal inválida para envio à Too.');
         }
 
         $total = $aluguel
@@ -334,15 +334,15 @@ class TooRentalGuaranteePayloadBuilder
             + $this->valorLuz($lead);
 
         if ($total > 24999) {
-            throw new \RuntimeException('A soma de aluguel + encargos não pode ultrapassar 24999 para a Too.');
+            throw new \App\Exceptions\InvalidInsuranceAnalysisPayload('A soma de aluguel + encargos não pode ultrapassar 24999 para a Too.');
         }
 
         if (! $this->brokerCnpj()) {
-            throw new \RuntimeException('TOO_BROKER_CNPJ não configurado.');
+            throw new \App\Exceptions\InvalidInsuranceAnalysisPayload('TOO_BROKER_CNPJ não configurado.');
         }
 
         if (! $this->brokerName()) {
-            throw new \RuntimeException('TOO_BROKER_NAME não configurado.');
+            throw new \App\Exceptions\InvalidInsuranceAnalysisPayload('TOO_BROKER_NAME não configurado.');
         }
     }
 
@@ -414,7 +414,7 @@ class TooRentalGuaranteePayloadBuilder
             ['data_nascimento' => $birthdate],
             ['data_nascimento' => ['bail', 'required', 'date_format:Y-m-d', 'before_or_equal:today']],
         )->fails()) {
-            throw new \RuntimeException('Informe uma data de nascimento válida do pretendente/responsável antes de enviar à Too.');
+            throw new \App\Exceptions\InvalidInsuranceAnalysisPayload('Informe uma data de nascimento válida do pretendente/responsável antes de enviar à Too.');
         }
 
         return $birthdate;
@@ -447,7 +447,7 @@ class TooRentalGuaranteePayloadBuilder
         ];
 
         if (! isset($map[$normalized])) {
-            throw new \RuntimeException(
+            throw new \App\Exceptions\InvalidInsuranceAnalysisPayload(
                 "Vínculo empregatício inválido para Too: {$value}. Use Clt, Autonomo, Empresario, Aposentado ou outro valor aceito."
             );
         }
@@ -462,7 +462,7 @@ class TooRentalGuaranteePayloadBuilder
         $profession = trim($profession);
 
         if ($profession === '' || mb_strlen($profession) > 40) {
-            throw new \RuntimeException('Configure uma profissão válida para a Too, com até 40 caracteres.');
+            throw new \App\Exceptions\InvalidInsuranceAnalysisPayload('Configure uma profissão válida para a Too, com até 40 caracteres.');
         }
 
         return $profession;

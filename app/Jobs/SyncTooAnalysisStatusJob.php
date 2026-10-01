@@ -16,6 +16,10 @@ class SyncTooAnalysisStatusJob implements ShouldQueue
 
     public int $tries = 10;
 
+    public int $maxExceptions = 3;
+
+    public array $backoff = [30, 120, 300];
+
     public int $timeout = 180;
 
     public int $consecutiveFailures = 0;
@@ -37,6 +41,11 @@ class SyncTooAnalysisStatusJob implements ShouldQueue
         } catch (ObsoleteInsuranceAnalysisAttempt) {
             return;
         }
+    }
+
+    public function failed(?\Throwable $exception): void
+    {
+        \App\Services\Insurance\InsuranceAnalysisFailure::finish($this->analysisId, $this->attemptId, $this->isReanalysis, $exception);
     }
 
     public function middleware(): array

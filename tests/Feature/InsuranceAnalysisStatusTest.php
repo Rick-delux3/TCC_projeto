@@ -102,7 +102,15 @@ it('persists only explicit provider decisions across creation reanalysis and syn
         $job = $operation === 'sync'
             ? new SyncProviderAnalysisStatusJob($analysis->id, 'status-test')
             : new RunProviderAnalysisJob($analysis->id, 'status-test', $operation === 'reanalyze');
-        $job->handle($resolver);
+        if (! $success && $job instanceof RunProviderAnalysisJob) {
+            expect(fn () => $job->handle($resolver))->toThrow(RuntimeException::class);
+            expect($analysis->fresh()->status)->toBe('processing')
+                ->and($analysis->fresh()->finished_at)->toBeNull();
+            Queue::assertNotPushed(CompleteInsuranceAnalysesBatchJob::class);
+            $job->failed(new RuntimeException('Provider retries exhausted'));
+        } else {
+            $job->handle($resolver);
+        }
 
         Queue::assertPushed(CompleteInsuranceAnalysesBatchJob::class);
     }

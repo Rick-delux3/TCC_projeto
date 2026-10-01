@@ -26,6 +26,10 @@ class SyncProviderAnalysisStatusJob implements ShouldQueue
      */
     public int $tries = 10;
 
+    public int $maxExceptions = 3;
+
+    public array $backoff = [30, 120, 300];
+
     /**
      * Tempo máximo de execução do job em segundos.
      */
@@ -68,6 +72,11 @@ class SyncProviderAnalysisStatusJob implements ShouldQueue
         } catch (ObsoleteInsuranceAnalysisAttempt) {
             return;
         }
+    }
+
+    public function failed(?\Throwable $exception): void
+    {
+        \App\Services\Insurance\InsuranceAnalysisFailure::finish($this->analysisId, $this->attemptId, $this->isReanalysis, $exception);
     }
 
     public function middleware(): array

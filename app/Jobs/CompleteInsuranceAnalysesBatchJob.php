@@ -2,9 +2,13 @@
 
 namespace App\Jobs;
 
+use App\Events\DashboardActivityChanged;
 use App\Models\InsuranceAnalysis;
 use App\Models\InsuranceAnalysisBatch;
 use App\Models\InsuranceAnalysisEvent;
+use App\Models\Lead;
+use App\Services\Insurance\InsuranceAnalysisAttempt;
+use App\Services\Insurance\InsuranceBatchResult;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -16,6 +20,10 @@ class CompleteInsuranceAnalysesBatchJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
+    public int $tries = 3;
+
+    public array $backoff = [30, 120, 300];
+
     public function __construct(
         public int $batchId,
         public string $attemptId,
@@ -24,18 +32,29 @@ class CompleteInsuranceAnalysesBatchJob implements ShouldQueue
 
     public function handle(): void
     {
+        try {
+            $this->complete();
+        } catch (\App\Exceptions\ObsoleteInsuranceAnalysisAttempt) {
+            return;
+        }
+    }
+
+    private function complete(): void
+    {
         if (! config('features.insurance_analysis.enabled', false)) {
             logger()->notice('Job de análise ignorado porque o módulo está desativado.', ['job' => static::class]);
 
             return;
         }
 
-        DB::transaction(function (): void {
+        $batch = DB::transaction(function (): ?InsuranceAnalysisBatch {
+            $leadId = InsuranceAnalysisBatch::query()->whereKey($this->batchId)->value('lead_id');
+            $lead = Lead::query()->lockForUpdate()->findOrFail($leadId);
             $batch = InsuranceAnalysisBatch::query()->lockForUpdate()->findOrFail($this->batchId);
             $analyses = $batch->analyses()->lockForUpdate()->get();
             $context = \App\Services\Insurance\InsuranceAnalysisAttempt::batchContext($batch->id, true);
             if (($context['attempt_id'] ?? null) !== $this->attemptId) {
-                return;
+                return null;
             }
 
             /*
@@ -71,7 +90,7 @@ class CompleteInsuranceAnalysesBatchJob implements ShouldQueue
             ]);
 
             if ($status === 'processing') {
-                return;
+                return null;
             }
 
             /*
@@ -81,7 +100,71 @@ class CompleteInsuranceAnalysesBatchJob implements ShouldQueue
             | Este Job pode ser disparado pelo RunProviderAnalysisJob e pelo finally()
             | do Bus::batch. O evento email_queued funciona como trava da rodada.
             */
-            $this->queueCompletionJobs($batch);
+            $batch->setRelation('analyses', $analyses);
+            $alreadyConsolidated = InsuranceAnalysisEvent::query()
+                ->whereIn('insurance_analysis_id', $analyses->modelKeys())
+                ->where('event_type', 'local_result_consolidated')
+                ->where('payload->attempt_id', $this->attemptId)->exists();
+            if (! $alreadyConsolidated) {
+                $result = InsuranceBatchResult::status($batch);
+                $lead->forceFill([
+                    'analysis_final_status' => $result,
+                    'analysis_final_tag_key' => InsuranceBatchResult::tagKey($batch),
+                    'analysis_finalized_at' => $batch->finished_at,
+                    'last_analysis_batch_id' => $batch->id,
+                    'tags_originais' => InsuranceBatchResult::localTags($lead->tags_originais, $result),
+                ])->save();
+                $analyses->first()->events()->create([
+                    'event_type' => 'local_result_consolidated',
+                    'status' => $result,
+                    'payload' => ['attempt_id' => $this->attemptId, 'is_reanalysis' => $this->isReanalysis],
+                ]);
+                DashboardActivityChanged::dispatch('lead', $lead->id, $lead->company_id, 'lead.analysis-result.changed');
+            }
+
+            return $batch;
+        });
+        if (! $batch) {
+            return;
+        }
+
+        $failure = null;
+        try {
+            $this->queueLeadLoversSync($batch);
+        } catch (\Throwable $exception) {
+            $failure = $exception;
+        }
+        $this->queueCompletionJobs($batch);
+        if ($failure) {
+            throw $failure;
+        }
+    }
+
+    private function queueLeadLoversSync(InsuranceAnalysisBatch $batch): void
+    {
+        if (! config('services.leadlovers.enabled', false)) {
+            return;
+        }
+        InsuranceAnalysisAttempt::runBatch($batch, $this->attemptId, function () use ($batch): void {
+            $batch->load('lead', 'analyses');
+            if (! InsuranceBatchResult::readyForLeadLovers($batch->lead, $batch)) {
+                return;
+            }
+            $analysis = $batch->analyses->first();
+            if ($analysis->events()->where('event_type', 'leadlovers_final_sync_queued')
+                ->where('payload->attempt_id', $this->attemptId)->exists()) {
+                return;
+            }
+            if ((int) $batch->lead->leadlovers_lead_id > 0) {
+                ApplyFinalAnalysisTagToLeadLoversJob::dispatch($batch->id, $this->attemptId, $this->isReanalysis)->beforeCommit();
+            } else {
+                SendLeadToLeadLoversJob::dispatch($batch->lead_id)->beforeCommit();
+            }
+            $analysis->events()->create([
+                'event_type' => 'leadlovers_final_sync_queued',
+                'status' => 'queued',
+                'payload' => ['attempt_id' => $this->attemptId, 'is_reanalysis' => $this->isReanalysis],
+            ]);
         });
     }
 
@@ -90,7 +173,7 @@ class CompleteInsuranceAnalysesBatchJob implements ShouldQueue
      */
     private function queueCompletionJobs(InsuranceAnalysisBatch $batch): bool
     {
-        return DB::transaction(function () use ($batch) {
+        return InsuranceAnalysisAttempt::runBatch($batch, $this->attemptId, function () use ($batch) {
             $controlAnalysis = InsuranceAnalysis::query()
                 ->where('insurance_analysis_batch_id', $batch->id)
                 ->orderBy('id')
@@ -123,8 +206,6 @@ class CompleteInsuranceAnalysesBatchJob implements ShouldQueue
                 return false;
             }
 
-            $isFirstQueueForAttempt = ! $latestQueuedId;
-
             $controlAnalysis->events()->create([
                 'event_type' => 'email_queued',
                 'status' => 'queued',
@@ -144,14 +225,6 @@ class CompleteInsuranceAnalysesBatchJob implements ShouldQueue
                 'email_failed_at' => null,
                 'email_error' => null,
             ]);
-
-            if ($isFirstQueueForAttempt) {
-                ApplyFinalAnalysisTagToLeadLoversJob::dispatch(
-                    batchId: $batch->id,
-                    attemptId: $this->attemptId,
-                    isReanalysis: $this->isReanalysis
-                )->afterCommit();
-            }
 
             SendAnalysisResultsEmailJob::dispatch(
                 batchId: $batch->id,

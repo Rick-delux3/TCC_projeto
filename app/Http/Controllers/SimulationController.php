@@ -6,14 +6,12 @@ use App\Events\DashboardActivityChanged;
 use App\Http\Requests\RecoverCompanyAccessCodeRequest;
 use App\Http\Requests\StoreSimulationLeadRequest;
 use App\Jobs\RecoverCompanyAccessCodeJob;
-use App\Jobs\SendLeadToLeadLoversJob;
 use App\Jobs\StartInsuranceAnalysesBatchJob;
 use App\Models\Imobiliaria;
 use App\Models\InsuranceAnalysisBatch;
 use App\Models\Lead;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
@@ -813,8 +811,6 @@ class SimulationController extends Controller
     private function dispatchLeadFlow(Lead $lead): void
     {
         if (! config('features.insurance_analysis.enabled', false)) {
-            SendLeadToLeadLoversJob::dispatch($lead->id)->afterCommit();
-
             return;
         }
 
@@ -835,12 +831,6 @@ class SimulationController extends Controller
             return;
         }
 
-        Bus::chain([
-            new SendLeadToLeadLoversJob($lead->id),
-            new StartInsuranceAnalysesBatchJob(
-                leadId: $lead->id,
-                isReanalysis: false
-            ),
-        ])->dispatch();
+        StartInsuranceAnalysesBatchJob::dispatch($lead->id)->afterCommit();
     }
 }

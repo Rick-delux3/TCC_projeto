@@ -146,6 +146,7 @@ final class LeadLoversResultTagService
     ): string {
         $finalTitles = $catalog
             ->pluck('title')
+            ->merge(array_column(ManualLeadResultTags::all(), 'label'))
             ->filter(fn (mixed $title): bool => filled($title))
             ->map(fn (mixed $title): string => $this->normalizeTitle((string) $title))
             ->values();

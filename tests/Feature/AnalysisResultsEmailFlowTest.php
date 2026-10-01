@@ -62,8 +62,10 @@ function analysisResultsEmailFixture(
 
 it('queues one completion per active attempt and allows a new queue after terminal failure', function () {
     Queue::fake();
+    config(['services.leadlovers.enabled' => true]);
     $attemptId = 'recoverable-result-email';
     ['batch' => $batch, 'analysis' => $analysis] = analysisResultsEmailFixture($attemptId);
+    $batch->lead->update(['leadlovers_lead_id' => 501]);
     $job = new CompleteInsuranceAnalysesBatchJob($batch->id, $attemptId);
 
     $job->handle();

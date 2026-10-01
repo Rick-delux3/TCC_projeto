@@ -34,19 +34,19 @@ class RentalGuaranteeQuotePayloadBuilder
         $lead = $analysis->lead;
 
         if (! $lead) {
-            throw new \RuntimeException('Lead não encontrado para montar o payload da Pottencial.');
+            throw new \App\Exceptions\InvalidInsuranceAnalysisPayload('Lead não encontrado para montar o payload da Pottencial.');
         }
 
         $policyHolderDocument = $lead->rentalApplicantDocument();
 
         if (Validator::make(['document' => $policyHolderDocument], ['document' => ['required', new CpfOrCnpj]])->fails()) {
-            throw new \RuntimeException('CPF/CNPJ do pretendente inválido para envio da cotação à Pottencial.');
+            throw new \App\Exceptions\InvalidInsuranceAnalysisPayload('CPF/CNPJ do pretendente inválido para envio da cotação à Pottencial.');
         }
 
         $occupation = match ($lead->tipo_locacao) {
             TipoLocacao::RESIDENCIAL => 'Residencial',
             TipoLocacao::COMERCIAL => 'Commercial',
-            default => throw new \RuntimeException('Informe a finalidade residencial ou comercial da locação para a Pottencial.'),
+            default => throw new \App\Exceptions\InvalidInsuranceAnalysisPayload('Informe a finalidade residencial ou comercial da locação para a Pottencial.'),
         };
 
         $this->validateRequiredLeadData($lead);
@@ -135,7 +135,7 @@ class RentalGuaranteeQuotePayloadBuilder
         $brokerDocument = \only_numbers(config('services.pottencial.broker_document'));
 
         if (! $brokerDocument) {
-            throw new \RuntimeException('Documento do broker não configurado para envio da cotação.');
+            throw new \App\Exceptions\InvalidInsuranceAnalysisPayload('Documento do broker não configurado para envio da cotação.');
         }
 
         $agents = [
@@ -366,23 +366,23 @@ class RentalGuaranteeQuotePayloadBuilder
     private function validateRequiredLeadData(Lead $lead): void
     {
         if (! filled($lead->nome)) {
-            throw new \RuntimeException('Nome do solicitante não informado para envio da cotação.');
+            throw new \App\Exceptions\InvalidInsuranceAnalysisPayload('Nome do solicitante não informado para envio da cotação.');
         }
 
         if (! filled($lead->email)) {
-            throw new \RuntimeException('E-mail do solicitante não informado para envio da cotação.');
+            throw new \App\Exceptions\InvalidInsuranceAnalysisPayload('E-mail do solicitante não informado para envio da cotação.');
         }
 
         $aluguel = $this->expenseValue($lead, 'valor_aluguel') ?? 0.0;
 
         if ($aluguel <= 0) {
-            throw new \RuntimeException('Valor do aluguel não informado para envio da cotação.');
+            throw new \App\Exceptions\InvalidInsuranceAnalysisPayload('Valor do aluguel não informado para envio da cotação.');
         }
 
         $endereco = $lead->endereco;
 
         if (! $endereco) {
-            throw new \RuntimeException('Endereço do imóvel não encontrado para envio da cotação.');
+            throw new \App\Exceptions\InvalidInsuranceAnalysisPayload('Endereço do imóvel não encontrado para envio da cotação.');
         }
 
         $requiredAddressFields = [
@@ -395,7 +395,7 @@ class RentalGuaranteeQuotePayloadBuilder
 
         foreach ($requiredAddressFields as $field => $label) {
             if (! filled($endereco->{$field} ?? null)) {
-                throw new \RuntimeException("Campo de endereço obrigatório ausente: {$label}.");
+                throw new \App\Exceptions\InvalidInsuranceAnalysisPayload("Campo de endereço obrigatório ausente: {$label}.");
             }
         }
     }

@@ -475,7 +475,6 @@ it('preserves an accepted action when confirmation is rate limited', function ()
 it('records one failure when the queue failed callback runs after fail', function () {
     ['lead' => $lead, 'batch' => $batch, 'analysis' => $analysis] = finalAnalysisTagFixture();
     finalAnalysisAttempt($analysis, 'attempt-with-permanent-failure');
-    $lead->forceFill(['leadlovers_lead_id' => null])->save();
     $job = (new ApplyFinalAnalysisTagToLeadLoversJob(
         batchId: $batch->id,
         attemptId: 'attempt-with-permanent-failure',

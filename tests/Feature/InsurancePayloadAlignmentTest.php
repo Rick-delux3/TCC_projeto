@@ -17,6 +17,7 @@ beforeEach(function () {
     Bus::fake();
     Http::preventStrayRequests();
     config([
+        'queue.default' => 'database',
         'features.insurance_analysis.enabled' => true,
         'services.too.enabled' => true,
         'services.pottencial.enabled' => true,

@@ -67,87 +67,106 @@ class TooInsuranceProvider implements InsuranceProviderInterface
         | 1. Registra ficha/proposta
         |--------------------------------------------------------------------------
         */
-        $fichaPayload = $this->payloadBuilder->buildFichaPayload($analysis);
+        $saved = $analysis->providerResponsePayload();
+        $resume = ($saved['too_analysis_attempt_id'] ?? null) === $attemptId
+            && filled($analysis->tooNumeroProposta()) && filled($analysis->tooNumeroFicha());
+        if ($resume) {
+            $fichaResponse = $saved['ficha'] ?? [];
+            $numeroProposta = $analysis->tooNumeroProposta();
+            $numeroFicha = $analysis->tooNumeroFicha();
+        } else {
+            $fichaPayload = $this->payloadBuilder->buildFichaPayload($analysis);
 
-        $analysis->updateForAttempt([
-            'request_payload' => [
-                'provider' => 'too',
-                'step' => 'ficha',
-                'ficha_payload' => $fichaPayload,
-            ],
-        ]);
+            $analysis->updateForAttempt([
+                'request_payload' => [
+                    'provider' => 'too',
+                    'step' => 'ficha',
+                    'ficha_payload' => $fichaPayload,
+                ],
+            ]);
 
-        $fichaResponse = $this->tooService->registerProposalFicha($fichaPayload);
+            $fichaResponse = $this->tooService->registerProposalFicha($fichaPayload);
 
-        if (! $this->responseWasSuccessful($fichaResponse)) {
-            return $this->failResult(
-                message: 'Erro ao registrar ficha/proposta na Too.',
-                step: 'register_ficha',
-                responses: [
+            if (! $this->responseWasSuccessful($fichaResponse)) {
+                return $this->failResult(
+                    message: 'Erro ao registrar ficha/proposta na Too.',
+                    step: 'register_ficha',
+                    responses: [
+                        'ficha' => $fichaResponse,
+                    ]
+                );
+            }
+
+            $fichaData = $fichaResponse['response'] ?? [];
+
+            $numeroProposta = $this->extractFirstValue($fichaData, [
+                'numeroProposta',
+                'NumeroProposta',
+                'numero_proposta',
+                'proposalNumber',
+                'proposal_number',
+                'proposta',
+            ]);
+
+            $numeroFicha = $this->extractFirstValue($fichaData, [
+                'numeroFicha',
+                'NumeroFicha',
+                'numero_ficha',
+                'ficha',
+                'fichaId',
+                'idFicha',
+            ]);
+
+            /*
+             * Em homologação, a Too pode retornar apenas numeroFicha.
+             * Nesse fluxo, usamos o mesmo número como proposta/ficha.
+             */
+            $numeroProposta = $numeroProposta ?: $numeroFicha;
+            $numeroFicha = $numeroFicha ?: $numeroProposta;
+
+            if (! $numeroProposta || ! $numeroFicha) {
+                return $this->failResult(
+                    message: 'A Too registrou a ficha, mas não retornou numeroProposta/numeroFicha identificável.',
+                    step: 'extract_ficha_numbers',
+                    responses: [
+                        'ficha' => $fichaResponse,
+                    ]
+                );
+            }
+
+            $analysis->updateForAttempt([
+                'proposal_id' => (string) $numeroProposta,
+                'response_payload' => [
+                    'provider' => 'too',
                     'ficha' => $fichaResponse,
-                ]
-            );
+                    'numeroProposta' => $numeroProposta,
+                    'numeroFicha' => $numeroFicha,
+                    'too_analysis_attempt_id' => $attemptId,
+                    'too_is_reanalysis' => false,
+                ],
+
+            ]);
+
         }
-
-        $fichaData = $fichaResponse['response'] ?? [];
-
-        $numeroProposta = $this->extractFirstValue($fichaData, [
-            'numeroProposta',
-            'NumeroProposta',
-            'numero_proposta',
-            'proposalNumber',
-            'proposal_number',
-            'proposta',
-        ]);
-
-        $numeroFicha = $this->extractFirstValue($fichaData, [
-            'numeroFicha',
-            'NumeroFicha',
-            'numero_ficha',
-            'ficha',
-            'fichaId',
-            'idFicha',
-        ]);
-
-        /*
-         * Em homologação, a Too pode retornar apenas numeroFicha.
-         * Nesse fluxo, usamos o mesmo número como proposta/ficha.
-         */
-        $numeroProposta = $numeroProposta ?: $numeroFicha;
-        $numeroFicha = $numeroFicha ?: $numeroProposta;
-
-        if (! $numeroProposta || ! $numeroFicha) {
-            return $this->failResult(
-                message: 'A Too registrou a ficha, mas não retornou numeroProposta/numeroFicha identificável.',
-                step: 'extract_ficha_numbers',
-                responses: [
-                    'ficha' => $fichaResponse,
-                ]
-            );
-        }
-
-        $analysis->updateForAttempt([
-            'proposal_id' => (string) $numeroProposta,
-            'response_payload' => [
-                'provider' => 'too',
-                'ficha' => $fichaResponse,
-                'numeroProposta' => $numeroProposta,
-                'numeroFicha' => $numeroFicha,
-                'too_analysis_attempt_id' => $attemptId,
-                'too_is_reanalysis' => false,
-            ],
-
-        ]);
 
         /*
         |--------------------------------------------------------------------------
         | 2. Envia para análise de crédito
         |--------------------------------------------------------------------------
         */
-        $creditResponse = $this->tooService->submitCreditAnalysis(
-            cpf: $cpf,
-            numeroProposta: $numeroProposta
-        );
+        $creditResponse = $saved['credit'] ?? [];
+        if (! $resume || ! $this->responseWasSuccessful($creditResponse)) {
+            InsuranceAnalysisAttempt::assertCurrent($analysis, $attemptId);
+            $creditResponse = $this->tooService->submitCreditAnalysis(
+                cpf: $cpf,
+                numeroProposta: $numeroProposta
+            );
+            if ($this->responseWasSuccessful($creditResponse)) {
+                $analysis->updateForAttempt([
+                    'response_payload' => array_merge($analysis->providerResponsePayload(), ['credit' => $creditResponse]),
+                ]);
+            }
+        }
 
         if (! $this->responseWasSuccessful($creditResponse)) {
             return $this->failResult(
@@ -252,6 +271,12 @@ class TooInsuranceProvider implements InsuranceProviderInterface
                     'numeroFicha' => $numeroFicha,
                 ]
             );
+        }
+
+        $saved = $analysis->providerResponsePayload();
+        if (($saved['too_reanalysis_attempt_id'] ?? null) === $attemptId
+            && $this->responseWasSuccessful($saved['too_reanalysis_request'] ?? [])) {
+            return $this->getStatus($analysis);
         }
 
         $basicDataPayload = $this->payloadBuilder->buildBasicDataPayload($analysis);
@@ -803,6 +828,7 @@ class TooInsuranceProvider implements InsuranceProviderInterface
 
         return [
             'success' => false,
+            'retryable' => $this->lastResponseIsRetryable($responses),
             'http_status' => $this->lastHttpStatus($responses),
             'endpoint' => 'too_flow',
             'url' => null,
@@ -819,13 +845,26 @@ class TooInsuranceProvider implements InsuranceProviderInterface
         ];
     }
 
+    private function lastResponseIsRetryable(array $responses): bool
+    {
+        $last = end($responses);
+        if (! is_array($last) || ($last['success'] ?? false)) {
+            return false;
+        }
+        $status = $last['http_status'] ?? null;
+
+        return in_array($status, [408, 429], true)
+            || (is_numeric($status) && (int) $status >= 500)
+            || ($status === null && filled($last['url'] ?? null));
+    }
+
     private function lastHttpStatus(array $responses): ?int
     {
         $lastStatus = null;
 
         foreach ($responses as $response) {
-            if (is_array($response) && isset($response['http_status'])) {
-                $lastStatus = (int) $response['http_status'];
+            if (is_array($response) && array_key_exists('http_status', $response)) {
+                $lastStatus = $response['http_status'] === null ? null : (int) $response['http_status'];
             }
         }
 

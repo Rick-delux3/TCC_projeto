@@ -2,9 +2,11 @@
 
 namespace App\Jobs;
 
+use App\Exceptions\InvalidInsuranceAnalysisPayload;
 use App\Exceptions\ObsoleteInsuranceAnalysisAttempt;
 use App\Models\InsuranceAnalysis;
 use App\Services\Insurance\InsuranceAnalysisAttempt;
+use App\Services\Insurance\InsuranceAnalysisFailure;
 use App\Services\Insurance\InsuranceStatusPolling;
 use App\Services\Insurance\ProviderAnalysisStatus;
 use App\Services\Insurance\Providers\InsuranceProviderResolver;
@@ -25,6 +27,10 @@ class RunProviderAnalysisJob implements ShouldQueue
 
     public int $timeout = 180;
 
+    public int $maxExceptions = 3;
+
+    public array $backoff = [30, 120, 300];
+
     public function __construct(
         public int $analysisId,
         public string $attemptId,
@@ -39,6 +45,11 @@ class RunProviderAnalysisJob implements ShouldQueue
         } catch (ObsoleteInsuranceAnalysisAttempt) {
             return;
         }
+    }
+
+    public function failed(?\Throwable $exception): void
+    {
+        InsuranceAnalysisFailure::finish($this->analysisId, $this->attemptId, $this->isReanalysis, $exception);
     }
 
     public function middleware(): array
@@ -89,7 +100,9 @@ class RunProviderAnalysisJob implements ShouldQueue
             $analysis->updateForAttempt(['product' => $analysis->lead->rentalGuaranteeProduct()]);
             $provider = $resolver->resolve($analysis->provider);
 
-            if ($this->isReanalysis) {
+            if ($this->attempts() > 1 && ! $analysis->isTooProvider() && filled($analysis->quote_id)) {
+                $result = $provider->getStatus($analysis);
+            } elseif ($this->isReanalysis) {
                 $result = $provider->requestReanalysis(
                     analysis: $analysis,
                     attemptId: $this->attemptId,
@@ -101,6 +114,10 @@ class RunProviderAnalysisJob implements ShouldQueue
                     analysis: $analysis,
                     attemptId: $this->attemptId
                 );
+            }
+
+            if ($this->shouldRetryResult($result)) {
+                throw new \RuntimeException('Falha temporária na comunicação com a companhia.');
             }
 
             Log::info('Resultado bruto recebido do provider', [
@@ -117,33 +134,45 @@ class RunProviderAnalysisJob implements ShouldQueue
             });
         } catch (ObsoleteInsuranceAnalysisAttempt $obsolete) {
             throw $obsolete;
-        } catch (\Throwable $e) {
-            InsuranceAnalysisAttempt::run($analysis, $this->attemptId, function () use ($analysis, $e): void {
+        } catch (InvalidInsuranceAnalysisPayload|\DomainException|\InvalidArgumentException $exception) {
+            $this->failed($exception);
+        } catch (\Throwable $exception) {
+            InsuranceAnalysisAttempt::run($analysis, $this->attemptId, function () use ($analysis, $exception): void {
+                if (ProviderAnalysisStatus::isTerminal($analysis->status)) {
+                    return;
+                }
                 $analysis->update([
-                    'status' => 'failed',
-                    'result' => null,
-                    'error_message' => $e->getMessage(),
-                    'finished_at' => now(),
+                    'status' => 'processing',
+                    'finished_at' => null,
+                    'error_message' => null,
                 ]);
-
                 $analysis->events()->create([
-                    'event_type' => $this->isReanalysis ? 'reanalysis_failed' : 'failed',
-                    'status' => 'failed',
-                    'message' => $e->getMessage(),
-                    'payload' => $this->analysisSnapshot($analysis),
+                    'event_type' => 'execution_retry',
+                    'status' => 'processing',
+                    'message' => 'Falha temporária. A fila realizará uma nova tentativa.',
+                    'payload' => array_merge($this->analysisSnapshot($analysis), [
+                        'queue_attempt' => $this->attempts(),
+                        'exception' => $exception::class,
+                    ]),
                 ]);
-
-                Log::error('Erro ao executar análise de provider', [
-                    'analysis_id' => $analysis->id,
-                    'attempt_id' => $this->attemptId,
-                    'is_reanalysis' => $this->isReanalysis,
-                    'provider' => $analysis->provider,
-                    'message' => $e->getMessage(),
-                ]);
-
-                $this->dispatchBatchCompletionCheck($analysis);
             });
+            throw $exception;
         }
+    }
+
+    private function shouldRetryResult(array $result): bool
+    {
+        if ($result['success'] ?? false) {
+            return false;
+        }
+        if (array_key_exists('retryable', $result)) {
+            return (bool) $result['retryable'];
+        }
+        $status = $result['http_status'] ?? null;
+
+        return in_array($status, [408, 429], true)
+            || (is_numeric($status) && (int) $status >= 500)
+            || ($status === null && filled($result['url'] ?? null));
     }
 
     private function applyResult(InsuranceAnalysis $analysis, array $result): void
