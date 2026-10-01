@@ -128,6 +128,17 @@ class CompleteInsuranceAnalysesBatchJob implements ShouldQueue
             return;
         }
 
+        DB::afterCommit(function () use ($batch): void {
+            try {
+                $this->dispatchCompletionJobs($batch);
+            } catch (\App\Exceptions\ObsoleteInsuranceAnalysisAttempt) {
+                return;
+            }
+        });
+    }
+
+    private function dispatchCompletionJobs(InsuranceAnalysisBatch $batch): void
+    {
         $failure = null;
         try {
             $this->queueLeadLoversSync($batch);
@@ -168,12 +179,30 @@ class CompleteInsuranceAnalysesBatchJob implements ShouldQueue
         });
     }
 
-    /**
-     * Persiste a trava e os jobs da fila database na mesma transação.
-     */
     private function queueCompletionJobs(InsuranceAnalysisBatch $batch): bool
     {
-        return InsuranceAnalysisAttempt::runBatch($batch, $this->attemptId, function () use ($batch) {
+        $queuedEventId = null;
+
+        try {
+            return $this->queueResultsEmail($batch, $queuedEventId);
+        } catch (\Throwable $exception) {
+            if ($queuedEventId !== null) {
+                $this->releaseFailedEmailDispatch($batch, $queuedEventId);
+            }
+
+            throw $exception;
+        }
+    }
+
+    private function queueResultsEmail(InsuranceAnalysisBatch $batch, ?int &$queuedEventId): bool
+    {
+        return InsuranceAnalysisAttempt::runBatch($batch, $this->attemptId, function () use ($batch, &$queuedEventId): bool {
+            if (! config('features.insurance_analysis.enabled', false)
+                || ! in_array($batch->status, ['completed', 'completed_with_errors'], true)
+                || $batch->finished_at === null) {
+                return false;
+            }
+
             $controlAnalysis = InsuranceAnalysis::query()
                 ->where('insurance_analysis_batch_id', $batch->id)
                 ->orderBy('id')
@@ -206,7 +235,7 @@ class CompleteInsuranceAnalysesBatchJob implements ShouldQueue
                 return false;
             }
 
-            $controlAnalysis->events()->create([
+            $queuedEvent = $controlAnalysis->events()->create([
                 'event_type' => 'email_queued',
                 'status' => 'queued',
                 'message' => $this->isReanalysis
@@ -219,6 +248,7 @@ class CompleteInsuranceAnalysesBatchJob implements ShouldQueue
                     'queued_at' => now()->toDateTimeString(),
                 ],
             ]);
+            $queuedEventId = $queuedEvent->id;
 
             $batch->update([
                 'email_status' => 'queued',
@@ -233,6 +263,38 @@ class CompleteInsuranceAnalysesBatchJob implements ShouldQueue
             )->afterCommit();
 
             return true;
+        });
+    }
+
+    private function releaseFailedEmailDispatch(InsuranceAnalysisBatch $batch, int $queuedEventId): void
+    {
+        InsuranceAnalysisAttempt::runBatch($batch, $this->attemptId, function () use ($batch, $queuedEventId): void {
+            $events = InsuranceAnalysisEvent::query()
+                ->whereHas('analysis', fn ($query) => $query->where('insurance_analysis_batch_id', $batch->id))
+                ->where('payload->attempt_id', $this->attemptId);
+            $queuedEvent = (clone $events)->where('event_type', 'email_queued')->latest('id')->first();
+
+            if ($queuedEvent?->id !== $queuedEventId || (clone $events)->where('event_type', 'email_sent')->exists()) {
+                return;
+            }
+
+            $message = 'Não foi possível enfileirar a preparação dos PDFs. O envio pode ser tentado novamente.';
+            $queuedEvent->analysis->events()->create([
+                'event_type' => 'email_failed',
+                'status' => 'failed',
+                'message' => $message,
+                'payload' => [
+                    'attempt_id' => $this->attemptId,
+                    'is_reanalysis' => $this->isReanalysis,
+                    'batch_id' => $batch->id,
+                    'stage' => 'dispatch',
+                ],
+            ]);
+            $batch->update([
+                'email_status' => 'failed',
+                'email_failed_at' => now(),
+                'email_error' => $message,
+            ]);
         });
     }
 }

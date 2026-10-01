@@ -5,6 +5,7 @@ namespace App\Jobs;
 use App\Exceptions\ObsoleteInsuranceAnalysisAttempt;
 use App\Models\InsuranceAnalysisBatch;
 use App\Models\InsuranceAnalysisEvent;
+use App\Services\Insurance\AnalysisResultPreparationService;
 use App\Services\Insurance\InsuranceAnalysisAttempt;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Bus\Queueable;
@@ -66,10 +67,7 @@ class SendAnalysisResultsEmailJob implements ShouldQueue
 
         $batch = InsuranceAnalysisBatch::with([
             'lead',
-            'analyses.events',
-            'lead.company',
-            'lead.imobiliariaInformada',
-            'lead.locador',
+            'analyses',
         ])->findOrFail($this->batchId);
 
         /*
@@ -100,7 +98,25 @@ class SendAnalysisResultsEmailJob implements ShouldQueue
             throw new RuntimeException('Lead não encontrado para envio do resultado.');
         }
 
-        $recipients = $this->resolveEmailRecipients($lead);
+        try {
+            $prepared = app(AnalysisResultPreparationService::class)->prepare($batch, $this->attemptId);
+        } catch (ObsoleteInsuranceAnalysisAttempt $obsolete) {
+            throw $obsolete;
+        } catch (Throwable $exception) {
+            if ($this->attempts() >= $this->tries) {
+                $this->recordTerminalFailure($batch, 'Falha ao preparar os dados do resultado.', [
+                    'attempt_id' => $this->attemptId,
+                    'is_reanalysis' => $this->isReanalysis,
+                ]);
+            }
+
+            throw $exception;
+        }
+
+        $lead->forceFill($prepared['lead']);
+        $batch->setRelation('lead', $lead);
+        $this->isReanalysis = $prepared['is_reanalysis'];
+        $recipients = $prepared['recipients'];
 
         if (empty($recipients['to'])) {
             if ($this->attempts() >= $this->tries) {
@@ -119,7 +135,7 @@ class SendAnalysisResultsEmailJob implements ShouldQueue
             throw new RuntimeException('Nenhum destinatário válido encontrado para envio do resultado.');
         }
 
-        $resultEvents = $this->resultEventsForCurrentAttempt($batch);
+        $resultEvents = $this->resultEventsForCurrentAttempt($batch, $prepared);
 
         try {
             $body = $this->buildMessage($batch, $resultEvents);
@@ -210,7 +226,7 @@ class SendAnalysisResultsEmailJob implements ShouldQueue
 
     public function failed(?Throwable $exception): void
     {
-        $batch = InsuranceAnalysisBatch::with(['analyses.events'])->find($this->batchId);
+        $batch = InsuranceAnalysisBatch::with(['analyses'])->find($this->batchId);
 
         if (! $batch) {
             return;
@@ -245,47 +261,17 @@ class SendAnalysisResultsEmailJob implements ShouldQueue
         return $query->exists();
     }
 
-    private function resultEventsForCurrentAttempt(InsuranceAnalysisBatch $batch): Collection
+    private function resultEventsForCurrentAttempt(InsuranceAnalysisBatch $batch, ?array $prepared = null): Collection
     {
-        $eventTypes = [
-            'analysis_completed',
-            'reanalysis_completed',
-            'created_without_body',
-            'reanalysis_created_without_body',
-            'failed',
-            'reanalysis_failed',
-            'invalid_response',
-            'reanalysis_invalid_response',
-        ];
+        $analyses = $prepared === null ? $batch->analyses : collect($prepared['analyses'])->map(function (array $attributes) {
+            $analysis = new \App\Models\InsuranceAnalysis;
+            $analysis->forceFill($attributes);
+            $analysis->exists = true;
 
-        $query = InsuranceAnalysisEvent::query()
-            ->with(['analysis.lead', 'analysis.batch'])
-            ->whereHas('analysis', function ($query) use ($batch) {
-                $query->where('insurance_analysis_batch_id', $batch->id);
-            })
-            ->whereIn('event_type', $eventTypes);
+            return $analysis;
+        });
 
-        if ($this->attemptId) {
-            $query->where('payload->attempt_id', $this->attemptId);
-        }
-
-        $events = $query
-            ->orderBy('created_at')
-            ->get();
-
-        /*
-        |--------------------------------------------------------------------------
-        | Fallback
-        |--------------------------------------------------------------------------
-        | Se ainda não existirem eventos novos, usa as análises atuais para não
-        | quebrar o fluxo antigo. Depois que RunProviderAnalysisJob atualizado
-        | estiver rodando, os eventos serão encontrados normalmente.
-        */
-        if ($events->isNotEmpty()) {
-            return $events;
-        }
-
-        return $batch->analyses->map(function ($analysis) {
+        return $analyses->map(function ($analysis) {
             $event = new InsuranceAnalysisEvent;
 
             $event->setRelation('analysis', $analysis);
@@ -310,7 +296,6 @@ class SendAnalysisResultsEmailJob implements ShouldQueue
                 'gross_premium' => $analysis->gross_premium,
                 'iof' => $analysis->iof,
                 'insured_amount' => $analysis->insured_amount,
-                'debug' => $analysis->response_payload,
             ];
 
             return $event;
@@ -369,7 +354,7 @@ class SendAnalysisResultsEmailJob implements ShouldQueue
 
             $fullPath = Storage::disk('local')->path($relativePath);
 
-            if ($event->exists && $analysis) {
+            InsuranceAnalysisAttempt::runBatch($batch, $this->attemptId, function () use ($analysis, $event, $type, $relativePath, $fileName): void {
                 $analysis->events()->create([
                     'event_type' => 'pdf_generated',
                     'status' => $event->status,
@@ -382,7 +367,7 @@ class SendAnalysisResultsEmailJob implements ShouldQueue
                         'file_name' => $fileName,
                     ],
                 ]);
-            }
+            });
 
             $attachments[] = [
                 'path' => $fullPath,
@@ -471,7 +456,7 @@ class SendAnalysisResultsEmailJob implements ShouldQueue
 
     private function markEmailAsDeferredWhileDisabled(): void
     {
-        $batch = InsuranceAnalysisBatch::with(['analyses.events'])->find($this->batchId);
+        $batch = InsuranceAnalysisBatch::with(['analyses'])->find($this->batchId);
 
         if (! $batch) {
             return;
@@ -518,90 +503,6 @@ class SendAnalysisResultsEmailJob implements ShouldQueue
         $id = $query->max('id');
 
         return $id ? (int) $id : null;
-    }
-
-    private function resolveEmailRecipients($lead): array
-    {
-        $lead->loadMissing([
-            'company',
-            'imobiliariaInformada',
-            'locador',
-        ]);
-
-        $to = [];
-        $cc = [];
-
-        switch ($lead->tipo_solicitante) {
-            case 'imobiliaria_cadastrada':
-                $to[] = $lead->company?->email;
-
-                if ($lead->email) {
-                    $cc[] = $lead->email;
-                }
-
-                break;
-
-            case 'imobiliaria_nao_cadastrada':
-                $to[] = $lead->imobiliariaInformada?->responsavel_preenchimento;
-
-                if ($lead->email) {
-                    $cc[] = $lead->email;
-                }
-
-                break;
-
-            case 'locador':
-                $to[] = $lead->locador?->email;
-
-                if ($lead->email) {
-                    $cc[] = $lead->email;
-                }
-
-                break;
-
-            case 'locatario':
-            default:
-                $to[] = $lead->email;
-                break;
-        }
-
-        $to = $this->validEmails($to);
-
-        /*
-        |--------------------------------------------------------------------------
-        | Fallback de segurança
-        |--------------------------------------------------------------------------
-        | Se não encontrou e-mail específico do tipo solicitante,
-        | tenta enviar para o e-mail principal do lead.
-        */
-        if (empty($to)) {
-            $to = $this->validEmails([$lead->email]);
-        }
-
-        $cc = $this->validEmails($cc);
-
-        /*
-        |--------------------------------------------------------------------------
-        | Evita duplicidade
-        |--------------------------------------------------------------------------
-        */
-        $cc = array_values(array_diff($cc, $to));
-
-        return [
-            'to' => array_values(array_unique($to)),
-            'cc' => array_values(array_unique($cc)),
-        ];
-    }
-
-    private function validEmails(array $emails): array
-    {
-        return collect($emails)
-            ->filter()
-            ->map(fn ($email) => trim((string) $email))
-            ->filter(fn ($email) => filter_var($email, FILTER_VALIDATE_EMAIL))
-            ->unique()
-            ->values()
-            ->all();
     }
 
     private function buildMessage(InsuranceAnalysisBatch $batch, Collection $resultEvents): string
