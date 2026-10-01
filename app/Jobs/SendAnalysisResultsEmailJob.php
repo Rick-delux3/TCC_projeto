@@ -168,8 +168,8 @@ class SendAnalysisResultsEmailJob implements ShouldQueue
                     batch: $batch,
                     eventType: 'email_sent',
                     message: $this->isReanalysis
-                        ? 'E-mail de resultado da reanálise enviado ao lead.'
-                        : 'E-mail de resultado da análise enviado ao lead.',
+                        ? 'E-mail de resultado da reanálise enviado aos destinatários.'
+                        : 'E-mail de resultado da análise enviado aos destinatários.',
                     payload: [
                         'attempt_id' => $this->attemptId,
                         'is_reanalysis' => $this->isReanalysis,
@@ -442,13 +442,13 @@ class SendAnalysisResultsEmailJob implements ShouldQueue
 
         $lines = [];
 
-        $lines[] = "Olá, {$lead->nome}.";
+        $lines[] = 'Olá!';
         $lines[] = '';
 
         if ($this->isReanalysis) {
-            $lines[] = 'Recebemos o resultado da sua reanálise de Seguro Fiança Locatícia Residencial.';
+            $lines[] = "Segue o resultado da reanálise de Seguro Fiança Locatícia de {$lead->nome}.";
         } else {
-            $lines[] = 'Recebemos o resultado da sua análise de Seguro Fiança Locatícia Residencial.';
+            $lines[] = "Segue o resultado da análise de Seguro Fiança Locatícia de {$lead->nome}.";
         }
 
         $lines[] = '';
@@ -547,7 +547,7 @@ class SendAnalysisResultsEmailJob implements ShouldQueue
             $lines[] = '';
         }
 
-        $lines[] = 'Os PDFs com os detalhes também foram anexados quando disponíveis.';
+        $lines[] = 'Os documentos do resultado estão anexados a este e-mail.';
         $lines[] = '';
         $lines[] = 'Em breve, a imobiliária ou corretora poderá entrar em contato com mais informações.';
         $lines[] = '';

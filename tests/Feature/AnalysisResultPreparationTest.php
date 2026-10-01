@@ -162,7 +162,8 @@ it('uses the saved recipient and final results in the queued email', function ()
         $callback(new Message($email));
         expect($email->getTo()[0]->getAddress())->toBe('tenant@example.test')
             ->and($email->getCc())->toBe([])
-            ->and($body)->toContain('Tenant', '900,00')->not->toContain('9.999,00');
+            ->and($body)->toContain('Seguro Fiança Locatícia de Tenant.', '900,00', 'Os documentos do resultado estão anexados')
+            ->not->toContain('9.999,00', 'Residencial', 'Olá, Tenant');
 
         return true;
     })->andReturn($confirmation);

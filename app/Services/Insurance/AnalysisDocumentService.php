@@ -33,12 +33,14 @@ class AnalysisDocumentService
                         throw new AnalysisDocumentsNotReady('PDF próprio aguardando conteúdo ou dados comparáveis.');
                     }
 
-                    return [$this->document($batch, $attemptId, 'summary', $prepared['analyses'][0]['id'], function () use ($prepared): string {
-                        $html = view('emails.analysis-summary-pdf', ['result' => $prepared])->render();
-                        if (trim(strip_tags($html)) === '') {
-                            throw new AnalysisDocumentsNotReady('A view do PDF próprio ainda não possui conteúdo.');
-                        }
+                    $html = view('emails.analysis-summary-pdf', ['result' => $prepared])->render();
+                    $text = preg_replace('/<(head|style|script)\b[^>]*>.*?<\/\1>/is', '', $html);
+                    $text = html_entity_decode(strip_tags($text), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+                    if (preg_match('/[^\s\p{Z}]/u', $text) !== 1) {
+                        throw new AnalysisDocumentsNotReady('A view do PDF próprio ainda não possui conteúdo.');
+                    }
 
+                    return [$this->document($batch, $attemptId, 'summary', $prepared['analyses'][0]['id'], function () use ($html): string {
                         return Pdf::loadHTML($html)->setOptions(['isRemoteEnabled' => false, 'isPhpEnabled' => false])
                             ->setPaper('a4')->output();
                     })];

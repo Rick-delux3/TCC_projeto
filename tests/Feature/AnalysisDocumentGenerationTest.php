@@ -65,10 +65,11 @@ it('renders one private consolidated PDF and reuses it on retries', function () 
     config(['analysis_documents.own_pdf_enabled' => true]);
     $batch = documentBatch(['approved', 'rejected']);
     $view = Mockery::mock(\Illuminate\Contracts\View\View::class);
-    $view->shouldReceive('render')->once()->andReturn('<html><body><p>Test document</p></body></html>');
-    View::partialMock()->shouldReceive('make')->once()->withArgs(function ($name, $data): bool {
+    $view->shouldReceive('render')->twice()->andReturn('<html><body><p>Test document</p></body></html>');
+    View::partialMock()->shouldReceive('make')->twice()->withArgs(function ($name, $data): bool {
         expect($name)->toBe('emails.analysis-summary-pdf')
-            ->and($data['result']['best_quote']['provider'])->toBe('pottencial');
+            ->and($data['result']['best_quote']['provider'])->toBe('pottencial')
+            ->and($data['result'])->toHaveKeys(['lead', 'best_quote', 'other_quotes', 'analyses', 'is_reanalysis']);
 
         return true;
     })->andReturn($view);
@@ -82,6 +83,29 @@ it('renders one private consolidated PDF and reuses it on retries', function () 
         ->and(config('filesystems.disks.local.root'))->toBe(storage_path('app/private'));
     Http::assertNothingSent();
 });
+
+it('blocks cached own PDFs when delivery is disabled or the view has no visible text', function (bool $enabled, string $html) {
+    config(['analysis_documents.own_pdf_enabled' => true]);
+    $batch = documentBatch(['approved']);
+    $view = Mockery::mock(\Illuminate\Contracts\View\View::class);
+    $view->shouldReceive('render')->times($enabled ? 2 : 1)->andReturn('<p>Test document</p>', $html);
+    View::partialMock()->shouldReceive('make')->times($enabled ? 2 : 1)
+        ->withArgs(fn (string $name, array $data): bool => $name === 'emails.analysis-summary-pdf' && isset($data['result']))->andReturn($view);
+    app(AnalysisDocumentService::class)->generate($batch, 'documents');
+    config(['analysis_documents.own_pdf_enabled' => $enabled]);
+
+    (new SendAnalysisResultsEmailJob($batch->id, 'documents'))->handle();
+
+    expect($batch->fresh()->email_status)->toBe('pending')
+        ->and($batch->fresh()->email_sent_at)->toBeNull()
+        ->and(InsuranceAnalysisEvent::query()->where('event_type', 'document_generated')->count())->toBe(1);
+    Mail::assertNothingSent();
+    Http::assertNothingSent();
+})->with([
+    'disabled' => [false, '<p>Test document</p>'],
+    'empty' => [true, ''],
+    'structure only' => [true, '<html><head><title>PDF</title><style>body { color: black; }</style></head><body>&nbsp; &#160;</body></html>'],
+]);
 
 it('reuses a successful refusal letter when the next company fails and retries only the missing document', function () {
     Http::fake([
