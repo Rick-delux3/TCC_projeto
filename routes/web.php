@@ -53,6 +53,10 @@ Route::prefix('/Dashboard')->group(function () {
         Route::get('/analises', [InsuranceAnalysisController::class, 'index'])
             ->name('insurance-analyses.index');
 
+        Route::get('/leads/{lead}/analises', [InsuranceAnalysisController::class, 'showLead'])
+            ->whereNumber('lead')
+            ->name('insurance-analyses.lead');
+
         Route::get('/analises/{batch}', [InsuranceAnalysisController::class, 'show'])
             ->name('insurance-analyses.show');
 
@@ -134,6 +138,11 @@ Route::prefix('/Dashboard')->group(function () {
         Route::get('/analises', [InsuranceAnalysisController::class, 'adminIndex'])
             ->middleware('can:view-analyses')
             ->name('admin.insurance-analyses.index');
+
+        Route::get('/leads/{lead}/analises', [InsuranceAnalysisController::class, 'adminShowLead'])
+            ->middleware('can:view-analyses')
+            ->whereNumber('lead')
+            ->name('admin.insurance-analyses.lead');
 
         Route::get('/analises/{batch}', [InsuranceAnalysisController::class, 'adminShow'])
             ->middleware('can:view-analyses')
