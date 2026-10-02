@@ -198,6 +198,11 @@ class Lead extends Model
         return $this->lotesAnalisesSeguro();
     }
 
+    public function latestInsuranceAnalysisBatch(): HasOne
+    {
+        return $this->hasOne(InsuranceAnalysisBatch::class)->latestOfMany();
+    }
+
     public function lotesAnalisesSeguro()
     {
         return $this->hasMany(InsuranceAnalysisBatch::class);

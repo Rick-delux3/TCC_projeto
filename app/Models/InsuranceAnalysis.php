@@ -2,8 +2,11 @@
 
 namespace App\Models;
 
+use App\Services\Insurance\InsuranceAnalysisAttempt;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class InsuranceAnalysis extends Model
 {
@@ -126,6 +129,12 @@ class InsuranceAnalysis extends Model
         return $this->hasMany(InsuranceAnalysisEvent::class, 'insurance_analysis_id');
     }
 
+    public function latestAttemptEvent(): HasOne
+    {
+        return $this->hasOne(InsuranceAnalysisEvent::class, 'insurance_analysis_id')
+            ->ofMany(['id' => 'max'], fn (Builder $query): Builder => $query->whereIn('event_type', InsuranceAnalysisAttempt::START_EVENTS));
+    }
+
     public function isApprovedResult(): bool
     {
         return mb_strtolower(trim((string) $this->status)) === 'approved';
@@ -183,18 +192,13 @@ class InsuranceAnalysis extends Model
     /** @return array{attempt_id: string, is_reanalysis: bool}|null */
     public function currentAttemptContext(bool $lock = false): ?array
     {
-        $event = $this->events()
-            ->whereIn('event_type', [
-                'created',
-                'analysis_restarted',
-                'analysis_started',
-                'reanalysis_requested',
-                'reanalysis_started',
-                'technical_retry_requested',
-            ])
-            ->when($lock, fn ($query) => $query->lockForUpdate())
-            ->latest('id')
-            ->first();
+        $event = ! $lock && $this->relationLoaded('latestAttemptEvent')
+            ? $this->getRelation('latestAttemptEvent')
+            : $this->events()
+                ->whereIn('event_type', InsuranceAnalysisAttempt::START_EVENTS)
+                ->when($lock, fn ($query) => $query->lockForUpdate())
+                ->latest('id')
+                ->first();
 
         if ($event) {
             $attemptId = data_get($event->payload, 'attempt_id');

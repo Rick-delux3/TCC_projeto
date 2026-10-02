@@ -10,6 +10,9 @@ use App\Models\Lead;
 use App\Services\LeadReanalysisService;
 use DomainException;
 use Illuminate\Contracts\View\View;
+use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -251,8 +254,28 @@ class InsuranceAnalysisController extends Controller
 
     private function leadView(Lead $lead, string $viewerType): View
     {
+        $lead->load([
+            'endereco',
+            'despesas',
+            'conjuge',
+            'latestInsuranceAnalysisBatch.analyses' => fn (HasMany $query): HasMany => $query
+                ->orderBy('id')->with([
+                    'latestAttemptEvent' => fn (HasOne $query): HasOne => $query->select(
+                        $query->getRelated()->qualifyColumns(['id', 'insurance_analysis_id', 'event_type', 'payload'])
+                    ),
+                ]),
+        ]);
+        $batch = $lead->latestInsuranceAnalysisBatch;
+        $analyses = $batch?->analyses ?? new Collection;
+
         return view('insurance-analyses.index', [
             'lead' => $lead,
+            'batch' => $batch,
+            'analyses' => $analyses,
+            'analysisAttempts' => $analyses->mapWithKeys(fn (InsuranceAnalysis $analysis): array => [
+                $analysis->id => $analysis->currentAttemptContext(),
+            ])->all(),
+            'awaitingBatch' => $batch === null,
             'viewerType' => $viewerType,
             'returnUrl' => route($viewerType === 'admin' ? 'Dashboard-Admin' : 'company.dashboard').'#leads-section',
         ]);
