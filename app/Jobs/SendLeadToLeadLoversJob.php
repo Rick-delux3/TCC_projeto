@@ -53,7 +53,9 @@ class SendLeadToLeadLoversJob implements ShouldQueue
 
     public function __construct(
         public int $leadId
-    ) {}
+    ) {
+        $this->onQueue('leadlovers');
+    }
 
     public function middleware(): array
     {

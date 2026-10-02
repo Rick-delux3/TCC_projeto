@@ -59,8 +59,7 @@
         ],
         "dev": [
             "Composer\\Config::disableProcessTimeout",
-            "@php artisan leadlovers:sync-tags",
-            "npx concurrently -c \"#93c5fd,#f9a8d4,#c4b5fd,#fdba74\" \"php artisan serve\" \"php artisan reverb:start --debug\" \"php artisan queue:listen --queue=broadcasts,leadlovers,default --tries=3 --timeout=180\" \"npm run dev\" --names='server,reverb,queue,vite'"
+            "npx concurrently --kill-others --names=server,reverb,analysis-1,analysis-2,analysis-3,analysis-4,results,leadlovers,broadcasts,default,vite \"php artisan serve\" \"php artisan reverb:start --debug\" \"php artisan queue:listen --queue=insurance-analyses --sleep=1 --tries=3 --timeout=210\" \"php artisan queue:listen --queue=insurance-analyses --sleep=1 --tries=3 --timeout=210\" \"php artisan queue:listen --queue=insurance-analyses --sleep=1 --tries=3 --timeout=210\" \"php artisan queue:listen --queue=insurance-analyses --sleep=1 --tries=3 --timeout=210\" \"php artisan queue:listen --queue=insurance-results --sleep=1 --tries=3 --timeout=210\" \"php artisan queue:listen --queue=leadlovers --sleep=1 --tries=3 --timeout=330\" \"php artisan queue:listen --queue=broadcasts --sleep=1 --tries=3 --timeout=60\" \"php artisan queue:listen --queue=default --sleep=1 --tries=3 --timeout=150\" \"npm run dev\""
         ],
         "test": [
             "@php artisan config:clear --ansi",

@@ -822,6 +822,7 @@ class LeadReanalysisService
         $leadId = (int) $lead->id;
 
         Bus::batch($jobs)
+            ->onQueue('insurance-analyses')
             ->name("Reanálise do lead {$leadId}")
             ->allowFailures()
             ->finally(static function (Batch $batch) use ($batchId, $attemptId) {

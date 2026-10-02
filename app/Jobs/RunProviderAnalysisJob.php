@@ -36,7 +36,9 @@ class RunProviderAnalysisJob implements ShouldQueue
         public string $attemptId,
         public bool $isReanalysis = false,
         public array $options = []
-    ) {}
+    ) {
+        $this->onQueue('insurance-analyses');
+    }
 
     public function handle(InsuranceProviderResolver $resolver): void
     {

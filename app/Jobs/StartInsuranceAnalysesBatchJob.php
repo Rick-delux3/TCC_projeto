@@ -31,7 +31,9 @@ class StartInsuranceAnalysesBatchJob implements ShouldQueue
     public function __construct(
         public int $leadId,
         public bool $isReanalysis = false
-    ) {}
+    ) {
+        $this->onQueue('insurance-analyses');
+    }
 
     public function handle(InsuranceProviderResolver $resolver): void
     {
@@ -365,6 +367,7 @@ class StartInsuranceAnalysesBatchJob implements ShouldQueue
 
             Bus::batch($jobs)
                 ->onConnection($connection)
+                ->onQueue('insurance-analyses')
                 ->name(
                     $isReanalysis
                         ? "Reanálise do lead {$leadId}"

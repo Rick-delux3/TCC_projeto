@@ -28,7 +28,9 @@ class CompleteInsuranceAnalysesBatchJob implements ShouldQueue
         public int $batchId,
         public string $attemptId,
         public bool $isReanalysis = false
-    ) {}
+    ) {
+        $this->onQueue('insurance-analyses');
+    }
 
     public function handle(): void
     {

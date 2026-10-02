@@ -40,7 +40,9 @@ class SendAnalysisResultsEmailJob implements ShouldQueue
         public int $batchId,
         public ?string $attemptId = null,
         public bool $isReanalysis = false
-    ) {}
+    ) {
+        $this->onQueue('insurance-results');
+    }
 
     public function handle(): void
     {

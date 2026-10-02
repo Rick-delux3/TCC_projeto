@@ -79,6 +79,7 @@ class UpdateLeadOnLeadLoversJob implements ShouldQueue
         int $syncVersion = 0,
         array $requestedFields = [],
     ) {
+        $this->onQueue('leadlovers');
         $this->syncVersion = $syncVersion;
         $this->requestedFields = $this->normalizeRequestedFields($requestedFields);
     }

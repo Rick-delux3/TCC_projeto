@@ -92,7 +92,7 @@ it('polls until the last provider decides and only then finishes the batch', fun
         ->and($analysis->fresh()->finished_at)->toBeNull()
         ->and($analysis->batch->fresh()->finished_at)->toBeNull();
     $pollClass = $providerName === 'too' ? SyncTooAnalysisStatusJob::class : SyncProviderAnalysisStatusJob::class;
-    Queue::assertPushed($pollClass, 1);
+    Queue::assertPushedOn('insurance-analyses', $pollClass);
     Queue::assertPushed($pollClass, fn ($job): bool => $job->delay->isFuture() && $job->attemptId === 'polling-attempt');
     Queue::assertNotPushed(SendAnalysisResultsEmailJob::class);
 
@@ -127,6 +127,8 @@ it('polls until the last provider decides and only then finishes the batch', fun
         ->and($analysis->batch->fresh()->finished_at)->not->toBeNull();
     Queue::assertPushed(SendAnalysisResultsEmailJob::class, 1);
     Queue::assertPushed(ApplyFinalAnalysisTagToLeadLoversJob::class, 1);
+    Queue::assertPushedOn('insurance-results', SendAnalysisResultsEmailJob::class);
+    Queue::assertPushedOn('leadlovers', ApplyFinalAnalysisTagToLeadLoversJob::class);
 })->with(['pottencial', 'too']);
 
 it('does not finalize a batch with missing provider records', function () {

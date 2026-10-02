@@ -72,6 +72,7 @@ it('rolls back the package and queued jobs if batch dispatch fails and succeeds 
     expect(InsuranceAnalysisBatch::query()->count())->toBe(1)
         ->and(InsuranceAnalysis::query()->count())->toBe(2)
         ->and(DB::table('jobs')->count())->toBe(2)
+        ->and(DB::table('jobs')->pluck('queue')->unique()->all())->toBe(['insurance-analyses'])
         ->and(DB::table('job_batches')->count())->toBe(1);
 });
 
@@ -94,7 +95,7 @@ it('lets the database worker actually retry three transient failures before fina
     RunProviderAnalysisJob::dispatch($analysis->id, 'recovery')->beforeCommit();
     $worker = recoveryWorker();
     for ($attempt = 1; $attempt <= 3; $attempt++) {
-        $queued = Queue::connection('database')->pop();
+        $queued = Queue::connection('database')->pop('insurance-analyses');
         expect($queued)->not->toBeNull();
         expect(fn () => $worker->process('database', $queued, new WorkerOptions))->toThrow(ConnectionException::class);
         expect($analysis->fresh()->status)->toBe($attempt < 3 ? 'processing' : 'failed');
@@ -120,10 +121,10 @@ it('retries transient HTTP responses and recovers without prematurely finishing 
     $this->mock(InsuranceProviderResolver::class)->shouldReceive('resolve')->twice()->andReturn($provider);
     RunProviderAnalysisJob::dispatch($analysis->id, 'recovery')->beforeCommit();
     $worker = recoveryWorker();
-    expect(fn () => $worker->process('database', Queue::connection()->pop(), new WorkerOptions))->toThrow(RuntimeException::class);
+    expect(fn () => $worker->process('database', Queue::connection()->pop('insurance-analyses'), new WorkerOptions))->toThrow(RuntimeException::class);
     expect($analysis->fresh()->status)->toBe('processing')->and($analysis->fresh()->finished_at)->toBeNull();
     $this->travel(31)->seconds();
-    $worker->process('database', Queue::connection()->pop(), new WorkerOptions);
+    $worker->process('database', Queue::connection()->pop('insurance-analyses'), new WorkerOptions);
     expect($analysis->fresh()->status)->toBe('approved');
 })->with([408, 429, 503]);
 
@@ -185,7 +186,7 @@ it('finalizes a processing analysis when the worker refuses an exhausted job', f
     $this->mock(InsuranceProviderResolver::class)->shouldNotReceive('resolve');
     RunProviderAnalysisJob::dispatch($analysis->id, 'recovery')->beforeCommit();
     DB::table('jobs')->update(['attempts' => 10]);
-    $queued = Queue::connection()->pop();
+    $queued = Queue::connection()->pop('insurance-analyses');
     expect(fn () => recoveryWorker()->process('database', $queued, new WorkerOptions))->toThrow(MaxAttemptsExceededException::class)
         ->and($analysis->fresh()->status)->toBe('failed')
         ->and($analysis->fresh()->finished_at)->not->toBeNull();
@@ -227,6 +228,6 @@ it('resumes a persisted Pottencial quote through consultation on a worker retry'
     $this->mock(InsuranceProviderResolver::class)->shouldReceive('resolve')->once()->andReturn($provider);
     RunProviderAnalysisJob::dispatch($analysis->id, 'recovery')->beforeCommit();
     DB::table('jobs')->update(['attempts' => 1]);
-    recoveryWorker()->process('database', Queue::connection()->pop(), new WorkerOptions);
+    recoveryWorker()->process('database', Queue::connection()->pop('insurance-analyses'), new WorkerOptions);
     expect($analysis->fresh()->status)->toBe('approved');
 });

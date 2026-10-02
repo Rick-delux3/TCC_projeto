@@ -69,6 +69,7 @@ class ApplyFinalAnalysisTagToLeadLoversJob implements ShouldBeUniqueUntilProcess
         ?array $bulkAction = null,
         ?int $version = null,
     ) {
+        $this->onQueue('leadlovers');
         $this->phase = $phase;
         $this->bulkAction = $bulkAction;
         $this->version = $version;

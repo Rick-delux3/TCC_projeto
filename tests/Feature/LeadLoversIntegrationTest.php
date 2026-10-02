@@ -846,6 +846,7 @@ it('starts a general reanalysis with all prepared analyses and one dashboard bro
 
         return $job instanceof RunProviderAnalysisJob
             && $job->analysisId === (int) $analysis->id
+            && $pendingBatch->options['queue'] === 'insurance-analyses'
             && $job->isReanalysis === true;
     });
     Bus::assertBatchCount(1);

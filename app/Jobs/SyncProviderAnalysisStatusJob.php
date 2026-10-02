@@ -52,6 +52,7 @@ class SyncProviderAnalysisStatusJob implements ShouldQueue
         bool $automatic = false,
         int $consecutiveFailures = 0,
     ) {
+        $this->onQueue('insurance-analyses');
         $this->automatic = $automatic;
         $this->consecutiveFailures = $consecutiveFailures;
     }

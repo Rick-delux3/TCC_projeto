@@ -64,6 +64,7 @@ class ApplyManualLeadResultTagJob implements ShouldBeUniqueUntilProcessing, Shou
         ?array $bulkAction = null,
         ?int $version = null,
     ) {
+        $this->onQueue('leadlovers');
         $this->requestLogId = $requestLogId;
         $this->phase = $phase;
         $this->bulkAction = $bulkAction;

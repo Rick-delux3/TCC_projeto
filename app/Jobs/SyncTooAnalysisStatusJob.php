@@ -31,6 +31,7 @@ class SyncTooAnalysisStatusJob implements ShouldQueue
         public int $attemptNumber = 1,
         int $consecutiveFailures = 0,
     ) {
+        $this->onQueue('insurance-analyses');
         $this->consecutiveFailures = $consecutiveFailures;
     }
 
