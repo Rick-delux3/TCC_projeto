@@ -1,0 +1,6 @@
+@include('insurance-analyses.partials.lead', ['leadData' => $pageData['lead'], 'navigation' => $pageData['navigation']])
+@include('insurance-analyses.partials.batch', ['batchData' => $pageData['batch'], 'progress' => $pageData['progress'], 'result' => $pageData['result'], 'awaitingBatch' => $pageData['awaiting_batch']])
+@include('insurance-analyses.partials.companies', ['companies' => $pageData['analyses']])
+@include('insurance-analyses.partials.comparison', ['comparison' => $pageData['comparison']])
+@include('insurance-analyses.partials.actions', ['permissions' => $pageData['permissions'], 'actions' => $pageData['actions']])
+@include('insurance-analyses.partials.realtime', ['realtime' => $pageData['realtime']])

@@ -57,6 +57,10 @@ Route::prefix('/Dashboard')->group(function () {
             ->whereNumber('lead')
             ->name('insurance-analyses.lead');
 
+        Route::get('/leads/{lead}/analises/dados', [InsuranceAnalysisController::class, 'leadData'])
+            ->whereNumber('lead')
+            ->name('insurance-analyses.data');
+
         Route::get('/analises/{batch}', [InsuranceAnalysisController::class, 'show'])
             ->name('insurance-analyses.show');
 
@@ -143,6 +147,11 @@ Route::prefix('/Dashboard')->group(function () {
             ->middleware('can:view-analyses')
             ->whereNumber('lead')
             ->name('admin.insurance-analyses.lead');
+
+        Route::get('/leads/{lead}/analises/dados', [InsuranceAnalysisController::class, 'adminLeadData'])
+            ->middleware('can:view-analyses')
+            ->whereNumber('lead')
+            ->name('admin.insurance-analyses.data');
 
         Route::get('/analises/{batch}', [InsuranceAnalysisController::class, 'adminShow'])
             ->middleware('can:view-analyses')

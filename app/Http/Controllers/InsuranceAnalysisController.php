@@ -2,17 +2,16 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Resources\InsuranceAnalysisLeadResource;
 use App\Jobs\SyncProviderAnalysisStatusJob;
 use App\Models\Corretor;
 use App\Models\InsuranceAnalysis;
 use App\Models\InsuranceAnalysisBatch;
 use App\Models\Lead;
+use App\Services\Insurance\InsuranceAnalysisPageService;
 use App\Services\LeadReanalysisService;
 use DomainException;
 use Illuminate\Contracts\View\View;
-use Illuminate\Database\Eloquent\Collection;
-use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -22,7 +21,8 @@ use Illuminate\Validation\ValidationException;
 class InsuranceAnalysisController extends Controller
 {
     public function __construct(
-        private LeadReanalysisService $leadReanalysisService
+        private LeadReanalysisService $leadReanalysisService,
+        private InsuranceAnalysisPageService $analysisPageService,
     ) {}
 
     public function index(): RedirectResponse
@@ -45,6 +45,13 @@ class InsuranceAnalysisController extends Controller
         $this->authorizeCompanyLead($lead);
 
         return $this->leadView($lead, 'company');
+    }
+
+    public function leadData(Lead $lead): InsuranceAnalysisLeadResource
+    {
+        $this->authorizeCompanyLead($lead);
+
+        return new InsuranceAnalysisLeadResource($this->analysisPageService->read($lead, 'company', Auth::guard('web')->user()));
     }
 
     /**
@@ -116,6 +123,13 @@ class InsuranceAnalysisController extends Controller
         $this->authorizeAdminAbility('view-analyses');
 
         return $this->leadView($lead, 'admin');
+    }
+
+    public function adminLeadData(Lead $lead): InsuranceAnalysisLeadResource
+    {
+        $this->authorizeAdminAbility('view-analyses');
+
+        return new InsuranceAnalysisLeadResource($this->analysisPageService->read($lead, 'admin', Auth::guard('admin')->user()));
     }
 
     /**
@@ -254,31 +268,9 @@ class InsuranceAnalysisController extends Controller
 
     private function leadView(Lead $lead, string $viewerType): View
     {
-        $lead->load([
-            'endereco',
-            'despesas',
-            'conjuge',
-            'latestInsuranceAnalysisBatch.analyses' => fn (HasMany $query): HasMany => $query
-                ->orderBy('id')->with([
-                    'latestAttemptEvent' => fn (HasOne $query): HasOne => $query->select(
-                        $query->getRelated()->qualifyColumns(['id', 'insurance_analysis_id', 'event_type', 'payload'])
-                    ),
-                ]),
-        ]);
-        $batch = $lead->latestInsuranceAnalysisBatch;
-        $analyses = $batch?->analyses ?? new Collection;
-
-        return view('insurance-analyses.index', [
-            'lead' => $lead,
-            'batch' => $batch,
-            'analyses' => $analyses,
-            'analysisAttempts' => $analyses->mapWithKeys(fn (InsuranceAnalysis $analysis): array => [
-                $analysis->id => $analysis->currentAttemptContext(),
-            ])->all(),
-            'awaitingBatch' => $batch === null,
-            'viewerType' => $viewerType,
-            'returnUrl' => route($viewerType === 'admin' ? 'Dashboard-Admin' : 'company.dashboard').'#leads-section',
-        ]);
+        return view('insurance-analyses.index', $this->analysisPageService->read(
+            $lead, $viewerType, Auth::guard($viewerType === 'admin' ? 'admin' : 'web')->user(),
+        ));
     }
 
     /**

@@ -12,6 +12,7 @@ class AnalysisResultPreparationService
     public function __construct(
         private readonly AnalysisResultRecipients $recipients,
         private readonly AnalysisQuoteSummary $quotes,
+        private readonly AnalysisQuoteComparison $comparison,
     ) {}
 
     /** @return array<string, mixed> Immutable delivery data for the current batch attempt. */
@@ -44,22 +45,9 @@ class AnalysisResultPreparationService
             }
 
             $quotes = $analyses->map(fn (InsuranceAnalysis $analysis): array => $this->quotes->summarize($analysis));
-            $approved = $quotes->where('status', 'approved');
-            $comparisonIssue = null;
-            if ($approved->contains(fn (array $quote): bool => $quote['price']['basis'] !== 'gross_total'
-                || (float) $quote['price']['total'] <= 0)) {
-                $comparisonIssue = 'missing_confirmed_total';
-            } elseif ($approved->pluck('price.currency')->unique()->count() > 1) {
-                $comparisonIssue = 'incomparable_currencies';
-            } elseif ($approved->count() > 1 && (
-                $approved->contains(fn (array $quote): bool => ! $quote['price']['period_start'] || ! $quote['price']['period_end']
-                    || $quote['price']['period_end'] <= $quote['price']['period_start'])
-                || $approved->map(fn (array $quote): array => [$quote['price']['period_start'], $quote['price']['period_end']])->unique()->count() > 1
-            )) {
-                $comparisonIssue = 'incomparable_periods';
-            }
-
-            $best = $comparisonIssue === null ? $approved->sortBy(fn (array $quote): float => (float) $quote['price']['total'])->first() : null;
+            $comparison = $this->comparison->compare($quotes);
+            $comparisonIssue = $comparison['comparison_issue'];
+            $best = $comparison['best_quote'];
             $result = InsuranceBatchResult::status($batch);
             $context = InsuranceAnalysisAttempt::batchContext($batch->id);
             $prepared = [
