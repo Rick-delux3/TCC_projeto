@@ -22,16 +22,18 @@ class StartInsuranceAnalysesBatchJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    public int $tries = 2;
+    public int $tries = 3;
+
+    public array $backoff = [30, 120, 300];
 
     public int $timeout = 120;
-
-    private const PRODUCT_KEY = 'fianca_locaticia_residencial';
 
     public function __construct(
         public int $leadId,
         public bool $isReanalysis = false
-    ) {}
+    ) {
+        $this->onQueue('insurance-analyses');
+    }
 
     public function handle(InsuranceProviderResolver $resolver): void
     {
@@ -98,7 +100,7 @@ class StartInsuranceAnalysesBatchJob implements ShouldQueue
         $chargesAmount = $this->chargesAmount($lead);
         $totalMonthlyAmount = $rentAmount + $chargesAmount;
 
-        $batchData = DB::transaction(function () use (
+        DB::transaction(function () use (
             $lead,
             $providers,
             $attemptId,
@@ -119,6 +121,10 @@ class StartInsuranceAnalysesBatchJob implements ShouldQueue
                 ->lockForUpdate()
                 ->latest('id')
                 ->first();
+
+            if ($batchModel) {
+                return null;
+            }
 
             if (! $batchModel) {
                 $batchModel = InsuranceAnalysisBatch::create([
@@ -155,7 +161,7 @@ class StartInsuranceAnalysesBatchJob implements ShouldQueue
                     ->where('insurance_analysis_batch_id', $batchModel->id)
                     ->where('lead_id', $lead->id)
                     ->where('provider', $provider)
-                    ->where('product', self::PRODUCT_KEY)
+                    ->where('product', $lead->rentalGuaranteeProduct())
                     ->first();
 
                 if (! $analysis) {
@@ -165,7 +171,7 @@ class StartInsuranceAnalysesBatchJob implements ShouldQueue
                         'company_id' => $lead->company_id,
 
                         'provider' => $provider,
-                        'product' => self::PRODUCT_KEY,
+                        'product' => $lead->rentalGuaranteeProduct(),
 
                         'status' => 'pending',
 
@@ -341,48 +347,58 @@ class StartInsuranceAnalysesBatchJob implements ShouldQueue
                 $analysisIds[] = $analysis->id;
             }
 
-            return [
-                'batch_model_id' => $batchModel->id,
-                'attempt_id' => $attemptId,
-                'analysis_ids' => $analysisIds,
-            ];
-        });
+            $connection = config('queue.default');
+            $database = DB::connection()->getName();
+            if (config("queue.connections.{$connection}.driver") !== 'database'
+                || (config("queue.connections.{$connection}.connection") ?: $database) !== $database
+                || (config('queue.batching.database') ?: $database) !== $database) {
+                throw new \LogicException('Os pacotes de análise exigem a fila database na mesma conexão de banco da aplicação.');
+            }
 
-        $jobs = collect($batchData['analysis_ids'])
-            ->map(fn (int $analysisId) => new RunProviderAnalysisJob(
-                analysisId: $analysisId,
-                attemptId: $batchData['attempt_id'],
-                isReanalysis: $this->isReanalysis
-            ))->all();
-
-        $isReanalysis = $this->isReanalysis;
-        $batchModelId = (int) $batchData['batch_model_id'];
-        $attemptId = (string) $batchData['attempt_id'];
-        $leadId = (int) $lead->id;
-
-        Bus::batch($jobs)
-            ->name(
-                $isReanalysis
-                    ? "Reanálise do lead {$leadId}"
-                    : "Análises do lead {$leadId}"
-            )
-            ->allowFailures()
-            ->catch(static function (Batch $batch, Throwable $e) use ($batchModelId, $attemptId) {
-                Log::warning('Erro em algum job do lote de análises', [
-                    'batch_model_id' => $batchModelId,
-                    'attempt_id' => $attemptId,
-                    'laravel_batch_id' => $batch->id,
-                    'message' => $e->getMessage(),
-                ]);
-            })
-            ->finally(static function (Batch $batch) use ($batchModelId, $attemptId, $isReanalysis) {
-                CompleteInsuranceAnalysesBatchJob::dispatch(
-                    batchId: $batchModelId,
+            $jobs = collect($analysisIds)
+                ->map(fn (int $analysisId) => (new RunProviderAnalysisJob(
+                    analysisId: $analysisId,
                     attemptId: $attemptId,
-                    isReanalysis: $isReanalysis,
-                );
-            })
-            ->dispatch();
+                    isReanalysis: false
+                ))->beforeCommit())->all();
+            $isReanalysis = false;
+            $batchModelId = (int) $batchModel->id;
+            $leadId = (int) $lead->id;
+
+            Bus::batch($jobs)
+                ->onConnection($connection)
+                ->onQueue('insurance-analyses')
+                ->name(
+                    $isReanalysis
+                        ? "Reanálise do lead {$leadId}"
+                        : "Análises do lead {$leadId}"
+                )
+                ->allowFailures()
+                ->catch(static function (Batch $batch, Throwable $e) use ($batchModelId, $attemptId) {
+                    Log::warning('Erro em algum job do lote de análises', [
+                        'batch_model_id' => $batchModelId,
+                        'attempt_id' => $attemptId,
+                        'laravel_batch_id' => $batch->id,
+                        'message' => $e->getMessage(),
+                    ]);
+                })
+                ->finally(static function (Batch $batch) use ($batchModelId, $attemptId, $isReanalysis) {
+                    CompleteInsuranceAnalysesBatchJob::dispatch(
+                        batchId: $batchModelId,
+                        attemptId: $attemptId,
+                        isReanalysis: $isReanalysis,
+                    );
+                })
+                ->dispatch();
+        });
+    }
+
+    public function failed(?Throwable $exception): void
+    {
+        Log::error('Não foi possível despachar o pacote inicial de análises.', [
+            'lead_id' => $this->leadId,
+            'exception' => $exception ? $exception::class : null,
+        ]);
     }
 
     private function attemptPayload(

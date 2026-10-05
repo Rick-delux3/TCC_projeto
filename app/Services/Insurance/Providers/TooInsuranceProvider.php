@@ -3,10 +3,10 @@
 namespace App\Services\Insurance\Providers;
 
 use App\Models\InsuranceAnalysis;
-use App\Services\TooService;
+use App\Services\Insurance\InsuranceAnalysisAttempt;
 use App\Services\Insurance\Payloads\TooRentalGuaranteePayloadBuilder;
+use App\Services\TooService;
 use Illuminate\Support\Facades\Log;
-use App\Jobs\SyncTooAnalysisStatusJob;
 
 class TooInsuranceProvider implements InsuranceProviderInterface
 {
@@ -32,37 +32,33 @@ class TooInsuranceProvider implements InsuranceProviderInterface
     public function requestAnalysis(InsuranceAnalysis $analysis, string $attemptId): array
     {
         $this->ensureEnabled();
+        $analysis->executionAttemptId = $attemptId;
+        InsuranceAnalysisAttempt::assertCurrent($analysis, $analysis->executionAttemptId);
 
         $this->loadTooRelations($analysis);
 
         $lead = $analysis->lead;
 
-        if (!$lead) {
+        if (! $lead) {
             return $this->failResult(
                 message: 'Lead não encontrado para análise na Too.',
                 step: 'load_lead'
             );
         }
 
-        $cpf = $this->onlyNumbers($lead->cpf);
+        $cpf = $lead->rentalApplicantCpf();
 
-        if (!$cpf) {
+        if (! $cpf) {
             return $this->failResult(
                 message: 'CPF do lead não encontrado para análise na Too.',
                 step: 'validate_cpf'
             );
         }
 
-        if (!$lead->canBeSentToToo()) {
-            return $this->successResult(
-                status: 'UnderAnalysis',
-                quoteId: null,
-                premiumAmount: null,
-                responses: [],
-                extra: [
-                    'provider_original_status' => 'skipped',
-                    'message' => 'Lead não enviado para Too: tipo_solicitante ou CPF incompatível com o fluxo da Too.',
-                ]
+        if (! $lead->canBeSentToToo()) {
+            return $this->failResult(
+                message: 'CPF do pretendente/responsável ou finalidade da locação inválidos para a Too.',
+                step: 'validate_eligibility',
             );
         }
 
@@ -71,90 +67,108 @@ class TooInsuranceProvider implements InsuranceProviderInterface
         | 1. Registra ficha/proposta
         |--------------------------------------------------------------------------
         */
-        $fichaPayload = $this->payloadBuilder->buildFichaPayload($analysis);
+        $saved = $analysis->providerResponsePayload();
+        $resume = ($saved['too_analysis_attempt_id'] ?? null) === $attemptId
+            && filled($analysis->tooNumeroProposta()) && filled($analysis->tooNumeroFicha());
+        if ($resume) {
+            $fichaResponse = $saved['ficha'] ?? [];
+            $numeroProposta = $analysis->tooNumeroProposta();
+            $numeroFicha = $analysis->tooNumeroFicha();
+        } else {
+            $fichaPayload = $this->payloadBuilder->buildFichaPayload($analysis);
 
-        $analysis->update([
-            'request_payload' => [
-                'provider' => 'too',
-                'step' => 'ficha',
-                'ficha_payload' => $fichaPayload,
-            ],
-        ]);
+            $analysis->updateForAttempt([
+                'request_payload' => [
+                    'provider' => 'too',
+                    'step' => 'ficha',
+                    'ficha_payload' => $fichaPayload,
+                ],
+            ]);
 
-        $fichaResponse = $this->tooService->registerProposalFicha($fichaPayload);
+            $fichaResponse = $this->tooService->registerProposalFicha($fichaPayload);
 
-        if (!$this->responseWasSuccessful($fichaResponse)) {
-            return $this->failResult(
-                message: 'Erro ao registrar ficha/proposta na Too.',
-                step: 'register_ficha',
-                responses: [
+            if (! $this->responseWasSuccessful($fichaResponse)) {
+                return $this->failResult(
+                    message: 'Erro ao registrar ficha/proposta na Too.',
+                    step: 'register_ficha',
+                    responses: [
+                        'ficha' => $fichaResponse,
+                    ]
+                );
+            }
+
+            $fichaData = $fichaResponse['response'] ?? [];
+
+            $numeroProposta = $this->extractFirstValue($fichaData, [
+                'numeroProposta',
+                'NumeroProposta',
+                'numero_proposta',
+                'proposalNumber',
+                'proposal_number',
+                'proposta',
+            ]);
+
+            $numeroFicha = $this->extractFirstValue($fichaData, [
+                'numeroFicha',
+                'NumeroFicha',
+                'numero_ficha',
+                'ficha',
+                'fichaId',
+                'idFicha',
+            ]);
+
+            /*
+             * Em homologação, a Too pode retornar apenas numeroFicha.
+             * Nesse fluxo, usamos o mesmo número como proposta/ficha.
+             */
+            $numeroProposta = $numeroProposta ?: $numeroFicha;
+            $numeroFicha = $numeroFicha ?: $numeroProposta;
+
+            if (! $numeroProposta || ! $numeroFicha) {
+                return $this->failResult(
+                    message: 'A Too registrou a ficha, mas não retornou numeroProposta/numeroFicha identificável.',
+                    step: 'extract_ficha_numbers',
+                    responses: [
+                        'ficha' => $fichaResponse,
+                    ]
+                );
+            }
+
+            $analysis->updateForAttempt([
+                'proposal_id' => (string) $numeroProposta,
+                'response_payload' => [
+                    'provider' => 'too',
                     'ficha' => $fichaResponse,
-                ]
-            );
+                    'numeroProposta' => $numeroProposta,
+                    'numeroFicha' => $numeroFicha,
+                    'too_analysis_attempt_id' => $attemptId,
+                    'too_is_reanalysis' => false,
+                ],
+
+            ]);
+
         }
-
-        $fichaData = $fichaResponse['response'] ?? [];
-
-        $numeroProposta = $this->extractFirstValue($fichaData, [
-            'numeroProposta',
-            'NumeroProposta',
-            'numero_proposta',
-            'proposalNumber',
-            'proposal_number',
-            'proposta',
-        ]);
-
-        $numeroFicha = $this->extractFirstValue($fichaData, [
-            'numeroFicha',
-            'NumeroFicha',
-            'numero_ficha',
-            'ficha',
-            'fichaId',
-            'idFicha',
-        ]);
-
-        /*
-         * Em homologação, a Too pode retornar apenas numeroFicha.
-         * Nesse fluxo, usamos o mesmo número como proposta/ficha.
-         */
-        $numeroProposta = $numeroProposta ?: $numeroFicha;
-        $numeroFicha = $numeroFicha ?: $numeroProposta;
-
-        if (!$numeroProposta || !$numeroFicha) {
-            return $this->failResult(
-                message: 'A Too registrou a ficha, mas não retornou numeroProposta/numeroFicha identificável.',
-                step: 'extract_ficha_numbers',
-                responses: [
-                    'ficha' => $fichaResponse,
-                ]
-            );
-        }
-
-        $analysis->update([
-            'proposal_id' => (string) $numeroProposta,
-            'response_payload' => [
-                'provider' => 'too',
-                'ficha' => $fichaResponse,
-                'numeroProposta' => $numeroProposta,
-                'numeroFicha' => $numeroFicha,
-                'too_analysis_attempt_id' => $attemptId,
-                'too_is_reanalysis' => false,
-            ],
-
-
-        ]);
 
         /*
         |--------------------------------------------------------------------------
         | 2. Envia para análise de crédito
         |--------------------------------------------------------------------------
         */
-        $creditResponse = $this->tooService->submitCreditAnalysis(
-            cpf: $cpf,
-            numeroProposta: $numeroProposta
-        );
+        $creditResponse = $saved['credit'] ?? [];
+        if (! $resume || ! $this->responseWasSuccessful($creditResponse)) {
+            InsuranceAnalysisAttempt::assertCurrent($analysis, $attemptId);
+            $creditResponse = $this->tooService->submitCreditAnalysis(
+                cpf: $cpf,
+                numeroProposta: $numeroProposta
+            );
+            if ($this->responseWasSuccessful($creditResponse)) {
+                $analysis->updateForAttempt([
+                    'response_payload' => array_merge($analysis->providerResponsePayload(), ['credit' => $creditResponse]),
+                ]);
+            }
+        }
 
-        if (!$this->responseWasSuccessful($creditResponse)) {
+        if (! $this->responseWasSuccessful($creditResponse)) {
             return $this->failResult(
                 message: 'Erro ao enviar ficha para análise de crédito na Too.',
                 step: 'submit_credit_analysis',
@@ -174,12 +188,13 @@ class TooInsuranceProvider implements InsuranceProviderInterface
         | 3. Consulta status da proposta
         |--------------------------------------------------------------------------
         */
+        InsuranceAnalysisAttempt::assertCurrent($analysis, $analysis->executionAttemptId);
         $statusResponse = $this->tooService->getProposalStatus(
             cpf: $cpf,
             numeroProposta: $numeroProposta
         );
 
-        if (!$this->responseWasSuccessful($statusResponse)) {
+        if (! $this->responseWasSuccessful($statusResponse)) {
             return $this->failResult(
                 message: 'Erro ao consultar status da proposta na Too.',
                 step: 'get_proposal_status',
@@ -209,7 +224,6 @@ class TooInsuranceProvider implements InsuranceProviderInterface
                 'numeroProposta' => $numeroProposta,
                 'numeroFicha' => $numeroFicha,
             ],
-            scheduleNextCheck: true,
             attemptId: $attemptId,
             isReanalysis: false
         );
@@ -221,21 +235,23 @@ class TooInsuranceProvider implements InsuranceProviderInterface
         array $options = [],
     ): array {
         $this->ensureEnabled();
+        $analysis->executionAttemptId = $attemptId;
+        InsuranceAnalysisAttempt::assertCurrent($analysis, $analysis->executionAttemptId);
 
         $this->loadTooRelations($analysis);
 
         $lead = $analysis->lead;
 
-        if(!$lead) {
+        if (! $lead) {
             return $this->failResult(
                 message: 'Lead não encontrado para reanálise na Too',
                 step: 'too_reanalysis_load_lead'
             );
         }
 
-        $cpf = $this->onlyNumbers($lead->cpf);
+        $cpf = $lead->rentalApplicantCpf();
 
-        if(!$cpf){
+        if (! $cpf) {
             return $this->failResult(
                 message: 'CPF do lead não encontrado para reanálise na Too.',
                 step: 'too_reanalysis_validate_cpf'
@@ -245,7 +261,7 @@ class TooInsuranceProvider implements InsuranceProviderInterface
         $numeroProposta = $analysis->tooNumeroProposta();
         $numeroFicha = $analysis->tooNumeroFicha();
 
-        if (!$numeroProposta || !$numeroFicha) {
+        if (! $numeroProposta || ! $numeroFicha) {
             return $this->failResult(
                 message: 'Número da proposta/ficha ausente para reanálise na Too.',
                 step: 'too_reanalysis_missing_numbers',
@@ -257,12 +273,20 @@ class TooInsuranceProvider implements InsuranceProviderInterface
             );
         }
 
+        $saved = $analysis->providerResponsePayload();
+        if (($saved['too_reanalysis_attempt_id'] ?? null) === $attemptId
+            && $this->responseWasSuccessful($saved['too_reanalysis_request'] ?? [])) {
+            return $this->getStatus($analysis);
+        }
+
+        $basicDataPayload = $this->payloadBuilder->buildBasicDataPayload($analysis);
+
         $statusBeforeResponse = $this->tooService->getProposalStatus(
             cpf: $cpf,
             numeroProposta: $numeroProposta
         );
 
-        if (!$this->responseWasSuccessful($statusBeforeResponse)) {
+        if (! $this->responseWasSuccessful($statusBeforeResponse)) {
             return $this->failResult(
                 message: 'Erro ao consultar status antes da reanálise na Too.',
                 step: 'too_reanalysis_status_before',
@@ -291,14 +315,13 @@ class TooInsuranceProvider implements InsuranceProviderInterface
             );
         }
 
-        $basicDataPayload = $this->payloadBuilder->buildBasicDataPayload($analysis);
-
+        InsuranceAnalysisAttempt::assertCurrent($analysis, $analysis->executionAttemptId);
         $updateBasicDataResponse = $this->tooService->updateProposalBasicData(
             numeroFicha: $numeroFicha,
             payload: $basicDataPayload
         );
 
-        if (!$this->responseWasSuccessful($updateBasicDataResponse)) {
+        if (! $this->responseWasSuccessful($updateBasicDataResponse)) {
             return $this->failResult(
                 message: 'Erro ao atualizar dados básicos da ficha na Too.',
                 step: 'too_reanalysis_update_basic_data',
@@ -323,13 +346,14 @@ class TooInsuranceProvider implements InsuranceProviderInterface
             'observacoes' => $observacoes,
         ];
 
+        InsuranceAnalysisAttempt::assertCurrent($analysis, $analysis->executionAttemptId);
         $reanalysisResponse = $this->tooService->submitReanalysis(
             cpf: $cpf,
             numeroProposta: $numeroProposta,
             payload: $reanalysisPayload
         );
 
-        if (!$this->responseWasSuccessful($reanalysisResponse)) {
+        if (! $this->responseWasSuccessful($reanalysisResponse)) {
             return $this->failResult(
                 message: 'Erro ao solicitar reanálise de crédito na Too.',
                 step: 'too_reanalysis_submit',
@@ -352,7 +376,7 @@ class TooInsuranceProvider implements InsuranceProviderInterface
             $currentPayload = json_decode($currentPayload, true) ?: [];
         }
 
-        $analysis->forceFill([
+        $analysis->updateForAttempt([
             'status' => 'processing',
             'result' => null,
             'provider_status' => 'Reanálise solicitada - aguardando processamento da Too',
@@ -377,21 +401,7 @@ class TooInsuranceProvider implements InsuranceProviderInterface
 
             'error_message' => null,
             'finished_at' => null,
-        ])->save();
-
-        SyncTooAnalysisStatusJob::dispatch(
-            analysisId: $analysis->id,
-            attemptId: $attemptId,
-            isReanalysis: true,
-            attemptNumber: 1
-        )->delay(
-            now()->addSeconds(
-                (int) config(
-                    'services.too.status_check_delay_seconds',
-                    30
-                )
-            )
-        );
+        ]);
 
         return $this->successResult(
             status: 'UnderAnalysis',
@@ -418,38 +428,23 @@ class TooInsuranceProvider implements InsuranceProviderInterface
 
     public function getStatus(
         InsuranceAnalysis $analysis
-    ): array
-    {
+    ): array {
+        $this->ensureEnabled();
+        $analysis->executionAttemptId ??= $analysis->currentAttemptContext()['attempt_id'] ?? null;
+        InsuranceAnalysisAttempt::assertCurrent($analysis, $analysis->executionAttemptId);
         $this->loadTooRelations($analysis);
 
         $lead = $analysis->lead;
 
-        $cpf = $this->onlyNumbers($lead?->cpf);
+        $cpf = $lead?->rentalApplicantCpf() ?? '';
 
-        $correntPayload = $analysis->response_payload ?? [];
+        $currentPayload = $analysis->providerResponsePayload();
+        $numeroProposta = $analysis->tooNumeroProposta();
+        $numeroFicha = $analysis->tooNumeroFicha();
 
-        if(is_string($correntPayload)) {
-            $currentPayload = json_decode(
-                $correntPayload,
-                true
-            ) ?: [];
-        }
-
-        if(!is_array($correntPayload)){
-            $currentPayload = [];
-        }
-
-        $numeroProposta = $analysis->tooNumeroProposta() 
-        ?? data_get($currentPayload, 'numeroProposta')
-        ?? $analysis->proposal_id;
-
-        $numeroFicha = $analysis->tooNumeroFicha()
-        ?? data_get($currentPayload, 'numeroFicha')
-        ?? $numeroProposta;
-
-        if(
+        if (
             ! $lead
-            || blank($cpf)
+            || preg_match('/^[0-9]{11}$/D', $cpf) !== 1
             || blank($numeroProposta)
         ) {
             return $this->failResult(
@@ -464,12 +459,13 @@ class TooInsuranceProvider implements InsuranceProviderInterface
             );
         }
 
+        InsuranceAnalysisAttempt::assertCurrent($analysis, $analysis->executionAttemptId);
         $statusResponse = $this->tooService->getProposalStatus(
             cpf: $cpf,
             numeroProposta: $numeroProposta
         );
 
-        if(! $this->responseWasSuccessful($statusResponse)){
+        if (! $this->responseWasSuccessful($statusResponse)) {
             return $this->failResult(
                 message: 'Erro ao consultar o status da proposta na Too.',
                 step: 'get_status',
@@ -520,11 +516,9 @@ class TooInsuranceProvider implements InsuranceProviderInterface
                 'numeroProposta' => $numeroProposta,
                 'numeroFicha' => $numeroFicha,
             ],
-            scheduleNextCheck: false,
             attemptId: $attemptId,
             isReanalysis: $isReanalysis
         );
-
 
     }
 
@@ -538,14 +532,13 @@ class TooInsuranceProvider implements InsuranceProviderInterface
         array $statusResponse,
         array $baseResponses,
         array $baseExtra = [],
-        bool $scheduleNextCheck = false,
         ?string $attemptId = null,
         bool $isReanalysis = false,
     ): array {
         $this->ensureEnabled();
 
-
         $statusData = $statusResponse['response'] ?? [];
+        InsuranceAnalysisAttempt::assertCurrent($analysis, $analysis->executionAttemptId);
         $statusInfo = $this->tooCreditDecision($statusData);
 
         $numeroFicha = $baseExtra['numeroFicha']
@@ -567,29 +560,14 @@ class TooInsuranceProvider implements InsuranceProviderInterface
          * Status 16 = Pré-aprovado, mas sem cotação por enquanto
          * Status 6/11/12/14/15 = recusado/cancelado/expirado
          */
-        if (!$statusInfo['can_quote']) {
-            $analysis->update([
+        if (! $statusInfo['can_quote']) {
+            $analysis->updateForAttempt([
                 'provider_status' => $statusInfo['status_description'] ?? $statusInfo['status_code'],
-                'response_payload' => array_merge($analysis->response_payload ?? [], [
+                'response_payload' => array_merge($analysis->providerResponsePayload(), [
                     'status_latest' => $statusResponse,
                     'too_status_info' => $statusInfo,
                 ]),
             ]);
-
-            if($scheduleNextCheck && $statusInfo['canonical'] === 'UnderAnalysis'){
-                if (blank($attemptId)) {
-                    throw new \LogicException(
-                        'attempt_id não informado para iniciar sincronização automática da Too.'
-                    );
-                }
-
-                SyncTooAnalysisStatusJob::dispatch(
-                    analysisId: $analysis->id,
-                    attemptId: $attemptId,
-                    isReanalysis: $isReanalysis,
-                    attemptNumber: 1
-                );
-            }
 
             return $this->successResult(
                 status: $this->statusForJob($statusInfo),
@@ -633,7 +611,7 @@ class TooInsuranceProvider implements InsuranceProviderInterface
         array $statusInfo,
         array $extra = []
     ): array {
-        if (!$numeroFicha) {
+        if (! $numeroFicha) {
             return $this->failResult(
                 message: 'Número da ficha ausente para solicitar cotação na Too.',
                 step: 'request_quote_missing_numero_ficha',
@@ -647,7 +625,7 @@ class TooInsuranceProvider implements InsuranceProviderInterface
             numeroFicha: $numeroFicha
         );
 
-        $analysis->update([
+        $analysis->updateForAttempt([
             'request_payload' => array_merge($analysis->request_payload ?? [], [
                 'quote_payload' => $quotePayload,
             ]),
@@ -659,7 +637,7 @@ class TooInsuranceProvider implements InsuranceProviderInterface
             'quote' => $quoteResponse,
         ]);
 
-        if (!$this->responseWasSuccessful($quoteResponse)) {
+        if (! $this->responseWasSuccessful($quoteResponse)) {
             return $this->failResult(
                 message: 'Status aprovado, mas houve erro ao solicitar cotação na Too.',
                 step: 'request_quote',
@@ -675,7 +653,7 @@ class TooInsuranceProvider implements InsuranceProviderInterface
         $paymentConditions = $this->extractPaymentConditions($quoteData);
         $coverages = $this->extractQuoteCoverages($quoteData);
 
-        $analysis->update([
+        $analysis->updateForAttempt([
             'quote_id' => $numeroCotacao ? (string) $numeroCotacao : $analysis->quote_id,
             'quote_number' => $numeroCotacao ? (string) $numeroCotacao : $analysis->quote_number,
             'premium_amount' => $premiumAmount ?? $analysis->premium_amount,
@@ -683,7 +661,7 @@ class TooInsuranceProvider implements InsuranceProviderInterface
             'available_plans' => $paymentConditions,
             'available_assistances' => $coverages,
             'provider_status' => $statusInfo['status_description'] ?? $statusInfo['status_code'],
-            'response_payload' => array_merge($analysis->response_payload ?? [], [
+            'response_payload' => array_merge($analysis->providerResponsePayload(), [
                 'status_latest' => $statusResponse,
                 'quote_latest' => $quoteResponse,
                 'too_status_info' => $statusInfo,
@@ -796,6 +774,7 @@ class TooInsuranceProvider implements InsuranceProviderInterface
     private function loadTooRelations(InsuranceAnalysis $analysis): void
     {
         $analysis->loadMissing([
+            'lead.lead_empresa',
             'lead.company',
             'lead.endereco',
             'lead.despesas',
@@ -849,6 +828,7 @@ class TooInsuranceProvider implements InsuranceProviderInterface
 
         return [
             'success' => false,
+            'retryable' => $this->lastResponseIsRetryable($responses),
             'http_status' => $this->lastHttpStatus($responses),
             'endpoint' => 'too_flow',
             'url' => null,
@@ -865,20 +845,32 @@ class TooInsuranceProvider implements InsuranceProviderInterface
         ];
     }
 
+    private function lastResponseIsRetryable(array $responses): bool
+    {
+        $last = end($responses);
+        if (! is_array($last) || ($last['success'] ?? false)) {
+            return false;
+        }
+        $status = $last['http_status'] ?? null;
+
+        return in_array($status, [408, 429], true)
+            || (is_numeric($status) && (int) $status >= 500)
+            || ($status === null && filled($last['url'] ?? null));
+    }
+
     private function lastHttpStatus(array $responses): ?int
     {
         $lastStatus = null;
 
         foreach ($responses as $response) {
-            if (is_array($response) && isset($response['http_status'])) {
-                $lastStatus = (int) $response['http_status'];
+            if (is_array($response) && array_key_exists('http_status', $response)) {
+                $lastStatus = $response['http_status'] === null ? null : (int) $response['http_status'];
             }
         }
 
         return $lastStatus;
     }
 
-   
     private function quoteRoot(array $quoteData): array
     {
         if (array_is_list($quoteData)) {
@@ -1001,4 +993,3 @@ class TooInsuranceProvider implements InsuranceProviderInterface
         return preg_replace('/\D+/', '', (string) $value);
     }
 }
-

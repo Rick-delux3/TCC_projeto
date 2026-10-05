@@ -4,8 +4,12 @@ namespace App\Jobs;
 
 use App\Events\DashboardActivityChanged;
 use App\Exceptions\LeadLoversApiException;
+use App\Exceptions\PermanentLeadTagException;
+use App\Models\InsuranceAnalysisBatch;
 use App\Models\Lead;
 use App\Models\LeadLoversTag;
+use App\Services\Insurance\InsuranceAnalysisAttempt;
+use App\Services\Insurance\InsuranceBatchResult;
 use App\Services\LeadCompanyLinkService;
 use App\Services\LeadLoversApiClient;
 use App\Services\LeadLoversTagOperationCoordinator;
@@ -49,7 +53,9 @@ class SendLeadToLeadLoversJob implements ShouldQueue
 
     public function __construct(
         public int $leadId
-    ) {}
+    ) {
+        $this->onQueue('leadlovers');
+    }
 
     public function middleware(): array
     {
@@ -62,6 +68,42 @@ class SendLeadToLeadLoversJob implements ShouldQueue
     }
 
     public function handle(LeadLoversApiClient $leadLovers): void
+    {
+        $lead = $this->loadLead();
+        $batch = InsuranceAnalysisBatch::with('analyses')->where('lead_id', $this->leadId)->latest('id')->first();
+        if ($batch && ! InsuranceBatchResult::readyForLeadLovers($lead, $batch)
+            && (int) $lead->leadlovers_lead_id <= 0
+            && ! in_array($this->currentPhase($lead), [self::PHASE_CREATE_STARTED, self::PHASE_RECONCILIATION_PENDING], true)) {
+            if ($lead->leadlovers_status === 'processing') {
+                $this->release($this->confirmationDelay());
+            }
+
+            return;
+        }
+        try {
+            $this->send($leadLovers);
+        } finally {
+            $this->dispatchCurrentAnalysisTag();
+        }
+    }
+
+    private function dispatchCurrentAnalysisTag(): void
+    {
+        if (! config('services.leadlovers.enabled', false) || ! config('features.insurance_analysis.enabled', false)) {
+            return;
+        }
+        $lead = $this->loadLead();
+        $batch = InsuranceAnalysisBatch::with('analyses')->where('lead_id', $lead->id)->latest('id')->first();
+        if (! $batch || (int) $lead->leadlovers_lead_id <= 0 || ! InsuranceBatchResult::readyForLeadLovers($lead, $batch)) {
+            return;
+        }
+        $context = InsuranceAnalysisAttempt::batchContext($batch->id);
+        if ($context) {
+            ApplyFinalAnalysisTagToLeadLoversJob::dispatch($batch->id, $context['attempt_id'], $context['is_reanalysis'])->afterCommit();
+        }
+    }
+
+    private function send(LeadLoversApiClient $leadLovers): void
     {
         if (! config('services.leadlovers.enabled', false)) {
             $this->disableInitialSend();
@@ -198,6 +240,14 @@ class SendLeadToLeadLoversJob implements ShouldQueue
             return null;
         }
 
+        try {
+            $payload = $this->creationPayload($lead, $mainTagId);
+        } catch (PermanentLeadTagException $exception) {
+            $this->failInitialSend($lead->id, 'tag_failed', $this->failureSummary('final_tag', null), $exception->getMessage());
+
+            return null;
+        }
+
         if (! $this->storeProgress(self::PHASE_CREATE_STARTED, [
             'operation' => 'lead_creation',
             'creation_email_encrypted' => $encryptedEmail,
@@ -207,7 +257,7 @@ class SendLeadToLeadLoversJob implements ShouldQueue
 
         try {
             $response = $leadLovers->createLead(
-                $this->creationPayload($lead, $mainTagId)
+                $payload
             );
         } catch (LeadLoversApiException $exception) {
             if ($this->isEmailExists($exception)) {
@@ -789,6 +839,15 @@ class SendLeadToLeadLoversJob implements ShouldQueue
      */
     private function creationPayload(Lead $lead, ?int $mainTagId): array
     {
+        $tagIds = $mainTagId === null ? [] : [$mainTagId];
+        if (in_array($lead->analysis_final_status, ['approved', 'rejected'], true)) {
+            $finalTag = LeadLoversTag::query()->where('key', $lead->analysis_final_tag_key)->where('active', true)->first();
+            if (! $finalTag || (int) $finalTag->leadlovers_tag_id <= 0) {
+                throw new PermanentLeadTagException('A tag do resultado da análise precisa estar configurada e ativa.');
+            }
+            $tagIds[] = (int) $finalTag->leadlovers_tag_id;
+        }
+
         return [
             'staticFields' => [
                 'email' => $this->nullableString($lead->email),
@@ -802,7 +861,7 @@ class SendLeadToLeadLoversJob implements ShouldQueue
                         ?? $lead->imobiliaria
                 ),
             ],
-            ...($mainTagId === null ? [] : ['tags' => [$mainTagId]]),
+            ...($tagIds === [] ? [] : ['tags' => array_values(array_unique($tagIds))]),
             'dynamicFields' => $this->dynamicFieldsForLead($lead),
         ];
     }

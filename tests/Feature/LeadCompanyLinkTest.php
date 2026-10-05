@@ -458,7 +458,7 @@ it('does not mark a completed local link or unrelated integration as failed on l
 });
 
 it('uses the current company when an initial analysis starts while linking is processed', function () {
-    config(['features.insurance_analysis.enabled' => true]);
+    config(['features.insurance_analysis.enabled' => true, 'queue.default' => 'database']);
     $requestId = requestCompanyLink($this);
     $resolver = Mockery::mock(InsuranceProviderResolver::class);
     $resolver->shouldReceive('availableProviders')->once()->andReturnUsing(function () use ($requestId): array {

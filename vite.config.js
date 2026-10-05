@@ -19,6 +19,7 @@ export default defineConfig({
                 'resources/js/imobiliarias-admin.js',
                 'resources/css/config-equipe.css',
                 'resources/js/config-equipe.js',
+                'resources/js/insurance-analyses.js',
 
             ],
             refresh: true,

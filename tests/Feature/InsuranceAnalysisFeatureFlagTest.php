@@ -32,7 +32,8 @@ it('keeps public forms available while insurance analyses are disabled', functio
     'tenant form' => 'simulation.tenant.form',
 ]);
 
-it('creates a company lead and sends it to LeadLovers without starting analyses', function () {
+it('keeps public registration local and starts only enabled analyses', function (bool $enabled) {
+    config(['features.insurance_analysis.enabled' => $enabled]);
     $company = Imobiliaria::create([
         'name' => 'Imobiliária Formulário',
         'email' => 'form-company@example.test',
@@ -58,6 +59,7 @@ it('creates a company lead and sends it to LeadLovers without starting analyses'
             'email' => 'new-lead@example.test',
             'tel' => '11988887777',
             'cpf' => '52998224725',
+            'data_nascimento' => '1992-02-29',
             'estado_civil' => 'solteiro',
             'valor_aluguel' => '1500',
             'cep' => '01001000',
@@ -81,14 +83,15 @@ it('creates a company lead and sends it to LeadLovers without starting analyses'
         ->and(InsuranceAnalysisBatch::query()->count())->toBe(0)
         ->and(InsuranceAnalysis::query()->count())->toBe(0);
 
-    Bus::assertDispatched(
-        SendLeadToLeadLoversJob::class,
-        fn (SendLeadToLeadLoversJob $job) => $job->leadId === $lead->id
-    );
-    Bus::assertNotDispatched(StartInsuranceAnalysesBatchJob::class);
+    Bus::assertNotDispatched(SendLeadToLeadLoversJob::class);
+    if ($enabled) {
+        Bus::assertDispatched(StartInsuranceAnalysesBatchJob::class, fn ($job) => $job->leadId === $lead->id && $job->chained === []);
+    } else {
+        Bus::assertNotDispatched(StartInsuranceAnalysesBatchJob::class);
+    }
     Bus::assertNotDispatched(RunProviderAnalysisJob::class);
     Http::assertNothingSent();
-});
+})->with([false, true]);
 
 it('ignores queued analysis jobs that remained in the queue', function () {
     $resolver = app(InsuranceProviderResolver::class);

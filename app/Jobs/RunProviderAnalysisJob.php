@@ -2,39 +2,70 @@
 
 namespace App\Jobs;
 
+use App\Exceptions\InvalidInsuranceAnalysisPayload;
+use App\Exceptions\ObsoleteInsuranceAnalysisAttempt;
 use App\Models\InsuranceAnalysis;
+use App\Services\Insurance\InsuranceAnalysisAttempt;
+use App\Services\Insurance\InsuranceAnalysisFailure;
+use App\Services\Insurance\InsuranceStatusPolling;
+use App\Services\Insurance\ProviderAnalysisStatus;
 use App\Services\Insurance\Providers\InsuranceProviderResolver;
 use Illuminate\Bus\Batchable;
 use Illuminate\Bus\Queueable;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
+use Illuminate\Queue\Middleware\WithoutOverlapping;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\Log;
 
 class RunProviderAnalysisJob implements ShouldQueue
 {
-    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels, Batchable;
+    use Batchable, Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    public int $tries = 3;
+    public int $tries = 10;
+
     public int $timeout = 180;
+
+    public int $maxExceptions = 3;
+
+    public array $backoff = [30, 120, 300];
 
     public function __construct(
         public int $analysisId,
         public string $attemptId,
         public bool $isReanalysis = false,
         public array $options = []
-    ) {}
+    ) {
+        $this->onQueue('insurance-analyses');
+    }
 
     public function handle(InsuranceProviderResolver $resolver): void
+    {
+        try {
+            $this->execute($resolver);
+        } catch (ObsoleteInsuranceAnalysisAttempt) {
+            return;
+        }
+    }
+
+    public function failed(?\Throwable $exception): void
+    {
+        InsuranceAnalysisFailure::finish($this->analysisId, $this->attemptId, $this->isReanalysis, $exception);
+    }
+
+    public function middleware(): array
+    {
+        return [(new WithoutOverlapping("insurance-analysis:{$this->analysisId}"))->shared()->releaseAfter(30)->expireAfter(210)];
+    }
+
+    private function execute(InsuranceProviderResolver $resolver): void
     {
         if (! config('features.insurance_analysis.enabled', false)) {
             logger()->notice('Job de análise ignorado porque o módulo está desativado.', ['job' => static::class]);
 
             return;
         }
-
-        
 
         $analysis = InsuranceAnalysis::with([
             'lead.company',
@@ -46,37 +77,49 @@ class RunProviderAnalysisJob implements ShouldQueue
             'batch',
         ])->findOrFail($this->analysisId);
 
-        
-        $analysis->update([
-            'status' => 'processing',
-            'requested_at' => now(),
-            'error_message' => null,
-        ]);
+        InsuranceAnalysisAttempt::run($analysis, $this->attemptId, function () use ($analysis): void {
+            if ($analysis->status !== 'pending' && ! ($analysis->status === 'processing' && $this->attempts() > 1)) {
+                throw new ObsoleteInsuranceAnalysisAttempt('Esta execução já foi iniciada.');
+            }
+            $analysis->update([
+                'status' => 'processing',
+                'requested_at' => now(),
+                'error_message' => null,
+            ]);
 
-        $analysis->events()->create([
-            'event_type' => $this->isReanalysis ? 'reanalysis_sent_to_api' : 'sent_to_api',
-            'status' => 'processing',
-            'message' => $this->isReanalysis
-                ? "Enviando reanálise para {$analysis->provider}."
-                : "Enviando análise para {$analysis->provider}.",
-            'payload' => $this->analysisSnapshot($analysis),
-        ]);
+            $analysis->events()->create([
+                'event_type' => $this->isReanalysis ? 'reanalysis_sent_to_api' : 'sent_to_api',
+                'status' => 'processing',
+                'message' => $this->isReanalysis
+                    ? "Enviando reanálise para {$analysis->provider}."
+                    : "Enviando análise para {$analysis->provider}.",
+                'payload' => $this->analysisSnapshot($analysis),
+            ]);
+
+        });
 
         try {
+            $analysis->updateForAttempt(['product' => $analysis->lead->rentalGuaranteeProduct()]);
             $provider = $resolver->resolve($analysis->provider);
-            
-            if($this->isReanalysis) {
+
+            if ($this->attempts() > 1 && ! $analysis->isTooProvider() && filled($analysis->quote_id)) {
+                $result = $provider->getStatus($analysis);
+            } elseif ($this->isReanalysis) {
                 $result = $provider->requestReanalysis(
                     analysis: $analysis,
                     attemptId: $this->attemptId,
                     options: $this->options ?? []
 
-                ); 
+                );
             } else {
                 $result = $provider->requestAnalysis(
                     analysis: $analysis,
                     attemptId: $this->attemptId
                 );
+            }
+
+            if ($this->shouldRetryResult($result)) {
+                throw new \RuntimeException('Falha temporária na comunicação com a companhia.');
             }
 
             Log::info('Resultado bruto recebido do provider', [
@@ -87,31 +130,51 @@ class RunProviderAnalysisJob implements ShouldQueue
                 'result' => $result,
             ]);
 
-            $this->applyResult($analysis, $result);
-        } catch (\Throwable $e) {
-            $analysis->update([
-                'status' => 'failed',
-                'error_message' => $e->getMessage(),
-                'finished_at' => now(),
-            ]);
-
-            $analysis->events()->create([
-                'event_type' => $this->isReanalysis ? 'reanalysis_failed' : 'failed',
-                'status' => 'failed',
-                'message' => $e->getMessage(),
-                'payload' => $this->analysisSnapshot($analysis),
-            ]);
-
-            Log::error('Erro ao executar análise de provider', [
-                'analysis_id' => $analysis->id,
-                'attempt_id' => $this->attemptId,
-                'is_reanalysis' => $this->isReanalysis,
-                'provider' => $analysis->provider,
-                'message' => $e->getMessage(),
-            ]);
-
-            $this->dispatchBatchCompletionCheck($analysis);
+            InsuranceAnalysisAttempt::run($analysis, $this->attemptId, function () use ($analysis, $result): void {
+                $this->applyResult($analysis, $result);
+                InsuranceStatusPolling::schedule($analysis->fresh(), $this->attemptId, $this->isReanalysis);
+            });
+        } catch (ObsoleteInsuranceAnalysisAttempt $obsolete) {
+            throw $obsolete;
+        } catch (InvalidInsuranceAnalysisPayload|\DomainException|\InvalidArgumentException $exception) {
+            $this->failed($exception);
+        } catch (\Throwable $exception) {
+            InsuranceAnalysisAttempt::run($analysis, $this->attemptId, function () use ($analysis, $exception): void {
+                if (ProviderAnalysisStatus::isTerminal($analysis->status)) {
+                    return;
+                }
+                $analysis->update([
+                    'status' => 'processing',
+                    'finished_at' => null,
+                    'error_message' => null,
+                ]);
+                $analysis->events()->create([
+                    'event_type' => 'execution_retry',
+                    'status' => 'processing',
+                    'message' => 'Falha temporária. A fila realizará uma nova tentativa.',
+                    'payload' => array_merge($this->analysisSnapshot($analysis), [
+                        'queue_attempt' => $this->attempts(),
+                        'exception' => $exception::class,
+                    ]),
+                ]);
+            });
+            throw $exception;
         }
+    }
+
+    private function shouldRetryResult(array $result): bool
+    {
+        if ($result['success'] ?? false) {
+            return false;
+        }
+        if (array_key_exists('retryable', $result)) {
+            return (bool) $result['retryable'];
+        }
+        $status = $result['http_status'] ?? null;
+
+        return in_array($status, [408, 429], true)
+            || (is_numeric($status) && (int) $status >= 500)
+            || ($status === null && filled($result['url'] ?? null));
     }
 
     private function applyResult(InsuranceAnalysis $analysis, array $result): void
@@ -133,10 +196,10 @@ class RunProviderAnalysisJob implements ShouldQueue
             'error' => $result['error'] ?? null,
         ];
 
-        if (!($result['success'] ?? false)) {
+        if (! ($result['success'] ?? false)) {
             $currentPayload = $this->payloadAsArray(
-            $analysis->response_payload
-        );
+                $analysis->response_payload
+            );
 
             $responsePayload = $isToo
                 ? array_merge($currentPayload, [
@@ -149,6 +212,7 @@ class RunProviderAnalysisJob implements ShouldQueue
 
             $analysis->update([
                 'status' => 'failed',
+                'result' => null,
                 'response_payload' => $responsePayload,
                 'error_message' => $result['error']
                     ?? (
@@ -177,7 +241,7 @@ class RunProviderAnalysisJob implements ShouldQueue
             return;
         }
 
-        if($isToo) {
+        if ($isToo) {
             $this->applyTooResult($analysis, $result, $debugPayload);
 
             return;
@@ -186,14 +250,14 @@ class RunProviderAnalysisJob implements ShouldQueue
         $providerStatus = $this->extractProviderStatus($response);
         $quoteId = $this->extractQuoteIdFromResponse($response);
 
-        if (!$quoteId) {
+        if (! $quoteId) {
             $quoteId = $this->extractQuoteIdFromHeaders($headers);
         }
 
         if (empty($response)) {
             $analysis->update([
-                'status' => 'manual_review',
-                'result' => 'manual_review',
+                'status' => 'failed',
+                'result' => null,
                 'provider_status' => 'CreatedWithoutBody',
                 'quote_id' => $quoteId,
 
@@ -204,8 +268,8 @@ class RunProviderAnalysisJob implements ShouldQueue
 
             $analysis->events()->create([
                 'event_type' => $this->isReanalysis ? 'reanalysis_created_without_body' : 'created_without_body',
-                'status' => 'manual_review',
-                'message' => "A API retornou HTTP {$httpStatus}, mas sem JSON útil. A análise foi marcada como em negociação.",
+                'status' => 'failed',
+                'message' => "A API retornou HTTP {$httpStatus}, mas sem JSON útil. Não foi possível identificar a decisão da análise.",
                 'payload' => $this->analysisSnapshot($analysis),
                 'response' => $debugPayload,
             ]);
@@ -215,9 +279,10 @@ class RunProviderAnalysisJob implements ShouldQueue
             return;
         }
 
-        if (!$providerStatus && !$quoteId) {
+        if (! $providerStatus && ! $quoteId) {
             $analysis->update([
                 'status' => 'failed',
+                'result' => null,
                 'response_payload' => $debugPayload,
                 'error_message' => 'Resposta recebida, mas sem status e sem quoteId.',
                 'finished_at' => now(),
@@ -236,19 +301,12 @@ class RunProviderAnalysisJob implements ShouldQueue
             return;
         }
 
-        $internalStatus = match ($providerStatus) {
-            'Approved' => 'approved',
-            'Denied' => 'rejected',
-            'UnderAnalysis', 'Pending' => 'manual_review',
-            default => 'quoted',
-        };
+        $internalStatus = ProviderAnalysisStatus::fromProviderStatus($providerStatus);
 
         $analysis->update([
             'status' => $internalStatus,
 
-            'result' => in_array($internalStatus, ['approved', 'rejected', 'manual_review'], true)
-                ? $internalStatus
-                : null,
+            'result' => ProviderAnalysisStatus::result($internalStatus),
 
             'provider_status' => $providerStatus,
             'quote_id' => $quoteId ?? $analysis->quote_id,
@@ -265,18 +323,20 @@ class RunProviderAnalysisJob implements ShouldQueue
             'insured_amount' => $this->extractInsuredAmount($response) ?? $analysis->insured_amount,
 
             'response_payload' => $debugPayload,
-            'error_message' => null,
-            'finished_at' => now(),
+            'error_message' => ProviderAnalysisStatus::errorMessage($internalStatus),
+            'finished_at' => ProviderAnalysisStatus::isTerminal($internalStatus) ? now() : null,
         ]);
 
         $analysis->refresh();
 
         $analysis->events()->create([
-            'event_type' => $this->isReanalysis ? 'reanalysis_completed' : 'analysis_completed',
+            'event_type' => ProviderAnalysisStatus::isTerminal($internalStatus)
+                ? ($this->isReanalysis ? 'reanalysis_completed' : 'analysis_completed')
+                : 'analysis_waiting_provider',
             'status' => $internalStatus,
-            'message' => $this->isReanalysis
-                ? "Reanálise concluída para companhia {$analysis->provider}. HTTP {$httpStatus}."
-                : "Análise concluída para companhia {$analysis->provider}. HTTP {$httpStatus}.",
+            'message' => ProviderAnalysisStatus::isTerminal($internalStatus)
+                ? "Análise concluída para companhia {$analysis->provider}. HTTP {$httpStatus}."
+                : "Aguardando decisão da companhia {$analysis->provider}.",
             'payload' => $this->analysisSnapshot($analysis),
             'response' => [
                 'provider' => $analysis->provider,
@@ -356,8 +416,7 @@ class RunProviderAnalysisJob implements ShouldQueue
         /*
         * Status 16: pré-aprovado.
         *
-        * Como a biometria não será implementada agora,
-        * paramos como análise manual e liberamos consulta manual.
+        * A pré-aprovação não encerra a análise; as consultas continuam.
         */
         if ($tooInternalDecision === 'PreApproved') {
             $analysis->update([
@@ -368,18 +427,18 @@ class RunProviderAnalysisJob implements ShouldQueue
                     ?? 'Análise pré-aprovada',
                 'response_payload' => array_merge($currentPayload, [
                     $resultPayloadKey => $debugPayload,
-                    'too_status_check_stopped' => true,
-                    'too_manual_sync_available' => true,
-                    'too_status_check_stopped_at' => now()->toDateTimeString(),
+                    'too_status_check_stopped' => false,
+                    'too_manual_sync_available' => false,
+                    'too_status_check_stopped_at' => null,
                 ]),
                 'error_message' => null,
-                'finished_at' => now(),
+                'finished_at' => null,
             ]);
 
             $analysis->events()->create([
-                'event_type' => $this->isReanalysis ? 'reanalysis_completed' : 'analysis_completed',
+                'event_type' => 'analysis_waiting_provider',
                 'status' => 'manual_review',
-                'message' => 'A Too retornou análise pré-aprovada. Como a biometria não será tratada agora, a análise ficou em revisão manual.',
+                'message' => 'A Too retornou pré-aprovação. Aguardando decisão final nas próximas consultas.',
                 'payload' => $this->analysisSnapshot($analysis),
                 'response' => $debugPayload,
             ]);
@@ -501,11 +560,11 @@ class RunProviderAnalysisJob implements ShouldQueue
                 'too_manual_sync_available' => true,
             ]),
             'error_message' => null,
-            'finished_at' => now(),
+            'finished_at' => null,
         ]);
 
         $analysis->events()->create([
-            'event_type' => $this->isReanalysis ? 'reanalysis_completed' : 'analysis_completed',
+            'event_type' => 'analysis_waiting_provider',
             'status' => 'manual_review',
             'message' => 'A Too retornou um status não finalizado ou não reconhecido. A análise ficou em revisão manual.',
             'payload' => $this->analysisSnapshot($analysis),
@@ -550,15 +609,11 @@ class RunProviderAnalysisJob implements ShouldQueue
 
     private function dispatchBatchCompletionCheck(InsuranceAnalysis $analysis): void
     {
-        if (!$analysis->insurance_analysis_batch_id) {
+        if (! $analysis->insurance_analysis_batch_id) {
             return;
         }
 
-        CompleteInsuranceAnalysesBatchJob::dispatch(
-            batchId: $analysis->insurance_analysis_batch_id,
-            attemptId: $this->attemptId,
-            isReanalysis: $this->isReanalysis
-        );
+        InsuranceAnalysisAttempt::dispatchCompletion($analysis);
     }
 
     private function extractPremiumAmount(array $response): ?float
@@ -598,7 +653,7 @@ class RunProviderAnalysisJob implements ShouldQueue
             'too.status.response.statusProposta',
         ]);
 
-        return $value !== null ? (string) $value : null;
+        return is_string($value) ? $value : null;
     }
 
     private function extractQuoteIdFromResponse(array $response): ?string
@@ -725,7 +780,7 @@ class RunProviderAnalysisJob implements ShouldQueue
             ?? $headers['location'][0]
             ?? null;
 
-        if (!$location) {
+        if (! $location) {
             return null;
         }
 

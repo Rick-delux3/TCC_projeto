@@ -737,6 +737,10 @@ class LeadReanalysisService
             $options,
             $attemptId
         ) {
+            $lead = Lead::query()->lockForUpdate()->findOrFail($lead->id);
+            if (! $lead->canRequestGeneralReanalysis()) {
+                throw new DomainException('Esta reanálise já foi iniciada ou não está mais disponível.');
+            }
             $batch = InsuranceAnalysisBatch::query()
                 ->where('lead_id', $lead->id)
                 ->latest('id')
@@ -818,6 +822,7 @@ class LeadReanalysisService
         $leadId = (int) $lead->id;
 
         Bus::batch($jobs)
+            ->onQueue('insurance-analyses')
             ->name("Reanálise do lead {$leadId}")
             ->allowFailures()
             ->finally(static function (Batch $batch) use ($batchId, $attemptId) {
@@ -972,6 +977,10 @@ class LeadReanalysisService
             $requestedBy,
             $options
         ) {
+            Lead::query()->lockForUpdate()->findOrFail($analysis->lead_id);
+            if ($analysis->insurance_analysis_batch_id) {
+                InsuranceAnalysisBatch::query()->lockForUpdate()->findOrFail($analysis->insurance_analysis_batch_id);
+            }
             $analysis = InsuranceAnalysis::query()
                 ->whereKey($analysis->id)
                 ->lockForUpdate()
@@ -1200,6 +1209,14 @@ class LeadReanalysisService
         ]);
 
         DB::transaction(function () use ($analysis, $attemptId, $requestedBy) {
+            Lead::query()->lockForUpdate()->findOrFail($analysis->lead_id);
+            if ($analysis->insurance_analysis_batch_id) {
+                InsuranceAnalysisBatch::query()->lockForUpdate()->findOrFail($analysis->insurance_analysis_batch_id);
+            }
+            $analysis = InsuranceAnalysis::query()->lockForUpdate()->findOrFail($analysis->id);
+            if (! in_array($analysis->status, ['failed', 'error'], true)) {
+                throw new DomainException('O reenvio técnico já foi iniciado ou não está mais disponível.');
+            }
             $analysis->events()->create([
                 'event_type' => 'technical_retry_requested',
                 'status' => 'pending',

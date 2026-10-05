@@ -2,17 +2,26 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
+use App\Services\Insurance\InsuranceAnalysisAttempt;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use App\Models\Lead;
-use App\Models\Imobiliaria;
-use App\Models\InsuranceAnalysisEvent;
-use App\Models\InsuranceAnalysisBatch;
-
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class InsuranceAnalysis extends Model
 {
     use HasFactory;
+
+    public ?string $executionAttemptId = null;
+
+    public function updateForAttempt(array $attributes): void
+    {
+        \App\Services\Insurance\InsuranceAnalysisAttempt::run(
+            $this,
+            $this->executionAttemptId ?? '',
+            fn () => $this->forceFill($attributes)->save(),
+        );
+    }
 
     protected $table = 'analises_seguro';
 
@@ -85,8 +94,8 @@ class InsuranceAnalysis extends Model
 
     ];
 
-
-    public function batch(){
+    public function batch()
+    {
         return $this->lote();
     }
 
@@ -94,12 +103,14 @@ class InsuranceAnalysis extends Model
     {
         return $this->belongsTo(InsuranceAnalysisBatch::class, 'insurance_analysis_batch_id');
     }
-    
-    public function lead(){
+
+    public function lead()
+    {
         return $this->belongsTo(Lead::class);
     }
 
-    public function company(){
+    public function company()
+    {
         return $this->imobiliaria();
     }
 
@@ -108,7 +119,8 @@ class InsuranceAnalysis extends Model
         return $this->belongsTo(Imobiliaria::class, 'company_id');
     }
 
-    public function events(){
+    public function events()
+    {
         return $this->eventos();
     }
 
@@ -117,22 +129,25 @@ class InsuranceAnalysis extends Model
         return $this->hasMany(InsuranceAnalysisEvent::class, 'insurance_analysis_id');
     }
 
+    public function latestAttemptEvent(): HasOne
+    {
+        return $this->hasOne(InsuranceAnalysisEvent::class, 'insurance_analysis_id')
+            ->ofMany(['id' => 'max'], fn (Builder $query): Builder => $query->whereIn('event_type', InsuranceAnalysisAttempt::START_EVENTS));
+    }
+
     public function isApprovedResult(): bool
     {
-        return in_array(mb_strtolower((string) $this->status),
-        [
-            'approved',
-            'quoted',
-        ], true);
+        return mb_strtolower(trim((string) $this->status)) === 'approved';
     }
+
     public function isRejectedResult(): bool
     {
         return in_array(mb_strtolower((string) $this->status),
-        [
-            'rejected',
-            'denied',
-            'refused',
-        ], true);
+            [
+                'rejected',
+                'denied',
+                'refused',
+            ], true);
     }
 
     public function hasFinalResultForReanalysis(): bool
@@ -153,15 +168,60 @@ class InsuranceAnalysis extends Model
     public function tooNumeroProposta(): ?string
     {
         return $this->proposal_id
-            ?? data_get($this->response_payload, 'numeroProposta');
+            ?? data_get($this->providerResponsePayload(), 'numeroProposta');
     }
 
     public function tooNumeroFicha(): ?string
     {
-        return data_get($this->response_payload, 'numeroFicha')
-            ?? data_get($this->response_payload, 'numeroProposta')
+        return data_get($this->providerResponsePayload(), 'numeroFicha')
+            ?? data_get($this->providerResponsePayload(), 'numeroProposta')
             ?? $this->proposal_id;
     }
 
+    public function providerResponsePayload(): array
+    {
+        $payload = $this->response_payload;
 
+        if (is_string($payload)) {
+            $payload = json_decode($payload, true);
+        }
+
+        return is_array($payload) ? $payload : [];
+    }
+
+    /** @return array{attempt_id: string, is_reanalysis: bool}|null */
+    public function currentAttemptContext(bool $lock = false): ?array
+    {
+        $event = ! $lock && $this->relationLoaded('latestAttemptEvent')
+            ? $this->getRelation('latestAttemptEvent')
+            : $this->events()
+                ->whereIn('event_type', InsuranceAnalysisAttempt::START_EVENTS)
+                ->when($lock, fn ($query) => $query->lockForUpdate())
+                ->latest('id')
+                ->first();
+
+        if ($event) {
+            $attemptId = data_get($event->payload, 'attempt_id');
+            $isReanalysis = (bool) data_get(
+                $event->payload,
+                'is_reanalysis',
+                str_starts_with($event->event_type, 'reanalysis_')
+            );
+        } else {
+            $payload = $this->providerResponsePayload();
+            $isReanalysis = (bool) ($payload['too_is_reanalysis']
+                ?? $payload['is_reanalysis']
+                ?? filled($payload['too_reanalysis_attempt_id'] ?? null));
+            $attemptId = $payload['attempt_id']
+                ?? ($isReanalysis
+                    ? ($payload['too_reanalysis_attempt_id'] ?? null)
+                    : ($payload['too_analysis_attempt_id'] ?? null));
+        }
+
+        if (! is_string($attemptId) || blank($attemptId)) {
+            return null;
+        }
+
+        return ['attempt_id' => $attemptId, 'is_reanalysis' => $isReanalysis];
+    }
 }

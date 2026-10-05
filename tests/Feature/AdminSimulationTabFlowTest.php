@@ -45,6 +45,8 @@ function adminSimulationTabPayload(array $overrides = []): array
     return array_merge([
         'tipo_locacao' => 'residencial',
         'aceite_termos' => '1',
+        'cpf' => '52998224725',
+        'data_nascimento' => '1992-02-29',
         'nome' => 'Novo lead administrativo',
         'email' => 'new-admin-lead@example.test',
         'tel' => '11988887777',

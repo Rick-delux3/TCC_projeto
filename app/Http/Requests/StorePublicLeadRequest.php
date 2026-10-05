@@ -47,6 +47,8 @@ class StorePublicLeadRequest extends FormRequest
                 'max:255',
             ],
 
+            'data_nascimento' => ['bail', 'required', 'string', 'date_format:Y-m-d', 'before_or_equal:today'],
+
             'cpf' => [
                 'required',
                 'string',
@@ -117,7 +119,6 @@ class StorePublicLeadRequest extends FormRequest
                 'min:3',
                 'max:255',
             ],
-            
 
             // Campo invisível contra bots.
             'website' => [
@@ -131,11 +132,11 @@ class StorePublicLeadRequest extends FormRequest
     {
         return [
             function (Validator $validator) {
-                if ($this->filled('cpf') && !$this->cpfValido($this->cpf)) {
+                if ($this->filled('cpf') && ! $this->cpfValido($this->cpf)) {
                     $validator->errors()->add('cpf', 'O CPF informado é inválido.');
                 }
 
-                if ($this->filled('conjuge_cpf') && !$this->cpfValido($this->conjuge_cpf)) {
+                if ($this->filled('conjuge_cpf') && ! $this->cpfValido($this->conjuge_cpf)) {
                     $validator->errors()->add('conjuge_cpf', 'O CPF do cônjuge é inválido.');
                 }
 
@@ -154,6 +155,10 @@ class StorePublicLeadRequest extends FormRequest
     {
         return [
             'nome.required' => 'Informe o nome do lead.',
+            'data_nascimento.required' => 'Informe a data de nascimento.',
+            'data_nascimento.string' => 'Informe uma data de nascimento válida.',
+            'data_nascimento.date_format' => 'Informe uma data de nascimento válida.',
+            'data_nascimento.before_or_equal' => 'A data de nascimento não pode estar no futuro.',
             'nome.min' => 'O nome precisa ter pelo menos :min caracteres.',
 
             'email.required' => 'Informe o e-mail.',
@@ -228,21 +233,21 @@ class StorePublicLeadRequest extends FormRequest
             return null;
         }
 
-       $valor = (string) $valor;
+        $valor = (string) $valor;
 
-       $valor = preg_replace('/[^\d,\.]/u', '', $valor);
+        $valor = preg_replace('/[^\d,\.]/u', '', $valor);
 
-       if(str_contains($valor, ',')){
+        if (str_contains($valor, ',')) {
             $valor = str_replace('.', '', $valor);
             $valor = str_replace(',', '.', $valor);
-       }
+        }
 
         return is_numeric($valor) ? $valor : null;
     }
 
     private function cpfValido(?string $cpf): bool
     {
-        if (!$cpf || strlen($cpf) !== 11) {
+        if (! $cpf || strlen($cpf) !== 11) {
             return false;
         }
 

@@ -35,6 +35,7 @@ function validRegisteredCompanySimulationPayload(array $overrides = []): array
         'email' => 'protected-code-lead@example.test',
         'tel' => '11988887777',
         'cpf' => '52998224725',
+        'data_nascimento' => '1992-02-29',
         'estado_civil' => 'solteiro',
         'valor_aluguel' => '1500',
         'cep' => '01001000',

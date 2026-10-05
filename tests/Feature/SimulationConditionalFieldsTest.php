@@ -25,6 +25,7 @@ function conditionalSimulationPayload(array $overrides = []): array
         'email' => 'conditional@example.test',
         'tel' => '11988887777',
         'cpf' => '529.982.247-25',
+        'data_nascimento' => '1992-02-29',
         'tipo_locacao' => 'residencial',
         'estado_civil' => 'solteiro',
         'valor_aluguel' => '1500',
@@ -36,6 +37,34 @@ function conditionalSimulationPayload(array $overrides = []): array
         'estado' => 'SP',
     ], $overrides);
 }
+
+it('validates the birth date in the legacy public request', function (mixed $birthDate, bool $valid) {
+    $request = new \App\Http\Requests\StorePublicLeadRequest;
+    $validator = \Illuminate\Support\Facades\Validator::make(
+        ['data_nascimento' => $birthDate],
+        ['data_nascimento' => $request->rules()['data_nascimento']],
+        $request->messages(),
+    );
+
+    expect($validator->passes())->toBe($valid);
+})->with([
+    'leap day' => ['1992-02-29', true],
+    'missing date' => [null, false],
+    'impossible date' => ['1991-02-29', false],
+    'future date' => ['2999-01-01', false],
+    'wrong format' => ['29/02/1992', false],
+    'array date' => [['1992-02-29'], false],
+]);
+
+it('stores the supplied birth date without inventing an age restriction', function () {
+    $birthDate = now()->subYears(16)->toDateString();
+
+    $this->post(route('simulation.tenant.store'), conditionalSimulationPayload([
+        'data_nascimento' => $birthDate,
+    ]))->assertSessionHasNoErrors()->assertRedirect(route('simulation.success'));
+
+    expect(Lead::query()->sole()->data_nascimento->toDateString())->toBe($birthDate);
+});
 
 function conditionalSimulationCompany(): Imobiliaria
 {
@@ -124,6 +153,11 @@ it('audits validation errors and absence of persistence in each public lead form
 })->with(['simulation.tenant.store', 'simulation.unregistered-company.store', 'simulation.registered-company.store'])
     ->with([
         'missing name' => ['nome', null],
+        'missing birth date' => ['data_nascimento', null],
+        'invalid birth date' => ['data_nascimento', '1991-02-29'],
+        'future birth date' => ['data_nascimento', '2999-01-01'],
+        'wrong birth date format' => ['data_nascimento', '29/02/1992'],
+        'array birth date' => ['data_nascimento', ['1992-02-29']],
         'short name' => ['nome', 'ab'],
         'long name' => ['nome', str_repeat('a', 256)],
         'array name' => ['nome', ['invalid']],
@@ -444,6 +478,8 @@ it('persists the independent document and rental choices through every public pr
     $isCompany = strlen(preg_replace('/\D/', '', $document)) === 14;
 
     expect($lead->tipo_solicitante)->toBe($profile)
+        ->and($lead->data_nascimento->toDateString())->toBe('1992-02-29')
+        ->and($lead->attributesToArray()['data_nascimento'])->toBe('1992-02-29')
         ->and($lead->tipo_locacao)->toBe(TipoLocacao::from($rentalType))
         ->and($lead->descrever_atividade)->toBe($rentalType === 'comercial' ? 'Comércio de roupas' : null)
         ->and($lead->cpf)->toBe($isCompany ? null : '52998224725')
@@ -540,6 +576,13 @@ it('updates and removes conditional relationships only through an authorized adm
 
     $this->actingAs($admin, 'admin')->post($url, conditionalSimulationPayload())->assertSessionHasNoErrors();
 
+    $this->post($url, conditionalSimulationPayload())->assertSessionHasNoErrors();
+    expect(Lead::query()->sole()->data_edited_at)->toBeNull();
+
+    $this->post($url, conditionalSimulationPayload(['data_nascimento' => '1990-06-15']))->assertSessionHasNoErrors();
+    expect(Lead::query()->sole()->data_nascimento->toDateString())->toBe('1990-06-15')
+        ->and(Lead::query()->sole()->data_edited_at)->not->toBeNull();
+
     $companyPayload = conditionalSimulationPayload([
         'cpf' => '11222333000181',
         'cpf_responsavel' => '11144477735',
@@ -614,6 +657,9 @@ it('renders the same conditional controls in all simulation views', function (st
     expect($dom->query('//input[@name="tipo_locacao"]')->length)->toBe(2)
         ->and($dom->query('//input[@name="cpf"]')->length)->toBe(1)
         ->and($dom->query('//input[@name="cpf" and @required]')->length)->toBe(1)
+        ->and($dom->query('//input[@name="data_nascimento" and @type="date" and @required]')->length)->toBe(1)
+        ->and($dom->evaluate('string(//input[@name="data_nascimento"]/@max)'))->toBe(now()->toDateString())
+        ->and($dom->query('//*[@id="data_nascimento-hint"]')->length)->toBe(1)
         ->and($dom->query('//option[@value="separado"]')->length)->toBe(1)
         ->and($dom->query('//*[@data-simulation-fields]//input')->length)->toBe(0);
 })->with([
@@ -843,11 +889,13 @@ it('opens the stage containing validation errors and restores property values an
         ->and($dom->query('//*[@role="alert"]//*[@data-error-field]')->length)->toBe(count($errors))
         ->and($dom->query('//*[@id="modalErrors"]')->length)->toBe(0)
         ->and($dom->evaluate('string(//input[@name="valor_gas"]/@value)'))->toBe('0')
+        ->and($dom->evaluate('string(//input[@name="data_nascimento"]/@value)'))->toBe('1992-02-29')
         ->and($dom->query('//*[@data-expense-field="valor_gas"][contains(@class,"d-none")]')->length)->toBe(0)
         ->and($dom->evaluate('string(//select[@name="estado"]/option[@selected]/@value)'))->toBe('SP')
         ->and($dom->query('//input[@name="aceite_termos"][@checked]')->length)->toBe(1);
 })->with([
     'people error' => [['nome' => 'Informe seu nome.'], '1'],
+    'birth date error' => [['data_nascimento' => 'Informe uma data de nascimento válida.'], '1'],
     'property error' => [['cep' => 'Informe um CEP válido.'], '2'],
     'commercial error' => [['descrever_atividade' => 'Descreva a atividade.'], '2'],
     'both stages' => [['cpf_responsavel' => 'Informe o CPF.', 'cep' => 'Informe o CEP.'], '1'],

@@ -83,7 +83,11 @@ return [
     ],
 
     'pottencial' => [
+        'letters_endpoint' => env('POTTENCIAL_LETTERS_ENDPOINT', '/insurance/v1/fianca-locaticia/quotes/{quote_id}/letters'),
+        'document_download_hosts' => array_filter(explode(',', (string) env('POTTENCIAL_DOCUMENT_DOWNLOAD_HOSTS', ''))),
         'enabled' => env('POTTENCIAL_ENABLED', false),
+        'status_check_delay_seconds' => (int) env('POTTENCIAL_STATUS_CHECK_DELAY_SECONDS', 30),
+        'status_check_max_failures' => (int) env('POTTENCIAL_STATUS_CHECK_MAX_FAILURES', 3),
         'base_url' => env('POTTENCIAL_API_URL', 'https://api-hml.pottencial.com.br'),
         'rental_endpoint' => env('POTTENCIAL_RENTAL_GUARANTEE_ENDPOINT', '/insurance/v1/fianca-locaticia-mensalizado-pf/quotes'),
         'client_id' => env('POTTENCIAL_CLIENT_ID'),
@@ -105,6 +109,7 @@ return [
     ],
 
     'too' => [
+        'document_download_hosts' => array_filter(explode(',', (string) env('TOO_DOCUMENT_DOWNLOAD_HOSTS', ''))),
         'enabled' => env('TOO_ENABLED', false),
         'base_url' => env('TOO_BASE_URL', 'https://openapi-uat.tooseguros.com.br'),
         'client_id' => env('TOO_CLIENT_ID'),
@@ -122,7 +127,7 @@ return [
         'default_reside_property' => env('TOO_DEFAULT_RESIDE_PROPERTY', true),
         'default_financial_responsible' => env('TOO_DEFAULT_FINANCIAL_RESPONSIBLE', true),
         'status_check_delay_seconds' => env('TOO_STATUS_CHECK_DELAY_SECONDS', 20),
-        'status_check_max_attempts' => env('TOO_STATUS_CHECK_MAX_ATTEMPTS', 15),
+        'status_check_max_failures' => (int) env('TOO_STATUS_CHECK_MAX_FAILURES', env('TOO_STATUS_CHECK_MAX_ATTEMPTS', 15)),
         'default_reanalysis_reason' => env('TOO_DEFAULT_REANALYSIS_REASON', 10),
     ],
 

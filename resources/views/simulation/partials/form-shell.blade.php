@@ -7,7 +7,7 @@
     $firstStepLabel = $isTenant ? 'Seus dados' : 'Pessoas e responsável';
     $document = \App\Rules\CpfOrCnpj::normalize(old('cpf', ''));
     $isCompanyDocument = is_string($document) && preg_match('/^[0-9]{14}$/D', $document) === 1;
-    $firstStepFields = ['nome', 'email', 'cpf', 'tel', 'estado_civil', 'conjuge_nome', 'conjuge_cpf', 'cpf_responsavel', 'nome_responsavel', 'responsavel_tipo', 'responsavel_nome', 'responsavel_email', 'responsavel_telefone', 'responsavel_preenchimento'];
+    $firstStepFields = ['nome', 'email', 'cpf', 'data_nascimento', 'tel', 'estado_civil', 'conjuge_nome', 'conjuge_cpf', 'cpf_responsavel', 'nome_responsavel', 'responsavel_tipo', 'responsavel_nome', 'responsavel_email', 'responsavel_telefone', 'responsavel_preenchimento'];
     $initialStep = $errors->any() && ! $errors->hasAny($firstStepFields) ? 2 : 1;
 @endphp
 
@@ -92,6 +92,7 @@
                         'fields' => 'simulation.partials.company-representative',
                     ])
                     @include('simulation.partials.marital-status')
+                    @include('simulation.partials.input', ['field' => ['name' => 'data_nascimento', 'label' => 'Data de nascimento', 'type' => 'date', 'required' => true, 'max' => now()->toDateString(), 'autocomplete' => 'bday', 'hint' => 'Para CNPJ, informe a data de nascimento do responsável que representa a empresa.']])
                 </div>
 
                 @if ($isRegistered)

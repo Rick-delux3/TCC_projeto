@@ -20,6 +20,48 @@ use Illuminate\Support\Facades\Queue;
 const FINAL_ANALYSIS_TAG_API_URL = 'https://leadlovers-final-tag.example.test';
 const FINAL_ANALYSIS_TAG_TOKEN = 'final-analysis-fake-token';
 
+it('requires explicit credit decisions to choose a final batch tag', function (array $statuses, ?string $expectedTag) {
+    $batch = new InsuranceAnalysisBatch;
+    $batch->setRelation('analyses', collect($statuses)->map(
+        fn (?string $status): InsuranceAnalysis => new InsuranceAnalysis(['status' => $status])
+    ));
+
+    $method = new ReflectionMethod(ApplyFinalAnalysisTagToLeadLoversJob::class, 'resolveFinalTagKey');
+
+    expect($method->invoke(new ApplyFinalAnalysisTagToLeadLoversJob(1, 'decision-test'), $batch))
+        ->toBe($expectedTag);
+})->with([
+    'empty batch' => [[], null],
+    'quote alone' => [['quoted'], null],
+    'quotes and refusals' => [['quoted', 'rejected', 'quoted', 'denied'], null],
+    'failure is not refusal' => [['failed', 'rejected'], null],
+    'all failed' => [['failed', 'failed'], null],
+    'unknown is not refusal' => [['unexpected', 'rejected'], null],
+    'missing decision is not discarded' => [[null, 'rejected'], null],
+    'all refused' => [['rejected', 'denied', 'refused', 'rejected'], 'ruim'],
+    'one explicit approval' => [['rejected', 'approved', 'rejected', 'failed'], 'aprovados'],
+    'legacy quote with real approval' => [['quoted', 'approved'], 'aprovados'],
+    'normalized explicit approval' => [['Approved', 'rejected'], 'aprovados'],
+    'await pending provider' => [['approved', 'pending'], null],
+    'await processing provider' => [['approved', 'processing'], null],
+    'await manual review' => [['approved', 'manual_review'], null],
+    'preapproval alone' => [['PreApproved'], null],
+]);
+
+it('does not send a final tag without approval or unanimous refusal', function (string $status) {
+    Queue::fake();
+    finalAnalysisTagCatalog();
+    ['lead' => $lead, 'batch' => $batch, 'analysis' => $analysis] = finalAnalysisTagFixture($status);
+    finalAnalysisAttempt($analysis, 'no-credit-decision');
+
+    handleFinalAnalysisTagJob(new ApplyFinalAnalysisTagToLeadLoversJob($batch->id, 'no-credit-decision'));
+
+    Http::assertNothingSent();
+    Queue::assertNothingPushed();
+    expect($lead->fresh()->analysis_final_status)->toBeNull()
+        ->and($lead->fresh()->tags_originais)->toBe($lead->tags_originais);
+})->with(['quoted', 'failed', 'manual_review', 'unexpected']);
+
 beforeEach(function () {
     Http::preventStrayRequests();
     Http::fake([]);
@@ -118,6 +160,33 @@ function finalAnalysisRemoteTag(int $id, string $name): array
         'linkedAt' => '2026-08-13T12:00:00Z',
     ];
 }
+
+it('does not persist a remote tag confirmation after a reanalysis starts during the request', function () {
+    Queue::fake();
+    finalAnalysisTagCatalog();
+    ['lead' => $lead, 'batch' => $batch, 'analysis' => $analysis] = finalAnalysisTagFixture();
+    finalAnalysisAttempt($analysis, 'old-http-attempt');
+    $originalTags = $lead->tags_originais;
+    Http::fake([
+        FINAL_ANALYSIS_TAG_API_URL.'/leads/501/tags' => function () use ($lead, $batch, $analysis) {
+            $analysis->events()->create(['event_type' => 'reanalysis_requested', 'payload' => ['attempt_id' => 'new-http-attempt']]);
+            $analysis->update(['status' => 'pending', 'result' => null]);
+            $batch->update(['status' => 'processing', 'finished_at' => null]);
+            $lead->forceFill(['analysis_final_status' => null, 'analysis_finalized_at' => null])->save();
+
+            return Http::response([finalAnalysisRemoteTag(101, 'Aprovados')]);
+        },
+    ]);
+
+    handleFinalAnalysisTagJob(new ApplyFinalAnalysisTagToLeadLoversJob($batch->id, 'old-http-attempt'));
+
+    expect($lead->fresh()->analysis_final_status)->toBeNull()
+        ->and($lead->fresh()->analysis_finalized_at)->toBeNull()
+        ->and($lead->fresh()->tags_originais)->toBe($originalTags)
+        ->and($analysis->events()->where('event_type', 'leadlovers_final_tag_applied')->count())->toBe(0);
+    Http::assertSentCount(1);
+    Queue::assertNothingPushed();
+});
 
 it('does not access LeadLovers or dispatch confirmation while analyses are disabled', function () {
     Queue::fake();
@@ -406,7 +475,6 @@ it('preserves an accepted action when confirmation is rate limited', function ()
 it('records one failure when the queue failed callback runs after fail', function () {
     ['lead' => $lead, 'batch' => $batch, 'analysis' => $analysis] = finalAnalysisTagFixture();
     finalAnalysisAttempt($analysis, 'attempt-with-permanent-failure');
-    $lead->forceFill(['leadlovers_lead_id' => null])->save();
     $job = (new ApplyFinalAnalysisTagToLeadLoversJob(
         batchId: $batch->id,
         attemptId: 'attempt-with-permanent-failure',

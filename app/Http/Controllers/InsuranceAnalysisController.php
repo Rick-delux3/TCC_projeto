@@ -2,13 +2,17 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Resources\InsuranceAnalysisLeadResource;
 use App\Jobs\SyncProviderAnalysisStatusJob;
 use App\Models\Corretor;
-use App\Models\Imobiliaria;
 use App\Models\InsuranceAnalysis;
 use App\Models\InsuranceAnalysisBatch;
+use App\Models\Lead;
+use App\Services\Insurance\InsuranceAnalysisPageService;
 use App\Services\LeadReanalysisService;
 use DomainException;
+use Illuminate\Contracts\View\View;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Gate;
@@ -17,146 +21,45 @@ use Illuminate\Validation\ValidationException;
 class InsuranceAnalysisController extends Controller
 {
     public function __construct(
-        private LeadReanalysisService $leadReanalysisService
+        private LeadReanalysisService $leadReanalysisService,
+        private InsuranceAnalysisPageService $analysisPageService,
     ) {}
 
-    /**
-     * Lista os lotes de análises no dashboard da imobiliária cadastrada.
-     */
-    public function index(Request $request)
+    public function index(): RedirectResponse
     {
-        $companyId = $this->currentCompanyId();
+        abort_if(! $this->currentCompanyId(), 403);
 
-        abort_if(! $companyId, 403, 'Empresa não identificada.');
-
-        $company = Imobiliaria::findOrFail($companyId);
-
-        $selectedStatus = $request->query('status');
-        $search = trim((string) $request->query('search'));
-
-        $totalBatches = InsuranceAnalysisBatch::where('company_id', $companyId)->count();
-
-        $runningBatches = InsuranceAnalysisBatch::where('company_id', $companyId)
-            ->whereIn('status', ['pending', 'running', 'processing'])
-            ->count();
-
-        $finishedBatches = InsuranceAnalysisBatch::where('company_id', $companyId)
-            ->whereIn('status', ['done', 'completed', 'completed_with_errors', 'finished'])
-            ->count();
-
-        $failedBatches = InsuranceAnalysisBatch::where('company_id', $companyId)
-            ->whereIn('status', ['failed', 'error', 'completed_with_errors'])
-            ->count();
-
-        $approvedAnalyses = InsuranceAnalysis::where('company_id', $companyId)
-            ->whereIn('status', ['approved', 'Approved', 'quoted'])
-            ->count();
-
-        $rejectedAnalyses = InsuranceAnalysis::where('company_id', $companyId)
-            ->whereIn('status', ['rejected', 'refused', 'denied', 'Denied', 'Refused'])
-            ->count();
-
-        $inProgressAnalyses = InsuranceAnalysis::with([
-            'lead',
-            'events',
-        ])
-            ->where('company_id', $companyId)
-            ->whereIn('status', ['pending', 'processing', 'queued', 'running'])
-            ->latest('updated_at')
-            ->limit(6)
-            ->get();
-
-        $batchesQuery = InsuranceAnalysisBatch::with([
-            'lead.despesas',
-            'lead.endereco',
-            'lead.conjuge',
-            'analyses.events',
-        ])
-            ->where('company_id', $companyId);
-
-        if (filled($selectedStatus)) {
-            $batchesQuery->where('status', $selectedStatus);
-        }
-
-        if (filled($search)) {
-            $batchesQuery->where(function ($query) use ($search) {
-                $query->whereHas('lead', function ($leadQuery) use ($search) {
-                    $leadQuery
-                        ->where('nome', 'like', "%{$search}%")
-                        ->orWhere('email', 'like', "%{$search}%")
-                        ->orWhere('cpf', 'like', "%{$search}%");
-                })
-                    ->orWhereHas('analyses', function ($analysisQuery) use ($search) {
-                        $analysisQuery
-                            ->where('provider', 'like', "%{$search}%")
-                            ->orWhere('quote_id', 'like', "%{$search}%")
-                            ->orWhere('quote_number', 'like', "%{$search}%")
-                            ->orWhere('product_key', 'like', "%{$search}%");
-                    });
-            });
-        }
-
-        $batches = $batchesQuery
-            ->latest()
-            ->paginate(2)
-            ->withQueryString();
-
-        $dashboardStats = [
-            'totalBatches' => $totalBatches,
-            'runningBatches' => $runningBatches,
-            'finishedBatches' => $finishedBatches,
-            'failedBatches' => $failedBatches,
-            'approvedAnalyses' => $approvedAnalyses,
-            'rejectedAnalyses' => $rejectedAnalyses,
-        ];
-
-        return view('insurance-analyses.dashboard-user.index', [
-            'company' => $company,
-            'batches' => $batches,
-            'inProgressAnalyses' => $inProgressAnalyses,
-            'dashboardStats' => $dashboardStats,
-            'selectedStatus' => $selectedStatus,
-            'search' => $search,
-        ]);
+        return redirect()->to(route('company.dashboard').'#leads-section');
     }
 
-    /**
-     * Mostra detalhes de um lote específico no dashboard da imobiliária cadastrada.
-     */
-    public function show(InsuranceAnalysisBatch $batch)
+    public function show(InsuranceAnalysisBatch $batch): RedirectResponse
     {
-        $companyId = $this->currentCompanyId();
+        $lead = $batch->lead()->firstOrFail();
+        $this->authorizeCompanyLead($lead);
 
-        abort_if(! $companyId, 403, 'Empresa não identificada.');
+        return redirect()->route('insurance-analyses.lead', ['lead' => $lead]);
+    }
 
-        abort_if(
-            (int) $batch->company_id !== (int) $companyId,
-            403,
-            'Você não tem permissão para acessar esta análise.'
-        );
+    public function showLead(Lead $lead): View
+    {
+        $this->authorizeCompanyLead($lead);
 
-        $company = Imobiliaria::findOrFail($companyId);
+        return $this->leadView($lead, 'company');
+    }
 
-        $batch->load([
-            'lead.despesas',
-            'lead.endereco',
-            'lead.conjuge',
-            'company',
-            'analyses.events',
-        ]);
+    public function leadData(Lead $lead): InsuranceAnalysisLeadResource
+    {
+        $this->authorizeCompanyLead($lead);
 
-        return view('insurance-analyses.dashboard-user.show', [
-            'company' => $company,
-            'batch' => $batch,
-        ]);
+        return new InsuranceAnalysisLeadResource($this->analysisPageService->read($lead, 'company', Auth::guard('web')->user()));
     }
 
     /**
      * Retry técnico de uma análise pela imobiliária.
      */
-    public function retry(InsuranceAnalysis $analysis)
+    public function retry(InsuranceAnalysis $analysis): RedirectResponse
     {
-        $this->authorizeCompanyAccess($analysis);
+        $this->authorizeAnalysis($analysis, 'web', 'requestAnalysis');
 
         try {
             $this->leadReanalysisService->startTechnicalRetry(
@@ -176,9 +79,9 @@ class InsuranceAnalysisController extends Controller
     /**
      * Reanálise por companhia solicitada pela imobiliária.
      */
-    public function providerReanalysis(Request $request, InsuranceAnalysis $analysis)
+    public function providerReanalysis(Request $request, InsuranceAnalysis $analysis): RedirectResponse
     {
-        $this->authorizeCompanyAccess($analysis);
+        $this->authorizeAnalysis($analysis, 'web', 'reanalyzeWithChanges');
 
         return $this->startProviderReanalysisFromLeadUpdate(
             request: $request,
@@ -190,9 +93,9 @@ class InsuranceAnalysisController extends Controller
     /**
      * Sincroniza o status de uma análise específica com a companhia.
      */
-    public function syncStatus(InsuranceAnalysis $analysis)
+    public function syncStatus(InsuranceAnalysis $analysis): RedirectResponse
     {
-        $this->authorizeCompanyAccess($analysis);
+        $this->authorizeAnalysis($analysis, 'web', 'viewAnalyses');
 
         return $this->syncAnalysisStatus(
             analysis: $analysis,
@@ -200,153 +103,42 @@ class InsuranceAnalysisController extends Controller
         );
     }
 
-    /**
-     * Lista todos os lotes de análises para o admin/corretor.
-     */
-    public function adminIndex(Request $request)
-    {
-        $selectedCompany = $request->query('company_id');
-        $selectedStatus = $request->query('status');
-        $search = trim((string) $request->query('search'));
-
-        $imobiliarias = Imobiliaria::query()
-            ->orderBy('name')
-            ->get();
-
-        $batchesQuery = InsuranceAnalysisBatch::with([
-            'lead.despesas',
-            'lead.endereco',
-            'lead.conjuge',
-            'company',
-            'analyses.events',
-        ]);
-
-        if (filled($selectedCompany)) {
-            $batchesQuery->where('company_id', $selectedCompany);
-        }
-
-        if (filled($selectedStatus)) {
-            $batchesQuery->where('status', $selectedStatus);
-        }
-
-        if (filled($search)) {
-            $batchesQuery->where(function ($query) use ($search) {
-                $query->whereHas('lead', function ($leadQuery) use ($search) {
-                    $leadQuery
-                        ->where('nome', 'like', "%{$search}%")
-                        ->orWhere('email', 'like', "%{$search}%")
-                        ->orWhere('cpf', 'like', "%{$search}%");
-                })
-                    ->orWhereHas('company', function ($companyQuery) use ($search) {
-                        $companyQuery
-                            ->where('name', 'like', "%{$search}%")
-                            ->orWhere('nome', 'like', "%{$search}%")
-                            ->orWhere('cnpj', 'like', "%{$search}%");
-                    })
-                    ->orWhereHas('analyses', function ($analysisQuery) use ($search) {
-                        $analysisQuery
-                            ->where('provider', 'like', "%{$search}%")
-                            ->orWhere('quote_id', 'like', "%{$search}%")
-                            ->orWhere('quote_number', 'like', "%{$search}%")
-                            ->orWhere('product_key', 'like', "%{$search}%");
-                    });
-            });
-        }
-
-        $statsQuery = InsuranceAnalysisBatch::query();
-
-        if (filled($selectedCompany)) {
-            $statsQuery->where('company_id', $selectedCompany);
-        }
-
-        $analysisStatsQuery = InsuranceAnalysis::query();
-
-        if (filled($selectedCompany)) {
-            $analysisStatsQuery->where('company_id', $selectedCompany);
-        }
-
-        $dashboardStats = [
-            'totalBatches' => (clone $statsQuery)->count(),
-
-            'runningBatches' => (clone $statsQuery)
-                ->whereIn('status', ['pending', 'running', 'processing'])
-                ->count(),
-
-            'finishedBatches' => (clone $statsQuery)
-                ->whereIn('status', ['done', 'completed', 'completed_with_errors', 'finished'])
-                ->count(),
-
-            'failedBatches' => (clone $statsQuery)
-                ->whereIn('status', ['failed', 'error', 'completed_with_errors'])
-                ->count(),
-
-            'approvedAnalyses' => (clone $analysisStatsQuery)
-                ->whereIn('status', ['approved', 'Approved', 'quoted'])
-                ->count(),
-
-            'rejectedAnalyses' => (clone $analysisStatsQuery)
-                ->whereIn('status', ['rejected', 'refused', 'denied', 'Denied', 'Refused'])
-                ->count(),
-        ];
-
-        $inProgressAnalysesQuery = InsuranceAnalysis::with([
-            'lead',
-            'company',
-            'events',
-        ])
-            ->whereIn('status', ['pending', 'processing', 'queued', 'running']);
-
-        if (filled($selectedCompany)) {
-            $inProgressAnalysesQuery->where('company_id', $selectedCompany);
-        }
-
-        $inProgressAnalyses = $inProgressAnalysesQuery
-            ->latest('updated_at')
-            ->limit(6)
-            ->get();
-
-        $batches = $batchesQuery
-            ->latest()
-            ->paginate(10)
-            ->withQueryString();
-
-        return view('insurance-analyses.dashboard-admin.index', [
-            'batches' => $batches,
-            'imobiliarias' => $imobiliarias,
-            'inProgressAnalyses' => $inProgressAnalyses,
-            'dashboardStats' => $dashboardStats,
-            'selectedCompany' => $selectedCompany,
-            'selectedStatus' => $selectedStatus,
-            'search' => $search,
-        ]);
-    }
-
-    /**
-     * Mostra o detalhe de qualquer lote para o admin/corretor.
-     */
-    public function adminShow(InsuranceAnalysisBatch $batch)
+    public function adminIndex(): RedirectResponse
     {
         $this->authorizeAdminAbility('view-analyses');
 
-        $batch->load([
-            'lead.despesas',
-            'lead.endereco',
-            'lead.conjuge',
-            'company',
-            'analyses.events',
-        ]);
+        return redirect()->to(route('Dashboard-Admin').'#leads-section');
+    }
 
-        return view('insurance-analyses.dashboard-admin.show', [
-            'batch' => $batch,
-        ]);
+    public function adminShow(InsuranceAnalysisBatch $batch): RedirectResponse
+    {
+        $this->authorizeAdminAbility('view-analyses');
+        $lead = $batch->lead()->firstOrFail();
+        Gate::forUser(Auth::guard('admin')->user())->authorize('viewAnalyses', $lead);
+
+        return redirect()->route('admin.insurance-analyses.lead', ['lead' => $lead]);
+    }
+
+    public function adminShowLead(Lead $lead): View
+    {
+        Gate::forUser(Auth::guard('admin')->user())->authorize('viewAnalyses', $lead);
+
+        return $this->leadView($lead, 'admin');
+    }
+
+    public function adminLeadData(Lead $lead): InsuranceAnalysisLeadResource
+    {
+        Gate::forUser(Auth::guard('admin')->user())->authorize('viewAnalyses', $lead);
+
+        return new InsuranceAnalysisLeadResource($this->analysisPageService->read($lead, 'admin', Auth::guard('admin')->user()));
     }
 
     /**
      * Retry técnico de uma análise pelo painel admin.
      */
-    public function adminRetry(InsuranceAnalysis $analysis)
+    public function adminRetry(InsuranceAnalysis $analysis): RedirectResponse
     {
-        $this->authorizeAdminAbility('create-analysis');
+        $this->authorizeAnalysis($analysis, 'admin', 'requestAnalysis');
 
         try {
             $this->leadReanalysisService->startTechnicalRetry(
@@ -366,9 +158,9 @@ class InsuranceAnalysisController extends Controller
     /**
      * Reanálise por companhia solicitada pelo admin/corretor.
      */
-    public function adminProviderReanalysis(Request $request, InsuranceAnalysis $analysis)
+    public function adminProviderReanalysis(Request $request, InsuranceAnalysis $analysis): RedirectResponse
     {
-        $this->authorizeAdminAbility('create-analysis');
+        $this->authorizeAnalysis($analysis, 'admin', 'reanalyzeWithChanges');
 
         return $this->startProviderReanalysisFromLeadUpdate(
             request: $request,
@@ -380,9 +172,9 @@ class InsuranceAnalysisController extends Controller
     /**
      * Sincroniza o status de uma análise pelo painel admin.
      */
-    public function adminSyncStatus(InsuranceAnalysis $analysis)
+    public function adminSyncStatus(InsuranceAnalysis $analysis): RedirectResponse
     {
-        $this->authorizeAdminAbility('view-analyses');
+        $this->authorizeAnalysis($analysis, 'admin', 'viewAnalyses');
 
         return $this->syncAnalysisStatus(
             analysis: $analysis,
@@ -397,7 +189,7 @@ class InsuranceAnalysisController extends Controller
         Request $request,
         InsuranceAnalysis $analysis,
         string $requestedBy
-    ) {
+    ): RedirectResponse {
         $analysis->loadMissing([
             'lead.endereco',
             'lead.despesas',
@@ -464,23 +256,29 @@ class InsuranceAnalysisController extends Controller
      */
     private function currentCompanyId(): ?int
     {
-        return auth()->user()?->company_id;
+        return Auth::guard('web')->user()?->company_id;
+    }
+
+    private function authorizeCompanyLead(Lead $lead): void
+    {
+        Gate::forUser(Auth::guard('web')->user())->authorize('viewAnalyses', $lead);
+    }
+
+    private function leadView(Lead $lead, string $viewerType): View
+    {
+        return view('insurance-analyses.index', $this->analysisPageService->read(
+            $lead, $viewerType, Auth::guard($viewerType === 'admin' ? 'admin' : 'web')->user(),
+        ));
     }
 
     /**
      * Protege ações feitas pela imobiliária cadastrada.
      */
-    private function authorizeCompanyAccess(InsuranceAnalysis $analysis): void
+    private function authorizeAnalysis(InsuranceAnalysis $analysis, string $guard, string $ability): void
     {
-        $companyId = $this->currentCompanyId();
-
-        abort_if(! $companyId, 403, 'Empresa não identificada.');
-
-        abort_if(
-            (int) $analysis->company_id !== (int) $companyId,
-            403,
-            'Você não tem permissão para acessar essa análise.'
-        );
+        $lead = $analysis->lead()->firstOrFail();
+        Gate::forUser(Auth::guard($guard)->user())->authorize($ability, $lead);
+        $analysis->setRelation('lead', $lead);
     }
 
     /**
@@ -569,13 +367,9 @@ class InsuranceAnalysisController extends Controller
     /**
      * Sincronização manual de status, usada por imobiliária e admin.
      */
-    private function syncAnalysisStatus(InsuranceAnalysis $analysis, string $requestedBy)
+    private function syncAnalysisStatus(InsuranceAnalysis $analysis, string $requestedBy): RedirectResponse
     {
-        $responsePayload = $analysis->response_payload ?? [];
-
-        if (is_string($responsePayload)) {
-            $responsePayload = json_decode($responsePayload, true) ?: [];
-        }
+        $responsePayload = $analysis->providerResponsePayload();
 
         $isToo = mb_strtolower((string) $analysis->provider) === 'too';
         $normalizedStatus = mb_strtolower((string) $analysis->status);
@@ -599,7 +393,7 @@ class InsuranceAnalysisController extends Controller
         $canSyncByQuote = ! $isToo && filled($analysis->quote_id);
 
         $canSyncTooManually = $isToo
-            && filled($analysis->proposal_id)
+            && filled($analysis->tooNumeroProposta())
             && $tooAutoStopped
             && $tooManualSyncAvailable
             && ! in_array($normalizedStatus, $finalStatuses, true);
@@ -613,6 +407,12 @@ class InsuranceAnalysisController extends Controller
 
         $isAdmin = $requestedBy === 'admin';
 
+        $attempt = $analysis->currentAttemptContext();
+
+        if ($attempt === null) {
+            return back()->with('error', 'Não foi possível identificar a rodada desta análise para consultar o status.');
+        }
+
         $analysis->events()->create([
             'event_type' => $canSyncTooManually ? 'too_manual_sync_requested' : 'sync_requested',
             'status' => $analysis->status,
@@ -624,6 +424,8 @@ class InsuranceAnalysisController extends Controller
                     ? 'Sincronização de status solicitada pelo admin/corretor.'
                     : 'Sincronização de status solicitada pela imobiliária.'),
             'payload' => [
+                'attempt_id' => $attempt['attempt_id'],
+                'is_reanalysis' => $attempt['is_reanalysis'],
                 'requested_by' => $requestedBy,
                 'requested_at' => now()->toDateTimeString(),
                 'provider' => $analysis->provider,
@@ -632,7 +434,11 @@ class InsuranceAnalysisController extends Controller
             ],
         ]);
 
-        SyncProviderAnalysisStatusJob::dispatch($analysis->id);
+        SyncProviderAnalysisStatusJob::dispatch(
+            analysisId: $analysis->id,
+            attemptId: $attempt['attempt_id'],
+            isReanalysis: $attempt['is_reanalysis'],
+        );
 
         return back()->with(
             'success',

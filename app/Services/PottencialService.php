@@ -9,7 +9,9 @@ use Illuminate\Support\Facades\Log;
 class PottencialService
 {
     private string $baseUrl;
+
     private ?string $clientId;
+
     private ?string $clientSecret;
 
     public function __construct()
@@ -27,28 +29,26 @@ class PottencialService
         $this->ensureEnabled();
 
         return Cache::remember('pottencial_access_token', now()->addMinutes(55), function () {
-            if (!$this->baseUrl) {
+            if (! $this->baseUrl) {
                 Log::error('Base URL da Pottencial não configurada.');
 
                 return null;
             }
 
-
-            if (!$this->clientId || !$this->clientSecret) {
+            if (! $this->clientId || ! $this->clientSecret) {
                 Log::error('Credenciais da Pottencial não configuradas.');
 
                 return null;
             }
 
-            $url = $this->baseUrl . '/oauth/v3/access-token';
-
+            $url = $this->baseUrl.'/oauth/v3/access-token';
 
             $response = Http::withBasicAuth($this->clientId, $this->clientSecret)
                 ->acceptJson()
                 ->timeout(30)
                 ->post($url);
 
-            if (!$response->successful()) {
+            if (! $response->successful()) {
                 Log::warning('Erro ao gerar access_token da Pottencial', [
                     'status' => $response->status(),
                     'http_status' => $response->status(),
@@ -74,7 +74,7 @@ class PottencialService
     {
         $token = $this->getAccessToken();
 
-        if (!$token) {
+        if (! $token) {
             throw new \RuntimeException('Não foi possível autenticar na Pottencial.');
         }
 
@@ -88,7 +88,7 @@ class PottencialService
     {
         $token = $this->getAccessToken();
 
-        if (!$token) {
+        if (! $token) {
             return [
                 'success' => false,
                 'message' => 'Não foi possível gerar o access_token.',
@@ -98,7 +98,7 @@ class PottencialService
         return [
             'success' => true,
             'message' => 'Access token gerado com sucesso.',
-            'token_preview' => substr($token, 0, 8) . '...',
+            'token_preview' => substr($token, 0, 8).'...',
         ];
     }
 
@@ -113,19 +113,31 @@ class PottencialService
 
     public function getRentalGuaranteeQuote(string $quoteId): array
     {
-        return $this->getJson($this->rentalEndpoint() . "/{$quoteId}");
+        return $this->getJson($this->rentalEndpoint()."/{$quoteId}");
     }
 
+    public function getRentalGuaranteeRefusalLetter(string $quoteId): string
+    {
+        $this->ensureEnabled();
+        $endpoint = (string) config('services.pottencial.letters_endpoint');
+        if (! str_starts_with($endpoint, '/') || str_starts_with($endpoint, '//') || ! str_contains($endpoint, '{quote_id}')) {
+            throw new \RuntimeException('Endpoint das cartas da Pottencial não configurado.');
+        }
 
-    
+        return app(\App\Services\Insurance\ProviderDocumentDownload::class)->fetch(
+            $this->baseUrl.str_replace('{quote_id}', rawurlencode($quoteId), $endpoint),
+            $this->authHeaders(),
+            config('services.pottencial.document_download_hosts', []),
+        );
+    }
 
     private function postJson(string $endpoint, array $payload): array
     {
         $this->ensureEnabled();
 
-        $url = $this->baseUrl . $endpoint;
+        $url = $this->baseUrl.$endpoint;
 
-        if(!$this->baseUrl){
+        if (! $this->baseUrl) {
             return [
                 'success' => false,
                 'http_status' => null,
@@ -138,7 +150,6 @@ class PottencialService
             ];
         }
 
-
         try {
             $response = Http::asJson()
                 ->acceptJson()
@@ -146,14 +157,13 @@ class PottencialService
                 ->withHeaders($this->authHeaders())
                 ->post($url, $payload);
 
-             return $this->normalizeResponse(
+            return $this->normalizeResponse(
                 response: $response,
                 endpoint: $endpoint,
                 url: $url,
                 payload: $payload
             );
-        
-            
+
         } catch (\Throwable $e) {
             Log::error('Falha inesperada ao chamar API da Pottencial', [
                 'endpoint' => $endpoint,
@@ -180,9 +190,9 @@ class PottencialService
     {
         $this->ensureEnabled();
 
-        $url = $this->baseUrl . $endpoint;
+        $url = $this->baseUrl.$endpoint;
 
-        if(!$this->baseUrl){
+        if (! $this->baseUrl) {
             return [
                 'success' => false,
                 'http_status' => null,
@@ -236,6 +246,7 @@ class PottencialService
             throw new \LogicException('O provider pottencial está desativado.');
         }
     }
+
     private function normalizeResponse($response, string $endpoint, string $url, ?array $payload = null): array
     {
         $json = $this->safeJson($response);
@@ -278,7 +289,7 @@ class PottencialService
 
     private function rentalEndpoint(): string
     {
-        return '/' . ltrim(
+        return '/'.ltrim(
             (string) config(
                 'services.pottencial.rental_endpoint',
                 '/insurance/v1/fianca-locaticia-mensalizado-pf/quotes'

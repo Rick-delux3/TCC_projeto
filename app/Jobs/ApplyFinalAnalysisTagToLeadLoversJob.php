@@ -2,20 +2,20 @@
 
 namespace App\Jobs;
 
+use App\Events\DashboardActivityChanged;
 use App\Exceptions\LeadLoversApiException;
 use App\Exceptions\PermanentLeadTagException;
 use App\Models\InsuranceAnalysis;
 use App\Models\InsuranceAnalysisBatch;
-use App\Models\InsuranceAnalysisEvent;
 use App\Models\Lead;
 use App\Models\LeadLoversTag;
 use App\Models\LeadLoversTagOperation;
+use App\Services\Insurance\InsuranceAnalysisAttempt;
+use App\Services\Insurance\InsuranceBatchResult;
 use App\Services\LeadLoversApiClient;
 use App\Services\LeadLoversResultTagService;
 use App\Services\LeadLoversTagOperationCoordinator;
 use App\Services\RejectedLeadRetentionService;
-use App\Events\DashboardActivityChanged;
-use App\Support\ManualLeadResultTags;
 use DateTimeInterface;
 use Illuminate\Contracts\Queue\ShouldBeUniqueUntilProcessing;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -69,6 +69,7 @@ class ApplyFinalAnalysisTagToLeadLoversJob implements ShouldBeUniqueUntilProcess
         ?array $bulkAction = null,
         ?int $version = null,
     ) {
+        $this->onQueue('leadlovers');
         $this->phase = $phase;
         $this->bulkAction = $bulkAction;
         $this->version = $version;
@@ -229,12 +230,6 @@ class ApplyFinalAnalysisTagToLeadLoversJob implements ShouldBeUniqueUntilProcess
             );
         }
 
-        if ((int) $lead->leadlovers_lead_id <= 0) {
-            throw new PermanentLeadTagException(
-                'O lead não possui um ID remoto válido da LeadLovers.'
-            );
-        }
-
         $tagKey = $attemptIsCurrent
             ? $this->resolveFinalTagKey($batch)
             : null;
@@ -251,28 +246,39 @@ class ApplyFinalAnalysisTagToLeadLoversJob implements ShouldBeUniqueUntilProcess
             return;
         }
 
-        if ($attemptIsCurrent && is_string($tagKey)) {
-            $state = $coordinator->registerAnalysisDesired(
-                leadId: $lead->id,
-                tagKey: $tagKey,
-                batchId: $batch->id,
-                attemptId: $this->attemptId,
-                isReanalysis: $this->isReanalysis,
-            );
+        if ((int) $lead->leadlovers_lead_id <= 0) {
+            if ($attemptIsCurrent && is_string($tagKey)) {
+                SendLeadToLeadLoversJob::dispatch($lead->id)->afterCommit();
+            }
 
-            if ($this->stateDesiresThisAnalysis($state, $batch)) {
-                $lead->forceFill([
-                    'analysis_final_status' => match ($tagKey) {
-                        'aprovados' => 'approved',
-                        'ruim' => 'rejected',
-                        'em_negociacao' => 'negotiation',
-                        default => null,
-                    },
-                    'analysis_final_tag_key' => $tagKey,
-                    'last_analysis_batch_id' => $batch->id,
-                    'analysis_finalized_at' => now(),
-                ])->save();
-            } elseif (! $this->ownsAnalysisInflight($state, $batch)) {
+            return;
+        }
+
+        if ($attemptIsCurrent && is_string($tagKey)) {
+            $state = DB::transaction(function () use ($batch, $coordinator, $lead, $tagKey, $attemptIsCurrent) {
+                Lead::query()->lockForUpdate()->findOrFail($lead->id);
+                InsuranceAnalysisBatch::query()->lockForUpdate()->findOrFail($batch->id);
+                $batch->setRelation('analyses', $batch->analyses()->lockForUpdate()->with('events')->get());
+                if (! $this->attemptIsCurrent($batch) || $this->resolveFinalTagKey($batch) !== $tagKey) {
+                    return null;
+                }
+                if ($attemptIsCurrent && is_string($tagKey)) {
+                    $state = $coordinator->registerAnalysisDesired(
+                        leadId: $lead->id,
+                        tagKey: $tagKey,
+                        batchId: $batch->id,
+                        attemptId: $this->attemptId,
+                        isReanalysis: $this->isReanalysis,
+                    );
+
+                    if (! $this->stateDesiresThisAnalysis($state, $batch) && ! $this->ownsAnalysisInflight($state, $batch)) {
+                        return null;
+                    }
+                }
+
+                return $state;
+            });
+            if ($state === null) {
                 return;
             }
         }
@@ -413,17 +419,16 @@ class ApplyFinalAnalysisTagToLeadLoversJob implements ShouldBeUniqueUntilProcess
             $coordinator->completeCurrent(
                 $lead->id,
                 $state->version,
-                fn (LeadLoversTagOperation $lockedState): bool =>
-                    $this->persistConfirmedTag(
-                        batch: $batch,
-                        resultTags: $resultTags,
-                        catalog: $catalog,
-                        selectedTag: $selectedTag,
-                        tagKey: $operationTagKey,
-                        retention: $retention,
-                        remoteTags: $remoteTags,
-                        operationVersion: $lockedState->version,
-                    )
+                fn (LeadLoversTagOperation $lockedState): bool => $this->persistConfirmedTag(
+                    batch: $batch,
+                    resultTags: $resultTags,
+                    catalog: $catalog,
+                    selectedTag: $selectedTag,
+                    tagKey: $operationTagKey,
+                    retention: $retention,
+                    remoteTags: $remoteTags,
+                    operationVersion: $lockedState->version,
+                )
             );
 
             return;
@@ -543,7 +548,9 @@ class ApplyFinalAnalysisTagToLeadLoversJob implements ShouldBeUniqueUntilProcess
                 ->lockForUpdate()
                 ->findOrFail((int) $batch->lead_id);
 
-            if (! $this->attemptIsCurrent($batch)) {
+            InsuranceAnalysisBatch::query()->lockForUpdate()->findOrFail($batch->id);
+            $batch->setRelation('analyses', $batch->analyses()->lockForUpdate()->with('events')->get());
+            if (! $this->attemptIsCurrent($batch) || $this->resolveFinalTagKey($batch) !== $tagKey) {
                 return false;
             }
 
@@ -588,7 +595,6 @@ class ApplyFinalAnalysisTagToLeadLoversJob implements ShouldBeUniqueUntilProcess
 
                 $companyId = $lead->company_id !== null ? (int) $lead->company_id : null;
 
-
                 DashboardActivityChanged::dispatch(
                     'lead',
                     $resourceId,
@@ -631,6 +637,12 @@ class ApplyFinalAnalysisTagToLeadLoversJob implements ShouldBeUniqueUntilProcess
         array $plan,
         int $inflightVersion
     ): void {
+        if (! $this->attemptIsCurrent($batch)) {
+            $coordinator->markDefiniteRejection($batch->lead_id, $inflightVersion);
+
+            return;
+        }
+
         try {
             $bulkAction = $leadLovers->mutateLeadTags($plan['payload']);
         } catch (LeadLoversApiException $exception) {
@@ -838,129 +850,16 @@ class ApplyFinalAnalysisTagToLeadLoversJob implements ShouldBeUniqueUntilProcess
             ->afterCommit();
     }
 
-    private function resolveFinalTagKey(
-        InsuranceAnalysisBatch $batch
-    ): ?string {
-        $statuses = $batch->analyses
-            ->pluck('status')
-            ->filter()
-            ->map(fn (mixed $status): string => mb_strtolower((string) $status))
-            ->values();
-
-        if ($statuses->isEmpty()) {
-            return null;
-        }
-
-        if ($statuses->contains(fn (string $status): bool => in_array(
-            $status,
-            ['approved', 'quoted'],
-            true
-        ))) {
-            return ManualLeadResultTags::leadloversKey(
-                ManualLeadResultTags::APPROVED
-            );
-        }
-
-        if ($statuses->contains(fn (string $status): bool => in_array(
-            $status,
-            [
-                'pending',
-                'processing',
-                'queued',
-                'running',
-                'manual_review',
-                'underanalysis',
-                'failed',
-                'error',
-            ],
-            true
-        ))) {
-            return ManualLeadResultTags::leadloversKey(
-                ManualLeadResultTags::IN_NEGOTIATION
-            );
-        }
-
-        $allRejected = $statuses->every(fn (string $status): bool => in_array(
-            $status,
-            ['rejected', 'denied', 'refused'],
-            true
-        ));
-
-        return $allRejected
-            ? ManualLeadResultTags::leadloversKey(
-                ManualLeadResultTags::REJECTED
-            )
-            : null;
+    private function resolveFinalTagKey(InsuranceAnalysisBatch $batch): ?string
+    {
+        return InsuranceBatchResult::tagKey($batch);
     }
 
     private function attemptIsCurrent(InsuranceAnalysisBatch $batch): bool
     {
-        if (blank($this->attemptId)) {
-            return false;
-        }
-
-        $batchStatus = InsuranceAnalysisBatch::query()
-            ->whereKey($batch->id)
-            ->value('status');
-
-        if (! in_array($batchStatus, ['completed', 'completed_with_errors'], true)) {
-            return false;
-        }
-
-        $analysisIds = $batch->analyses()->select('id');
-        $tickets = InsuranceAnalysisEvent::query()
-            ->whereIn('insurance_analysis_id', clone $analysisIds)
-            ->where('event_type', 'email_queued')
-            ->orderBy('id')
-            ->get(['id', 'payload']);
-        $ticket = $tickets->last(
-            fn (InsuranceAnalysisEvent $event): bool => data_get($event->payload, 'attempt_id') === $this->attemptId
-        );
-
-        if (
-            ! $ticket instanceof InsuranceAnalysisEvent
-            || $tickets->last()?->id !== $ticket->id
-        ) {
-            return false;
-        }
-
-        $markers = InsuranceAnalysisEvent::query()
-            ->whereIn(
-                'insurance_analysis_id',
-                clone $analysisIds
-            )
-            ->whereIn('event_type', self::ATTEMPT_START_EVENTS)
-            ->orderBy('id')
-            ->get(['id', 'insurance_analysis_id', 'payload']);
-
-        if ($markers->contains(function (InsuranceAnalysisEvent $event) use ($ticket): bool {
-            $attemptId = data_get($event->payload, 'attempt_id');
-
-            return $event->id > $ticket->id
-                && is_string($attemptId)
-                && $attemptId !== $this->attemptId;
-        })) {
-            return false;
-        }
-        $ownedAnalysisIds = $markers
-            ->filter(fn (InsuranceAnalysisEvent $event): bool => data_get($event->payload, 'attempt_id') === $this->attemptId
-            )
-            ->pluck('insurance_analysis_id')
-            ->unique();
-
-        if ($ownedAnalysisIds->isEmpty()) {
-            return false;
-        }
-
-        return $ownedAnalysisIds->every(function (int $analysisId) use ($markers): bool {
-            $latest = $markers
-                ->where('insurance_analysis_id', $analysisId)
-                ->sortByDesc('id')
-                ->first();
-
-            return $latest instanceof InsuranceAnalysisEvent
-                && data_get($latest->payload, 'attempt_id') === $this->attemptId;
-        });
+        return filled($this->attemptId)
+            && in_array(InsuranceAnalysisBatch::query()->whereKey($batch->id)->value('status'), ['completed', 'completed_with_errors'], true)
+            && (InsuranceAnalysisAttempt::batchContext($batch->id)['attempt_id'] ?? null) === $this->attemptId;
     }
 
     private function finalTagAlreadyApplied(
