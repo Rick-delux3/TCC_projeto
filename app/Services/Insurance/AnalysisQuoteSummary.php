@@ -50,7 +50,7 @@ class AnalysisQuoteSummary
             'price' => [
                 'total' => $analysis->isApprovedResult() ? ($total ?? $this->money($analysis->premium_amount)) : null,
                 'basis' => $total !== null ? 'gross_total' : 'unconfirmed',
-                'currency' => strtoupper((string) ($quote['currency'] ?? 'BRL')),
+                'currency' => strtoupper(trim((string) ($quote['currency'] ?? 'BRL'))),
                 'period_start' => $this->date($start),
                 'period_end' => $this->date($end),
             ],

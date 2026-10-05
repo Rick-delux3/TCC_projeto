@@ -11,10 +11,13 @@ class AnalysisQuoteComparison
     {
         $approved = $quotes->where('status', 'approved');
         $issue = null;
-        if ($approved->contains(fn (array $quote): bool => $quote['price']['basis'] !== 'gross_total'
+        if ($approved->isEmpty()) {
+            $issue = 'no_approved_quotes';
+        } elseif ($approved->contains(fn (array $quote): bool => $quote['price']['basis'] !== 'gross_total'
             || (float) $quote['price']['total'] <= 0)) {
             $issue = 'missing_confirmed_total';
-        } elseif ($approved->pluck('price.currency')->unique()->count() > 1) {
+        } elseif ($approved->contains(fn (array $quote): bool => preg_match('/^[A-Z]{3}$/D', $quote['price']['currency']) !== 1)
+            || $approved->pluck('price.currency')->unique()->count() > 1) {
             $issue = 'incomparable_currencies';
         } elseif ($approved->count() > 1 && (
             $approved->contains(fn (array $quote): bool => ! $quote['price']['period_start'] || ! $quote['price']['period_end']

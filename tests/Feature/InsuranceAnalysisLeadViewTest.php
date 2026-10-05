@@ -262,7 +262,7 @@ it('passes the same contract to the includes and the refresh endpoint without re
     });
     $response = $this->get(route($admin ? 'admin.insurance-analyses.lead' : 'insurance-analyses.lead', $this->lead))->assertOk();
     $page = $response->viewData('pageData');
-    expect(trim($response->getContent()))->toBe('')
+    expect(trim(preg_replace('/<script\b[^>]*>.*?<\/script>/s', '', $response->getContent())))->toBe('')
         ->and($includes)->toHaveCount(6)
         ->and($includes['insurance-analyses.partials.lead']['leadData'])->toBe($page['lead'])
         ->and($includes['insurance-analyses.partials.lead']['navigation']['return_url'])->toBe($response->viewData('returnUrl'))

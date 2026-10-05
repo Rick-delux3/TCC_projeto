@@ -6,8 +6,10 @@ use App\Models\Imobiliaria;
 use App\Models\InsuranceAnalysisBatch;
 use App\Models\InsuranceAnalysisEvent;
 use App\Models\Lead;
+use App\Models\User;
 use App\Services\Insurance\AnalysisResultPreparationService;
 use App\Services\Insurance\AnalysisResultRecipients;
+use App\Services\Insurance\InsuranceAnalysisPageService;
 use Illuminate\Mail\Message;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Mail;
@@ -144,9 +146,47 @@ it('keeps the prepared data unchanged on retry and rejects an obsolete attempt',
 
 it('refuses incomplete packages even when the package status says completed', function () {
     $batch = preparationBatch(['approved', 'pending']);
+    $page = app(InsuranceAnalysisPageService::class)->read($batch->lead, 'company', User::factory()->create())['pageData'];
+    expect($page['comparison']['best_quote'])->toBeNull()
+        ->and($page['comparison']['reason'])->toBe('awaiting_results')
+        ->and($page['analyses'][1]['quote']['price']['total'])->toBeNull();
     expect(fn () => app(AnalysisResultPreparationService::class)->prepare($batch, 'prepare'))->toThrow(RuntimeException::class)
         ->and(InsuranceAnalysisEvent::query()->where('event_type', 'result_prepared')->exists())->toBeFalse();
 });
+
+it('uses identical normalized budgets and comparison decisions for the page and PDF preparation', function (string $scenario, ?string $provider, ?string $issue) {
+    $batch = preparationBatch();
+    $pottencial = $batch->analyses()->where('provider', 'pottencial')->firstOrFail();
+    $too = $batch->analyses()->where('provider', 'too')->firstOrFail();
+    match ($scenario) {
+        'cheaper pottencial' => $pottencial->update(['response_payload' => ['grossPremium' => 'R$ 999,90', 'currency' => ' brl ']]),
+        'missing price' => $too->update(['response_payload' => [], 'premium_amount' => 1]),
+        'missing currency' => $pottencial->update(['response_payload' => ['grossPremium' => 1, 'currency' => '']]),
+        'invalid currency' => $pottencial->update(['response_payload' => ['grossPremium' => 1, 'currency' => 'R$']]),
+        'different periods' => $pottencial->update(['lease_end_date' => '2029-10-01']),
+        'no approval' => $batch->analyses()->update(['status' => 'rejected']),
+        'failed cheaper quote' => $pottencial->update(['status' => 'failed', 'response_payload' => ['grossPremium' => 1]]),
+        default => null,
+    };
+
+    $page = app(InsuranceAnalysisPageService::class)->read($batch->lead, 'company', User::factory()->create())['pageData'];
+    $prepared = app(AnalysisResultPreparationService::class)->prepare($batch, 'prepare');
+    expect($page['comparison']['best_quote'])->toBe($prepared['best_quote'])
+        ->and($page['comparison']['reason'])->toBe($prepared['comparison_issue'])
+        ->and($prepared['comparison_issue'])->toBe($issue)
+        ->and($prepared['best_quote']['provider'] ?? null)->toBe($provider)
+        ->and(array_column($page['analyses'], 'quote'))->toBe($prepared['quotes']);
+    Http::assertNothingSent();
+})->with([
+    ['cheaper too', 'too', null],
+    ['cheaper pottencial', 'pottencial', null],
+    ['missing price', null, 'missing_confirmed_total'],
+    ['missing currency', null, 'incomparable_currencies'],
+    ['invalid currency', null, 'incomparable_currencies'],
+    ['different periods', null, 'incomparable_periods'],
+    ['no approval', null, 'no_approved_quotes'],
+    ['failed cheaper quote', 'too', null],
+]);
 
 it('uses the saved recipient and final results in the queued email', function () {
     Storage::fake('local');

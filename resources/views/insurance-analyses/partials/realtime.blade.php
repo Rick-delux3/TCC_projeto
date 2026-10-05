@@ -1,1 +1,4 @@
-{{-- $realtime: endpoint, intervalo e condição de atualização; assinatura de broadcasting ainda desativada. --}}
+<script>
+    window.insuranceAnalysisInitialState = {{ Illuminate\Support\Js::from($pageData) }};
+</script>
+@vite('resources/js/insurance-analyses.js')

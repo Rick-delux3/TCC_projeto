@@ -2,6 +2,7 @@
 
 namespace App\Services\Insurance;
 
+use App\Events\InsuranceAnalysisChanged;
 use App\Models\Corretor;
 use App\Models\InsuranceAnalysis;
 use App\Models\Lead;
@@ -43,7 +44,6 @@ class InsuranceAnalysisPageService
             $batch === null => 'awaiting_batch',
             ! $allTerminal => 'awaiting_results',
             ! $final => 'awaiting_consolidation',
-            $quotes->where('status', 'approved')->isEmpty() => 'no_approved_quotes',
             default => $comparison['comparison_issue'],
         };
         $progress = [
@@ -126,12 +126,18 @@ class InsuranceAnalysisPageService
                     $admin ? 'admin.leads.reanalyze' : 'dashboard.leads.reanalyze', $lead->id),
             ],
             'realtime' => [
-                'transport' => 'polling',
+                'transport' => config('broadcasting.default') === 'reverb' ? 'reverb' : 'polling',
                 'refresh_url' => $refreshUrl,
                 'method' => 'GET',
                 'interval_ms' => max(1000, (int) config('insurance_analysis_page.poll_interval_ms', 5000)),
+                'reconcile_interval_ms' => max(5000, (int) config('insurance_analysis_page.reconcile_interval_ms', 30000)),
                 'should_refresh' => ! $final,
-                'broadcasting' => ['enabled' => false, 'channel' => null, 'event' => null],
+                'broadcasting' => [
+                    'enabled' => config('broadcasting.default') === 'reverb',
+                    'channel' => $admin ? InsuranceAnalysisChanged::adminChannel($lead->id)
+                        : InsuranceAnalysisChanged::companyChannel($lead->id, (int) $lead->company_id),
+                    'event' => '.'.InsuranceAnalysisChanged::NAME,
+                ],
             ],
         ];
 
