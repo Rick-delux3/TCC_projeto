@@ -356,32 +356,9 @@
             : '#';
     };
 
-    /*
-    |--------------------------------------------------------------------------
-    | A rota de análises fica separada.
-    | Use a rota real do seu projeto quando ajustar o controller de análises admin.
-    |--------------------------------------------------------------------------
-    */
+    $analisesRoute = route('Dashboard-Admin').'#leads-section';
 
-    $analisesRoute = Route::has('admin.insurance-analyses.index')
-        ? route('admin.insurance-analyses.index')
-        : (Route::has('insurance-analyses.index') ? route('insurance-analyses.index') : '#');
-
-    $solicitarAnaliseRoute = function ($lead) {
-        if (Route::has('admin.insurance-analyses.create')) {
-            return route('admin.insurance-analyses.create', ['lead' => $lead->id]);
-        }
-
-        if (Route::has('insurance-analyses.create')) {
-            return route('insurance-analyses.create', ['lead' => $lead->id]);
-        }
-
-        if (Route::has('admin.leads.reanalyze')) {
-            return route('admin.leads.reanalyze', $lead);
-        }
-
-        return '#';
-    };
+    $solicitarAnaliseRoute = fn ($lead) => route('admin.leads.reanalyze', $lead);
 
     /*
     |--------------------------------------------------------------------------
@@ -1268,6 +1245,11 @@
                                     {{-- Botões --}}
                                     <div class="admin-lead-actions">
                                         <div class="d-flex flex-wrap gap-2">
+                                        @can('viewAnalyses', $lead)
+                                            <a href="{{ route('admin.insurance-analyses.lead', $lead) }}" class="btn btn-sm btn-outline-primary admin-lead-action text-nowrap">
+                                                Ver análises
+                                            </a>
+                                        @endcan
                                         @can('edit-leads')
                                             @if ($leadLoversFailureIsCorrectable)
                                                 <button

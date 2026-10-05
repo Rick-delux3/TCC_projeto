@@ -20,6 +20,8 @@ class InsuranceAnalysisPageService
     /** @return array<string, mixed> */
     public function read(Lead $lead, string $viewerType, User|Corretor $viewer): array
     {
+        $gate = Gate::forUser($viewer);
+        $gate->authorize('viewAnalyses', $lead);
         $data = $this->reader->read($lead);
         $batch = $data['batch'];
         $analyses = $data['analyses'];
@@ -31,8 +33,9 @@ class InsuranceAnalysisPageService
         $permissions = [
             'view' => true,
             'edit_lead' => ! $admin || Gate::forUser($viewer)->allows('edit-leads'),
-            'create_analysis' => $enabled && (! $admin || Gate::forUser($viewer)->allows('create-analysis')),
+            'create_analysis' => $enabled && $gate->allows('requestAnalysis', $lead),
         ];
+        $canReanalyzeWithChanges = $enabled && $gate->allows('reanalyzeWithChanges', $lead);
         $total = max((int) $batch?->total_providers, $analyses->count());
         $completed = $analyses->filter(fn (InsuranceAnalysis $analysis): bool => ProviderAnalysisStatus::isTerminal($analysis->status))->count();
         $allTerminal = $total > 0 && $completed === $total;
@@ -84,9 +87,9 @@ class InsuranceAnalysisPageService
             ],
             'progress' => $progress,
             'result' => ['is_final' => $final, 'status' => $final ? InsuranceBatchResult::status($batch) : null],
-            'analyses' => $analyses->map(function (InsuranceAnalysis $analysis) use ($data, $quotes, $enabled, $permissions, $admin, $viewer, $prefix): array {
+            'analyses' => $analyses->map(function (InsuranceAnalysis $analysis) use ($data, $quotes, $enabled, $permissions, $canReanalyzeWithChanges, $prefix): array {
                 $attempt = $data['analysisAttempts'][$analysis->id];
-                $allowed = $enabled && ($admin || (int) $analysis->company_id === (int) $viewer->company_id);
+                $allowed = $enabled;
 
                 return [
                     'id' => $analysis->id,
@@ -105,7 +108,7 @@ class InsuranceAnalysisPageService
                     'updated_at' => $analysis->updated_at?->toIso8601String(),
                     'actions' => [
                         'retry' => $this->action($allowed && $permissions['create_analysis'] && in_array($analysis->status, ['failed', 'error'], true), $prefix.'retry', $analysis->id),
-                        'reanalysis' => $this->action($allowed && $permissions['create_analysis'] && $this->canReanalyze($analysis), $prefix.'provider-reanalysis', $analysis->id) + ['requires_data_changes' => true],
+                        'reanalysis' => $this->action($canReanalyzeWithChanges && $this->canReanalyze($analysis), $prefix.'provider-reanalysis', $analysis->id) + ['requires_data_changes' => true],
                         'sync' => $this->action($allowed && $attempt !== null && $this->canSync($analysis), $prefix.'sync-status', $analysis->id),
                     ],
                 ];

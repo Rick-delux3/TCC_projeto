@@ -352,7 +352,7 @@ it('offers company actions only for allowed states ownership and feature configu
     $this->getJson($url)->assertOk()->assertJsonPath('data.analyses.0.actions.reanalysis.available', false)
         ->assertJsonPath('data.actions.reanalysis.available', false);
     $analysis->update(['status' => 'failed', 'company_id' => null]);
-    $this->getJson($url)->assertOk()->assertJsonPath('data.analyses.0.actions.retry.url', null);
+    $this->getJson($url)->assertOk()->assertJsonPath('data.analyses.0.actions.retry.url', route('insurance-analyses.retry', $analysis));
     $analysis->update(['company_id' => $this->company->id]);
     config(['features.insurance_analysis.enabled' => false]);
     $this->getJson($url)->assertOk()->assertJsonPath('data.analyses.0.actions.retry.url', null);

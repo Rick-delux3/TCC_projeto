@@ -1056,6 +1056,11 @@
                                                 ></i>
                                                 {{ $leadLoversFailureIsCorrectable ? 'Corrigir' : 'Editar' }}
                                             </button>
+                                            @can('viewAnalyses', $lead)
+                                                <a href="{{ route('insurance-analyses.lead', $lead) }}" class="btn btn-sm btn-outline-primary w-100 text-nowrap">
+                                                    Ver análises
+                                                </a>
+                                            @endcan
                                         </div>
 
                                     </div>

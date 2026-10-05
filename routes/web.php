@@ -28,7 +28,7 @@ Route::get('/dashboard', fn () => redirect()->route('company.dashboard'))
     ->middleware(['auth', '2fa'])
     ->name('dashboard');
 
-Route::get('/analise', fn () => redirect()->route('company.dashboard'))
+Route::get('/analise', [InsuranceAnalysisController::class, 'index'])
     ->middleware(['auth', '2fa'])
     ->name('analise');
 
@@ -47,7 +47,7 @@ Route::prefix('/Dashboard')->group(function () {
             ->name('dashboard.leads.leadlovers.correct');
 
         Route::post('/leads/{lead}/reanalisar', [DashboardLeadController::class, 'reanalyze'])
-            ->middleware('analysis.enabled')
+            ->middleware(['analysis.enabled', 'can:requestAnalysis,lead'])
             ->name('dashboard.leads.reanalyze');
 
         Route::get('/analises', [InsuranceAnalysisController::class, 'index'])
@@ -62,6 +62,7 @@ Route::prefix('/Dashboard')->group(function () {
             ->name('insurance-analyses.data');
 
         Route::get('/analises/{batch}', [InsuranceAnalysisController::class, 'show'])
+            ->whereNumber('batch')
             ->name('insurance-analyses.show');
 
         Route::post('/analises/provider/{analysis}/retry', [InsuranceAnalysisController::class, 'retry'])
@@ -136,7 +137,7 @@ Route::prefix('/Dashboard')->group(function () {
             ->name('admin.leads.leadlovers.correct');
 
         Route::post('/leads/{lead}/reanalisar', [DashboardLeadController::class, 'adminReanalyze'])
-            ->middleware(['can:create-analysis', 'analysis.enabled'])
+            ->middleware(['can:create-analysis', 'analysis.enabled', 'can:requestAnalysis,lead'])
             ->name('admin.leads.reanalyze');
 
         Route::get('/analises', [InsuranceAnalysisController::class, 'adminIndex'])
@@ -154,6 +155,7 @@ Route::prefix('/Dashboard')->group(function () {
             ->name('admin.insurance-analyses.data');
 
         Route::get('/analises/{batch}', [InsuranceAnalysisController::class, 'adminShow'])
+            ->whereNumber('batch')
             ->middleware('can:view-analyses')
             ->name('admin.insurance-analyses.show');
 

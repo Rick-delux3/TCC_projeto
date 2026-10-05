@@ -8,18 +8,21 @@ use Illuminate\Support\Facades\Gate;
 
 Broadcast::channel('companies.{companyId}.leads.{leadId}.analyses',
     function (User $user, int $companyId, int $leadId): bool {
+        $lead = Lead::query()->find($leadId);
+
         return $companyId > 0 && (int) $user->company_id === $companyId
             && session('2fa_passed') === true
-            && Lead::query()->whereKey($leadId)->where('company_id', $companyId)->exists();
+            && $lead !== null && Gate::forUser($user)->allows('viewAnalyses', $lead);
     }, ['guards' => ['web']]
 );
 
 Broadcast::channel('admins.leads.{leadId}.analyses',
     function (Corretor $corretor, int $leadId): bool {
+        $lead = Lead::query()->find($leadId);
+
         return $corretor->isActive()
             && ($corretor->hasVerifiedFirstLogin() || session('admin_2fa_passed') === true)
-            && Gate::forUser($corretor)->allows('view-analyses')
-            && Lead::query()->whereKey($leadId)->exists();
+            && $lead !== null && Gate::forUser($corretor)->allows('viewAnalyses', $lead);
     }, ['guards' => ['admin']]
 );
 

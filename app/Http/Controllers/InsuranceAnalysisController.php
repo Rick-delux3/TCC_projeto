@@ -57,9 +57,9 @@ class InsuranceAnalysisController extends Controller
     /**
      * Retry técnico de uma análise pela imobiliária.
      */
-    public function retry(InsuranceAnalysis $analysis)
+    public function retry(InsuranceAnalysis $analysis): RedirectResponse
     {
-        $this->authorizeCompanyAccess($analysis);
+        $this->authorizeAnalysis($analysis, 'web', 'requestAnalysis');
 
         try {
             $this->leadReanalysisService->startTechnicalRetry(
@@ -79,9 +79,9 @@ class InsuranceAnalysisController extends Controller
     /**
      * Reanálise por companhia solicitada pela imobiliária.
      */
-    public function providerReanalysis(Request $request, InsuranceAnalysis $analysis)
+    public function providerReanalysis(Request $request, InsuranceAnalysis $analysis): RedirectResponse
     {
-        $this->authorizeCompanyAccess($analysis);
+        $this->authorizeAnalysis($analysis, 'web', 'reanalyzeWithChanges');
 
         return $this->startProviderReanalysisFromLeadUpdate(
             request: $request,
@@ -93,9 +93,9 @@ class InsuranceAnalysisController extends Controller
     /**
      * Sincroniza o status de uma análise específica com a companhia.
      */
-    public function syncStatus(InsuranceAnalysis $analysis)
+    public function syncStatus(InsuranceAnalysis $analysis): RedirectResponse
     {
-        $this->authorizeCompanyAccess($analysis);
+        $this->authorizeAnalysis($analysis, 'web', 'viewAnalyses');
 
         return $this->syncAnalysisStatus(
             analysis: $analysis,
@@ -114,20 +114,21 @@ class InsuranceAnalysisController extends Controller
     {
         $this->authorizeAdminAbility('view-analyses');
         $lead = $batch->lead()->firstOrFail();
+        Gate::forUser(Auth::guard('admin')->user())->authorize('viewAnalyses', $lead);
 
         return redirect()->route('admin.insurance-analyses.lead', ['lead' => $lead]);
     }
 
     public function adminShowLead(Lead $lead): View
     {
-        $this->authorizeAdminAbility('view-analyses');
+        Gate::forUser(Auth::guard('admin')->user())->authorize('viewAnalyses', $lead);
 
         return $this->leadView($lead, 'admin');
     }
 
     public function adminLeadData(Lead $lead): InsuranceAnalysisLeadResource
     {
-        $this->authorizeAdminAbility('view-analyses');
+        Gate::forUser(Auth::guard('admin')->user())->authorize('viewAnalyses', $lead);
 
         return new InsuranceAnalysisLeadResource($this->analysisPageService->read($lead, 'admin', Auth::guard('admin')->user()));
     }
@@ -135,9 +136,9 @@ class InsuranceAnalysisController extends Controller
     /**
      * Retry técnico de uma análise pelo painel admin.
      */
-    public function adminRetry(InsuranceAnalysis $analysis)
+    public function adminRetry(InsuranceAnalysis $analysis): RedirectResponse
     {
-        $this->authorizeAdminAbility('create-analysis');
+        $this->authorizeAnalysis($analysis, 'admin', 'requestAnalysis');
 
         try {
             $this->leadReanalysisService->startTechnicalRetry(
@@ -157,9 +158,9 @@ class InsuranceAnalysisController extends Controller
     /**
      * Reanálise por companhia solicitada pelo admin/corretor.
      */
-    public function adminProviderReanalysis(Request $request, InsuranceAnalysis $analysis)
+    public function adminProviderReanalysis(Request $request, InsuranceAnalysis $analysis): RedirectResponse
     {
-        $this->authorizeAdminAbility('create-analysis');
+        $this->authorizeAnalysis($analysis, 'admin', 'reanalyzeWithChanges');
 
         return $this->startProviderReanalysisFromLeadUpdate(
             request: $request,
@@ -171,9 +172,9 @@ class InsuranceAnalysisController extends Controller
     /**
      * Sincroniza o status de uma análise pelo painel admin.
      */
-    public function adminSyncStatus(InsuranceAnalysis $analysis)
+    public function adminSyncStatus(InsuranceAnalysis $analysis): RedirectResponse
     {
-        $this->authorizeAdminAbility('view-analyses');
+        $this->authorizeAnalysis($analysis, 'admin', 'viewAnalyses');
 
         return $this->syncAnalysisStatus(
             analysis: $analysis,
@@ -188,7 +189,7 @@ class InsuranceAnalysisController extends Controller
         Request $request,
         InsuranceAnalysis $analysis,
         string $requestedBy
-    ) {
+    ): RedirectResponse {
         $analysis->loadMissing([
             'lead.endereco',
             'lead.despesas',
@@ -260,10 +261,7 @@ class InsuranceAnalysisController extends Controller
 
     private function authorizeCompanyLead(Lead $lead): void
     {
-        $companyId = $this->currentCompanyId();
-
-        abort_if(! $companyId || (int) $lead->company_id !== $companyId, 403,
-            'Você não tem permissão para acessar as análises deste lead.');
+        Gate::forUser(Auth::guard('web')->user())->authorize('viewAnalyses', $lead);
     }
 
     private function leadView(Lead $lead, string $viewerType): View
@@ -276,17 +274,11 @@ class InsuranceAnalysisController extends Controller
     /**
      * Protege ações feitas pela imobiliária cadastrada.
      */
-    private function authorizeCompanyAccess(InsuranceAnalysis $analysis): void
+    private function authorizeAnalysis(InsuranceAnalysis $analysis, string $guard, string $ability): void
     {
-        $companyId = $this->currentCompanyId();
-
-        abort_if(! $companyId, 403, 'Empresa não identificada.');
-
-        abort_if(
-            (int) $analysis->company_id !== (int) $companyId,
-            403,
-            'Você não tem permissão para acessar essa análise.'
-        );
+        $lead = $analysis->lead()->firstOrFail();
+        Gate::forUser(Auth::guard($guard)->user())->authorize($ability, $lead);
+        $analysis->setRelation('lead', $lead);
     }
 
     /**
@@ -375,7 +367,7 @@ class InsuranceAnalysisController extends Controller
     /**
      * Sincronização manual de status, usada por imobiliária e admin.
      */
-    private function syncAnalysisStatus(InsuranceAnalysis $analysis, string $requestedBy)
+    private function syncAnalysisStatus(InsuranceAnalysis $analysis, string $requestedBy): RedirectResponse
     {
         $responsePayload = $analysis->providerResponsePayload();
 

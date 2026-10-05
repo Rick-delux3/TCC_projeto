@@ -111,7 +111,7 @@
                 @if ($insuranceAnalysisEnabled)
                     <a
                         class="dashboard-header-nav__link {{ request()->routeIs('insurance-analyses.*') ? 'active' : '' }}"
-                        href="{{ route('insurance-analyses.index') }}"
+                        href="{{ route('company.dashboard') }}#leads-section"
                         @if (request()->routeIs('insurance-analyses.*')) aria-current="page" @endif
                     >
                         Análises
@@ -275,7 +275,7 @@
             </a>
 
             @if ($insuranceAnalysisEnabled)
-                <a href="{{ route('insurance-analyses.index') }}" class="dashboard-sidebar-link">
+                <a href="{{ route('company.dashboard') }}#leads-section" class="dashboard-sidebar-link">
                     <i class="bi bi-clipboard2-data" aria-hidden="true"></i>
                     <span>Análises</span>
                 </a>

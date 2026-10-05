@@ -188,7 +188,7 @@ it('does not invent an attempt or enqueue a query without an identifiable round'
 });
 
 it('prevents another company from requesting a status query', function () {
-    $this->analysis->update(['company_id' => Imobiliaria::factory()->create()->id]);
+    $this->analysis->lead->update(['company_id' => Imobiliaria::factory()->create()->id]);
 
     $this->post(route('insurance-analyses.sync-status', $this->analysis))->assertForbidden();
 

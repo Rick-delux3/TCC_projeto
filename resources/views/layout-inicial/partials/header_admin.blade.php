@@ -57,9 +57,7 @@
         ? route('admin.leads.index')
         : ($dashboardRoute !== '#' ? $dashboardRoute . '#leads-section' : '#');
 
-    $analisesRoute = Route::has('admin.insurance-analyses.index')
-        ? route('admin.insurance-analyses.index')
-        : (Route::has('insurance-analyses.index') ? route('insurance-analyses.index') : '#');
+    $analisesRoute = route('Dashboard-Admin').'#leads-section';
 
     $equipeRoute = Route::has('admin.config-equipe.index')
         ? route('admin.config-equipe.index')

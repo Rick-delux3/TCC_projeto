@@ -146,7 +146,9 @@ it('keeps the prepared data unchanged on retry and rejects an obsolete attempt',
 
 it('refuses incomplete packages even when the package status says completed', function () {
     $batch = preparationBatch(['approved', 'pending']);
-    $page = app(InsuranceAnalysisPageService::class)->read($batch->lead, 'company', User::factory()->create())['pageData'];
+    $viewer = User::factory()->create(['company_id' => Imobiliaria::factory()->create()->id]);
+    $batch->lead->update(['company_id' => $viewer->company_id]);
+    $page = app(InsuranceAnalysisPageService::class)->read($batch->lead, 'company', $viewer)['pageData'];
     expect($page['comparison']['best_quote'])->toBeNull()
         ->and($page['comparison']['reason'])->toBe('awaiting_results')
         ->and($page['analyses'][1]['quote']['price']['total'])->toBeNull();
@@ -169,7 +171,9 @@ it('uses identical normalized budgets and comparison decisions for the page and 
         default => null,
     };
 
-    $page = app(InsuranceAnalysisPageService::class)->read($batch->lead, 'company', User::factory()->create())['pageData'];
+    $viewer = User::factory()->create(['company_id' => Imobiliaria::factory()->create()->id]);
+    $batch->lead->update(['company_id' => $viewer->company_id]);
+    $page = app(InsuranceAnalysisPageService::class)->read($batch->lead, 'company', $viewer)['pageData'];
     $prepared = app(AnalysisResultPreparationService::class)->prepare($batch, 'prepare');
     expect($page['comparison']['best_quote'])->toBe($prepared['best_quote'])
         ->and($page['comparison']['reason'])->toBe($prepared['comparison_issue'])

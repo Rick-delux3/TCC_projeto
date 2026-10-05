@@ -3,15 +3,14 @@
 namespace App\Http\Middleware;
 
 use Closure;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Http\Request;
-
+use Illuminate\Support\Facades\Auth;
 
 class TwoFactorMiddleware
 {
     public function handle(Request $request, Closure $next)
     {
-        if (Auth::check() && !session()->has('2fa_passed')) {
+        if (Auth::guard('web')->check() && $request->session()->get('2fa_passed') !== true) {
             return redirect('/2fa');
         }
 
