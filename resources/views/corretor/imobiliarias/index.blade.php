@@ -246,7 +246,7 @@
                             Assim que uma imobiliária for cadastrada, seus dados aparecerão nesta página.
                         </p>
                         @can('create-real-estate-company')
-                            <a href="{{ route('admin.imobiliarias.create') }}" class="btn btn-primary">
+                            <a href="{{ route('admin.imobiliarias.create') }}" class="btn btn-primary text-white">
                                 <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>
                                 Cadastrar primeira imobiliária
                             </a>

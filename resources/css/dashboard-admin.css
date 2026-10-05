@@ -269,6 +269,46 @@
         border-color 0.2s ease;
 }
 
+.dashboard-stat-card--clients,
+.dashboard-stat-card--approved,
+.dashboard-stat-card--rejected,
+.dashboard-stat-card--companies {
+    position: relative;
+    overflow: hidden;
+}
+
+.dashboard-stat-card--clients::before,
+.dashboard-stat-card--approved::before,
+.dashboard-stat-card--rejected::before,
+.dashboard-stat-card--companies::before {
+    position: absolute;
+    inset-block: 0;
+    left: 0;
+    width: 5px;
+    border-top-left-radius: inherit;
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+    border-bottom-left-radius: inherit;
+    background-color: var(--dashboard-stat-accent);
+    content: "";
+}
+
+.dashboard-stat-card--clients {
+    --dashboard-stat-accent: var(--bs-primary);
+}
+
+.dashboard-stat-card--approved {
+    --dashboard-stat-accent: var(--bs-success);
+}
+
+.dashboard-stat-card--rejected {
+    --dashboard-stat-accent: var(--bs-danger);
+}
+
+.dashboard-stat-card--companies {
+    --dashboard-stat-accent: var(--bs-info);
+}
+
 .dashboard-stat-card:hover {
     transform: translateY(-3px);
     box-shadow: 0 16px 36px rgba(15, 23, 42, 0.10) !important;

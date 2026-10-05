@@ -91,9 +91,6 @@
 <header
     class="dashboard-client-header sticky-top"
     data-dashboard-header="{{ $brandProfile }}"
-    x-data="{ isCompact: window.scrollY > 24 }"
-    x-on:scroll.window.throttle.100ms="isCompact = window.scrollY > 24"
-    x-bind:class="{ 'is-compact': isCompact }"
 >
     <div class="dashboard-client-header__primary">
         <div class="dashboard-client-header__rail">
@@ -121,49 +118,18 @@
                 </span>
             </a>
 
-            <nav class="dashboard-header-nav" aria-label="Seções do painel">
-                <a class="dashboard-header-nav__link" href="{{ $dashboardRoute }}">
-                    Visão geral
-                </a>
-
-                @can('view-leads')
-                    <a
-                        class="dashboard-header-nav__link {{ request()->routeIs('Dashboard-Admin') || request()->routeIs('admin.leads.*') ? 'active' : '' }}"
-                        href="{{ $leadsRoute }}"
-                        @if (request()->routeIs('Dashboard-Admin') || request()->routeIs('admin.leads.*')) aria-current="page" @endif
-                    >
-                        Leads
-                    </a>
-                @endcan
-
-                @can('view-real-estate-companies')
-                    <a
-                        class="dashboard-header-nav__link {{ request()->routeIs('admin.imobiliarias.*') ? 'active' : '' }}"
-                        href="{{ $imobiliariasRoute }}"
-                        @if (request()->routeIs('admin.imobiliarias.*')) aria-current="page" @endif
-                    >
-                        Imobiliárias
-                    </a>
-                @endcan
-
-                @if ($insuranceAnalysisEnabled)
-                    @can('view-analyses')
-                        <a
-                            class="dashboard-header-nav__link {{ request()->routeIs('admin.insurance-analyses.*') ? 'active' : '' }}"
-                            href="{{ $analisesRoute }}"
-                            @if (request()->routeIs('admin.insurance-analyses.*')) aria-current="page" @endif
-                        >
-                            Propostas
-                        </a>
-                    @endcan
-                @endif
-
-                <span class="dashboard-header-nav__link dashboard-header-nav__link--disabled" aria-disabled="true">
-                    Relatórios
-                </span>
-            </nav>
-
             <div class="dashboard-header-actions">
+                <button
+                    type="button"
+                    class="btn dashboard-header-theme-toggle"
+                    data-dashboard-theme-toggle
+                    aria-label="Modo escuro"
+                    aria-pressed="false"
+                    title="Modo escuro"
+                >
+                    <i class="bi bi-moon" data-dashboard-theme-icon aria-hidden="true"></i>
+                </button>
+
                 @if ($brandProfile === 'tcc')
                     @include('layout-inicial.partials.dashboard-header-notifications', [
                         'notificationCount' => $notificationCount,
@@ -240,18 +206,6 @@
                             @endcan
                         @endif
 
-                        <li>
-                            <a
-                                class="dropdown-item py-2"
-                                href="https://api.whatsapp.com/send?phone=5511999999999&text=Ola,%20gostaria%20de%20tirar%20uma%20duvida"
-                                target="_blank"
-                                rel="noopener noreferrer"
-                            >
-                                <i class="bi bi-question-circle me-2" aria-hidden="true"></i>
-                                Tirar dúvidas
-                            </a>
-                        </li>
-
                         <li><hr class="dropdown-divider"></li>
 
                         <li>
@@ -270,10 +224,59 @@
     </div>
 
     <div class="dashboard-client-header__secondary">
-        <div class="dashboard-header-breadcrumb" aria-label="Localização atual">
-            <span>Dashboard</span>
-            <i class="bi bi-slash-lg" aria-hidden="true"></i>
-            <strong>{{ $currentSectionLabel }}</strong>
+        <div class="dashboard-header-secondary-inner">
+            <nav class="dashboard-header-nav" aria-label="Seções do painel">
+                <a class="dashboard-header-nav__link" href="{{ $dashboardRoute }}">
+                    Visão geral
+                </a>
+
+                @can('view-leads')
+                    <a
+                        class="dashboard-header-nav__link {{ request()->routeIs('Dashboard-Admin') || request()->routeIs('admin.leads.*') ? 'active' : '' }}"
+                        href="{{ $leadsRoute }}"
+                        @if (request()->routeIs('Dashboard-Admin') || request()->routeIs('admin.leads.*')) aria-current="page" @endif
+                    >
+                        Leads
+                    </a>
+                @endcan
+
+                @can('view-real-estate-companies')
+                    <a
+                        class="dashboard-header-nav__link {{ request()->routeIs('admin.imobiliarias.*') ? 'active' : '' }}"
+                        href="{{ $imobiliariasRoute }}"
+                        @if (request()->routeIs('admin.imobiliarias.*')) aria-current="page" @endif
+                    >
+                        Imobiliárias
+                    </a>
+                @endcan
+
+                @can('manage-organization')
+                    <a
+                        class="dashboard-header-nav__link {{ request()->routeIs('admin.config-equipe.*') ? 'active' : '' }}"
+                        href="{{ $equipeRoute }}"
+                        @if (request()->routeIs('admin.config-equipe.*')) aria-current="page" @endif
+                    >
+                        Equipe
+                    </a>
+                @endcan
+
+                @if ($insuranceAnalysisEnabled)
+                    @can('view-analyses')
+                        <a
+                            class="dashboard-header-nav__link {{ request()->routeIs('admin.insurance-analyses.*') ? 'active' : '' }}"
+                            href="{{ $analisesRoute }}"
+                            @if (request()->routeIs('admin.insurance-analyses.*')) aria-current="page" @endif
+                        >
+                            Propostas
+                        </a>
+                    @endcan
+                @endif
+            </nav>
+            <div class="dashboard-header-breadcrumb" aria-label="Localização atual">
+                <span>Dashboard</span>
+                <i class="bi bi-slash-lg" aria-hidden="true"></i>
+                <strong>{{ $currentSectionLabel }}</strong>
+            </div>
         </div>
     </div>
 </header>
@@ -396,16 +399,6 @@
                 </a>
             @endcan
 
-            {{-- Ajuda --}}
-            <a
-                href="https://api.whatsapp.com/send?phone=5511999999999&text=Ola,%20gostaria%20de%20tirar%20uma%20duvida"
-                target="_blank"
-                rel="noopener noreferrer"
-                class="dashboard-sidebar-link"
-            >
-                <i class="bi bi-question-circle" aria-hidden="true"></i>
-                <span>Tirar dúvidas</span>
-            </a>
         </nav>
 
         {{-- Rodapé --}}

@@ -307,6 +307,8 @@
 
                             <input
                                 type="text"
+                                aria-label="Buscar integrante"
+                                maxlength="255"
                                 name="search"
                                 value="{{ $search }}"
                                 class="form-control"

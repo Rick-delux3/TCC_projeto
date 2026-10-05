@@ -1,0 +1,644 @@
+.dashboard-admin-body {
+    --font-principal: 'Inter';
+    --dashboard-header-font: 'Inter', system-ui, sans-serif;
+    background: #f4f7fb;
+    color: #1e293b;
+    font-family: 'Inter', system-ui, sans-serif;
+    font-size: 0.875rem;
+}
+
+.dashboard-admin-body::before {
+    content: none;
+}
+
+.dashboard-admin-body .dashboard-client-header[data-dashboard-header] {
+    position: sticky;
+    top: 0;
+    background: #080e1e;
+    box-shadow: 0 1px 3px rgb(11 21 40 / 5%);
+    animation: none;
+}
+
+.dashboard-admin-body .dashboard-client-header::after {
+    content: none;
+}
+
+.dashboard-admin-body .dashboard-client-header[data-dashboard-header] .dashboard-client-header__primary {
+    @apply mx-auto flex items-center gap-4;
+    max-width: 1280px;
+    min-height: 64px;
+    padding: 0 32px;
+    background: #080e1e;
+}
+
+.dashboard-admin-body .dashboard-client-header[data-dashboard-header] .dashboard-client-header__rail {
+    min-height: 64px;
+    border: 0;
+    background: transparent;
+}
+
+.dashboard-admin-body .dashboard-client-header[data-dashboard-header] .dashboard-client-navbar {
+    flex: 1;
+    min-height: 64px;
+    padding: 0;
+    gap: 16px;
+    color: white;
+    background: transparent;
+}
+
+.dashboard-admin-body .dashboard-client-header .dashboard-sidebar-toggle {
+    width: 32px;
+    height: 36px;
+    border-radius: 6px;
+    font-size: 1.5rem;
+    color: #cbd5e1;
+}
+
+.dashboard-admin-body .dashboard-client-header[data-dashboard-header] .dashboard-client-brand {
+    gap: 12px;
+    min-width: 0;
+}
+
+.dashboard-admin-body .dashboard-client-header[data-dashboard-header] .dashboard-client-brand__logo {
+    width: 36px;
+    height: 40px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    box-shadow: none;
+}
+
+.dashboard-admin-body .dashboard-client-header[data-dashboard-header] .dashboard-client-brand__logo img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    object-position: center;
+    transform: none;
+}
+
+.dashboard-admin-body[data-brand="client"] .dashboard-client-header[data-dashboard-header="client"] .dashboard-client-brand__logo {
+    width: 176px;
+    height: 52px;
+    background: #ffffff;
+}
+
+.dashboard-admin-body[data-brand="client"] .dashboard-client-header[data-dashboard-header="client"] .dashboard-client-brand__logo img {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 125%;
+    max-width: none;
+    height: auto;
+    transform: translate(-50%, -50%);
+}
+
+@media (max-width: 575.98px) {
+    .dashboard-admin-body[data-brand="client"] .dashboard-client-header[data-dashboard-header="client"] .dashboard-client-brand__logo {
+        width: 132px;
+        height: 44px;
+    }
+}
+
+.dashboard-admin-body .dashboard-client-header[data-dashboard-header] .dashboard-client-brand__text {
+    max-width: 180px;
+    padding: 0;
+    border: 0;
+}
+
+.dashboard-admin-body .dashboard-client-header[data-dashboard-header] .dashboard-client-brand__text strong {
+    font-size: 0.875rem;
+}
+
+.dashboard-admin-body .dashboard-client-header[data-dashboard-header] .dashboard-client-brand__text small {
+    margin-top: 3px;
+    color: #94a3b8;
+    font-size: 0.6875rem;
+}
+
+.dashboard-admin-body .dashboard-header-actions { gap: 16px; }
+.dashboard-admin-body .dashboard-header-separator { height: 28px; }
+
+.dashboard-admin-body .dashboard-header-status {
+    gap: 8px;
+    padding: 5px 10px;
+    border: 1px solid #1e293b;
+    border-radius: 6px;
+    background: #0f172a;
+    color: #cbd5e1;
+    font-size: 0.6875rem;
+}
+
+.dashboard-admin-body .dashboard-client-header[data-dashboard-header] .dashboard-header-status__dot {
+    width: 7px;
+    height: 7px;
+    flex-basis: 7px;
+    background: #22d3ee;
+    box-shadow: none;
+}
+
+.dashboard-admin-body .dashboard-notification-btn {
+    width: 32px;
+    height: 36px;
+    font-size: 1.125rem;
+}
+
+.dashboard-admin-body .dashboard-notification-count {
+    top: 0;
+    right: -4px;
+    min-width: 17px;
+    height: 17px;
+    padding: 0 3px;
+    border: 2px solid #080e1e;
+    font-size: 0.5625rem;
+}
+
+.dashboard-admin-body .dashboard-profile-btn { min-height: 40px; border-radius: 6px; }
+.dashboard-admin-body .dashboard-profile-avatar { width: 32px; height: 32px; flex-basis: 32px; font-size: 0.75rem; }
+.dashboard-admin-body .dashboard-profile-copy strong { max-width: 170px; font-size: 0.75rem; }
+.dashboard-admin-body .dashboard-profile-copy small { font-size: 0.625rem; text-transform: uppercase; }
+.dashboard-admin-body .dashboard-profile-chevron { font-size: 0.625rem; }
+.dashboard-admin-body .dashboard-profile-menu { max-width: calc(100vw - 24px); overflow-wrap: anywhere; }
+
+.dashboard-admin-body .dashboard-client-header[data-dashboard-header] .dashboard-client-header__secondary {
+    display: block;
+    min-height: 50px;
+    padding: 0;
+    margin: 0;
+    background: #fff;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.dashboard-header-secondary-inner {
+    @apply mx-auto flex items-center justify-between gap-4;
+    max-width: 1280px;
+    min-height: 50px;
+    padding: 4px 32px;
+}
+
+.dashboard-admin-body .dashboard-client-header[data-dashboard-header] .dashboard-header-nav {
+    position: static;
+    display: flex;
+    min-width: 0;
+    width: auto;
+    height: auto;
+    min-height: 0;
+    padding: 0;
+    margin: 0;
+    gap: 4px;
+    overflow-x: auto;
+    color: #475569;
+    background: transparent;
+    transform: none;
+}
+
+.dashboard-admin-body .dashboard-header-nav__link {
+    flex-shrink: 0;
+    padding: 10px 14px;
+    border-bottom: 2px solid transparent;
+    border-radius: 6px 6px 0 0;
+    font-size: 0.75rem;
+    font-weight: 500;
+    line-height: 1.25;
+}
+
+.dashboard-admin-body .dashboard-header-nav__link::after { content: none; }
+.dashboard-admin-body .dashboard-client-header[data-dashboard-header] .dashboard-header-nav__link:hover { color: #1d4ed8; background: #f8fafc; transform: none; }
+.dashboard-admin-body .dashboard-client-header[data-dashboard-header] .dashboard-header-nav__link.active { color: #1d4ed8; background: #eff6ff; border-bottom-color: #2563eb; font-weight: 700; }
+.dashboard-admin-body .dashboard-header-breadcrumb { color: #64748b; font-size: 0.75rem; }
+.dashboard-admin-body .dashboard-header-breadcrumb strong { color: #334155; }
+.dashboard-admin-body .dashboard-client-sidebar { max-width: 85vw; width: 320px; font-family: 'Inter', sans-serif; font-size: 0.8125rem; }
+.dashboard-admin-body .dashboard-sidebar-profile .min-w-0 { min-width: 0; }
+.dashboard-admin-body .dashboard-sidebar-link { font-size: 0.8125rem; }
+
+.dashboard-admin-body .dashboard-shell:is(.admin-leads-page, .team-management-page, .real-estate-index-page) {
+    --dash-bg: #f4f7fb;
+    --dash-border: #e2e8f0;
+    --dash-text: #0f172a;
+    --dash-muted: #64748b;
+    --dash-card-shadow: 0 2px 6px rgb(11 21 40 / 4%);
+    background: var(--dash-bg);
+    min-height: calc(100vh - 114px);
+    font-family: 'Inter', system-ui, sans-serif;
+}
+
+.dashboard-admin-body .dashboard-shell:is(.admin-leads-page, .team-management-page, .real-estate-index-page) > .container-fluid {
+    max-width: 1280px;
+    margin-inline: auto;
+    padding: 32px !important;
+}
+
+.dashboard-admin-body :is(.admin-leads-page, .team-management-page, .real-estate-index-page) h1 { font-size: 1.875rem; letter-spacing: -0.035em; }
+.dashboard-admin-body :is(.admin-leads-page, .team-management-page, .real-estate-index-page) .btn { border-radius: 8px; font-size: 0.75rem; padding: 10px 14px; font-weight: 600; }
+.dashboard-admin-body :is(.admin-leads-page, .team-management-page, .real-estate-index-page) .btn-primary { background: #2563eb; border-color: #2563eb; }
+.dashboard-admin-body :is(.admin-leads-page, .team-management-page, .real-estate-index-page) .btn-primary:hover { background: #1d4ed8; border-color: #1d4ed8; }
+.dashboard-admin-body :is(.admin-leads-page, .team-management-page, .real-estate-index-page) .badge { font-weight: 600; font-size: 0.6875rem; }
+.dashboard-admin-body :is(.admin-page-heading, .team-page-header, .company-page-hero__copy) p { font-size: 0.875rem; line-height: 1.6; }
+
+.admin-overview-grid {
+    @apply grid grid-cols-1 gap-5;
+}
+
+.dashboard-admin-body .admin-leads-overview {
+    @apply flex flex-col justify-between gap-5;
+    padding: 24px;
+    color: white;
+    border-radius: 8px;
+    background: linear-gradient(135deg, #0f2b66, #0a1a3d);
+    box-shadow: 0 4px 16px rgb(11 21 40 / 6%) !important;
+}
+
+.dashboard-admin-body .admin-leads-overview::before,
+.dashboard-admin-body .admin-leads-overview::after { content: none; }
+
+.admin-leads-overview h2 { font-size: 1.75rem; letter-spacing: -0.035em; }
+.admin-leads-overview p { max-width: 440px; font-size: 0.8125rem; color: #bfdbfe; }
+.admin-overview-footer { @apply flex flex-wrap items-center justify-between gap-4; padding-top: 18px; border-top: 1px solid rgb(96 165 250 / 15%); }
+.admin-latest-lead { @apply flex flex-col gap-1; font-size: 0.6875rem; }
+.admin-latest-lead span { color: #93c5fd; }
+.admin-latest-lead strong { font-size: 0.75rem; }
+.admin-eyebrow { font-size: 0.6875rem; font-weight: 600; color: #2563eb; }
+.dashboard-admin-body .admin-new-lead { border: 1px solid var(--dash-border); border-radius: 8px; }
+.admin-new-lead > .card-body { padding: 24px; }
+.admin-new-lead p { font-size: 0.8125rem; }
+.admin-new-lead .small { font-size: 0.6875rem; }
+.admin-new-lead-action { padding-top: 16px; border-top: 1px solid var(--dash-border); }
+
+.dashboard-admin-body :is(.admin-leads-page, .team-management-page) :is(.dashboard-stat-card, .team-stat-card, .team-list-card, .team-rules-card) {
+    border: 1px solid var(--dash-border) !important;
+    border-radius: 8px !important;
+}
+
+.dashboard-admin-body .admin-leads-page :is(.dashboard-stat-card--clients, .dashboard-stat-card--approved, .dashboard-stat-card--rejected, .dashboard-stat-card--companies) {
+    border: 2px solid #cbd5e1 !important;
+}
+
+.dashboard-admin-body .admin-leads-page[data-dashboard-theme="dark"] :is(.dashboard-stat-card--clients, .dashboard-stat-card--approved, .dashboard-stat-card--rejected, .dashboard-stat-card--companies) {
+    border-color: #64748b !important;
+}
+
+.dashboard-admin-body .admin-leads-page .dashboard-stat-card:not(.admin-new-lead) .card-body { padding: 20px; }
+.dashboard-admin-body .admin-leads-page .dashboard-stat-card:not(.admin-new-lead) .badge { background: transparent !important; padding: 0; font-size: 0.75rem; }
+.dashboard-admin-body .admin-leads-page .dashboard-stat-card .small { font-size: 0.6875rem; }
+.admin-lead-directory { overflow: hidden; border: 1px solid var(--dash-border); border-radius: 8px; background: var(--dash-surface); box-shadow: var(--dash-card-shadow); }
+.dashboard-admin-body .admin-leads-page .lead-filter-panel { margin: 0; border: 0; border-radius: 0; background: var(--dash-surface); box-shadow: none; scroll-margin-top: 130px; }
+.dashboard-admin-body .admin-lead-directory > .lead-list { padding: 24px; }
+.dashboard-admin-body .admin-lead-directory > .card { margin-top: 0 !important; border-radius: 0 !important; box-shadow: none !important; }
+.admin-empty-icon { display: inline-grid; place-items: center; width: 56px; height: 56px; color: #2563eb; background: var(--dash-surface-soft); border: 1px solid var(--dash-border); border-radius: 8px; font-size: 1.5rem; }
+.dashboard-admin-body .admin-leads-page .lead-filter-panel::before,
+.dashboard-admin-body .admin-leads-page .lead-filter-panel::after { content: none; }
+.dashboard-admin-body .admin-leads-page .lead-filter-panel__inner { padding: 0; }
+.dashboard-admin-body .admin-leads-page .lead-filter-panel__header { padding: 24px; border-bottom: 1px solid var(--dash-border); background: var(--dash-surface-soft); }
+.dashboard-admin-body .admin-leads-page .lead-filter-panel__title { font-family: inherit; font-size: 1.25rem; }
+.dashboard-admin-body .admin-leads-page .lead-filter-panel__description { font-size: 0.75rem; }
+.dashboard-admin-body .admin-leads-page .lead-filter-panel__eyebrow { color: var(--dash-muted); font-size: 0.625rem; }
+.dashboard-admin-body .admin-leads-page .lead-filter-panel__eyebrow i { width: 8px; height: 8px; border-radius: 2px; background: #2563eb; font-size: 0; box-shadow: none; }
+.dashboard-admin-body .admin-leads-page .lead-filter-panel__result { padding: 8px 16px; border-radius: 6px; background: var(--dash-surface-soft); box-shadow: none; }
+.dashboard-admin-body .admin-leads-page .lead-filter-panel__result-value { font-size: 1.125rem; }
+.dashboard-admin-body .admin-leads-page .lead-filter-form { padding: 24px; margin: 0; border: 0; border-bottom: 1px solid var(--dash-border); border-radius: 0; background: var(--dash-surface); }
+.dashboard-admin-body .admin-leads-page .lead-filter-quick,
+.dashboard-admin-body .admin-leads-page .lead-filter-summary { margin: 0; padding: 20px 24px; }
+.dashboard-admin-body .admin-leads-page .lead-filter-chip { min-height: 30px; padding: 6px 10px; border-radius: 6px; font-size: 0.6875rem; box-shadow: none; }
+.dashboard-admin-body .admin-leads-page .lead-filter-form__grid--admin { grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 16px; }
+.dashboard-admin-body .admin-leads-page .lead-filter-field { grid-column: span 2; }
+.dashboard-admin-body .admin-leads-page .lead-filter-field:nth-child(-n+2) { grid-column: span 3; }
+.dashboard-admin-body .admin-leads-page .lead-filter-actions { grid-column: 1 / -1; }
+.dashboard-admin-body .admin-leads-page .lead-filter-control { min-height: 40px; border-radius: 8px; background-color: var(--dash-surface-soft); box-shadow: none; font-size: 0.75rem; font-weight: 500; }
+.dashboard-admin-body .admin-leads-page .lead-filter-submit { min-height: 40px; border-radius: 8px; background: #080e1e; box-shadow: none; font-size: 0.75rem; }
+
+.dashboard-admin-body .team-management-page .team-page-header {
+    padding: 32px;
+    border-radius: 12px;
+    background: linear-gradient(110deg, #060b18, #0e1b3b 65%, #25102e);
+    box-shadow: 0 4px 16px rgb(11 21 40 / 6%);
+}
+
+.dashboard-admin-body .team-management-page .team-page-header::before,
+.dashboard-admin-body .team-management-page .team-page-header::after,
+.dashboard-admin-body .team-management-page .team-stat-card::after { content: none; }
+.dashboard-admin-body .team-management-page .team-page-header .badge { color: #bfdbfe !important; background: rgb(255 255 255 / 10%) !important; border-color: rgb(255 255 255 / 15%) !important; }
+.dashboard-admin-body .team-management-page .team-page-header p { color: #cbd5e1 !important; }
+.dashboard-admin-body .team-management-page .team-page-header .breadcrumb { font-size: 0.75rem; }
+.dashboard-admin-body .team-management-page .team-stat-card { border-width: 2px !important; border-left: 6px solid #2563eb !important; }
+.dashboard-admin-body .team-management-page .col-6:nth-child(2) .team-stat-card { border-left-color: #334155 !important; }
+.dashboard-admin-body .team-management-page .col-6:nth-child(3) .team-stat-card { border-left-color: #059669 !important; }
+.dashboard-admin-body .team-management-page .col-6:nth-child(4) .team-stat-card { border-left-color: #f59e0b !important; }
+.dashboard-admin-body .team-management-page .team-stat-card:hover { transform: none; }
+.dashboard-admin-body .team-management-page .team-list-card > .card-body { padding: 0 !important; }
+.dashboard-admin-body .team-management-page .team-list-card > .card-body > .d-flex { padding: 24px; margin: 0 !important; border-bottom: 1px solid #e2e8f0; background: #f8fafc; }
+.dashboard-admin-body .team-management-page .team-list-card { overflow: hidden; }
+.dashboard-admin-body .team-management-page .team-list-card h2 { font-size: 1.25rem; }
+.dashboard-admin-body .team-management-page .team-list-card p { font-size: 0.75rem; }
+.dashboard-admin-body .team-management-page .table { font-size: 0.75rem; }
+.dashboard-admin-body .team-management-page .table th { padding: 14px 16px; text-transform: uppercase; letter-spacing: 0.04em; color: #334155; background: #f1f5f9; font-size: 0.6875rem; white-space: nowrap; }
+.dashboard-admin-body .team-management-page .table td { padding: 18px 16px; }
+.dashboard-admin-body .team-management-page .team-member-avatar { border-radius: 50% !important; }
+.dashboard-admin-body .team-management-page .team-rules-card { background: #eff6ff; }
+.dashboard-admin-body .team-management-page .team-search-form .form-control { font-size: 0.75rem; }
+
+.dashboard-admin-body .real-estate-index-page .company-index-header .breadcrumb { font-size: 0.75rem; }
+.dashboard-admin-body .real-estate-index-page .company-overview-strip { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+.dashboard-admin-body .real-estate-index-page .company-overview-item { padding: 0; border: 0; }
+.dashboard-admin-body .real-estate-index-page .company-summary-card { position: relative; border: 2px solid #e2e8f0 !important; border-left: 6px solid #2563eb !important; border-radius: 8px !important; background: white; box-shadow: 0 1px 3px rgb(11 21 40 / 5%) !important; }
+.dashboard-admin-body .real-estate-index-page .company-summary-card--active { border-left-color: #059669 !important; }
+.dashboard-admin-body .real-estate-index-page .company-summary-card--inactive { border-left-color: #f59e0b !important; }
+.dashboard-admin-body .real-estate-index-page .company-summary-card__icon { flex-basis: 48px; width: 48px; height: 48px; font-size: 1.5rem; }
+.dashboard-admin-body .real-estate-index-page .company-summary-card .card-body { padding: 20px; gap: 16px; }
+.dashboard-admin-body .real-estate-index-page .company-summary-card__value { font-size: 1.875rem; color: #0f172a; }
+.dashboard-admin-body .real-estate-index-page .company-summary-card__label { font-size: 0.6875rem; font-weight: 700; text-transform: uppercase; }
+.dashboard-admin-body .real-estate-index-page .company-summary-card__hint { font-size: 0.6875rem; }
+.dashboard-admin-body .real-estate-index-page .company-directory { border: 1px solid #cbd5e1; border-radius: 8px; box-shadow: 0 4px 16px rgb(11 21 40 / 5%); }
+.dashboard-admin-body .real-estate-index-page .company-filter-card { background: #f8fafc; }
+.dashboard-admin-body .real-estate-index-page .company-directory-filters { gap: 16px; }
+.dashboard-admin-body .real-estate-index-page .company-directory-filters :is(.form-control, .form-select, .btn) { min-height: 40px; font-size: 0.75rem; }
+.dashboard-admin-body .real-estate-index-page .company-empty-state { background: #fff; }
+.dashboard-admin-body .real-estate-index-page .company-table thead th { color: #334155; background: #f1f5f9; }
+
+.dashboard-admin-body .admin-leads-page[data-dashboard-theme="dark"] {
+    --dash-bg: #0f172a;
+    --dash-surface: #111827;
+    --dash-surface-soft: #1e293b;
+    --dash-border: #334155;
+    --dash-text: #f8fafc;
+    --dash-muted: #cbd5e1;
+}
+
+@media (min-width: 1024px) {
+    .admin-overview-grid:has(.admin-new-lead) { grid-template-columns: 7fr 5fr; }
+}
+
+@media (max-width: 767.98px) {
+    .dashboard-admin-body .dashboard-client-header[data-dashboard-header] .dashboard-client-header__primary { padding-inline: 16px; gap: 12px; }
+    .dashboard-admin-body .dashboard-header-secondary-inner { flex-direction: column; align-items: stretch; gap: 2px; padding: 4px 16px 8px; }
+    .dashboard-admin-body .dashboard-header-breadcrumb { justify-content: flex-end; font-size: 0.625rem; }
+    .dashboard-admin-body .dashboard-header-actions { gap: 8px; }
+    .dashboard-admin-body .dashboard-header-status,
+    .dashboard-admin-body .dashboard-header-separator { display: none; }
+    .dashboard-admin-body .dashboard-shell:is(.admin-leads-page, .team-management-page, .real-estate-index-page) > .container-fluid { padding: 24px 16px !important; }
+    .dashboard-admin-body :is(.admin-leads-page, .team-management-page, .real-estate-index-page) h1 { font-size: 1.5rem; }
+    .dashboard-admin-body .admin-leads-page .lead-filter-field,
+    .dashboard-admin-body .admin-leads-page .lead-filter-field:nth-child(-n+2) { grid-column: 1 / -1; }
+    .dashboard-admin-body .admin-leads-page .lead-filter-panel { scroll-margin-top: 155px; }
+    .dashboard-admin-body .team-management-page .team-page-header { padding: 24px; }
+    .dashboard-admin-body .real-estate-index-page .company-overview-strip { grid-template-columns: 1fr; gap: 12px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .dashboard-admin-body .dashboard-header-status__dot { animation: none; }
+}
+
+.dashboard-admin-body[data-brand="tcc"] {
+    --font-principal: 'Sansation';
+    --dashboard-header-font: 'Sansation', 'Segoe UI', sans-serif;
+    font-family: var(--font-principal), 'Segoe UI', sans-serif;
+}
+
+.dashboard-admin-body[data-brand="tcc"] .dashboard-client-sidebar,
+.dashboard-admin-body[data-brand="tcc"] .dashboard-shell:is(.admin-leads-page, .team-management-page, .real-estate-index-page) {
+    font-family: var(--font-principal), 'Segoe UI', sans-serif;
+}
+
+.dashboard-admin-body[data-brand="tcc"] .dashboard-shell:is(.admin-leads-page, .team-management-page, .real-estate-index-page):not([data-dashboard-theme="dark"]) {
+    --dash-text: #0f172a;
+    --dash-muted: #334155;
+}
+
+.dashboard-admin-body[data-brand="tcc"] .admin-leads-page:not([data-dashboard-theme="dark"]) .lead-list-item {
+    --lead-muted: #334155;
+}
+
+.dashboard-admin-body[data-brand="tcc"] .real-estate-index-page:not([data-dashboard-theme="dark"]) :is(.company-summary-card__label, .company-summary-card__hint) {
+    color: #334155;
+}
+
+.dashboard-admin-body[data-brand="tcc"] .dashboard-header-breadcrumb {
+    color: #334155;
+}
+
+.dashboard-admin-body[data-brand="tcc"] .dashboard-client-header[data-dashboard-header] .dashboard-header-nav {
+    color: #334155;
+}
+
+.dashboard-admin-body[data-brand][data-dashboard-theme="dark"] .dashboard-client-header .dashboard-client-header__secondary {
+    background: #1e293b;
+    border-bottom-color: #475569;
+    box-shadow: 0 4px 12px rgb(0 0 0 / 20%);
+}
+
+.dashboard-admin-body[data-brand][data-dashboard-theme="dark"] .dashboard-client-header .dashboard-header-nav,
+.dashboard-admin-body[data-brand][data-dashboard-theme="dark"] .dashboard-client-header .dashboard-header-nav__link {
+    color: #e2e8f0;
+}
+
+.dashboard-admin-body[data-brand][data-dashboard-theme="dark"] .dashboard-header-breadcrumb {
+    color: #cbd5e1;
+}
+
+.dashboard-admin-body[data-brand][data-dashboard-theme="dark"] .dashboard-header-breadcrumb strong {
+    color: #f8fafc;
+}
+
+.dashboard-admin-body[data-brand][data-dashboard-theme="dark"] .dashboard-client-header .dashboard-header-nav__link:hover {
+    color: #ffffff;
+    background: #334155;
+}
+
+.dashboard-admin-body[data-brand][data-dashboard-theme="dark"] .dashboard-client-header .dashboard-header-nav__link.active {
+    color: #bfdbfe;
+    background: #1e3a5f;
+    border-bottom-color: #60a5fa;
+}
+
+.dashboard-admin-body .dashboard-header-theme-toggle {
+    display: grid;
+    flex: 0 0 32px;
+    width: 32px;
+    height: 36px;
+    padding: 0;
+    place-items: center;
+    color: #e2e8f0;
+    font-size: 1.125rem;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+}
+
+.dashboard-admin-body .dashboard-header-theme-toggle:is(:hover, :focus-visible) {
+    color: #fff;
+    background: transparent;
+    box-shadow: none;
+}
+
+.dashboard-admin-body .dashboard-header-theme-toggle:focus-visible {
+    outline: 2px solid #94a3b8;
+    outline-offset: 2px;
+}
+
+.dashboard-admin-body .dashboard-header-theme-toggle [data-dashboard-theme-icon] {
+    display: inline-block;
+    transform: rotate(0deg) scale(1);
+    transition: transform 320ms ease-in-out, color 200ms ease;
+}
+
+.dashboard-admin-body .dashboard-header-theme-toggle[aria-pressed="true"] [data-dashboard-theme-icon] {
+    transform: rotate(90deg) scale(1.08);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .dashboard-admin-body .dashboard-header-theme-toggle [data-dashboard-theme-icon] {
+        transition: none;
+        transform: none;
+    }
+
+    .dashboard-admin-body .dashboard-header-theme-toggle[aria-pressed="true"] [data-dashboard-theme-icon] {
+        transform: none;
+    }
+}
+
+.dashboard-admin-body[data-dashboard-theme="dark"],
+.dashboard-admin-body[data-dashboard-theme="dark"] .dashboard-shell[data-dashboard-theme="dark"] {
+    --dash-bg: #0f172a;
+    --dash-surface: #111827;
+    --dash-surface-soft: #1e293b;
+    --dash-input-bg: #0f172a;
+    --dash-border: #475569;
+    --dash-text: #f8fafc;
+    --dash-muted: #cbd5e1;
+    --team-surface: var(--dash-surface);
+    --team-border: var(--dash-border);
+    color-scheme: dark;
+    color: var(--dash-text);
+    background: var(--dash-bg);
+}
+
+.dashboard-admin-body[data-dashboard-theme="dark"] :is(.dashboard-client-sidebar, .dashboard-notification-menu, .dashboard-profile-menu, .modal-content) {
+    color: var(--dash-text);
+    background: var(--dash-surface);
+    border-color: var(--dash-border);
+}
+
+.dashboard-admin-body[data-dashboard-theme="dark"] :is(.dashboard-sidebar-profile, .company-empty-state, .team-status-panel, .team-permissions-panel, .team-current-data) {
+    color: var(--dash-text);
+    background: var(--dash-surface);
+    border-color: var(--dash-border);
+}
+
+.dashboard-admin-body[data-dashboard-theme="dark"] .dashboard-sidebar-link {
+    color: var(--dash-text);
+}
+
+.dashboard-admin-body[data-dashboard-theme="dark"] .dashboard-sidebar-link:is(:hover, .active) {
+    color: #bfdbfe;
+    background: #1e3a5f;
+}
+
+.dashboard-admin-body[data-dashboard-theme="dark"] :is(.dashboard-sidebar-link-danger, .text-danger, .invalid-feedback) {
+    color: #fda4af !important;
+}
+
+.dashboard-admin-body[data-dashboard-theme="dark"] .text-muted {
+    color: var(--dash-muted) !important;
+}
+
+.dashboard-admin-body[data-dashboard-theme="dark"] .text-primary {
+    color: #93c5fd !important;
+}
+
+.dashboard-admin-body[data-dashboard-theme="dark"] .text-success {
+    color: #6ee7b7 !important;
+}
+
+.dashboard-admin-body[data-dashboard-theme="dark"] :is(.input-group-text.bg-white, .team-create-modal .bg-white) {
+    color: var(--dash-text);
+    background-color: var(--dash-input-bg) !important;
+}
+
+.dashboard-admin-body[data-dashboard-theme="dark"] :is(.team-create-form .form-label, .team-permission-count, .team-modal-close, .company-summary-card__value) {
+    color: var(--dash-text);
+}
+
+.dashboard-admin-body[data-dashboard-theme="dark"] .team-management-page .team-list-card > .card-body > .d-flex,
+.dashboard-admin-body[data-dashboard-theme="dark"] :is(.team-rules-card, .company-filter-card, .team-modal-close) {
+    background: var(--dash-surface-soft);
+    border-color: var(--dash-border);
+}
+
+.dashboard-admin-body[data-dashboard-theme="dark"] :is(.team-management-page, .real-estate-index-page) .table thead th {
+    color: var(--dash-text);
+    background: var(--dash-surface-soft);
+}
+
+.dashboard-admin-body[data-dashboard-theme="dark"] .real-estate-index-page .company-summary-card {
+    background: var(--dash-surface);
+    border-top-color: var(--dash-border) !important;
+    border-right-color: var(--dash-border) !important;
+    border-bottom-color: var(--dash-border) !important;
+}
+
+.dashboard-admin-body[data-dashboard-theme="dark"] .company-directory {
+    border-color: var(--dash-border);
+}
+
+.dashboard-admin-body[data-dashboard-theme="dark"] .team-create-page .team-permission-option {
+    color: var(--dash-text);
+    background: var(--dash-input-bg);
+    border-color: var(--dash-border);
+}
+
+.dashboard-admin-body[data-dashboard-theme="dark"] .team-create-page .team-permission-option:is(.is-selected, :has(.form-check-input:checked)) {
+    background: #1e3a5f;
+    border-color: #60a5fa;
+}
+
+.dashboard-admin-body[data-dashboard-theme="dark"] .team-create-page .team-permission-option.is-disabled {
+    color: var(--dash-muted);
+    background: var(--dash-surface-soft);
+}
+
+.dashboard-admin-body[data-dashboard-theme="dark"] .team-create-page [data-team-status-label].is-active,
+.dashboard-admin-body[data-dashboard-theme="dark"] :is(.company-status--active, .company-live-status.is-active) {
+    color: #6ee7b7;
+}
+
+.dashboard-admin-body[data-dashboard-theme="dark"] .team-create-page [data-team-status-label].is-inactive {
+    color: #fcd34d;
+}
+
+.dashboard-admin-body[data-dashboard-theme="dark"] .team-create-page .team-create-backdrop::after {
+    background: rgb(15 23 42 / 40%);
+    border-color: var(--dash-border);
+}
+
+.dashboard-admin-body[data-dashboard-theme="dark"] .real-estate-create-page .company-form-section:is(:hover, .is-active) .company-form-section__number {
+    background: #214886;
+}
+
+.dashboard-admin-body[data-dashboard-theme="dark"] :is(.text-bg-primary-subtle, .bg-primary-subtle) {
+    color: #bfdbfe !important;
+    background-color: #1e3a5f !important;
+}
+
+.dashboard-admin-body[data-dashboard-theme="dark"] :is(.team-permission-icon, .team-permission-group-icon, .team-permission-select-all-icon, .team-permission-dependency-hint .bi, .company-password-toggle:not(:hover)) {
+    color: #93c5fd;
+}
+
+.dashboard-admin-body[data-dashboard-theme="dark"] .team-create-page :is(.form-control:not(.is-invalid):not(.is-valid), .input-group-text, .team-actions) {
+    border-color: var(--dash-border);
+}
+
+.dashboard-admin-body[data-dashboard-theme="dark"] .company-summary-card--active .company-summary-card__icon {
+    color: #6ee7b7;
+}
+
+.dashboard-admin-body[data-dashboard-theme="dark"] :is(.company-summary-card--inactive .company-summary-card__icon, .company-status--inactive, .company-live-status.is-inactive) {
+    color: #fcd34d;
+}
+
+.dashboard-admin-body[data-dashboard-theme="dark"] .company-validation-summary {
+    color: #fecdd3;
+    background: #351f33;
+    border-color: #9f4560;
+}
+
+.dashboard-admin-body[data-dashboard-theme="dark"] .company-action-button--delete:not(:hover) {
+    color: #fda4af;
+}
