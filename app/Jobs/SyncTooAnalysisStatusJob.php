@@ -24,6 +24,10 @@ class SyncTooAnalysisStatusJob implements ShouldQueue
 
     public int $consecutiveFailures = 0;
 
+    public bool $schedulePolling = true;
+
+    public ?array $providerResult = null;
+
     public function __construct(
         public int $analysisId,
         public string $attemptId,
@@ -93,6 +97,8 @@ class SyncTooAnalysisStatusJob implements ShouldQueue
             $result = ['success' => false, 'error' => 'Falha temporária ao consultar a Too.', 'response' => []];
         }
 
+        $this->providerResult = $result;
+
         InsuranceAnalysisAttempt::run($analysis, $this->attemptId, function () use ($analysis, $result): void {
             $analysis->refresh();
 
@@ -155,7 +161,7 @@ class SyncTooAnalysisStatusJob implements ShouldQueue
                     'response' => $result,
                 ]);
 
-                if ($this->consecutiveFailures + 1 < $maxFailures) {
+                if ($this->schedulePolling && $this->consecutiveFailures + 1 < $maxFailures) {
                     $this->dispatchNext($analysis, $delaySeconds, $this->consecutiveFailures + 1);
 
                     return;
@@ -164,7 +170,9 @@ class SyncTooAnalysisStatusJob implements ShouldQueue
                 $this->finishAsFailed(
                     analysis: $analysis,
                     result: $result,
-                    message: 'As consultas da Too falharam repetidamente. Não foi possível obter uma decisão de crédito.'
+                    message: $this->schedulePolling
+                        ? 'As consultas da Too falharam repetidamente. Não foi possível obter uma decisão de crédito.'
+                        : 'Falha ao consultar a Too durante o diagnóstico. Confira a resposta da companhia.'
                 );
 
                 return;
@@ -341,6 +349,10 @@ class SyncTooAnalysisStatusJob implements ShouldQueue
         int $delaySeconds,
         int $consecutiveFailures = 0,
     ): void {
+        if (! $this->schedulePolling) {
+            return;
+        }
+
         self::dispatch(
             analysisId: $analysis->id,
             attemptId: $this->attemptId,

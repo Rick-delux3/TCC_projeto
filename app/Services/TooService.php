@@ -345,6 +345,7 @@ class TooService
         try {
             $response = Http::acceptJson()
                 ->timeout(60)
+                ->withoutRedirecting()
                 ->withHeaders($this->authHeaders())
                 ->get($url);
 
@@ -354,6 +355,9 @@ class TooService
                 url: $url
             );
         } catch (\Throwable $e) {
+            if ($this->authenticationFailure !== null) {
+                return $this->authenticationFailure;
+            }
             Log::error('Falha inesperada ao consultar API da Too', [
                 'endpoint' => $endpoint,
                 'url' => $url,
