@@ -1223,24 +1223,6 @@
                                             </button>
                                         @endcan
                                         </div>
-
-                                        @if ($insuranceAnalysisEnabled)
-                                            @can('create-analysis')
-                                                @if ($solicitarAnaliseRoute($lead) !== '#')
-                                                    <form method="POST" action="{{ $solicitarAnaliseRoute($lead) }}">
-                                                        @csrf
-
-                                                        <button type="submit" class="btn btn-sm btn-warning w-100 text-nowrap">
-                                                            Analisar
-                                                        </button>
-                                                    </form>
-                                                @else
-                                                    <button type="button" class="btn btn-sm btn-warning w-100 text-nowrap" disabled>
-                                                        Analisar
-                                                    </button>
-                                                @endif
-                                            @endcan
-                                        @endif
                                     </div>
                                 </div>
 

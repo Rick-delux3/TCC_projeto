@@ -7,7 +7,7 @@ use App\Services\Insurance\InsuranceAnalysisAttempt;
 use App\Services\Insurance\Payloads\RentalGuaranteeQuotePayloadBuilder;
 use App\Services\PottencialService;
 
-class PottencialInsuranceProvider implements InsuranceProviderInterface
+class PottencialInsuranceProvider implements CreatesInsuranceQuotes, InsuranceProviderInterface
 {
     public function __construct(
         private readonly PottencialService $pottencialService,
@@ -17,6 +17,13 @@ class PottencialInsuranceProvider implements InsuranceProviderInterface
     public function name(): string
     {
         return 'Pottencial';
+    }
+
+    public function createQuote(InsuranceAnalysis $analysis): array
+    {
+        $this->ensureEnabled();
+
+        return $this->pottencialService->createRentalGuaranteeQuote($this->payloadBuilder->build($analysis));
     }
 
     public function requestAnalysis(

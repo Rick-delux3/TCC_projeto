@@ -14,6 +14,8 @@ class PottencialService
 
     private ?string $clientSecret;
 
+    private ?array $authenticationFailure = null;
+
     public function __construct()
     {
         $this->baseUrl = rtrim((string) config('services.pottencial.base_url'), '/');
@@ -27,6 +29,7 @@ class PottencialService
     public function getAccessToken(): ?string
     {
         $this->ensureEnabled();
+        $this->authenticationFailure = null;
 
         return Cache::remember('pottencial_access_token', now()->addMinutes(55), function () {
             if (! $this->baseUrl) {
@@ -46,9 +49,12 @@ class PottencialService
             $response = Http::withBasicAuth($this->clientId, $this->clientSecret)
                 ->acceptJson()
                 ->timeout(30)
+                ->withoutRedirecting()
                 ->post($url);
 
             if (! $response->successful()) {
+                $this->authenticationFailure = $this->normalizeResponse($response, '/oauth/v3/access-token', $url)
+                    + ['operation' => 'authentication'];
                 Log::warning('Erro ao gerar access_token da Pottencial', [
                     'status' => $response->status(),
                     'http_status' => $response->status(),
@@ -154,6 +160,7 @@ class PottencialService
             $response = Http::asJson()
                 ->acceptJson()
                 ->timeout(60)
+                ->withoutRedirecting()
                 ->withHeaders($this->authHeaders())
                 ->post($url, $payload);
 
@@ -165,6 +172,9 @@ class PottencialService
             );
 
         } catch (\Throwable $e) {
+            if ($this->authenticationFailure !== null) {
+                return $this->authenticationFailure;
+            }
             Log::error('Falha inesperada ao chamar API da Pottencial', [
                 'endpoint' => $endpoint,
                 'url' => $url,
@@ -207,6 +217,7 @@ class PottencialService
         try {
             $response = Http::acceptJson()
                 ->timeout(60)
+                ->withoutRedirecting()
                 ->withHeaders($this->authHeaders())
                 ->get($url);
 
@@ -216,6 +227,9 @@ class PottencialService
                 url: $url
             );
         } catch (\Throwable $e) {
+            if ($this->authenticationFailure !== null) {
+                return $this->authenticationFailure;
+            }
             Log::error('Falha inesperada ao consultar API da Pottencial', [
                 'endpoint' => $endpoint,
                 'url' => $url,

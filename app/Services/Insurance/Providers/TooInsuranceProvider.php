@@ -8,7 +8,7 @@ use App\Services\Insurance\Payloads\TooRentalGuaranteePayloadBuilder;
 use App\Services\TooService;
 use Illuminate\Support\Facades\Log;
 
-class TooInsuranceProvider implements InsuranceProviderInterface
+class TooInsuranceProvider implements CreatesInsuranceQuotes, InsuranceProviderInterface
 {
     public function __construct(
         private TooService $tooService,
@@ -18,6 +18,18 @@ class TooInsuranceProvider implements InsuranceProviderInterface
     public function name(): string
     {
         return 'too';
+    }
+
+    public function createQuote(InsuranceAnalysis $analysis): array
+    {
+        $this->ensureEnabled();
+        if ($analysis->status !== 'approved' || blank($analysis->tooNumeroFicha())) {
+            throw new \App\Exceptions\InvalidInsuranceAnalysisPayload(
+                'A cotação da Too exige uma análise aprovada com numeroFicha. Criar ficha e solicitar crédito são etapas anteriores, não executadas por este comando.'
+            );
+        }
+
+        return $this->tooService->requestQuote($this->payloadBuilder->buildQuotePayload($analysis, $analysis->tooNumeroFicha()));
     }
 
     /**

@@ -14,6 +14,8 @@ class TooService
 
     private ?string $clientSecret;
 
+    private ?array $authenticationFailure = null;
+
     public function __construct()
     {
         $this->baseUrl = rtrim((string) config('services.too.base_url'), '/');
@@ -38,6 +40,7 @@ class TooService
     public function getAccessToken(): ?string
     {
         $this->ensureEnabled();
+        $this->authenticationFailure = null;
 
         return Cache::remember('too_access_token', now()->addMinutes(55), function () {
             if (! $this->baseUrl) {
@@ -58,11 +61,14 @@ class TooService
                 ->asForm()
                 ->acceptJson()
                 ->timeout(30)
+                ->withoutRedirecting()
                 ->post($url, [
                     'grant_type' => 'client_credentials',
                 ]);
 
             if (! $response->successful()) {
+                $this->authenticationFailure = $this->normalizeResponse($response, '/authentication', $url)
+                    + ['operation' => 'authentication'];
                 Log::warning('Erro ao gerar access_token da Too', [
                     'url' => $url,
                     'status' => $response->status(),
@@ -283,6 +289,7 @@ class TooService
             $response = Http::asJson()
                 ->acceptJson()
                 ->timeout(60)
+                ->withoutRedirecting()
                 ->withHeaders($this->authHeaders())
                 ->post($url, $payload);
 
@@ -293,6 +300,9 @@ class TooService
                 payload: $payload
             );
         } catch (\Throwable $e) {
+            if ($this->authenticationFailure !== null) {
+                return $this->authenticationFailure;
+            }
             Log::error('Falha inesperada ao chamar API da Too', [
                 'endpoint' => $endpoint,
                 'url' => $url,
