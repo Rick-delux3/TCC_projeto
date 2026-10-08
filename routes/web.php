@@ -346,7 +346,7 @@ Route::get('/cep/{cep}', [CepController::class, 'show'])
     ->middleware('throttle:30,1')
     ->name('cep.show');
 
-Route::prefix('/empresa')->middleware(['guest', 'auth.unframed'])->group(function () {
+Route::prefix('/empresa')->middleware(['guest:web', 'auth.unframed'])->group(function () {
     Route::get('/form', [ImobiliariaRegistrationController::class, 'showRegistrationForm'])->name('empresa.register.form');
     Route::post('/register', [ImobiliariaRegistrationController::class, 'store'])
         ->middleware('throttle:5,1')
@@ -355,31 +355,27 @@ Route::prefix('/empresa')->middleware(['guest', 'auth.unframed'])->group(functio
     Route::post('/login/post', [ImobiliariaAuthController::class, 'login'])
         ->middleware('throttle:10,1')
         ->name('empresa.login.post');
-});
 
-Route::post('/empresa/logout', [ImobiliariaAuthController::class, 'logout'])
-    ->middleware('auth')
-    ->name('empresa.logout');
-
-Route::middleware(['guest', 'auth.unframed'])->group(function () {
-    Route::get('/empresa/forgot-password', [CompanyPasswordResetLinkController::class, 'create'])
+    Route::get('/forgot-password', [CompanyPasswordResetLinkController::class, 'create'])
         ->name('company.password.request');
 
-    Route::post('/empresa/forgot-password', [CompanyPasswordResetLinkController::class, 'store'])
+    Route::post('/forgot-password', [CompanyPasswordResetLinkController::class, 'store'])
         ->middleware('throttle:5,1')
         ->name('company.password.email');
 
-    Route::get('/empresa/reset-password/{token}', [CompanyNewPasswordController::class, 'create'])
+    Route::get('/reset-password/{token}', [CompanyNewPasswordController::class, 'create'])
         ->name('company.password.reset');
 
-    Route::post('/empresa/reset-password', [CompanyNewPasswordController::class, 'store'])
+    Route::post('/reset-password', [CompanyNewPasswordController::class, 'store'])
         ->middleware('throttle:10,1')
         ->name('company.password.store');
 });
 
 require __DIR__.'/auth.php';
 
-Route::middleware('auth')->group(function () {
+Route::middleware('auth:web')->group(function () {
+    Route::post('/empresa/logout', [ImobiliariaAuthController::class, 'logout'])->name('empresa.logout');
+
     Route::get('/2fa', [TwoFactorController::class, 'index'])->name('2fa');
     Route::post('/2fa', [TwoFactorController::class, 'verify'])->name('2fa.verify.post');
     Route::post('/2fa/resend', [TwoFactorController::class, 'resend'])->name('2fa.resend');

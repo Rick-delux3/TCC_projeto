@@ -470,6 +470,7 @@
                     const response = await fetch(endpoint, {
                         headers: {
                             'Accept': 'application/json',
+                            'X-Requested-With': 'XMLHttpRequest',
                         },
                     });
 

@@ -3,24 +3,35 @@
 namespace App\Http\Controllers;
 
 use App\Actions\Companies\RegisterCompany;
+use App\Actions\Companies\StartCompanyTwoFactorChallenge;
 use App\Http\Requests\StoreCompanyRequest;
 use App\Services\CompanyTagService;
 use Illuminate\Auth\Events\Registered;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\ValidationException;
+use Illuminate\View\View;
 use Throwable;
 
 class ImobiliariaRegistrationController extends Controller
 {
-    public function showRegistrationForm(CompanyTagService $companyTags)
+    public function showRegistrationForm(CompanyTagService $companyTags): View
     {
-       $tagsOficiais = $companyTags->availableTags();
+        $tagsOficiais = $companyTags->availableTags();
 
         return view('imobiliaria.register-company', compact('tagsOficiais'));
     }
 
-    public function store(StoreCompanyRequest $request, RegisterCompany $registerCompany)
-    {
-        $registration = $registerCompany->execute($request->validated());
+    public function store(
+        StoreCompanyRequest $request,
+        RegisterCompany $registerCompany,
+        StartCompanyTwoFactorChallenge $startChallenge,
+    ): RedirectResponse {
+        try {
+            $registration = $registerCompany->execute($request->validated());
+        } catch (ValidationException $exception) {
+            throw $exception->redirectTo(route('empresa.register.form'));
+        }
         $company = $registration['company'];
         $user = $registration['user'];
 
@@ -35,10 +46,15 @@ class ImobiliariaRegistrationController extends Controller
             ]);
         }
 
+        if (! $startChallenge->execute($user, $request)) {
+            return redirect()->route('empresa.login')
+                ->withErrors(['email' => 'Cadastro realizado, mas não foi possível enviar o código de verificação. Faça login para tentar novamente.'])
+                ->onlyInput('email');
+        }
 
-        return redirect()->route('empresa.login')->with(
+        return redirect()->route('2fa')->with(
             'success',
-            'Cadastro realizado com sucesso. Faça login para continuar.'
+            'Cadastro realizado com sucesso. Enviamos o código de verificação ao e-mail da imobiliária.'
         );
     }
 }
