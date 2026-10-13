@@ -64,7 +64,7 @@ const initializeConditionalFields = (form) => {
     }
 
     form.querySelectorAll('[data-simulation-template]').forEach((template) => {
-        template.content.querySelectorAll('input').forEach((input) => {
+        template.content.querySelectorAll('input, select').forEach((input) => {
             input.value = '';
         });
     });

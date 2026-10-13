@@ -818,6 +818,56 @@ it('restores active fields and choices after a validation error', function () {
         ->and($dom->evaluate('string(//input[@name="tipo_locacao"][@checked]/@value)'))->toBe('comercial');
 });
 
+it('renders the business activity select only for commercial rental in every simulation form', function (string $view, bool $isAdminSimulation, ?string $rentalType): void {
+    $this->withSession(['_old_input' => ['tipo_locacao' => $rentalType]]);
+    $this->app['request']->setLaravelSession($this->app['session.store']);
+
+    $html = (string) $this->view('simulation.forms.'.$view, [
+        'company' => conditionalSimulationCompany(),
+        'isAdminSimulation' => $isAdminSimulation,
+        'errors' => new \Illuminate\Support\ViewErrorBag,
+    ]);
+    $dom = conditionalSimulationDom($html);
+    $select = '//*[@data-simulation-fields="commercial"]//select[@name="ramo_atividade"]';
+    $templateSelect = '//template[@data-simulation-template="commercial"]//select[@name="ramo_atividade"]';
+
+    expect($dom->query($select)->length)->toBe($rentalType === 'comercial' ? 1 : 0)
+        ->and($dom->query($templateSelect.'[@required]')->length)->toBe(1)
+        ->and($dom->query($templateSelect.'/option')->length)->toBe(4)
+        ->and($dom->evaluate('string('.$templateSelect.'/option[@value="21205"])'))->toBe('Comércio')
+        ->and($dom->evaluate('string('.$templateSelect.'/option[@value="21204"])'))->toBe('Indústria')
+        ->and($dom->evaluate('string('.$templateSelect.'/option[@value="21206"])'))->toBe('Serviços');
+
+    if ($rentalType === 'comercial') {
+        expect($dom->query($select.'[@required]')->length)->toBe(1)
+            ->and($dom->query('//section[@data-form-step="2"]'.$select)->length)->toBe(1);
+    }
+})->with(['tenant', 'registered-company', 'unregistered-company_landlord'])
+    ->with(['public' => false, 'internal' => true])
+    ->with(['unselected' => null, 'residential' => 'residencial', 'commercial' => 'comercial']);
+
+it('restores the business activity choice and displays its validation error in the property step', function (mixed $activity, string $selected): void {
+    $message = 'Selecione um ramo de atividade válido: Comércio, Indústria ou Serviços.';
+    $this->withSession([
+        '_old_input' => ['tipo_locacao' => 'comercial', 'ramo_atividade' => $activity],
+        'errors' => (new \Illuminate\Support\ViewErrorBag)->put('default', new \Illuminate\Support\MessageBag(['ramo_atividade' => $message])),
+    ]);
+
+    $dom = conditionalSimulationDom($this->get(route('simulation.tenant.form'))->assertOk()->getContent());
+    $select = '//*[@data-simulation-fields="commercial"]//select[@name="ramo_atividade"]';
+
+    expect($dom->evaluate('string('.$select.'/option[@selected]/@value)'))->toBe($selected)
+        ->and($dom->evaluate('string('.$select.'/@aria-invalid)'))->toBe('true')
+        ->and($dom->evaluate('string('.$select.'/@aria-describedby)'))->toBe('ramo_atividade-error')
+        ->and($dom->evaluate('string(//*[@data-simulation-fields="commercial"]//*[@id="ramo_atividade-error"])'))->toBe($message)
+        ->and($dom->evaluate('string(//*[@data-simulation-wizard]/@data-initial-step)'))->toBe('2');
+})->with([
+    'commerce' => ['21205', '21205'],
+    'industry' => ['21204', '21204'],
+    'services' => [21206, '21206'],
+    'malformed input' => [['invalid'], ''],
+]);
+
 it('renders the form after rejecting malformed conditional fields', function () {
     $url = route('simulation.tenant.form');
     $this->from($url)->post(route('simulation.tenant.store'), conditionalSimulationPayload([
