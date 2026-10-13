@@ -24,6 +24,9 @@ use Illuminate\Support\Facades\Route;
 
 Route::get('/', PublicHomeController::class)->name('index');
 
+Route::get('/simulacao/atividades', \App\Http\Controllers\CommercialActivityController::class)
+    ->middleware('throttle:60,1')->name('simulation.activities');
+
 Route::get('/dashboard', fn () => redirect()->route('company.dashboard'))
     ->middleware(['auth', '2fa'])
     ->name('dashboard');

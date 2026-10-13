@@ -448,6 +448,9 @@ it('persists the independent document and rental choices through every public pr
         'cpf' => $document,
         'tipo_locacao' => $rentalType,
         'descrever_atividade' => '  Comércio   de roupas  ',
+        'atividade_economica_id' => \App\Models\AtividadeEconomicaCodigo::factory()->for(
+            \App\Models\AtividadeEconomica::factory()->state(['descricao' => 'Comércio de roupas']), 'atividadeEconomica'
+        )->create()->atividade_economica_id,
         'cpf_responsavel' => '111.444.777-35',
         'nome_responsavel' => '  Representante   da empresa  ',
     ]);
@@ -521,9 +524,9 @@ it('rejects invalid or missing conditional data without creating a lead', functi
     'rental type required' => [['tipo_locacao' => null], ['tipo_locacao']],
     'invalid rental type' => [['tipo_locacao' => 'industrial'], ['tipo_locacao']],
     'array rental type' => [['tipo_locacao' => ['comercial']], ['tipo_locacao']],
-    'commercial activity required' => [['tipo_locacao' => 'comercial'], ['descrever_atividade']],
-    'commercial activity too long' => [['tipo_locacao' => 'comercial', 'descrever_atividade' => str_repeat('a', 56)], ['descrever_atividade']],
-    'commercial activity must be text' => [['tipo_locacao' => 'comercial', 'descrever_atividade' => ['invalid']], ['descrever_atividade']],
+    'commercial activity required' => [['tipo_locacao' => 'comercial'], ['atividade_economica_id']],
+    'commercial activity must exist' => [['tipo_locacao' => 'comercial', 'atividade_economica_id' => 999999], ['atividade_economica_id']],
+    'commercial activity must be an identifier' => [['tipo_locacao' => 'comercial', 'atividade_economica_id' => ['invalid']], ['atividade_economica_id']],
     'invalid CPF checksum' => [['cpf' => '52998224724'], ['cpf']],
     'invalid CNPJ checksum' => [['cpf' => '11222333000180'], ['cpf']],
     'repeated CPF digits' => [['cpf' => '11111111111'], ['cpf']],
@@ -556,6 +559,7 @@ it('preserves leading zeroes in company and representative documents', function 
         'nome_responsavel' => str_repeat('a', 55),
         'tipo_locacao' => 'comercial',
         'descrever_atividade' => str_repeat('b', 55),
+        'atividade_economica_id' => \App\Models\AtividadeEconomicaCodigo::factory()->create()->atividade_economica_id,
     ]))->assertSessionHasNoErrors();
 
     expect(LeadEmpresa::query()->sole()->cnpj)->toBe('04252011000110')
@@ -584,6 +588,9 @@ it('updates and removes conditional relationships only through an authorized adm
         ->and(Lead::query()->sole()->data_edited_at)->not->toBeNull();
 
     $companyPayload = conditionalSimulationPayload([
+        'atividade_economica_id' => \App\Models\AtividadeEconomicaCodigo::factory()->for(
+            \App\Models\AtividadeEconomica::factory()->state(['descricao' => 'Loja']), 'atividadeEconomica'
+        )->create()->atividade_economica_id,
         'cpf' => '11222333000181',
         'cpf_responsavel' => '11144477735',
         'nome_responsavel' => 'Representante',
@@ -799,6 +806,9 @@ it('updates editable water and electricity defaults with the rent in simulation 
 
 it('restores active fields and choices after a validation error', function () {
     $this->withSession(['_old_input' => conditionalSimulationPayload([
+        'atividade_economica_id' => \App\Models\AtividadeEconomicaCodigo::factory()->for(
+            \App\Models\AtividadeEconomica::factory()->state(['descricao' => 'Loja']), 'atividadeEconomica'
+        )->create()->atividade_economica_id,
         'cpf' => '11222333000181',
         'cpf_responsavel' => '11144477735',
         'nome_responsavel' => 'Representante',
@@ -813,7 +823,7 @@ it('restores active fields and choices after a validation error', function () {
 
     expect($dom->query('//*[@data-simulation-fields="company"]//input')->length)->toBe(2)
         ->and($dom->evaluate('string(//*[@data-simulation-fields="company"]//input[@name="nome_responsavel"]/@value)'))->toBe('Representante')
-        ->and($dom->evaluate('string(//*[@data-simulation-fields="commercial"]//input/@value)'))->toBe('Loja')
+        ->and($dom->evaluate('string(//*[@data-simulation-fields="commercial"]//input[@name="descrever_atividade"]/@value)'))->toBe('Loja')
         ->and($dom->query('//*[@data-simulation-fields="spouse"]//input')->length)->toBe(2)
         ->and($dom->evaluate('string(//input[@name="tipo_locacao"][@checked]/@value)'))->toBe('comercial');
 });
@@ -880,7 +890,7 @@ it('renders the form after rejecting malformed conditional fields', function () 
         'conjuge_nome' => ['invalid'],
         'conjuge_cpf' => ['invalid'],
     ]))->assertRedirect($url)->assertSessionHasErrors([
-        'cpf_responsavel', 'nome_responsavel', 'descrever_atividade', 'conjuge_nome', 'conjuge_cpf',
+        'cpf_responsavel', 'nome_responsavel', 'atividade_economica_id', 'conjuge_nome', 'conjuge_cpf',
     ]);
 
     $this->get($url)->assertOk();

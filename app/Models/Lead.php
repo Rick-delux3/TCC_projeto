@@ -9,6 +9,7 @@ use App\Support\ManualLeadResultTags;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\Relations\MorphOne;
@@ -27,6 +28,20 @@ class Lead extends Model
 
     protected $table = 'leads';
 
+    public function atividadeEconomica(): BelongsTo
+    {
+        return $this->belongsTo(AtividadeEconomica::class);
+    }
+
+    public function setDescreverAtividadeAttribute(?string $descricao): void
+    {
+        if (($this->attributes['descrever_atividade'] ?? null) !== $descricao) {
+            $this->attributes['atividade_economica_id'] = null;
+        }
+
+        $this->attributes['descrever_atividade'] = $descricao;
+    }
+
     // Permite persistir os dados normalizados pelos formulários e serviços.
     protected $fillable = [
         'company_id',
@@ -36,6 +51,7 @@ class Lead extends Model
         'tipo_locacao',
         'ramo_atividade',
         'descrever_atividade',
+        'atividade_economica_id',
         'estado_civil',
         'imobiliaria',
         'nome',
@@ -74,6 +90,7 @@ class Lead extends Model
     ];
 
     protected $casts = [
+        'atividade_economica_id' => 'integer',
         'data_nascimento' => 'date:Y-m-d',
         'data_edited_at' => 'datetime',
         'tipo_locacao' => TipoLocacao::class,

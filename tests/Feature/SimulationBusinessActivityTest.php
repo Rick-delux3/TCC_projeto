@@ -13,6 +13,7 @@ beforeEach(function (): void {
     config(['features.insurance_analysis.enabled' => false]);
     Queue::fake();
     Http::preventStrayRequests();
+    \App\Models\AtividadeEconomicaCodigo::factory()->create();
 });
 
 function businessActivityPayload(array $overrides = []): array
@@ -26,6 +27,7 @@ function businessActivityPayload(array $overrides = []): array
         'data_nascimento' => '1992-02-29',
         'tipo_locacao' => 'comercial',
         'descrever_atividade' => 'Atividade no imóvel comercial',
+        'atividade_economica_id' => \App\Models\AtividadeEconomicaCodigo::query()->firstOrFail()->atividade_economica_id,
         'estado_civil' => 'solteiro',
         'valor_aluguel' => '1500',
         'cep' => '01001000',

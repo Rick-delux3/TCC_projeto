@@ -1,4 +1,5 @@
 import { initializeDocumentMask } from './document-mask';
+import { initializeActivityPicker } from './commercial-activity';
 
 const initializeProfileChoice = () => {
     const form = document.querySelector('[data-simulation-start] #profileChoiceForm');
@@ -106,6 +107,7 @@ const initializeConditionalFields = (form) => {
 
     const updateRentalType = () => {
         renderFields('commercial', form.querySelector('[name="tipo_locacao"]:checked')?.value === 'comercial');
+        initializeActivityPicker(form);
     };
 
     documentInput.addEventListener('input', updateDocument);

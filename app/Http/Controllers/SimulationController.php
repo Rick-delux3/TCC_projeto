@@ -574,7 +574,10 @@ class SimulationController extends Controller
             'data_nascimento' => $data['data_nascimento'],
             'tipo_locacao' => $data['tipo_locacao'],
             'ramo_atividade' => $data['ramo_atividade'] ?? null,
-            'descrever_atividade' => $data['descrever_atividade'] ?? null,
+            'descrever_atividade' => isset($data['atividade_economica_id'])
+                ? \App\Models\AtividadeEconomica::query()->disponiveis()->findOrFail($data['atividade_economica_id'])->descricao
+                : null,
+            'atividade_economica_id' => $data['atividade_economica_id'] ?? null,
             'tel' => $data['tel'] ?? null,
             'estado_civil' => $data['estado_civil'] ?? null,
             'imobiliaria' => $company?->name
@@ -747,7 +750,7 @@ class SimulationController extends Controller
         $relationships = ['lead_empresa', 'endereco', 'despesas', 'conjuge', 'locador', 'imobiliariaInformada'];
         $lead->load($relationships);
         $data = $lead->only([
-            'nome', 'email', 'cpf', 'data_nascimento', 'tipo_locacao', 'ramo_atividade', 'descrever_atividade', 'tel',
+            'nome', 'email', 'cpf', 'data_nascimento', 'tipo_locacao', 'ramo_atividade', 'descrever_atividade', 'atividade_economica_id', 'tel',
             'estado_civil', 'aceite_termos', 'observacoes',
         ]);
         $data['data_nascimento'] = $lead->data_nascimento?->toDateString();

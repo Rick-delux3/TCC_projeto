@@ -12,6 +12,13 @@
     </div>
 </fieldset>
 
+@php
+    $activityId = old('atividade_economica_id');
+    $selectedActivity = is_scalar($activityId) && ctype_digit((string) $activityId)
+        ? \App\Models\AtividadeEconomica::query()->disponiveis()->find($activityId)
+        : null;
+@endphp
+
 @include('simulation.partials.conditional-fields', [
     'condition' => 'commercial',
     'visible' => old('tipo_locacao') === 'comercial',

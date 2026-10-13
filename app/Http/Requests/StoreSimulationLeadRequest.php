@@ -4,7 +4,9 @@ namespace App\Http\Requests;
 
 use App\Enums\RamoAtividade;
 use App\Enums\TipoLocacao;
+use App\Models\AtividadeEconomica;
 use App\Rules\CpfOrCnpj;
+use Illuminate\Database\Query\Builder;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
@@ -100,11 +102,12 @@ class StoreSimulationLeadRequest extends FormRequest
                 'integer',
                 Rule::enum(RamoAtividade::class),
             ],
-            'descrever_atividade' => [
+            'atividade_economica_id' => [
                 'exclude_unless:tipo_locacao,comercial',
+                'bail',
                 'required',
-                'string',
-                'max:55',
+                'integer',
+                Rule::exists('atividades_economicas', 'id')->where(fn (Builder $query): Builder => $query->whereIn('id', AtividadeEconomica::query()->disponiveis()->select('id'))),
             ],
             'cpf_responsavel' => [
                 Rule::excludeIf(! $this->hasCompanyDocument()),
@@ -240,9 +243,9 @@ class StoreSimulationLeadRequest extends FormRequest
             'tipo_locacao.enum' => 'Selecione uma modalidade de locação válida.',
             'ramo_atividade.integer' => 'Selecione um ramo de atividade válido: Comércio, Indústria ou Serviços.',
             'ramo_atividade.enum' => 'Selecione um ramo de atividade válido: Comércio, Indústria ou Serviços.',
-            'descrever_atividade.required' => 'Descreva a atividade exercida no imóvel comercial.',
-            'descrever_atividade.string' => 'A descrição da atividade deve ser um texto válido.',
-            'descrever_atividade.max' => 'A descrição da atividade deve ter no máximo :max caracteres.',
+            'atividade_economica_id.required' => 'Pesquise e selecione uma atividade da lista.',
+            'atividade_economica_id.integer' => 'Selecione uma atividade válida da lista.',
+            'atividade_economica_id.exists' => 'Esta atividade não está disponível. Pesquise e selecione outra opção.',
             'cpf_responsavel.required' => 'Informe o CPF do representante da empresa.',
             'cpf_responsavel.string' => 'Informe um CPF válido para o representante da empresa.',
             'cpf_responsavel.size' => 'O CPF do representante da empresa deve conter 11 dígitos.',
