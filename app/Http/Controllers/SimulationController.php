@@ -573,6 +573,7 @@ class SimulationController extends Controller
             'cpf' => $request->hasCompanyDocument() ? null : ($data['cpf'] ?? null),
             'data_nascimento' => $data['data_nascimento'],
             'tipo_locacao' => $data['tipo_locacao'],
+            'ramo_atividade' => $data['ramo_atividade'] ?? null,
             'descrever_atividade' => $data['descrever_atividade'] ?? null,
             'tel' => $data['tel'] ?? null,
             'estado_civil' => $data['estado_civil'] ?? null,
@@ -608,6 +609,10 @@ class SimulationController extends Controller
                 ->lockForUpdate()
                 ->firstOrFail();
             $originalData = $this->editableLeadData($lead);
+            if ($data['tipo_locacao'] === 'comercial' && ! array_key_exists('ramo_atividade', $data)) {
+                unset($leadAttributes['ramo_atividade']);
+            }
+
             unset($leadAttributes['tags_originais'], $leadAttributes['status']);
             $leadAttributes['leadlovers_status'] = in_array(
                 $lead->leadlovers_status,
@@ -742,7 +747,7 @@ class SimulationController extends Controller
         $relationships = ['lead_empresa', 'endereco', 'despesas', 'conjuge', 'locador', 'imobiliariaInformada'];
         $lead->load($relationships);
         $data = $lead->only([
-            'nome', 'email', 'cpf', 'data_nascimento', 'tipo_locacao', 'descrever_atividade', 'tel',
+            'nome', 'email', 'cpf', 'data_nascimento', 'tipo_locacao', 'ramo_atividade', 'descrever_atividade', 'tel',
             'estado_civil', 'aceite_termos', 'observacoes',
         ]);
         $data['data_nascimento'] = $lead->data_nascimento?->toDateString();

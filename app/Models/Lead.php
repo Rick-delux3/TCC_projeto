@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\RamoAtividade;
 use App\Enums\TipoLocacao;
 use App\Exceptions\LeadLoversApiException;
 use App\Support\ManualLeadResultTags;
@@ -33,6 +34,7 @@ class Lead extends Model
         'cpf',
         'data_nascimento',
         'tipo_locacao',
+        'ramo_atividade',
         'descrever_atividade',
         'estado_civil',
         'imobiliaria',
@@ -75,6 +77,7 @@ class Lead extends Model
         'data_nascimento' => 'date:Y-m-d',
         'data_edited_at' => 'datetime',
         'tipo_locacao' => TipoLocacao::class,
+        'ramo_atividade' => RamoAtividade::class,
         'leadlovers_lead_id' => 'integer',
         'leadlovers_response' => 'array',
         'sent_to_leadlovers_at' => 'datetime',

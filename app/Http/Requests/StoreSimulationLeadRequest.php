@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Enums\RamoAtividade;
 use App\Enums\TipoLocacao;
 use App\Rules\CpfOrCnpj;
 use Illuminate\Foundation\Http\FormRequest;
@@ -23,6 +24,15 @@ class StoreSimulationLeadRequest extends FormRequest
         $maritalStatus = $this->input('estado_civil');
 
         $numero = $this->input('numero');
+
+        if ($this->exists('ramo_atividade')) {
+            $ramoAtividade = $this->input('ramo_atividade');
+            $ramoAtividade = is_string($ramoAtividade) ? trim($ramoAtividade) : $ramoAtividade;
+
+            $this->merge([
+                'ramo_atividade' => $ramoAtividade === '' ? null : $ramoAtividade,
+            ]);
+        }
 
         $this->merge([
             'nome' => $this->limparTexto($this->nome),
@@ -83,6 +93,13 @@ class StoreSimulationLeadRequest extends FormRequest
 
             'cpf' => ['bail', 'required', 'string', new CpfOrCnpj],
             'tipo_locacao' => ['required', Rule::enum(TipoLocacao::class)],
+            'ramo_atividade' => [
+                'exclude_unless:tipo_locacao,comercial',
+                'bail',
+                'nullable',
+                'integer',
+                Rule::enum(RamoAtividade::class),
+            ],
             'descrever_atividade' => [
                 'exclude_unless:tipo_locacao,comercial',
                 'required',
@@ -221,6 +238,8 @@ class StoreSimulationLeadRequest extends FormRequest
             'cpf.string' => 'Informe um CPF ou CNPJ válido.',
             'tipo_locacao.required' => 'Selecione se a locação é residencial ou comercial.',
             'tipo_locacao.enum' => 'Selecione uma modalidade de locação válida.',
+            'ramo_atividade.integer' => 'Selecione um ramo de atividade válido: Comércio, Indústria ou Serviços.',
+            'ramo_atividade.enum' => 'Selecione um ramo de atividade válido: Comércio, Indústria ou Serviços.',
             'descrever_atividade.required' => 'Descreva a atividade exercida no imóvel comercial.',
             'descrever_atividade.string' => 'A descrição da atividade deve ser um texto válido.',
             'descrever_atividade.max' => 'A descrição da atividade deve ter no máximo :max caracteres.',
