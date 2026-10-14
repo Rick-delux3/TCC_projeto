@@ -10,6 +10,7 @@ use App\Jobs\StartInsuranceAnalysesBatchJob;
 use App\Models\Imobiliaria;
 use App\Models\InsuranceAnalysisBatch;
 use App\Models\Lead;
+use App\Support\CompanyConstitution;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -566,6 +567,7 @@ class SimulationController extends Controller
         }
 
         $leadAttributes = [
+            ...CompanyConstitution::attributes($data['cpf'], $data['tipo_locacao'], $data['empresa_constituida'] ?? null),
             'company_id' => $company?->id,
             'tipo_solicitante' => $context['tipo_solicitante'],
             'nome' => $data['nome'],
@@ -612,6 +614,9 @@ class SimulationController extends Controller
                 ->lockForUpdate()
                 ->firstOrFail();
             $originalData = $this->editableLeadData($lead);
+            $leadAttributes = array_replace($leadAttributes, CompanyConstitution::attributes(
+                $data['cpf'], $data['tipo_locacao'], $data['empresa_constituida'] ?? null, $lead
+            ));
             if ($data['tipo_locacao'] === 'comercial' && ! array_key_exists('ramo_atividade', $data)) {
                 unset($leadAttributes['ramo_atividade']);
             }
@@ -752,8 +757,10 @@ class SimulationController extends Controller
         $data = $lead->only([
             'nome', 'email', 'cpf', 'data_nascimento', 'tipo_locacao', 'ramo_atividade', 'descrever_atividade', 'atividade_economica_id', 'tel',
             'estado_civil', 'aceite_termos', 'observacoes',
+            'tipo_pessoa', 'empresa_constituida', 'data_fundacao_calculada',
         ]);
         $data['data_nascimento'] = $lead->data_nascimento?->toDateString();
+        $data['data_fundacao_calculada'] = $lead->data_fundacao_calculada?->toDateString();
 
         foreach ($relationships as $relationship) {
             $details = $lead->getRelation($relationship);

@@ -6,6 +6,7 @@ use App\Enums\RamoAtividade;
 use App\Enums\TipoLocacao;
 use App\Models\AtividadeEconomica;
 use App\Rules\CpfOrCnpj;
+use App\Support\CompanyConstitution;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -26,6 +27,10 @@ class StoreSimulationLeadRequest extends FormRequest
         $maritalStatus = $this->input('estado_civil');
 
         $numero = $this->input('numero');
+
+        if ($this->exists('empresa_constituida')) {
+            $this->merge(['empresa_constituida' => $this->normalizarMaiusculo($this->input('empresa_constituida'))]);
+        }
 
         if ($this->exists('ramo_atividade')) {
             $ramoAtividade = $this->input('ramo_atividade');
@@ -95,6 +100,14 @@ class StoreSimulationLeadRequest extends FormRequest
 
             'cpf' => ['bail', 'required', 'string', new CpfOrCnpj],
             'tipo_locacao' => ['required', Rule::enum(TipoLocacao::class)],
+            'empresa_constituida' => [
+                Rule::excludeIf(! $this->hasCompanyDocument() || $this->input('tipo_locacao') !== 'comercial'),
+                'bail',
+                'sometimes',
+                'required',
+                'string',
+                Rule::in(['S']),
+            ],
             'ramo_atividade' => [
                 'exclude_unless:tipo_locacao,comercial',
                 'bail',
@@ -241,6 +254,11 @@ class StoreSimulationLeadRequest extends FormRequest
             'cpf.string' => 'Informe um CPF ou CNPJ válido.',
             'tipo_locacao.required' => 'Selecione se a locação é residencial ou comercial.',
             'tipo_locacao.enum' => 'Selecione uma modalidade de locação válida.',
+            'empresa_constituida.required' => 'Informe se a empresa é constituída há mais de dois anos.',
+            'empresa_constituida.string' => 'Selecione Sim ou Não para a constituição da empresa.',
+            'empresa_constituida.in' => $this->input('empresa_constituida') === 'N'
+                ? CompanyConstitution::REJECTION_MESSAGE
+                : 'Selecione Sim ou Não para a constituição da empresa.',
             'ramo_atividade.integer' => 'Selecione um ramo de atividade válido: Comércio, Indústria ou Serviços.',
             'ramo_atividade.enum' => 'Selecione um ramo de atividade válido: Comércio, Indústria ou Serviços.',
             'atividade_economica_id.required' => 'Pesquise e selecione uma atividade da lista.',

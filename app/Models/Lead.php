@@ -49,6 +49,9 @@ class Lead extends Model
         'cpf',
         'data_nascimento',
         'tipo_locacao',
+        'tipo_pessoa',
+        'empresa_constituida',
+        'data_fundacao_calculada',
         'ramo_atividade',
         'descrever_atividade',
         'atividade_economica_id',
@@ -90,6 +93,7 @@ class Lead extends Model
     ];
 
     protected $casts = [
+        'data_fundacao_calculada' => 'immutable_date:Y-m-d',
         'atividade_economica_id' => 'integer',
         'data_nascimento' => 'date:Y-m-d',
         'data_edited_at' => 'datetime',
@@ -291,6 +295,16 @@ class Lead extends Model
     public function rentalApplicantDocument(): string
     {
         return (string) \App\Rules\CpfOrCnpj::normalize($this->lead_empresa ? ($this->lead_empresa->cnpj ?? '') : ($this->cpf ?? ''));
+    }
+
+    /** @return array{tpPessoa: ?string, empresaConstituida: ?string, dataFundacao: ?string} */
+    public function tokioCompanyConstitutionParameters(): array
+    {
+        return [
+            'tpPessoa' => $this->tipo_pessoa,
+            'empresaConstituida' => $this->empresa_constituida,
+            'dataFundacao' => $this->data_fundacao_calculada?->format('d/m/Y'),
+        ];
     }
 
     public function rentalApplicantCpf(): string

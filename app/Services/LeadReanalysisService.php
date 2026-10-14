@@ -148,6 +148,15 @@ class LeadReanalysisService
             $hadDespesas = $lead->despesas !== null;
             $hadConjuge = $lead->conjuge !== null;
 
+            if (array_intersect(['cpf', 'tipo_locacao'], array_keys($data)) !== []) {
+                $lead->fill(\App\Support\CompanyConstitution::attributes(
+                    array_key_exists('cpf', $data) ? $data['cpf'] : $lead->rentalApplicantDocument(),
+                    array_key_exists('tipo_locacao', $data) ? $data['tipo_locacao'] : $lead->tipo_locacao?->value,
+                    null,
+                    $lead,
+                ));
+            }
+
             $lead->fill([
                 'nome' => $data['nome'] ?? $lead->nome,
                 'tel' => $submittedStringValue('tel', $lead->tel),
