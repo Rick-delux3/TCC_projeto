@@ -447,6 +447,7 @@ it('persists the independent document and rental choices through every public pr
     $payload = conditionalSimulationPayload([
         'cpf' => $document,
         'tipo_locacao' => $rentalType,
+        'empresa_constituida' => 'S',
         'descrever_atividade' => '  Comércio   de roupas  ',
         'atividade_economica_id' => \App\Models\AtividadeEconomicaCodigo::factory()->for(
             \App\Models\AtividadeEconomica::factory()->state(['descricao' => 'Comércio de roupas']), 'atividadeEconomica'
@@ -555,6 +556,7 @@ it('preserves the existing spouse rules for the other marital statuses', functio
 it('preserves leading zeroes in company and representative documents', function () {
     $this->post(route('simulation.tenant.store'), conditionalSimulationPayload([
         'cpf' => '04.252.011/0001-10',
+        'empresa_constituida' => 'S',
         'cpf_responsavel' => '012.345.678-90',
         'nome_responsavel' => str_repeat('a', 55),
         'tipo_locacao' => 'comercial',
@@ -588,6 +590,7 @@ it('updates and removes conditional relationships only through an authorized adm
         ->and(Lead::query()->sole()->data_edited_at)->not->toBeNull();
 
     $companyPayload = conditionalSimulationPayload([
+        'empresa_constituida' => 'S',
         'atividade_economica_id' => \App\Models\AtividadeEconomicaCodigo::factory()->for(
             \App\Models\AtividadeEconomica::factory()->state(['descricao' => 'Loja']), 'atividadeEconomica'
         )->create()->atividade_economica_id,

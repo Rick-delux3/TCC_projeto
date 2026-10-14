@@ -126,6 +126,7 @@
                 </footer>
             </section>
         </form>
+        @include('simulation.partials.company-constitution-modal')
     </section>
 </div>
 @include('simulation.partials.form-script')

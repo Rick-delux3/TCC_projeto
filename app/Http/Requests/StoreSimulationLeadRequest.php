@@ -103,7 +103,6 @@ class StoreSimulationLeadRequest extends FormRequest
             'empresa_constituida' => [
                 Rule::excludeIf(! $this->hasCompanyDocument() || $this->input('tipo_locacao') !== 'comercial'),
                 'bail',
-                'sometimes',
                 'required',
                 'string',
                 Rule::in(['S']),

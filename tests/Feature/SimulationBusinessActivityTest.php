@@ -84,6 +84,7 @@ it('stores each business activity through every public requester profile', funct
 it('stores business activity for a commercial company applicant', function (): void {
     $this->postJson(route('simulation.tenant.store'), businessActivityPayload([
         'cpf' => '11222333000181',
+        'empresa_constituida' => 'S',
         'cpf_responsavel' => '11144477735',
         'nome_responsavel' => 'Representante da empresa',
         'ramo_atividade' => 21206,

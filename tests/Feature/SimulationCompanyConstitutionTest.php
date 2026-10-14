@@ -79,13 +79,12 @@ it('rejects no and malformed answers without saving or dispatching jobs', functi
     Http::assertNothingSent();
 })->with(['N', ' n ', 'sim', '', null, true, 1, [['S']]]);
 
-it('allows an omitted answer temporarily without inventing a constitution date', function (): void {
+it('requires a constitution answer for commercial company submissions', function (): void {
     $payload = constitutionPayload();
     unset($payload['empresa_constituida']);
-    $this->post(route('simulation.tenant.store'), $payload)->assertSessionHasNoErrors();
-    expect(Lead::query()->sole()->tokioCompanyConstitutionParameters())->toBe([
-        'tpPessoa' => 'J', 'empresaConstituida' => null, 'dataFundacao' => null,
-    ]);
+    $this->post(route('simulation.tenant.store'), $payload)->assertSessionHasErrors('empresa_constituida');
+    expect(Lead::query()->count())->toBe(0);
+    Queue::assertNothingPushed();
 });
 
 it('excludes constitution answers outside commercial company requests', function (string $document, string $rentalType, string $personType): void {
@@ -122,7 +121,7 @@ it('preserves existing public leads and blocks negative resubmissions', function
     Queue::assertNothingPushed();
 });
 
-it('preserves omitted answers for the same company and clears them when its context changes', function (array $changes, string $personType): void {
+it('requires confirmation on admin simulation resubmission and resets it when the context changes', function (array $changes, string $personType): void {
     $this->actingAs(constitutionAdmin(), 'admin');
     $url = route('admin.simulations.unlinked.store', ['tipo' => 'locatario']);
     $this->post($url, constitutionPayload())->assertSessionHasNoErrors();
@@ -130,15 +129,17 @@ it('preserves omitted answers for the same company and clears them when its cont
     $payload = constitutionPayload();
     unset($payload['empresa_constituida']);
     $this->travel(1)->days();
-    $this->post($url, $payload)->assertSessionHasNoErrors();
+    $this->post($url, $payload)->assertSessionHasErrors('empresa_constituida');
     expect($lead->fresh()->data_fundacao_calculada->toDateString())->toBe('2019-10-14')
         ->and($lead->fresh()->data_edited_at)->toBeNull();
     $this->post($url, array_replace($payload, $changes))->assertSessionHasNoErrors();
     expect($lead->fresh()->tokioCompanyConstitutionParameters())->toBe([
-        'tpPessoa' => $personType, 'empresaConstituida' => null, 'dataFundacao' => null,
+        'tpPessoa' => $personType,
+        'empresaConstituida' => $changes['empresa_constituida'] ?? null,
+        'dataFundacao' => isset($changes['empresa_constituida']) ? '15/10/2019' : null,
     ])->and($lead->fresh()->data_edited_at)->not->toBeNull();
 })->with([
-    [['cpf' => '04252011000110'], 'J'],
+    [['cpf' => '04252011000110', 'empresa_constituida' => 'S'], 'J'],
     [['cpf' => '52998224725'], 'F'],
     [['tipo_locacao' => 'residencial'], 'J'],
 ]);

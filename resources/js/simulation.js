@@ -1,5 +1,6 @@
 import { initializeDocumentMask } from './document-mask';
 import { initializeActivityPicker } from './commercial-activity';
+import { initializeCompanyConstitution } from './company-constitution';
 
 const initializeProfileChoice = () => {
     const form = document.querySelector('[data-simulation-start] #profileChoiceForm');
@@ -85,6 +86,7 @@ const initializeConditionalFields = (form) => {
         }
     };
 
+    const updateCompanyConstitution = initializeCompanyConstitution(form, renderFields);
     const formatDocument = initializeDocumentMask(documentInput);
     const updateDocument = () => {
         const normalized = formatDocument();
@@ -92,6 +94,7 @@ const initializeConditionalFields = (form) => {
 
         renderFields('company', isCompany);
         documentInput.setAttribute('aria-expanded', String(isCompany));
+        updateCompanyConstitution();
     };
 
     const updateSpouse = () => {
@@ -108,6 +111,7 @@ const initializeConditionalFields = (form) => {
     const updateRentalType = () => {
         renderFields('commercial', form.querySelector('[name="tipo_locacao"]:checked')?.value === 'comercial');
         initializeActivityPicker(form);
+        updateCompanyConstitution();
     };
 
     documentInput.addEventListener('input', updateDocument);
