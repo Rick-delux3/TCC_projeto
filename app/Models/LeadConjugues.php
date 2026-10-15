@@ -2,16 +2,19 @@
 
 namespace App\Models;
 
+use App\Enums\TipoVinculoEmpresa;
 use Illuminate\Database\Eloquent\Model;
 
 class LeadConjugues extends Model
 {
+    protected $casts = ['tipo_vinculo' => TipoVinculoEmpresa::class];
+
     protected $table = 'lead_conjugues';
 
     protected $fillable = [
         'lead_id',
         'nome',
-        'cpf'
+        'cpf',
     ];
 
     public function leads()

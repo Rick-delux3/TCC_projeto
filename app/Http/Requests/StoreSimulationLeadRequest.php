@@ -422,7 +422,7 @@ class StoreSimulationLeadRequest extends FormRequest
                     $this->allowsSpouse() &&
                     $this->filled('cpf') &&
                     $this->filled('conjuge_cpf') &&
-                    $this->cpf === $this->conjuge_cpf
+                    ($this->hasCompanyDocument() ? $this->input('cpf_responsavel') : $this->cpf) === $this->conjuge_cpf
                 ) {
                     $validator->errors()->add('conjuge_cpf', 'O CPF do cônjuge não pode ser igual ao CPF do titular.');
                 }

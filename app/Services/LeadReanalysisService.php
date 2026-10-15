@@ -22,6 +22,8 @@ use Throwable;
 
 class LeadReanalysisService
 {
+    public function __construct(private CompanyApplicantService $companyApplicants) {}
+
     private const LEADLOVERS_UPDATE_FIELDS = [
         'name',
         'phone',
@@ -381,6 +383,7 @@ class LeadReanalysisService
                 }
             }
 
+            $this->companyApplicants->sync($lead);
             $lead->refresh();
 
             $integrationEnabled = (bool) config(

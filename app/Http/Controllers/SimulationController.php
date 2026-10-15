@@ -10,6 +10,7 @@ use App\Jobs\StartInsuranceAnalysesBatchJob;
 use App\Models\Imobiliaria;
 use App\Models\InsuranceAnalysisBatch;
 use App\Models\Lead;
+use App\Services\CompanyApplicantService;
 use App\Support\CompanyConstitution;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -22,6 +23,8 @@ use Illuminate\View\View;
 
 class SimulationController extends Controller
 {
+    public function __construct(private CompanyApplicantService $companyApplicants) {}
+
     private const REGISTERED_COMPANY_SESSION_KEY = 'simulation.registered_company_access';
 
     private const ADMIN_UNLINKED_TYPES = [
@@ -684,6 +687,8 @@ class SimulationController extends Controller
             $lead->conjuge()->delete();
         }
 
+        $this->companyApplicants->sync($lead);
+
         $responsavelTipo = $context['tipo_solicitante'] ?? ($data['responsavel_tipo'] ?? null);
 
         if ($responsavelTipo === 'locador') {
@@ -756,7 +761,7 @@ class SimulationController extends Controller
         $lead->load($relationships);
         $data = $lead->only([
             'nome', 'email', 'cpf', 'data_nascimento', 'tipo_locacao', 'ramo_atividade', 'descrever_atividade', 'atividade_economica_id', 'tel',
-            'estado_civil', 'aceite_termos', 'observacoes',
+            'estado_civil', 'tipo_vinculo', 'aceite_termos', 'observacoes',
             'tipo_pessoa', 'empresa_constituida', 'data_fundacao_calculada',
         ]);
         $data['data_nascimento'] = $lead->data_nascimento?->toDateString();

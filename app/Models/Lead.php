@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\RamoAtividade;
 use App\Enums\TipoLocacao;
+use App\Enums\TipoVinculoEmpresa;
 use App\Exceptions\LeadLoversApiException;
 use App\Support\ManualLeadResultTags;
 use Illuminate\Database\Eloquent\Builder;
@@ -93,6 +94,7 @@ class Lead extends Model
     ];
 
     protected $casts = [
+        'tipo_vinculo' => TipoVinculoEmpresa::class,
         'data_fundacao_calculada' => 'immutable_date:Y-m-d',
         'atividade_economica_id' => 'integer',
         'data_nascimento' => 'date:Y-m-d',
