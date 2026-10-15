@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Support\BirthDate;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Validator;
 
@@ -16,6 +17,7 @@ class StorePublicLeadRequest extends FormRequest
     {
         $this->merge([
             'nome' => $this->limparTexto($this->nome),
+            'data_nascimento' => BirthDate::normalize($this->input('data_nascimento')),
             'email' => mb_strtolower(trim((string) $this->email)),
             'cpf' => $this->somenteNumeros($this->cpf),
             'tel' => $this->somenteNumeros($this->tel),
@@ -47,7 +49,7 @@ class StorePublicLeadRequest extends FormRequest
                 'max:255',
             ],
 
-            'data_nascimento' => ['bail', 'required', 'string', 'date_format:Y-m-d', 'before_or_equal:today'],
+            'data_nascimento' => BirthDate::rules(),
 
             'cpf' => [
                 'required',
@@ -155,10 +157,7 @@ class StorePublicLeadRequest extends FormRequest
     {
         return [
             'nome.required' => 'Informe o nome do lead.',
-            'data_nascimento.required' => 'Informe a data de nascimento.',
-            'data_nascimento.string' => 'Informe uma data de nascimento válida.',
-            'data_nascimento.date_format' => 'Informe uma data de nascimento válida.',
-            'data_nascimento.before_or_equal' => 'A data de nascimento não pode estar no futuro.',
+            ...BirthDate::messages(),
             'nome.min' => 'O nome precisa ter pelo menos :min caracteres.',
 
             'email.required' => 'Informe o e-mail.',

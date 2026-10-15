@@ -6,6 +6,7 @@ use App\Enums\RamoAtividade;
 use App\Enums\TipoLocacao;
 use App\Models\AtividadeEconomica;
 use App\Rules\CpfOrCnpj;
+use App\Support\BirthDate;
 use App\Support\CompanyConstitution;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Foundation\Http\FormRequest;
@@ -43,6 +44,7 @@ class StoreSimulationLeadRequest extends FormRequest
 
         $this->merge([
             'nome' => $this->limparTexto($this->nome),
+            'data_nascimento' => BirthDate::normalize($this->input('data_nascimento')),
             'email' => $this->normalizarEmail($this->email),
             'cpf' => CpfOrCnpj::normalize($this->input('cpf')),
             'descrever_atividade' => $this->normalizeConditionalText($this->input('descrever_atividade')),
@@ -94,7 +96,7 @@ class StoreSimulationLeadRequest extends FormRequest
             'aceite_termos' => ['accepted'],
 
             'nome' => ['required', 'string', 'min:3', 'max:255'],
-            'data_nascimento' => ['bail', 'required', 'string', 'date_format:Y-m-d', 'before_or_equal:today'],
+            'data_nascimento' => BirthDate::rules(),
             'email' => ['required', 'string', 'email:rfc', 'max:255'],
             'tel' => ['required', 'string', 'min:10', 'max:11'],
 
@@ -231,10 +233,7 @@ class StoreSimulationLeadRequest extends FormRequest
         */
 
             'nome.required' => 'Informe o nome completo.',
-            'data_nascimento.required' => 'Informe a data de nascimento.',
-            'data_nascimento.string' => 'Informe uma data de nascimento válida.',
-            'data_nascimento.date_format' => 'Informe uma data de nascimento válida.',
-            'data_nascimento.before_or_equal' => 'A data de nascimento não pode estar no futuro.',
+            ...BirthDate::messages(),
             'nome.string' => 'O nome deve ser um texto válido.',
             'nome.min' => 'O nome deve ter pelo menos :min caracteres.',
             'nome.max' => 'O nome não pode ter mais de :max caracteres.',

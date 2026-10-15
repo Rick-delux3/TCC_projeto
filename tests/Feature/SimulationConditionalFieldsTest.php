@@ -5,6 +5,7 @@ use App\Models\Corretor;
 use App\Models\Imobiliaria;
 use App\Models\Lead;
 use App\Models\LeadEmpresa;
+use Carbon\CarbonImmutable;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Http;
@@ -39,6 +40,7 @@ function conditionalSimulationPayload(array $overrides = []): array
 }
 
 it('validates the birth date in the legacy public request', function (mixed $birthDate, bool $valid) {
+    $this->travelTo(CarbonImmutable::parse('2026-10-15 12:00:00', 'America/Sao_Paulo'));
     $request = new \App\Http\Requests\StorePublicLeadRequest;
     $validator = \Illuminate\Support\Facades\Validator::make(
         ['data_nascimento' => $birthDate],
@@ -54,17 +56,69 @@ it('validates the birth date in the legacy public request', function (mixed $bir
     'future date' => ['2999-01-01', false],
     'wrong format' => ['29/02/1992', false],
     'array date' => [['1992-02-29'], false],
+    'eighteenth birthday' => ['2008-10-15', true],
+    'under eighteen' => ['2008-10-16', false],
+    'last day aged 120' => ['1905-10-16', true],
+    '121st birthday' => ['1905-10-15', false],
+    'year zero' => ['0000-01-01', false],
+    'short year' => ['92-02-29', false],
+    'long year' => ['01992-02-29', false],
+    'timestamp' => ['1992-02-29T00:00:00Z', false],
+    'integer date' => [19920229, false],
+    'non leap century' => ['1900-02-29', false],
 ]);
 
-it('stores the supplied birth date without inventing an age restriction', function () {
-    $birthDate = now()->subYears(16)->toDateString();
+it('stores a birth date within the inclusive age limits', function (string $birthDate, string $storedDate) {
+    $this->travelTo(CarbonImmutable::parse('2026-10-15 12:00:00', 'America/Sao_Paulo'));
 
     $this->post(route('simulation.tenant.store'), conditionalSimulationPayload([
         'data_nascimento' => $birthDate,
     ]))->assertSessionHasNoErrors()->assertRedirect(route('simulation.success'));
 
-    expect(Lead::query()->sole()->data_nascimento->toDateString())->toBe($birthDate);
-});
+    expect(Lead::query()->sole()->data_nascimento->toDateString())->toBe($storedDate);
+})->with([
+    'eighteenth birthday' => ['2008-10-15', '2008-10-15'],
+    '120th birthday' => ['1906-10-15', '1906-10-15'],
+    'last day aged 120' => ['1905-10-16', '1905-10-16'],
+    'surrounding whitespace' => ['  1992-02-29  ', '1992-02-29'],
+]);
+
+it('rejects an invalid birth date with a specific message before saving', function (mixed $birthDate, string $message) {
+    $this->travelTo(CarbonImmutable::parse('2026-10-15 12:00:00', 'America/Sao_Paulo'));
+
+    $this->post(route('simulation.tenant.store'), conditionalSimulationPayload([
+        'data_nascimento' => $birthDate,
+    ]))->assertSessionHasErrors(['data_nascimento' => $message]);
+
+    expect(Lead::query()->count())->toBe(0);
+})->with([
+    'under eighteen' => ['2008-10-16', 'É necessário ter pelo menos 18 anos completos para solicitar a análise.'],
+    '121st birthday' => ['1905-10-15', 'A idade informada não pode ultrapassar 120 anos.'],
+    'future date' => ['2026-10-16', 'A data de nascimento não pode estar no futuro.'],
+    'missing date' => [null, 'Informe a data de nascimento.'],
+    'impossible date' => ['1992-02-30', 'Informe uma data de nascimento válida, com dia, mês e ano de quatro dígitos.'],
+    'invalid year' => ['19922-02-29', 'Informe uma data de nascimento válida, com dia, mês e ano de quatro dígitos.'],
+    'array date' => [['1992-02-29'], 'Informe uma data de nascimento válida.'],
+]);
+
+it('validates birth date boundaries using the local calendar and leap years', function (string $now, string $birthDate, bool $valid) {
+    $this->travelTo(CarbonImmutable::parse($now));
+    $request = new \App\Http\Requests\StoreSimulationLeadRequest;
+    $validator = \Illuminate\Support\Facades\Validator::make(
+        ['data_nascimento' => $birthDate],
+        ['data_nascimento' => $request->rules()['data_nascimento']],
+        $request->messages(),
+    );
+
+    expect($validator->passes())->toBe($valid);
+})->with([
+    'still seventeen in Brazil' => ['2026-10-16T01:30:00Z', '2008-10-16', false],
+    'already eighteen in Brazil' => ['2026-10-16T03:00:00Z', '2008-10-16', true],
+    'leap birthday still seventeen' => ['2026-02-28T12:00:00-03:00', '2008-02-29', false],
+    'leap birthday has passed' => ['2026-03-01T12:00:00-03:00', '2008-02-29', true],
+    'eighteen on a leap day' => ['2028-02-29T12:00:00-03:00', '2010-02-28', true],
+    'not yet eighteen on a leap day' => ['2028-02-29T12:00:00-03:00', '2010-03-01', false],
+]);
 
 function conditionalSimulationCompany(): Imobiliaria
 {
@@ -657,6 +711,7 @@ it('rolls back the lead when company persistence fails', function () {
 });
 
 it('renders the same conditional controls in all simulation views', function (string $route) {
+    $this->travelTo(CarbonImmutable::parse('2026-10-16T01:30:00Z'));
     $company = conditionalSimulationCompany();
     $this->post(route('simulation.registered-company.verify'), [
         'lead_access_code' => $company->lead_access_code,
@@ -668,7 +723,8 @@ it('renders the same conditional controls in all simulation views', function (st
         ->and($dom->query('//input[@name="cpf"]')->length)->toBe(1)
         ->and($dom->query('//input[@name="cpf" and @required]')->length)->toBe(1)
         ->and($dom->query('//input[@name="data_nascimento" and @type="date" and @required]')->length)->toBe(1)
-        ->and($dom->evaluate('string(//input[@name="data_nascimento"]/@max)'))->toBe(now()->toDateString())
+        ->and($dom->evaluate('string(//input[@name="data_nascimento"]/@min)'))->toBe('1905-10-16')
+        ->and($dom->evaluate('string(//input[@name="data_nascimento"]/@max)'))->toBe('2008-10-15')
         ->and($dom->query('//*[@id="data_nascimento-hint"]')->length)->toBe(1)
         ->and($dom->query('//option[@value="separado"]')->length)->toBe(1)
         ->and($dom->query('//*[@data-simulation-fields]//input')->length)->toBe(0);
