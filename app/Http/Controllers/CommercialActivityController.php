@@ -5,7 +5,6 @@ namespace App\Http\Controllers;
 use App\Http\Requests\SearchCommercialActivityRequest;
 use App\Models\AtividadeEconomica;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Http\JsonResponse;
 
 class CommercialActivityController extends Controller
@@ -23,18 +22,10 @@ class CommercialActivityController extends Controller
 
         $activities = AtividadeEconomica::query()->disponiveis()
             ->select(['id', 'descricao'])
-            ->with(['codigos' => fn (HasMany $query): HasMany => $query
-                ->select(['id', 'atividade_economica_id', 'codigo'])
-                ->where('seguradora', 'tokio')->where('ativo', true)->orderBy('id')])
             ->where(function (Builder $query) use ($term): void {
-                $query->where(function (Builder $descriptions) use ($term): void {
-                    foreach (array_unique(explode(' ', $term)) as $word) {
-                        $descriptions->where('descricao_busca', 'like', '%'.$word.'%');
-                    }
-                })->orWhereHas('codigos', function (Builder $codes) use ($term): void {
-                    $codes->where('seguradora', 'tokio')->where('ativo', true)
-                        ->where('codigo', 'like', str_replace(' ', '', $term).'%');
-                });
+                foreach (array_unique(explode(' ', $term)) as $word) {
+                    $query->where('descricao_busca', 'like', '%'.$word.'%');
+                }
             })
             ->orderBy('descricao')->orderBy('id')->limit(11)->get();
 
@@ -42,7 +33,6 @@ class CommercialActivityController extends Controller
             'data' => $activities->take(10)->map(fn (AtividadeEconomica $activity): array => [
                 'id' => $activity->id,
                 'descricao' => $activity->descricao,
-                'codigos' => $activity->codigos->pluck('codigo')->all(),
             ])->values(),
             'has_more' => $activities->count() > 10,
         ]);

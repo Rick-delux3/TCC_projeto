@@ -6,7 +6,7 @@
         <input type="hidden" name="atividade_economica_id" value="{{ $selectedActivity?->id }}" data-activity-id>
         <div class="relative">
             <input id="descrever_atividade" type="text" name="descrever_atividade" class="form-control"
-                value="{{ $selectedActivity?->descricao }}" placeholder="Busque por atividade ou código"
+                value="{{ $selectedActivity?->descricao }}" placeholder="Busque pela descrição da atividade"
                 maxlength="255" required autocomplete="off" role="combobox" aria-autocomplete="list"
                 aria-expanded="false" aria-controls="activity-options" aria-describedby="activity-help activity-status{{ $errors->has('atividade_economica_id') ? ' activity-error' : '' }}"
                 @if($errors->has('atividade_economica_id')) aria-invalid="true" @endif

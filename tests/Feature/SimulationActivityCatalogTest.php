@@ -13,15 +13,30 @@ beforeEach(function (): void {
     Http::preventStrayRequests();
 });
 
-it('searches accents punctuation word order and codes without duplicating descriptions', function (string $search): void {
+it('searches descriptions with accents punctuation and word order without duplicating suggestions', function (string $search): void {
     $activity = AtividadeEconomica::factory()->create(['descricao' => 'Comércio de peças para veículos']);
     AtividadeEconomicaCodigo::factory()->for($activity, 'atividadeEconomica')->create(['codigo' => '23872']);
     AtividadeEconomicaCodigo::factory()->for($activity, 'atividadeEconomica')->create(['codigo' => '23873']);
     $this->getJson(route('simulation.activities', ['q' => $search]))->assertOk()
         ->assertJsonCount(1, 'data')->assertJsonPath('data.0.id', $activity->id)
         ->assertJsonPath('data.0.descricao', $activity->descricao)
-        ->assertJsonPath('data.0.codigos', ['23872', '23873'])->assertJsonPath('has_more', false);
-})->with(['COMERCIO  pecas', 'veículos, comércio', '23873', '2387']);
+        ->assertJsonMissingPath('data.0.codigos')->assertJsonPath('has_more', false);
+    expect($activity->codigos()->orderBy('codigo')->pluck('codigo')->all())->toBe(['23872', '23873']);
+})->with(['COMERCIO  pecas', 'veículos, comércio']);
+
+it('does not search code values but still matches numbers present in descriptions', function (): void {
+    $activity = AtividadeEconomica::factory()->create(['descricao' => 'Comércio de peças para veículos']);
+    AtividadeEconomicaCodigo::factory()->for($activity, 'atividadeEconomica')->create(['codigo' => '23873']);
+    foreach (['23873', '2387', '2387-3'] as $term) {
+        $this->getJson(route('simulation.activities', ['q' => $term]))->assertOk()->assertExactJson([
+            'data' => [], 'has_more' => false,
+        ]);
+    }
+    $numberedActivity = AtividadeEconomica::factory()->create(['descricao' => 'Serviços de impressão 3D']);
+    AtividadeEconomicaCodigo::factory()->for($numberedActivity, 'atividadeEconomica')->create();
+    $this->getJson(route('simulation.activities', ['q' => '3d']))->assertOk()
+        ->assertJsonCount(1, 'data')->assertJsonPath('data.0.id', $numberedActivity->id);
+});
 
 it('limits suggestions and excludes unavailable activities and codes', function (): void {
     for ($index = 0; $index < 12; $index++) {
@@ -31,11 +46,16 @@ it('limits suggestions and excludes unavailable activities and codes', function 
     }
     $inactive = AtividadeEconomica::factory()->create(['descricao' => 'Comércio inativo', 'ativo' => false]);
     AtividadeEconomicaCodigo::factory()->for($inactive, 'atividadeEconomica')->create(['codigo' => '99999']);
-    AtividadeEconomicaCodigo::factory()->create(['codigo' => '88888', 'ativo' => false]);
-    AtividadeEconomicaCodigo::factory()->create(['codigo' => '77777', 'seguradora' => 'outra']);
+    AtividadeEconomicaCodigo::factory()->for(
+        AtividadeEconomica::factory()->state(['descricao' => 'Atividade indisponível']), 'atividadeEconomica'
+    )->create(['codigo' => '88888', 'ativo' => false]);
+    AtividadeEconomicaCodigo::factory()->for(
+        AtividadeEconomica::factory()->state(['descricao' => 'Atividade externa']), 'atividadeEconomica'
+    )->create(['codigo' => '77777', 'seguradora' => 'outra']);
+    AtividadeEconomica::factory()->create(['descricao' => 'Atividade sem código']);
     $this->getJson(route('simulation.activities', ['q' => 'comercio']))->assertOk()
         ->assertJsonCount(10, 'data')->assertJsonPath('has_more', true);
-    foreach (['99999', '88888', '77777', '%_'] as $term) {
+    foreach (['inativo', 'indisponivel', 'externa', 'sem codigo', '%_'] as $term) {
         $this->getJson(route('simulation.activities', ['q' => $term]))->assertOk()->assertJsonCount(0, 'data');
     }
 });
@@ -105,6 +125,7 @@ it('restores only a valid catalog selection after validation errors', function (
         'descrever_atividade' => 'forged',
     ]])->get(route('simulation.tenant.form'))->assertOk()
         ->assertSee('role="combobox"', false)->assertSee(e($code->atividadeEconomica->descricao), false)
+        ->assertSee('placeholder="Busque pela descrição da atividade"', false)
         ->assertDontSee('value="forged"', false);
 });
 
@@ -183,7 +204,7 @@ it('supports keyboard selection and ignores stale or failed activity searches', 
         assert.match(status.textContent, /Não foi possível/); assert.equal(list.hidden, true);
         emit(input, 'input'); tick();
         requests[3].resolve({ ok: true, json: async () => ({ data: [], has_more: false }) }); await flush();
-        assert.match(status.textContent, /Nenhuma atividade/);
+        assert.equal(status.textContent, 'Nenhuma atividade encontrada. Tente uma palavra mais geral da descrição.');
         input.value = 'se'; emit(input, 'input'); tick(); emit(input, 'blur');
         requests[4].resolve({ ok: true, json: async () => ({ data: [{ id: 2, descricao: 'Serviços' }], has_more: false }) });
         await flush(); assert.equal(list.hidden, true);

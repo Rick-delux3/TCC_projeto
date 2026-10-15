@@ -30,7 +30,7 @@ class SearchCommercialActivityRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'q.required' => 'Digite uma atividade ou código para pesquisar.',
+            'q.required' => 'Digite a descrição da atividade para pesquisar.',
             'q.string' => 'Informe um texto válido para pesquisar.',
             'q.min' => 'Digite pelo menos dois caracteres.',
             'q.max' => 'Use até 100 caracteres na pesquisa.',

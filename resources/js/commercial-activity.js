@@ -77,7 +77,7 @@ export const initializeActivityPicker = (container) => {
             list.hidden = results.length === 0;
             input.setAttribute('aria-expanded', String(results.length > 0));
             status.textContent = results.length === 0
-                ? 'Nenhuma atividade encontrada. Tente uma palavra mais geral ou o código.'
+                ? 'Nenhuma atividade encontrada. Tente uma palavra mais geral da descrição.'
                 : `${results.length} opções. ${payload.has_more ? 'Digite mais detalhes para refinar a busca.' : 'Selecione a atividade correspondente.'}`;
         } catch (error) {
             if (error.name === 'AbortError' || currentVersion !== version || !picker.isConnected) return;
