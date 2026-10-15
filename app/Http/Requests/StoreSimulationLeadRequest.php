@@ -2,8 +2,13 @@
 
 namespace App\Http\Requests;
 
+use App\Enums\RamoAtividade;
 use App\Enums\TipoLocacao;
+use App\Models\AtividadeEconomica;
 use App\Rules\CpfOrCnpj;
+use App\Support\BirthDate;
+use App\Support\CompanyConstitution;
+use Illuminate\Database\Query\Builder;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
@@ -24,8 +29,22 @@ class StoreSimulationLeadRequest extends FormRequest
 
         $numero = $this->input('numero');
 
+        if ($this->exists('empresa_constituida')) {
+            $this->merge(['empresa_constituida' => $this->normalizarMaiusculo($this->input('empresa_constituida'))]);
+        }
+
+        if ($this->exists('ramo_atividade')) {
+            $ramoAtividade = $this->input('ramo_atividade');
+            $ramoAtividade = is_string($ramoAtividade) ? trim($ramoAtividade) : $ramoAtividade;
+
+            $this->merge([
+                'ramo_atividade' => $ramoAtividade === '' ? null : $ramoAtividade,
+            ]);
+        }
+
         $this->merge([
             'nome' => $this->limparTexto($this->nome),
+            'data_nascimento' => BirthDate::normalize($this->input('data_nascimento')),
             'email' => $this->normalizarEmail($this->email),
             'cpf' => CpfOrCnpj::normalize($this->input('cpf')),
             'descrever_atividade' => $this->normalizeConditionalText($this->input('descrever_atividade')),
@@ -77,17 +96,32 @@ class StoreSimulationLeadRequest extends FormRequest
             'aceite_termos' => ['accepted'],
 
             'nome' => ['required', 'string', 'min:3', 'max:255'],
-            'data_nascimento' => ['bail', 'required', 'string', 'date_format:Y-m-d', 'before_or_equal:today'],
+            'data_nascimento' => BirthDate::rules(),
             'email' => ['required', 'string', 'email:rfc', 'max:255'],
             'tel' => ['required', 'string', 'min:10', 'max:11'],
 
             'cpf' => ['bail', 'required', 'string', new CpfOrCnpj],
             'tipo_locacao' => ['required', Rule::enum(TipoLocacao::class)],
-            'descrever_atividade' => [
-                'exclude_unless:tipo_locacao,comercial',
+            'empresa_constituida' => [
+                Rule::excludeIf(! $this->hasCompanyDocument() || $this->input('tipo_locacao') !== 'comercial'),
+                'bail',
                 'required',
                 'string',
-                'max:55',
+                Rule::in(['S']),
+            ],
+            'ramo_atividade' => [
+                'exclude_unless:tipo_locacao,comercial',
+                'bail',
+                'nullable',
+                'integer',
+                Rule::enum(RamoAtividade::class),
+            ],
+            'atividade_economica_id' => [
+                'exclude_unless:tipo_locacao,comercial',
+                'bail',
+                'required',
+                'integer',
+                Rule::exists('atividades_economicas', 'id')->where(fn (Builder $query): Builder => $query->whereIn('id', AtividadeEconomica::query()->disponiveis()->select('id'))),
             ],
             'cpf_responsavel' => [
                 Rule::excludeIf(! $this->hasCompanyDocument()),
@@ -199,10 +233,7 @@ class StoreSimulationLeadRequest extends FormRequest
         */
 
             'nome.required' => 'Informe o nome completo.',
-            'data_nascimento.required' => 'Informe a data de nascimento.',
-            'data_nascimento.string' => 'Informe uma data de nascimento válida.',
-            'data_nascimento.date_format' => 'Informe uma data de nascimento válida.',
-            'data_nascimento.before_or_equal' => 'A data de nascimento não pode estar no futuro.',
+            ...BirthDate::messages(),
             'nome.string' => 'O nome deve ser um texto válido.',
             'nome.min' => 'O nome deve ter pelo menos :min caracteres.',
             'nome.max' => 'O nome não pode ter mais de :max caracteres.',
@@ -221,9 +252,16 @@ class StoreSimulationLeadRequest extends FormRequest
             'cpf.string' => 'Informe um CPF ou CNPJ válido.',
             'tipo_locacao.required' => 'Selecione se a locação é residencial ou comercial.',
             'tipo_locacao.enum' => 'Selecione uma modalidade de locação válida.',
-            'descrever_atividade.required' => 'Descreva a atividade exercida no imóvel comercial.',
-            'descrever_atividade.string' => 'A descrição da atividade deve ser um texto válido.',
-            'descrever_atividade.max' => 'A descrição da atividade deve ter no máximo :max caracteres.',
+            'empresa_constituida.required' => 'Informe se a empresa é constituída há mais de dois anos.',
+            'empresa_constituida.string' => 'Selecione Sim ou Não para a constituição da empresa.',
+            'empresa_constituida.in' => $this->input('empresa_constituida') === 'N'
+                ? CompanyConstitution::REJECTION_MESSAGE
+                : 'Selecione Sim ou Não para a constituição da empresa.',
+            'ramo_atividade.integer' => 'Selecione um ramo de atividade válido: Comércio, Indústria ou Serviços.',
+            'ramo_atividade.enum' => 'Selecione um ramo de atividade válido: Comércio, Indústria ou Serviços.',
+            'atividade_economica_id.required' => 'Pesquise e selecione uma atividade da lista.',
+            'atividade_economica_id.integer' => 'Selecione uma atividade válida da lista.',
+            'atividade_economica_id.exists' => 'Esta atividade não está disponível. Pesquise e selecione outra opção.',
             'cpf_responsavel.required' => 'Informe o CPF do representante da empresa.',
             'cpf_responsavel.string' => 'Informe um CPF válido para o representante da empresa.',
             'cpf_responsavel.size' => 'O CPF do representante da empresa deve conter 11 dígitos.',
@@ -383,7 +421,7 @@ class StoreSimulationLeadRequest extends FormRequest
                     $this->allowsSpouse() &&
                     $this->filled('cpf') &&
                     $this->filled('conjuge_cpf') &&
-                    $this->cpf === $this->conjuge_cpf
+                    ($this->hasCompanyDocument() ? $this->input('cpf_responsavel') : $this->cpf) === $this->conjuge_cpf
                 ) {
                     $validator->errors()->add('conjuge_cpf', 'O CPF do cônjuge não pode ser igual ao CPF do titular.');
                 }

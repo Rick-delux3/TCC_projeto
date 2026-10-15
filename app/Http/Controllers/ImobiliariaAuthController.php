@@ -2,116 +2,77 @@
 
 namespace App\Http\Controllers;
 
+use App\Actions\Companies\StartCompanyTwoFactorChallenge;
+use App\Http\Requests\Auth\CompanyLoginRequest;
 use App\Models\Imobiliaria;
-use App\Models\TwoFactorCode;
-use App\Models\User;
-use App\Services\CompanyTwoFactorMailService;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
+use Illuminate\View\View;
 
 class ImobiliariaAuthController extends Controller
 {
     public function __construct(
-        private CompanyTwoFactorMailService $twoFactorMail
+        private StartCompanyTwoFactorChallenge $startChallenge
     ) {}
 
-    public function showLoginForm()
+    public function showLoginForm(): View
     {
         return view('imobiliaria.company-login');
     }
 
-    public function login(Request $request)
+    public function login(CompanyLoginRequest $request): RedirectResponse
     {
-        $request->merge([
-            'email' => mb_strtolower(trim((string) $request->email)),
-        ]);
-
-        $data = $request->validate([
-            'email' => 'required|email|max:255',
-            'password' => 'required|string|max:72',
-        ]);
+        $data = $request->validated();
 
         $throttleKey = 'company-login:'.Str::lower($data['email']).'|'.$request->ip();
 
         if (RateLimiter::tooManyAttempts($throttleKey, 5)) {
-            return back()
+            return redirect()->route('empresa.login')
                 ->withErrors([
                     'email' => 'Muitas tentativas de login. Tente novamente em alguns minutos.',
                 ])
                 ->onlyInput('email');
         }
 
-        $company = Imobiliaria::where('email', $data['email'])->first();
+        $company = Imobiliaria::query()->where('email', $data['email'])->first();
 
         if (! $company || ! Hash::check($data['password'], $company->password)) {
             RateLimiter::hit($throttleKey, 60);
 
-            return back()->withErrors(['email' => 'E-mail ou senha incorretos.']);
+            return redirect()->route('empresa.login')
+                ->withErrors(['email' => 'E-mail ou senha incorretos.'])->onlyInput('email');
         }
 
-        $user = User::where('company_id', $company->id)->first();
+        $user = $company->users()->orderBy('id')->first();
 
         if (! $user) {
-            return back()->withErrors(['email' => 'Usuario admin nao encontrado.'])->onlyInput('email');
+            return redirect()->route('empresa.login')
+                ->withErrors(['email' => 'Não foi possível acessar esta imobiliária. Entre em contato com o suporte.'])
+                ->onlyInput('email');
         }
 
         RateLimiter::clear($throttleKey);
 
-        Auth::login($user);
-        $request->session()->regenerate();
+        $user->setRelation('company', $company);
 
-        session(['company_id' => $company->id]);
-        // Keep only one active code per user.
-        TwoFactorCode::where('user_id', $user->id)->delete();
-
-        $code = (string) random_int(100000, 999999);
-        $expiresAt = now()->addMinutes(10);
-
-        TwoFactorCode::create([
-            'user_id' => $user->id,
-            'code' => Hash::make($code),
-            'expires_at' => $expiresAt,
-        ]);
-
-        try {
-            $this->twoFactorMail->sendCode($company->email, $code, $expiresAt);
-        } catch (\Throwable $e) {
-            TwoFactorCode::where('user_id', $user->id)->delete();
-
-            Log::error('Falha ao enviar código de 2FA da imobiliária.', [
-                'exception' => $e::class,
-                'mailer' => config('mail.default'),
-            ]);
-
-            Auth::logout();
-
-            $request->session()->invalidate();
-            $request->session()->regenerateToken();
-
-            return back()
+        if (! $this->startChallenge->execute($user, $request)) {
+            return redirect()->route('empresa.login')
                 ->withErrors([
                     'email' => 'Não foi possível enviar o código de verificação. Tente novamente.',
                 ])
                 ->onlyInput('email');
         }
 
-        session()->forget('2fa_passed');
-
-        // Reset old 2FA throttling state for this login challenge.
-        RateLimiter::clear('2fa:verify:'.$user->id.':'.$request->ip());
-        RateLimiter::clear('2fa:resend:'.$user->id.':'.$request->ip());
-        RateLimiter::clear('2fa:resend-cooldown:'.$user->id.':'.$request->ip());
-
         return redirect()->route('2fa')->with('success', 'Codigo enviado ao seu e-mail.');
     }
 
-    public function logout(Request $request)
+    public function logout(Request $request): RedirectResponse
     {
-        Auth::logout();
+        Auth::guard('web')->logout();
 
         $request->session()->invalidate();
         $request->session()->regenerateToken();

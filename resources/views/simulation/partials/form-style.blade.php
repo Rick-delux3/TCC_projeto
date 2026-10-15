@@ -13,6 +13,8 @@
     body.auth-layout-body[data-brand]:has(.simulation-wizard) .auth-topbar__surface { box-shadow: none !important; }
     .simulation-wizard { max-width: 1360px; margin-inline: auto; color: var(--simulation-ink); align-items: stretch; gap: 18px !important; }
     .simulation-wizard [hidden] { display: none !important; }
+    .simulation-constitution-modal { width: calc(100% - 32px); max-height: calc(100dvh - 32px); margin: auto; color: var(--simulation-ink); border-color: var(--simulation-line); background: #fff; }
+    .simulation-constitution-modal::backdrop { background: rgb(8 12 89 / 45%); }
     .simulation-sidebar, .simulation-form-card { border: 1px solid #dfe7f5; border-radius: 13px; background: #fff; }
     .simulation-sidebar { padding: 34px 18px; min-width: 0; }
     .simulation-sidebar-heading { padding-inline: 14px; }

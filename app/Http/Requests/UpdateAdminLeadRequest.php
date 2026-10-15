@@ -114,7 +114,13 @@ class UpdateAdminLeadRequest extends FormRequest
     {
         return [function (Validator $validator): void {
             $lead = $this->route('lead');
-            if (filled($this->input('conjuge_cpf')) && $this->input('conjuge_cpf') === $this->input('cpf', $lead->cpf) && in_array($lead->estado_civil, ['casado', 'uniao_estavel', 'divorciado', 'viuvo'], true)) {
+            $document = $this->input('cpf', $lead->rentalApplicantDocument());
+            $isCompany = is_string($document) && strlen($document) === 14;
+            $principalCpf = $isCompany
+                ? $this->input('cpf_responsavel', $lead->lead_empresa?->cpf_responsavel)
+                : $document;
+            $spouseCpf = $this->input('conjuge_cpf', $lead->conjuge?->cpf);
+            if ($this->hasAny(['cpf', 'cpf_responsavel', 'conjuge_cpf']) && filled($spouseCpf) && $spouseCpf === $principalCpf && in_array($lead->estado_civil, ['casado', 'uniao_estavel', 'divorciado', 'viuvo'], true)) {
                 $validator->errors()->add('conjuge_cpf', 'O CPF do cônjuge deve ser diferente do CPF do pretendente.');
             }
             if ($this->exists('tipo_solicitante') && $this->input('tipo_solicitante') !== $lead->tipo_solicitante) {

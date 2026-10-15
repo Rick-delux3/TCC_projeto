@@ -40,6 +40,8 @@ class TooRentalGuaranteePayloadBuilder
             ],
 
             'locacao' => $this->locacaoPayload($lead),
+
+            'coberturas' => $this->coverages($lead),
         ];
     }
 

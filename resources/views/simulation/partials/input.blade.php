@@ -14,6 +14,7 @@
             @required($field['required'] ?? false)
             @if (isset($field['maxlength'])) maxlength="{{ $field['maxlength'] }}" @endif
             @if (isset($field['minlength'])) minlength="{{ $field['minlength'] }}" @endif
+            @if (isset($field['min'])) min="{{ $field['min'] }}" @endif
             @if (isset($field['max'])) max="{{ $field['max'] }}" @endif
             @if ($isMoney) inputmode="decimal" @elseif (isset($field['inputmode'])) inputmode="{{ $field['inputmode'] }}" @endif
             @if (isset($field['autocomplete'])) autocomplete="{{ $field['autocomplete'] }}" @endif

@@ -2,15 +2,16 @@
 
 namespace App\Http\Requests;
 
+use App\Services\CepService;
 use App\Services\CompanyTagService;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
 use Illuminate\Validation\Validator;
-use App\Services\CepService;
 
 class StoreCompanyRequest extends FormRequest
 {
+    protected $redirectRoute = 'empresa.register.form';
 
     private ?array $resolvedCep = null;
 
@@ -28,7 +29,7 @@ class StoreCompanyRequest extends FormRequest
 
         $cep = $this->somenteNumeros($this->input('cep'));
 
-        if(is_string($cep) && preg_match('/^\d{8}$/', $cep) === 1) {
+        if (is_string($cep) && preg_match('/^\d{8}$/', $cep) === 1) {
             $this->resolvedCep = app(CepService::class)->find($cep);
         }
 
@@ -174,7 +175,7 @@ class StoreCompanyRequest extends FormRequest
 
                 $cepHasValidFormat = (is_string($this->cep) && preg_match('/^\d{8}$/', $this->cep) === 1);
 
-                if(
+                if (
                     $cepHasValidFormat
                     && $this->resolvedCep === null
                 ) {

@@ -1,6 +1,11 @@
 <h2 class="simulation-section-title">Valores da locação</h2>
 <div class="simulation-fields grid grid-cols-1 gap-x-5 gap-y-4 md:grid-cols-2">
     @include('simulation.partials.rental-type')
+    @include('simulation.partials.conditional-fields', [
+        'condition' => 'company-constitution',
+        'visible' => $isCompanyDocument && old('tipo_locacao') === 'comercial',
+        'fields' => 'simulation.partials.company-constitution',
+    ])
     @include('simulation.partials.input', ['field' => ['name' => 'valor_aluguel', 'label' => 'Valor do aluguel', 'type' => 'money', 'placeholder' => '1.500,00', 'required' => true]])
     <div class="simulation-field">
         <label for="expenseSelector">Despesas adicionais</label>

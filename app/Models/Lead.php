@@ -2,12 +2,15 @@
 
 namespace App\Models;
 
+use App\Enums\RamoAtividade;
 use App\Enums\TipoLocacao;
+use App\Enums\TipoVinculoEmpresa;
 use App\Exceptions\LeadLoversApiException;
 use App\Support\ManualLeadResultTags;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\Relations\MorphOne;
@@ -26,6 +29,20 @@ class Lead extends Model
 
     protected $table = 'leads';
 
+    public function atividadeEconomica(): BelongsTo
+    {
+        return $this->belongsTo(AtividadeEconomica::class);
+    }
+
+    public function setDescreverAtividadeAttribute(?string $descricao): void
+    {
+        if (($this->attributes['descrever_atividade'] ?? null) !== $descricao) {
+            $this->attributes['atividade_economica_id'] = null;
+        }
+
+        $this->attributes['descrever_atividade'] = $descricao;
+    }
+
     // Permite persistir os dados normalizados pelos formulários e serviços.
     protected $fillable = [
         'company_id',
@@ -33,7 +50,12 @@ class Lead extends Model
         'cpf',
         'data_nascimento',
         'tipo_locacao',
+        'tipo_pessoa',
+        'empresa_constituida',
+        'data_fundacao_calculada',
+        'ramo_atividade',
         'descrever_atividade',
+        'atividade_economica_id',
         'estado_civil',
         'imobiliaria',
         'nome',
@@ -72,9 +94,13 @@ class Lead extends Model
     ];
 
     protected $casts = [
+        'tipo_vinculo' => TipoVinculoEmpresa::class,
+        'data_fundacao_calculada' => 'immutable_date:Y-m-d',
+        'atividade_economica_id' => 'integer',
         'data_nascimento' => 'date:Y-m-d',
         'data_edited_at' => 'datetime',
         'tipo_locacao' => TipoLocacao::class,
+        'ramo_atividade' => RamoAtividade::class,
         'leadlovers_lead_id' => 'integer',
         'leadlovers_response' => 'array',
         'sent_to_leadlovers_at' => 'datetime',
@@ -271,6 +297,16 @@ class Lead extends Model
     public function rentalApplicantDocument(): string
     {
         return (string) \App\Rules\CpfOrCnpj::normalize($this->lead_empresa ? ($this->lead_empresa->cnpj ?? '') : ($this->cpf ?? ''));
+    }
+
+    /** @return array{tpPessoa: ?string, empresaConstituida: ?string, dataFundacao: ?string} */
+    public function tokioCompanyConstitutionParameters(): array
+    {
+        return [
+            'tpPessoa' => $this->tipo_pessoa,
+            'empresaConstituida' => $this->empresa_constituida,
+            'dataFundacao' => $this->data_fundacao_calculada?->format('d/m/Y'),
+        ];
     }
 
     public function rentalApplicantCpf(): string

@@ -5,6 +5,7 @@ use App\Models\Corretor;
 use App\Models\Imobiliaria;
 use App\Models\Lead;
 use App\Models\LeadEmpresa;
+use Carbon\CarbonImmutable;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Http;
@@ -39,6 +40,7 @@ function conditionalSimulationPayload(array $overrides = []): array
 }
 
 it('validates the birth date in the legacy public request', function (mixed $birthDate, bool $valid) {
+    $this->travelTo(CarbonImmutable::parse('2026-10-15 12:00:00', 'America/Sao_Paulo'));
     $request = new \App\Http\Requests\StorePublicLeadRequest;
     $validator = \Illuminate\Support\Facades\Validator::make(
         ['data_nascimento' => $birthDate],
@@ -54,17 +56,69 @@ it('validates the birth date in the legacy public request', function (mixed $bir
     'future date' => ['2999-01-01', false],
     'wrong format' => ['29/02/1992', false],
     'array date' => [['1992-02-29'], false],
+    'eighteenth birthday' => ['2008-10-15', true],
+    'under eighteen' => ['2008-10-16', false],
+    'last day aged 120' => ['1905-10-16', true],
+    '121st birthday' => ['1905-10-15', false],
+    'year zero' => ['0000-01-01', false],
+    'short year' => ['92-02-29', false],
+    'long year' => ['01992-02-29', false],
+    'timestamp' => ['1992-02-29T00:00:00Z', false],
+    'integer date' => [19920229, false],
+    'non leap century' => ['1900-02-29', false],
 ]);
 
-it('stores the supplied birth date without inventing an age restriction', function () {
-    $birthDate = now()->subYears(16)->toDateString();
+it('stores a birth date within the inclusive age limits', function (string $birthDate, string $storedDate) {
+    $this->travelTo(CarbonImmutable::parse('2026-10-15 12:00:00', 'America/Sao_Paulo'));
 
     $this->post(route('simulation.tenant.store'), conditionalSimulationPayload([
         'data_nascimento' => $birthDate,
     ]))->assertSessionHasNoErrors()->assertRedirect(route('simulation.success'));
 
-    expect(Lead::query()->sole()->data_nascimento->toDateString())->toBe($birthDate);
-});
+    expect(Lead::query()->sole()->data_nascimento->toDateString())->toBe($storedDate);
+})->with([
+    'eighteenth birthday' => ['2008-10-15', '2008-10-15'],
+    '120th birthday' => ['1906-10-15', '1906-10-15'],
+    'last day aged 120' => ['1905-10-16', '1905-10-16'],
+    'surrounding whitespace' => ['  1992-02-29  ', '1992-02-29'],
+]);
+
+it('rejects an invalid birth date with a specific message before saving', function (mixed $birthDate, string $message) {
+    $this->travelTo(CarbonImmutable::parse('2026-10-15 12:00:00', 'America/Sao_Paulo'));
+
+    $this->post(route('simulation.tenant.store'), conditionalSimulationPayload([
+        'data_nascimento' => $birthDate,
+    ]))->assertSessionHasErrors(['data_nascimento' => $message]);
+
+    expect(Lead::query()->count())->toBe(0);
+})->with([
+    'under eighteen' => ['2008-10-16', 'É necessário ter pelo menos 18 anos completos para solicitar a análise.'],
+    '121st birthday' => ['1905-10-15', 'A idade informada não pode ultrapassar 120 anos.'],
+    'future date' => ['2026-10-16', 'A data de nascimento não pode estar no futuro.'],
+    'missing date' => [null, 'Informe a data de nascimento.'],
+    'impossible date' => ['1992-02-30', 'Informe uma data de nascimento válida, com dia, mês e ano de quatro dígitos.'],
+    'invalid year' => ['19922-02-29', 'Informe uma data de nascimento válida, com dia, mês e ano de quatro dígitos.'],
+    'array date' => [['1992-02-29'], 'Informe uma data de nascimento válida.'],
+]);
+
+it('validates birth date boundaries using the local calendar and leap years', function (string $now, string $birthDate, bool $valid) {
+    $this->travelTo(CarbonImmutable::parse($now));
+    $request = new \App\Http\Requests\StoreSimulationLeadRequest;
+    $validator = \Illuminate\Support\Facades\Validator::make(
+        ['data_nascimento' => $birthDate],
+        ['data_nascimento' => $request->rules()['data_nascimento']],
+        $request->messages(),
+    );
+
+    expect($validator->passes())->toBe($valid);
+})->with([
+    'still seventeen in Brazil' => ['2026-10-16T01:30:00Z', '2008-10-16', false],
+    'already eighteen in Brazil' => ['2026-10-16T03:00:00Z', '2008-10-16', true],
+    'leap birthday still seventeen' => ['2026-02-28T12:00:00-03:00', '2008-02-29', false],
+    'leap birthday has passed' => ['2026-03-01T12:00:00-03:00', '2008-02-29', true],
+    'eighteen on a leap day' => ['2028-02-29T12:00:00-03:00', '2010-02-28', true],
+    'not yet eighteen on a leap day' => ['2028-02-29T12:00:00-03:00', '2010-03-01', false],
+]);
 
 function conditionalSimulationCompany(): Imobiliaria
 {
@@ -447,7 +501,11 @@ it('persists the independent document and rental choices through every public pr
     $payload = conditionalSimulationPayload([
         'cpf' => $document,
         'tipo_locacao' => $rentalType,
+        'empresa_constituida' => 'S',
         'descrever_atividade' => '  Comércio   de roupas  ',
+        'atividade_economica_id' => \App\Models\AtividadeEconomicaCodigo::factory()->for(
+            \App\Models\AtividadeEconomica::factory()->state(['descricao' => 'Comércio de roupas']), 'atividadeEconomica'
+        )->create()->atividade_economica_id,
         'cpf_responsavel' => '111.444.777-35',
         'nome_responsavel' => '  Representante   da empresa  ',
     ]);
@@ -521,9 +579,9 @@ it('rejects invalid or missing conditional data without creating a lead', functi
     'rental type required' => [['tipo_locacao' => null], ['tipo_locacao']],
     'invalid rental type' => [['tipo_locacao' => 'industrial'], ['tipo_locacao']],
     'array rental type' => [['tipo_locacao' => ['comercial']], ['tipo_locacao']],
-    'commercial activity required' => [['tipo_locacao' => 'comercial'], ['descrever_atividade']],
-    'commercial activity too long' => [['tipo_locacao' => 'comercial', 'descrever_atividade' => str_repeat('a', 56)], ['descrever_atividade']],
-    'commercial activity must be text' => [['tipo_locacao' => 'comercial', 'descrever_atividade' => ['invalid']], ['descrever_atividade']],
+    'commercial activity required' => [['tipo_locacao' => 'comercial'], ['atividade_economica_id']],
+    'commercial activity must exist' => [['tipo_locacao' => 'comercial', 'atividade_economica_id' => 999999], ['atividade_economica_id']],
+    'commercial activity must be an identifier' => [['tipo_locacao' => 'comercial', 'atividade_economica_id' => ['invalid']], ['atividade_economica_id']],
     'invalid CPF checksum' => [['cpf' => '52998224724'], ['cpf']],
     'invalid CNPJ checksum' => [['cpf' => '11222333000180'], ['cpf']],
     'repeated CPF digits' => [['cpf' => '11111111111'], ['cpf']],
@@ -552,10 +610,12 @@ it('preserves the existing spouse rules for the other marital statuses', functio
 it('preserves leading zeroes in company and representative documents', function () {
     $this->post(route('simulation.tenant.store'), conditionalSimulationPayload([
         'cpf' => '04.252.011/0001-10',
+        'empresa_constituida' => 'S',
         'cpf_responsavel' => '012.345.678-90',
         'nome_responsavel' => str_repeat('a', 55),
         'tipo_locacao' => 'comercial',
         'descrever_atividade' => str_repeat('b', 55),
+        'atividade_economica_id' => \App\Models\AtividadeEconomicaCodigo::factory()->create()->atividade_economica_id,
     ]))->assertSessionHasNoErrors();
 
     expect(LeadEmpresa::query()->sole()->cnpj)->toBe('04252011000110')
@@ -584,6 +644,10 @@ it('updates and removes conditional relationships only through an authorized adm
         ->and(Lead::query()->sole()->data_edited_at)->not->toBeNull();
 
     $companyPayload = conditionalSimulationPayload([
+        'empresa_constituida' => 'S',
+        'atividade_economica_id' => \App\Models\AtividadeEconomicaCodigo::factory()->for(
+            \App\Models\AtividadeEconomica::factory()->state(['descricao' => 'Loja']), 'atividadeEconomica'
+        )->create()->atividade_economica_id,
         'cpf' => '11222333000181',
         'cpf_responsavel' => '11144477735',
         'nome_responsavel' => 'Representante',
@@ -647,6 +711,7 @@ it('rolls back the lead when company persistence fails', function () {
 });
 
 it('renders the same conditional controls in all simulation views', function (string $route) {
+    $this->travelTo(CarbonImmutable::parse('2026-10-16T01:30:00Z'));
     $company = conditionalSimulationCompany();
     $this->post(route('simulation.registered-company.verify'), [
         'lead_access_code' => $company->lead_access_code,
@@ -658,7 +723,8 @@ it('renders the same conditional controls in all simulation views', function (st
         ->and($dom->query('//input[@name="cpf"]')->length)->toBe(1)
         ->and($dom->query('//input[@name="cpf" and @required]')->length)->toBe(1)
         ->and($dom->query('//input[@name="data_nascimento" and @type="date" and @required]')->length)->toBe(1)
-        ->and($dom->evaluate('string(//input[@name="data_nascimento"]/@max)'))->toBe(now()->toDateString())
+        ->and($dom->evaluate('string(//input[@name="data_nascimento"]/@min)'))->toBe('1905-10-16')
+        ->and($dom->evaluate('string(//input[@name="data_nascimento"]/@max)'))->toBe('2008-10-15')
         ->and($dom->query('//*[@id="data_nascimento-hint"]')->length)->toBe(1)
         ->and($dom->query('//option[@value="separado"]')->length)->toBe(1)
         ->and($dom->query('//*[@data-simulation-fields]//input')->length)->toBe(0);
@@ -799,6 +865,9 @@ it('updates editable water and electricity defaults with the rent in simulation 
 
 it('restores active fields and choices after a validation error', function () {
     $this->withSession(['_old_input' => conditionalSimulationPayload([
+        'atividade_economica_id' => \App\Models\AtividadeEconomicaCodigo::factory()->for(
+            \App\Models\AtividadeEconomica::factory()->state(['descricao' => 'Loja']), 'atividadeEconomica'
+        )->create()->atividade_economica_id,
         'cpf' => '11222333000181',
         'cpf_responsavel' => '11144477735',
         'nome_responsavel' => 'Representante',
@@ -813,10 +882,60 @@ it('restores active fields and choices after a validation error', function () {
 
     expect($dom->query('//*[@data-simulation-fields="company"]//input')->length)->toBe(2)
         ->and($dom->evaluate('string(//*[@data-simulation-fields="company"]//input[@name="nome_responsavel"]/@value)'))->toBe('Representante')
-        ->and($dom->evaluate('string(//*[@data-simulation-fields="commercial"]//input/@value)'))->toBe('Loja')
+        ->and($dom->evaluate('string(//*[@data-simulation-fields="commercial"]//input[@name="descrever_atividade"]/@value)'))->toBe('Loja')
         ->and($dom->query('//*[@data-simulation-fields="spouse"]//input')->length)->toBe(2)
         ->and($dom->evaluate('string(//input[@name="tipo_locacao"][@checked]/@value)'))->toBe('comercial');
 });
+
+it('renders the business activity select only for commercial rental in every simulation form', function (string $view, bool $isAdminSimulation, ?string $rentalType): void {
+    $this->withSession(['_old_input' => ['tipo_locacao' => $rentalType]]);
+    $this->app['request']->setLaravelSession($this->app['session.store']);
+
+    $html = (string) $this->view('simulation.forms.'.$view, [
+        'company' => conditionalSimulationCompany(),
+        'isAdminSimulation' => $isAdminSimulation,
+        'errors' => new \Illuminate\Support\ViewErrorBag,
+    ]);
+    $dom = conditionalSimulationDom($html);
+    $select = '//*[@data-simulation-fields="commercial"]//select[@name="ramo_atividade"]';
+    $templateSelect = '//template[@data-simulation-template="commercial"]//select[@name="ramo_atividade"]';
+
+    expect($dom->query($select)->length)->toBe($rentalType === 'comercial' ? 1 : 0)
+        ->and($dom->query($templateSelect.'[@required]')->length)->toBe(1)
+        ->and($dom->query($templateSelect.'/option')->length)->toBe(4)
+        ->and($dom->evaluate('string('.$templateSelect.'/option[@value="21205"])'))->toBe('Comércio')
+        ->and($dom->evaluate('string('.$templateSelect.'/option[@value="21204"])'))->toBe('Indústria')
+        ->and($dom->evaluate('string('.$templateSelect.'/option[@value="21206"])'))->toBe('Serviços');
+
+    if ($rentalType === 'comercial') {
+        expect($dom->query($select.'[@required]')->length)->toBe(1)
+            ->and($dom->query('//section[@data-form-step="2"]'.$select)->length)->toBe(1);
+    }
+})->with(['tenant', 'registered-company', 'unregistered-company_landlord'])
+    ->with(['public' => false, 'internal' => true])
+    ->with(['unselected' => null, 'residential' => 'residencial', 'commercial' => 'comercial']);
+
+it('restores the business activity choice and displays its validation error in the property step', function (mixed $activity, string $selected): void {
+    $message = 'Selecione um ramo de atividade válido: Comércio, Indústria ou Serviços.';
+    $this->withSession([
+        '_old_input' => ['tipo_locacao' => 'comercial', 'ramo_atividade' => $activity],
+        'errors' => (new \Illuminate\Support\ViewErrorBag)->put('default', new \Illuminate\Support\MessageBag(['ramo_atividade' => $message])),
+    ]);
+
+    $dom = conditionalSimulationDom($this->get(route('simulation.tenant.form'))->assertOk()->getContent());
+    $select = '//*[@data-simulation-fields="commercial"]//select[@name="ramo_atividade"]';
+
+    expect($dom->evaluate('string('.$select.'/option[@selected]/@value)'))->toBe($selected)
+        ->and($dom->evaluate('string('.$select.'/@aria-invalid)'))->toBe('true')
+        ->and($dom->evaluate('string('.$select.'/@aria-describedby)'))->toBe('ramo_atividade-error')
+        ->and($dom->evaluate('string(//*[@data-simulation-fields="commercial"]//*[@id="ramo_atividade-error"])'))->toBe($message)
+        ->and($dom->evaluate('string(//*[@data-simulation-wizard]/@data-initial-step)'))->toBe('2');
+})->with([
+    'commerce' => ['21205', '21205'],
+    'industry' => ['21204', '21204'],
+    'services' => [21206, '21206'],
+    'malformed input' => [['invalid'], ''],
+]);
 
 it('renders the form after rejecting malformed conditional fields', function () {
     $url = route('simulation.tenant.form');
@@ -830,7 +949,7 @@ it('renders the form after rejecting malformed conditional fields', function () 
         'conjuge_nome' => ['invalid'],
         'conjuge_cpf' => ['invalid'],
     ]))->assertRedirect($url)->assertSessionHasErrors([
-        'cpf_responsavel', 'nome_responsavel', 'descrever_atividade', 'conjuge_nome', 'conjuge_cpf',
+        'cpf_responsavel', 'nome_responsavel', 'atividade_economica_id', 'conjuge_nome', 'conjuge_cpf',
     ]);
 
     $this->get($url)->assertOk();

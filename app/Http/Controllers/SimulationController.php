@@ -10,6 +10,8 @@ use App\Jobs\StartInsuranceAnalysesBatchJob;
 use App\Models\Imobiliaria;
 use App\Models\InsuranceAnalysisBatch;
 use App\Models\Lead;
+use App\Services\CompanyApplicantService;
+use App\Support\CompanyConstitution;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -21,6 +23,8 @@ use Illuminate\View\View;
 
 class SimulationController extends Controller
 {
+    public function __construct(private CompanyApplicantService $companyApplicants) {}
+
     private const REGISTERED_COMPANY_SESSION_KEY = 'simulation.registered_company_access';
 
     private const ADMIN_UNLINKED_TYPES = [
@@ -566,6 +570,7 @@ class SimulationController extends Controller
         }
 
         $leadAttributes = [
+            ...CompanyConstitution::attributes($data['cpf'], $data['tipo_locacao'], $data['empresa_constituida'] ?? null),
             'company_id' => $company?->id,
             'tipo_solicitante' => $context['tipo_solicitante'],
             'nome' => $data['nome'],
@@ -573,7 +578,11 @@ class SimulationController extends Controller
             'cpf' => $request->hasCompanyDocument() ? null : ($data['cpf'] ?? null),
             'data_nascimento' => $data['data_nascimento'],
             'tipo_locacao' => $data['tipo_locacao'],
-            'descrever_atividade' => $data['descrever_atividade'] ?? null,
+            'ramo_atividade' => $data['ramo_atividade'] ?? null,
+            'descrever_atividade' => isset($data['atividade_economica_id'])
+                ? \App\Models\AtividadeEconomica::query()->disponiveis()->findOrFail($data['atividade_economica_id'])->descricao
+                : null,
+            'atividade_economica_id' => $data['atividade_economica_id'] ?? null,
             'tel' => $data['tel'] ?? null,
             'estado_civil' => $data['estado_civil'] ?? null,
             'imobiliaria' => $company?->name
@@ -608,6 +617,13 @@ class SimulationController extends Controller
                 ->lockForUpdate()
                 ->firstOrFail();
             $originalData = $this->editableLeadData($lead);
+            $leadAttributes = array_replace($leadAttributes, CompanyConstitution::attributes(
+                $data['cpf'], $data['tipo_locacao'], $data['empresa_constituida'] ?? null, $lead
+            ));
+            if ($data['tipo_locacao'] === 'comercial' && ! array_key_exists('ramo_atividade', $data)) {
+                unset($leadAttributes['ramo_atividade']);
+            }
+
             unset($leadAttributes['tags_originais'], $leadAttributes['status']);
             $leadAttributes['leadlovers_status'] = in_array(
                 $lead->leadlovers_status,
@@ -670,6 +686,8 @@ class SimulationController extends Controller
         } else {
             $lead->conjuge()->delete();
         }
+
+        $this->companyApplicants->sync($lead);
 
         $responsavelTipo = $context['tipo_solicitante'] ?? ($data['responsavel_tipo'] ?? null);
 
@@ -742,10 +760,12 @@ class SimulationController extends Controller
         $relationships = ['lead_empresa', 'endereco', 'despesas', 'conjuge', 'locador', 'imobiliariaInformada'];
         $lead->load($relationships);
         $data = $lead->only([
-            'nome', 'email', 'cpf', 'data_nascimento', 'tipo_locacao', 'descrever_atividade', 'tel',
-            'estado_civil', 'aceite_termos', 'observacoes',
+            'nome', 'email', 'cpf', 'data_nascimento', 'tipo_locacao', 'ramo_atividade', 'descrever_atividade', 'atividade_economica_id', 'tel',
+            'estado_civil', 'tipo_vinculo', 'aceite_termos', 'observacoes',
+            'tipo_pessoa', 'empresa_constituida', 'data_fundacao_calculada',
         ]);
         $data['data_nascimento'] = $lead->data_nascimento?->toDateString();
+        $data['data_fundacao_calculada'] = $lead->data_fundacao_calculada?->toDateString();
 
         foreach ($relationships as $relationship) {
             $details = $lead->getRelation($relationship);

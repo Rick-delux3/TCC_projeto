@@ -2,14 +2,17 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\Auth\VerifyCompanyTwoFactorRequest;
 use App\Models\TwoFactorCode;
 use App\Services\CompanyTwoFactorMailService;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\View\View;
 
 class TwoFactorController extends Controller
 {
@@ -29,15 +32,17 @@ class TwoFactorController extends Controller
         private CompanyTwoFactorMailService $twoFactorMail
     ) {}
 
-    public function index()
+    public function index(Request $request): View|RedirectResponse
     {
+        if ($request->session()->get('2fa_passed') === true) {
+            return redirect()->route('company.dashboard');
+        }
+
         return view('auth.2fa');
     }
 
-    public function verify(Request $request)
+    public function verify(VerifyCompanyTwoFactorRequest $request): RedirectResponse
     {
-        $request->validate(['code' => 'required|digits:6']);
-
         $user = Auth::user();
 
         if (! $user) {
@@ -52,7 +57,7 @@ class TwoFactorController extends Controller
         if (RateLimiter::tooManyAttempts($verifyKey, self::VERIFY_MAX_ATTEMPTS)) {
             $seconds = RateLimiter::availableIn($verifyKey);
 
-            return back()->withErrors([
+            return redirect()->route('2fa')->withErrors([
                 'code' => "Muitas tentativas. Tente novamente em {$seconds} segundos.",
             ]);
         }
@@ -101,20 +106,22 @@ class TwoFactorController extends Controller
         if ($verificationResult !== 'verified') {
             RateLimiter::hit($verifyKey, self::VERIFY_DECAY_SECONDS);
 
-            return back()->withErrors([
+            return redirect()->route('2fa')->withErrors([
                 'code' => $verificationResult === 'locked'
                     ? 'Este código atingiu o limite de tentativas. Solicite um novo código.'
                     : 'Código inválido ou expirado.',
             ]);
         }
 
-        session(['2fa_passed' => true]);
+        $request->session()->regenerate();
+        $request->session()->put('2fa_passed', true);
+        $request->session()->forget('url.intended');
         RateLimiter::clear($verifyKey);
 
         return redirect()->route('company.dashboard')->with('success', 'Bem vindo!');
     }
 
-    public function resend(Request $request)
+    public function resend(Request $request): RedirectResponse
     {
         $user = Auth::user();
 
@@ -130,7 +137,7 @@ class TwoFactorController extends Controller
                 'company_id' => $user->company_id,
             ]);
 
-            return back()->withErrors([
+            return redirect()->route('2fa')->withErrors([
                 'code' => 'Não foi possível reenviar o código. Verifique o e-mail cadastrado da imobiliária.',
             ]);
         }
@@ -141,7 +148,7 @@ class TwoFactorController extends Controller
         if (RateLimiter::tooManyAttempts($resendKey, self::RESEND_MAX_ATTEMPTS)) {
             $seconds = RateLimiter::availableIn($resendKey);
 
-            return back()->withErrors([
+            return redirect()->route('2fa')->withErrors([
                 'code' => "Limite de reenvio atingido. Tente novamente em {$seconds} segundos.",
             ]);
         }
@@ -149,7 +156,7 @@ class TwoFactorController extends Controller
         if (RateLimiter::tooManyAttempts($cooldownKey, 1)) {
             $seconds = RateLimiter::availableIn($cooldownKey);
 
-            return back()->with('info', "Aguarde {$seconds} segundos para reenviar o codigo.");
+            return redirect()->route('2fa')->with('info', "Aguarde {$seconds} segundos para reenviar o codigo.");
         }
 
         // Invalidate older codes and send a fresh one.
@@ -177,7 +184,7 @@ class TwoFactorController extends Controller
                 'mailer' => config('mail.default'),
             ]);
 
-            return back()->withErrors([
+            return redirect()->route('2fa')->withErrors([
                 'code' => 'Não foi possível reenviar o código. Tente novamente.',
             ]);
         }
@@ -185,7 +192,7 @@ class TwoFactorController extends Controller
         RateLimiter::hit($resendKey, self::RESEND_DECAY_SECONDS);
         RateLimiter::hit($cooldownKey, self::RESEND_COOLDOWN_SECONDS);
 
-        return back()->with('success', 'Novo codigo enviado para seu e-mail.');
+        return redirect()->route('2fa')->with('success', 'Novo codigo enviado para seu e-mail.');
     }
 
     private function verifyThrottleKey(int|string|null $userId, string $ip): string

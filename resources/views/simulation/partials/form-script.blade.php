@@ -41,7 +41,9 @@ document.addEventListener('DOMContentLoaded', () => {
     wizard.querySelectorAll('[data-error-field]').forEach(button => {
         button.addEventListener('click', () => {
             const field = form.elements.namedItem(button.dataset.errorField);
-            const input = field instanceof RadioNodeList ? field[0] : field;
+            const input = button.dataset.errorField === 'atividade_economica_id'
+                ? form.querySelector('[data-activity-search]')
+                : (field instanceof RadioNodeList ? field[0] : field);
             const panel = input?.closest('[data-form-step]');
             if (panel) {
                 showStep(Number(panel.dataset.formStep), false);

@@ -39,6 +39,10 @@ class SyncProviderAnalysisStatusJob implements ShouldQueue
 
     public int $consecutiveFailures = 0;
 
+    public bool $schedulePolling = true;
+
+    public ?array $providerResult = null;
+
     /**
      * Recebe o ID da análise específica.
      *
@@ -207,6 +211,7 @@ class SyncProviderAnalysisStatusJob implements ShouldQueue
              * ]
              */
             $result = $provider->getStatus($analysis);
+            $this->providerResult = $result;
 
             InsuranceAnalysisAttempt::run($analysis, $this->attemptId, function () use ($analysis, $result, $isToo): void {
                 if (! ($result['success'] ?? false) && $this->retryPollingFailure($analysis)) {
@@ -219,13 +224,17 @@ class SyncProviderAnalysisStatusJob implements ShouldQueue
 
                 if ($isToo) {
                     $this->applyTooResult($analysis, $result);
-                    InsuranceStatusPolling::schedule($analysis->fresh(), $this->attemptId, $this->isReanalysis);
+                    if ($this->schedulePolling) {
+                        InsuranceStatusPolling::schedule($analysis->fresh(), $this->attemptId, $this->isReanalysis);
+                    }
 
                     return;
                 }
 
                 $this->applyResult($analysis, $result);
-                InsuranceStatusPolling::schedule($analysis->fresh(), $this->attemptId, $this->isReanalysis);
+                if ($this->schedulePolling) {
+                    InsuranceStatusPolling::schedule($analysis->fresh(), $this->attemptId, $this->isReanalysis);
+                }
             });
         } catch (ObsoleteInsuranceAnalysisAttempt $obsolete) {
             throw $obsolete;
@@ -787,7 +796,7 @@ class SyncProviderAnalysisStatusJob implements ShouldQueue
     {
         $maxFailures = max(1, (int) config("services.{$analysis->provider}.status_check_max_failures", 3));
 
-        if (! $this->automatic || $this->consecutiveFailures + 1 >= $maxFailures) {
+        if (! $this->schedulePolling || ! $this->automatic || $this->consecutiveFailures + 1 >= $maxFailures) {
             return false;
         }
 

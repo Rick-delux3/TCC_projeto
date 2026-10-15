@@ -92,7 +92,7 @@
                         'fields' => 'simulation.partials.company-representative',
                     ])
                     @include('simulation.partials.marital-status')
-                    @include('simulation.partials.input', ['field' => ['name' => 'data_nascimento', 'label' => 'Data de nascimento', 'type' => 'date', 'required' => true, 'max' => now()->toDateString(), 'autocomplete' => 'bday', 'hint' => 'Para CNPJ, informe a data de nascimento do responsável que representa a empresa.']])
+                    @include('simulation.partials.input', ['field' => ['name' => 'data_nascimento', 'label' => 'Data de nascimento', 'type' => 'date', 'required' => true, 'min' => \App\Support\BirthDate::earliest()->toDateString(), 'max' => \App\Support\BirthDate::latest()->toDateString(), 'autocomplete' => 'bday', 'hint' => 'Para CNPJ, informe a data de nascimento do responsável que representa a empresa.']])
                 </div>
 
                 @if ($isRegistered)
@@ -126,6 +126,7 @@
                 </footer>
             </section>
         </form>
+        @include('simulation.partials.company-constitution-modal')
     </section>
 </div>
 @include('simulation.partials.form-script')

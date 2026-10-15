@@ -31,6 +31,10 @@ class RunProviderAnalysisJob implements ShouldQueue
 
     public array $backoff = [30, 120, 300];
 
+    public bool $schedulePolling = true;
+
+    public ?array $providerResult = null;
+
     public function __construct(
         public int $analysisId,
         public string $attemptId,
@@ -118,6 +122,8 @@ class RunProviderAnalysisJob implements ShouldQueue
                 );
             }
 
+            $this->providerResult = $result;
+
             if ($this->shouldRetryResult($result)) {
                 throw new \RuntimeException('Falha temporária na comunicação com a companhia.');
             }
@@ -132,7 +138,9 @@ class RunProviderAnalysisJob implements ShouldQueue
 
             InsuranceAnalysisAttempt::run($analysis, $this->attemptId, function () use ($analysis, $result): void {
                 $this->applyResult($analysis, $result);
-                InsuranceStatusPolling::schedule($analysis->fresh(), $this->attemptId, $this->isReanalysis);
+                if ($this->schedulePolling) {
+                    InsuranceStatusPolling::schedule($analysis->fresh(), $this->attemptId, $this->isReanalysis);
+                }
             });
         } catch (ObsoleteInsuranceAnalysisAttempt $obsolete) {
             throw $obsolete;

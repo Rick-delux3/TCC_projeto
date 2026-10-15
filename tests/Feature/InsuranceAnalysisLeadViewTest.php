@@ -34,7 +34,7 @@ afterEach(function () {
     Http::assertNothingSent();
 });
 
-it('renders the same empty view for the requested lead without requiring a batch', function (string $viewer) {
+it('renders the same analysis view for the requested lead without requiring a batch', function (string $viewer) {
     $admin = $viewer === 'admin';
     $route = $admin ? 'admin.insurance-analyses.lead' : 'insurance-analyses.lead';
     $this->actingAs($admin ? $this->corretor : $this->user, $admin ? 'admin' : 'web')
@@ -253,7 +253,7 @@ it('checks current lead ownership before redirecting a legacy batch link', funct
         ->get(route('insurance-analyses.show', $batch))->assertForbidden();
 });
 
-it('passes the same contract to the includes and the refresh endpoint without rendering markup', function (string $viewer) {
+it('renders the bootstrap structure using the same contract as the refresh endpoint', function (string $viewer) {
     $admin = $viewer === 'admin';
     $this->actingAs($admin ? $this->corretor : $this->user, $admin ? 'admin' : 'web')->withSession(['2fa_passed' => true]);
     $includes = [];
@@ -262,8 +262,14 @@ it('passes the same contract to the includes and the refresh endpoint without re
     });
     $response = $this->get(route($admin ? 'admin.insurance-analyses.lead' : 'insurance-analyses.lead', $this->lead))->assertOk();
     $page = $response->viewData('pageData');
-    expect(trim(preg_replace('/<script\b[^>]*>.*?<\/script>/s', '', $response->getContent())))->toBe('')
-        ->and($includes)->toHaveCount(6)
+    $response->assertSee('bootstrap@5.3.8/dist/css/bootstrap.min.css', false)
+        ->assertSee($this->lead->nome)->assertSee($this->lead->email)
+        ->assertSee('Aguardando a criação do pacote')
+        ->assertSee($response->viewData('returnUrl'), false)
+        ->assertSee('Todas as companhias')
+        ->assertDontSee('dashboard-user.css', false)
+        ->assertDontSee('class="modal', false);
+    expect($includes)->toHaveCount(6)
         ->and($includes['insurance-analyses.partials.lead']['leadData'])->toBe($page['lead'])
         ->and($includes['insurance-analyses.partials.lead']['navigation']['return_url'])->toBe($response->viewData('returnUrl'))
         ->and($includes['insurance-analyses.partials.batch']['progress'])->toBe($page['progress'])
@@ -274,6 +280,81 @@ it('passes the same contract to the includes and the refresh endpoint without re
         ->and($page['realtime']['broadcasting']['enabled'])->toBeFalse();
     $this->getJson($response->viewData('refreshUrl'))->assertOk()->assertExactJson(['data' => $page]);
 })->with(['company', 'admin']);
+
+it('renders four company cards and keeps unvalidated providers blocked', function () {
+    $response = $this->actingAs($this->user)->withSession(['2fa_passed' => true])
+        ->get(route('insurance-analyses.lead', $this->lead))->assertOk();
+    $document = new DOMDocument;
+    @$document->loadHTML('<?xml encoding="UTF-8">'.$response->getContent());
+    $xpath = new DOMXPath($document);
+
+    expect($xpath->query('//article[@data-provider]')->length)->toBe(4);
+    foreach (['porto', 'tokio'] as $provider) {
+        $card = $xpath->query('//article[@data-provider="'.$provider.'"]')->item(0);
+        expect($card->textContent)->toContain('Bloqueada')->toContain('Aguardando testes e validação');
+        expect($xpath->query('.//button[@disabled]', $card)->length)->toBe(1)
+            ->and($xpath->query('.//a | .//form', $card)->length)->toBe(0);
+    }
+    expect($xpath->query('//form')->length)->toBe(0)
+        ->and($xpath->query('//button[not(@disabled)]')->length)->toBe(0);
+});
+
+it('renders saved coverages and highlights the confirmed best total only after consolidation', function () {
+    $batch = $this->lead->insuranceAnalysesBatches()->create(['status' => 'processing', 'total_providers' => 2]);
+    $batch->analyses()->create([
+        'lead_id' => $this->lead->id, 'provider' => 'pottencial', 'product' => 'fianca_locaticia',
+        'status' => 'approved', 'gross_premium' => 1200,
+        'lease_start_date' => '2026-10-01', 'lease_end_date' => '2027-10-01',
+        'response_payload' => ['coverages' => [['name' => 'Aluguel protegido', 'insuredAmount' => 24000, 'premiumAmount' => 1100]]],
+    ]);
+    $too = $batch->analyses()->create([
+        'lead_id' => $this->lead->id, 'provider' => 'too', 'product' => 'fianca_locaticia',
+        'status' => 'processing', 'premium_amount' => 1,
+    ]);
+    $too->events()->create(['event_type' => 'created', 'payload' => ['attempt_id' => 'rodada-teste']]);
+    $this->actingAs($this->user)->withSession(['2fa_passed' => true]);
+    $url = route('insurance-analyses.lead', $this->lead);
+    $this->get($url)->assertOk()
+        ->assertSee('Aluguel protegido')->assertSee('R$ 24.000,00')->assertSee('R$ 1.200,00')
+        ->assertSee('1 de 2 análises finalizadas (50%)')->assertSee('rodada-teste')
+        ->assertSee('Em análise')->assertDontSee('>Melhor preço</div>', false)
+        ->assertDontSee('R$ 1,00');
+
+    $too->update([
+        'status' => 'approved', 'finished_at' => now(),
+        'response_payload' => ['quote_latest' => ['response' => [
+            'condicoesPagamento' => ['premioBrutoTotal' => 900],
+            'inicioVigencia' => '2026-10-01', 'fimVigencia' => '2027-10-01',
+        ]]],
+    ]);
+    $batch->update(['status' => 'completed', 'finished_at' => now()]);
+    $response = $this->get($url)->assertOk()
+        ->assertSee('2 de 2 análises finalizadas (100%)')
+        ->assertSee('R$ 900,00')->assertSee('Prêmio bruto total da vigência')
+        ->assertDontSee('/mês');
+    $document = new DOMDocument;
+    @$document->loadHTML('<?xml encoding="UTF-8">'.$response->getContent());
+    $best = (new DOMXPath($document))->query('//article[div[text()="Melhor preço"]]');
+    expect($best->length)->toBe(1)
+        ->and($best->item(0)->textContent)->toContain('Too Seguros')->toContain('R$ 900,00');
+});
+
+it('does not advertise failed rejected or unpriced quotes as offers', function (string $status, ?float $premium) {
+    $batch = $this->lead->insuranceAnalysesBatches()->create(['status' => 'completed', 'total_providers' => 1, 'finished_at' => now()]);
+    $batch->analyses()->create([
+        'lead_id' => $this->lead->id, 'provider' => 'pottencial', 'product' => 'fianca_locaticia',
+        'status' => $status, 'premium_amount' => $premium,
+    ]);
+    $this->lead->update(['nome' => '<script>alert("lead")</script>']);
+    $this->actingAs($this->user)->withSession(['2fa_passed' => true])
+        ->get(route('insurance-analyses.lead', $this->lead))->assertOk()
+        ->assertSee('Nenhuma oferta aprovada com preço confirmado disponível.')
+        ->assertDontSee('>Melhor preço</div>', false)
+        ->assertDontSee('<script>alert("lead")</script>', false);
+})->with([
+    'rejected' => ['rejected', 0], 'failed' => ['failed', 0],
+    'without price' => ['approved', null], 'unconfirmed price' => ['approved', 50],
+]);
 
 it('prepares progress and comparison only for complete consolidated results', function (array $statuses, int $total, bool $finished, ?string $result, ?string $reason) {
     $batch = $this->lead->insuranceAnalysesBatches()->create([
