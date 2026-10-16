@@ -1,7 +1,11 @@
 @extends('layout-inicial.app')
 
+@section('body-class', config('branding.active', 'tcc') === 'tcc' ? 'tcc-company-auth-body' : '')
+@section('main-class', config('branding.active', 'tcc') === 'tcc' ? 'tcc-company-auth-main tcc-company-auth-main--standalone' : '')
+@section('hide-header', config('branding.active', 'tcc') === 'tcc' ? 'true' : 'false')
+
 @section('content')
-<div class="admin-auth-page">
+<div class="admin-auth-page {{ config('branding.active', 'tcc') === 'tcc' ? 'tcc-company-auth tcc-ceo-login' : '' }}">
     <section class="admin-auth-shell">
         <aside class="admin-auth-aside">
             <img
@@ -124,6 +128,11 @@
                     <button type="submit" class="admin-submit">
                         Entrar
                     </button>
+                    @if (config('branding.active', 'tcc') === 'tcc')
+                        <a href="{{ route('admin.login') }}" class="admin-outline-link">
+                            Entrar como integrante
+                        </a>
+                    @endif
                 </div>
 
                 <div class="admin-auth-note">

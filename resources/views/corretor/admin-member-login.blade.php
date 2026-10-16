@@ -1,7 +1,11 @@
 @extends('layout-inicial.app')
 
+@section('body-class', config('branding.active', 'tcc') === 'tcc' ? 'tcc-company-auth-body' : '')
+@section('main-class', config('branding.active', 'tcc') === 'tcc' ? 'tcc-company-auth-main tcc-company-auth-main--standalone' : '')
+@section('hide-header', config('branding.active', 'tcc') === 'tcc' ? 'true' : 'false')
+
 @section('content')
-<div class="client-auth-page">
+<div class="client-auth-page {{ config('branding.active', 'tcc') === 'tcc' ? 'tcc-company-auth' : '' }}">
     <section class="client-auth-shell">
         <aside class="client-auth-aside">
             <img src="{{ asset('imgs/segure-chave-a-mao-ao-ar-livre.jpg') }}" alt="Acesso do corretor integrante">

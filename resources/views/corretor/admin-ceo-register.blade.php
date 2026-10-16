@@ -1,7 +1,11 @@
 @extends('layout-inicial.app')
 
+@section('body-class', config('branding.active', 'tcc') === 'tcc' ? 'tcc-company-auth-body' : '')
+@section('main-class', config('branding.active', 'tcc') === 'tcc' ? 'tcc-company-auth-main tcc-company-auth-main--standalone' : '')
+@section('hide-header', config('branding.active', 'tcc') === 'tcc' ? 'true' : 'false')
+
 @section('content')
-<div class="admin-register-page">
+<div class="admin-register-page {{ config('branding.active', 'tcc') === 'tcc' ? 'tcc-company-auth' : '' }}">
     <section class="admin-register-shell">
         <aside class="admin-register-aside">
             <img

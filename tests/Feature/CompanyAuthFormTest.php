@@ -63,6 +63,8 @@ it('renders the tcc company access pages with the redesign and working destinati
 });
 
 it('links the company access header to the imobiliaria login throughout the company auth journey', function () {
+    config(['branding.active' => 'client']);
+
     foreach ([
         'registration' => route('empresa.register.form'),
         'login' => route('empresa.login'),
@@ -77,6 +79,29 @@ it('links the company access header to the imobiliaria login throughout the comp
         expect($accessLink)->not->toBeNull()
             ->and($accessLink->getAttribute('href'))->toBe(route('empresa.login'));
     }
+});
+
+it('centers the tcc company forms without the site header', function (string $routeName) {
+    config(['branding.active' => 'tcc']);
+
+    $response = $this->get(route($routeName))->assertOk();
+    $document = new DOMDocument;
+    @$document->loadHTML('<?xml encoding="UTF-8">'.$response->getContent());
+    $xpath = new DOMXPath($document);
+
+    expect($xpath->query('//header[contains(@class, "auth-topbar")]')->length)->toBe(0)
+        ->and($xpath->query('//main[contains(@class, "tcc-company-auth-main--standalone")]')->length)->toBe(1)
+        ->and($xpath->query('//main//h1')->length)->toBe(1)
+        ->and($xpath->query('//main//form[@method="POST"]')->length)->toBe(1);
+})->with(['empresa.login', 'empresa.register.form']);
+
+it('preserves the header on tcc password recovery', function () {
+    config(['branding.active' => 'tcc']);
+
+    $this->get(route('company.password.request'))
+        ->assertOk()
+        ->assertSee('auth-topbar__access', false)
+        ->assertDontSee('tcc-company-auth-main--standalone', false);
 });
 
 it('keeps the original company access layout for the client profile', function () {

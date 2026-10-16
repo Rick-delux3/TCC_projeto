@@ -77,7 +77,9 @@
             </div>  
     @endif
 
-   @include('layout-inicial.partials.header_app')
+    @unless (trim($__env->yieldContent('hide-header')) === 'true')
+        @include('layout-inicial.partials.header_app')
+    @endunless
 
     <main class="auth-layout-main @yield('main-class')">
         @yield('content')
