@@ -114,7 +114,7 @@
                         <div class="p-8 flex flex-col flex-grow text-center items-center">
                             <h3 class="text-xl font-bold text-[#030133] mb-3">Inicie sua Operação</h3>
                             <p class="text-slate-600 mb-8 flex-grow text-sm leading-relaxed">Acelere seu tempo de resposta. Centralize novos leads e inicie os processos de locação imediatamente.</p>
-                            <a href="{{ route('empresa.register.form') }}" class="w-full bg-white border-2 border-[#146FB6] text-[#146FB6] font-semibold py-3 rounded-xl hover:bg-[#146FB6] hover:text-white transition-colors">
+                            <a href="{{ route('empresa.register.form') }}" data-auth-access target="_blank" rel="noopener noreferrer" aria-label="Começar agora (abre em nova guia)" class="w-full bg-white border-2 border-[#146FB6] text-[#146FB6] font-semibold py-3 rounded-xl hover:bg-[#146FB6] hover:text-white transition-colors">
                                 Começar agora
                             </a>
                         </div>
@@ -144,7 +144,7 @@
                         <div class="p-8 flex flex-col flex-grow text-center items-center">
                             <h3 class="text-xl font-bold text-[#030133] mb-3">Acessar Painel</h3>
                             <p class="text-slate-600 mb-8 flex-grow text-sm leading-relaxed">Tenha uma visão 360º da sua corretora. Dashboards gerenciais, métricas e acompanhamento de equipe.</p>
-                            <a href="{{ route('empresa.login') }}" class="w-full bg-white border-2 border-[#146FB6] text-[#146FB6] font-semibold py-3 rounded-xl hover:bg-[#146FB6] hover:text-white transition-colors">
+                            <a href="{{ route('empresa.login') }}" data-auth-access target="_blank" rel="noopener noreferrer" aria-label="Ir para o painel (abre em nova guia)" class="w-full bg-white border-2 border-[#146FB6] text-[#146FB6] font-semibold py-3 rounded-xl hover:bg-[#146FB6] hover:text-white transition-colors">
                                 Ir para o painel
                             </a>
                         </div>
@@ -259,7 +259,7 @@
                 <div class="flex gap-6 text-sm">
                     <a href="#solucoes" class="hover:text-white transition-colors">Soluções</a>
                     <a href="#suporte" class="hover:text-white transition-colors">Suporte</a>
-                    <a href="{{ route('empresa.login') }}" class="hover:text-white transition-colors">Área do Cliente</a>
+                    <a href="{{ route('empresa.login') }}" data-auth-access target="_blank" rel="noopener noreferrer" aria-label="Área do Cliente (abre em nova guia)" class="hover:text-white transition-colors">Área do Cliente</a>
                 </div>
             </div>
 

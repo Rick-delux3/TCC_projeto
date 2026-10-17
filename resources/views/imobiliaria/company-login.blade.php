@@ -7,9 +7,13 @@
 @section('content')
 <div class="client-auth-page tcc-company-auth">
     <section class="client-auth-shell">
-        <aside class="client-auth-aside">
-            <img src="{{ asset('imgs/segure-chave-a-mao-ao-ar-livre.jpg') }}" alt="Acesso da imobiliária">
-            <x-brand-logo class="auth-media-logo" />
+        <aside @class(['client-auth-aside', 'tcc-auth-logo-aside' => config('branding.active', 'tcc') === 'tcc'])>
+            @if (config('branding.active', 'tcc') === 'tcc')
+                <img src="{{ asset('imgs/Logo_NVS.png') }}" class="tcc-auth-background-logo" alt="" aria-hidden="true">
+            @else
+                <img src="{{ asset('imgs/segure-chave-a-mao-ao-ar-livre.jpg') }}" alt="Acesso da imobiliária">
+                <x-brand-logo class="auth-media-logo" />
+            @endif
 
             <div class="client-auth-overlay">
                 <span class="client-badge">Portal da imobiliária</span>

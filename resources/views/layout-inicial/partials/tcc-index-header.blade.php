@@ -15,7 +15,7 @@
             <a href="#suporte" class="py-3 text-sm font-medium text-slate-300 transition-colors hover:text-white">Suporte</a>
         </nav>
 
-        <a href="{{ route('empresa.login') }}" class="justify-self-end rounded-full bg-[#146FB6] px-6 py-2.5 text-sm font-medium text-white shadow-lg transition-all duration-300 hover:bg-blue-600 hover:shadow-xl">
+        <a href="{{ route('empresa.login') }}" data-auth-access target="_blank" rel="noopener noreferrer" aria-label="Entrar (abre em nova guia)" class="justify-self-end rounded-full bg-[#146FB6] px-6 py-2.5 text-sm font-medium text-white shadow-lg transition-all duration-300 hover:bg-blue-600 hover:shadow-xl">
             Entrar
         </a>
     </div>

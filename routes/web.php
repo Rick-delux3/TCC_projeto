@@ -241,7 +241,7 @@ Route::middleware(['auth', '2fa'])->group(function () {
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 });
 
-Route::middleware(['auth.unframed', 'ceo.registration.open'])->group(function () {
+Route::middleware(['auth.unframed', 'ceo.registration.open', 'throttle:tcc-auth-pages'])->group(function () {
     $ceoRegistrationPath = rtrim((string) config('admin.ceo_registration_path'), '/');
 
     Route::get($ceoRegistrationPath.'/access', [CorretorRegistrationController::class, 'showCeoRegistrationAccessForm'])
@@ -261,7 +261,7 @@ Route::middleware(['auth.unframed', 'ceo.registration.open'])->group(function ()
     });
 });
 
-Route::middleware(['auth.unframed', 'guest:admin', 'throttle:5,1'])->group(function () {
+Route::middleware(['auth.unframed', 'guest:admin', 'throttle:broker-access', 'throttle:tcc-auth-pages'])->group(function () {
     Route::get('/ceo/admin/login/form', [CorretorAuthController::class, 'ceoShowLoginForm'])
         ->name('admin.ceo.login');
 
@@ -349,7 +349,7 @@ Route::get('/cep/{cep}', [CepController::class, 'show'])
     ->middleware('throttle:30,1')
     ->name('cep.show');
 
-Route::prefix('/empresa')->middleware(['guest:web', 'auth.unframed'])->group(function () {
+Route::prefix('/empresa')->middleware(['guest:web', 'auth.unframed', 'throttle:tcc-auth-pages'])->group(function () {
     Route::get('/form', [ImobiliariaRegistrationController::class, 'showRegistrationForm'])->name('empresa.register.form');
     Route::post('/register', [ImobiliariaRegistrationController::class, 'store'])
         ->middleware('throttle:5,1')

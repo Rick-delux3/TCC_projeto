@@ -7,13 +7,17 @@
 @section('content')
 <div class="admin-register-page {{ config('branding.active', 'tcc') === 'tcc' ? 'tcc-company-auth' : '' }}">
     <section class="admin-register-shell">
-        <aside class="admin-register-aside">
-            <img
-                src="{{ asset('imgs/divulgar-imoveis-online-site-para-imobiliaria.jpg') }}"
-                alt="Acesso ao cadastro inicial do CEO"
-            >
+        <aside @class(['admin-register-aside', 'tcc-auth-logo-aside' => config('branding.active', 'tcc') === 'tcc'])>
+            @if (config('branding.active', 'tcc') === 'tcc')
+                <img src="{{ asset('imgs/Logo_NVS.png') }}" class="tcc-auth-background-logo" alt="" aria-hidden="true">
+            @else
+                <img
+                    src="{{ asset('imgs/divulgar-imoveis-online-site-para-imobiliaria.jpg') }}"
+                    alt="Acesso ao cadastro inicial do CEO"
+                >
 
-            <x-brand-logo class="auth-media-logo" />
+                <x-brand-logo class="auth-media-logo" />
+            @endif
 
             <div class="admin-register-overlay">
                 <span class="admin-badge">Configuração inicial</span>

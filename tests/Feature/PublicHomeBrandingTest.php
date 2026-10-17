@@ -96,6 +96,38 @@ it('connects the tcc landing actions and serves local images with valid section 
         ->and($xpath->query('//*[@id="nvs-mobile-menu"]')->length)->toBe(0);
 });
 
+it('opens index access links safely in a new tab only for tcc', function (string $profile) {
+    config([
+        'features.public_index_enabled' => true,
+        'branding.active' => $profile,
+    ]);
+
+    $html = $this->get(route('index'))->assertOk()->getContent();
+    $document = new DOMDocument;
+    @$document->loadHTML('<?xml encoding="UTF-8">'.$html);
+    $xpath = new DOMXPath($document);
+    $accessLinks = $xpath->query('//a[@href="'.route('empresa.login').'" or @href="'.route('empresa.register.form').'"]');
+
+    expect($accessLinks->length)->toBeGreaterThan(0);
+
+    foreach ($accessLinks as $link) {
+        if ($profile === 'tcc') {
+            $label = trim($link->textContent);
+
+            expect($link->getAttribute('target'))->toBe('_blank')
+                ->and($link->hasAttribute('data-auth-access'))->toBeTrue()
+                ->and(explode(' ', $link->getAttribute('rel')))->toContain('noopener', 'noreferrer')
+                ->and($link->getAttribute('aria-label'))->toBe($label.' (abre em nova guia)');
+        } else {
+            expect($link->getAttribute('target'))->not->toBe('_blank');
+        }
+    }
+
+    foreach ($xpath->query('//a[starts-with(@href, "#") or @href="'.route('simulation.start').'"]') as $link) {
+        expect($link->getAttribute('target'))->not->toBe('_blank');
+    }
+})->with(['tcc', 'client']);
+
 it('renders the new public page with the selected brand', function (
     string $profile,
     string $expectedLogo,

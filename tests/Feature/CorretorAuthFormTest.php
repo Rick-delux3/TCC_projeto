@@ -47,6 +47,22 @@ it('uses the standalone company layout only for tcc broker access forms', functi
     $xpath = new DOMXPath($document);
     $isTcc = $profile === 'tcc';
 
+    $logos = $xpath->query('//aside[contains(@class, "tcc-auth-logo-aside")]/img[contains(@class, "tcc-auth-background-logo")]');
+    $originalImage = $routeName === 'admin.login'
+        ? 'imgs/segure-chave-a-mao-ao-ar-livre.jpg'
+        : 'imgs/divulgar-imoveis-online-site-para-imobiliaria.jpg';
+
+    expect($logos->length)->toBe($isTcc ? 1 : 0);
+
+    if ($isTcc) {
+        expect($logos->item(0)->getAttribute('src'))->toBe(asset('imgs/Logo_NVS.png'))
+            ->and($logos->item(0)->getAttribute('alt'))->toBe('')
+            ->and($logos->item(0)->getAttribute('aria-hidden'))->toBe('true');
+        $response->assertDontSee($originalImage, false);
+    } else {
+        $response->assertSee($originalImage, false);
+    }
+
     expect($xpath->query('//header[contains(@class, "auth-topbar")]')->length)->toBe($isTcc ? 0 : 1)
         ->and($xpath->query('//main[contains(@class, "tcc-company-auth-main--standalone")]')->length)->toBe($isTcc ? 1 : 0)
         ->and($xpath->query('//main/div[contains(@class, "tcc-company-auth")]')->length)->toBe($isTcc ? 1 : 0)

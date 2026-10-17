@@ -7,13 +7,17 @@
 @section('content')
 <div class="admin-auth-page {{ config('branding.active', 'tcc') === 'tcc' ? 'tcc-company-auth tcc-ceo-login' : '' }}">
     <section class="admin-auth-shell">
-        <aside class="admin-auth-aside">
-            <img
-                src="{{ asset('imgs/divulgar-imoveis-online-site-para-imobiliaria.jpg') }}"
-                alt="Acesso restrito do CEO"
-            >
+        <aside @class(['admin-auth-aside', 'tcc-auth-logo-aside' => config('branding.active', 'tcc') === 'tcc'])>
+            @if (config('branding.active', 'tcc') === 'tcc')
+                <img src="{{ asset('imgs/Logo_NVS.png') }}" class="tcc-auth-background-logo" alt="" aria-hidden="true">
+            @else
+                <img
+                    src="{{ asset('imgs/divulgar-imoveis-online-site-para-imobiliaria.jpg') }}"
+                    alt="Acesso restrito do CEO"
+                >
 
-            <x-brand-logo class="auth-media-logo" />
+                <x-brand-logo class="auth-media-logo" />
+            @endif
 
             <div class="admin-auth-overlay">
                 <span class="admin-badge">Acesso Sigiloso</span>

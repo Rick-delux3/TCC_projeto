@@ -36,6 +36,13 @@ it('styles company password pages only for tcc while preserving form destination
         [route('company.password.reset', ['token' => 'preview-token', 'email' => 'company@example.test']), route('company.password.store')],
     ] as [$page, $destination]) {
         $response = $this->get($page)->assertOk();
+        $document = new DOMDocument;
+        @$document->loadHTML('<?xml encoding="UTF-8">'.$response->getContent());
+        $xpath = new DOMXPath($document);
+
+        expect($xpath->query('//header[contains(@class, "auth-topbar")]')->length)->toBe($profile === 'tcc' ? 0 : 1)
+            ->and($xpath->query('//main[contains(@class, "tcc-company-auth-main--standalone")]')->length)->toBe($profile === 'tcc' ? 1 : 0);
+
         $response->assertSee('action="'.$destination.'"', false)
             ->assertSee('name="_token"', false)
             ->assertSee('href="'.route('empresa.login').'"', false)

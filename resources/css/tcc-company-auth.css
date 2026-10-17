@@ -275,6 +275,16 @@ body.auth-layout-body .auth-layout-main.tcc-company-auth-main {
     }
 }
 
+body[data-brand="tcc"] .tcc-auth-logo-aside > img.tcc-auth-background-logo {
+    @apply absolute inset-0 m-auto h-auto max-h-[75%] min-h-0 w-4/5 max-w-[24rem] object-contain object-center opacity-80;
+    filter: none;
+    mix-blend-mode: normal;
+}
+
+body[data-brand="tcc"] .tcc-auth-logo-aside > :is(.client-auth-overlay, .client-register-overlay, .admin-auth-overlay, .admin-register-overlay, .password-reset-overlay) {
+    background: rgb(3 1 51 / 60%);
+}
+
 body.auth-layout-body .auth-layout-main.tcc-company-auth-main--standalone {
     @apply flex min-h-[100dvh] items-center justify-center px-4 py-6 sm:px-6 sm:py-10;
 }
