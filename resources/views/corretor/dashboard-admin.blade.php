@@ -1048,7 +1048,11 @@
                                 && $leadLoversFailure['fields'] !== [];
                         @endphp
 
-                        <article class="card lead-card lead-list-item {{ $resultTone['card'] }}" aria-labelledby="admin-lead-name-{{ $lead->id }}">
+                        <article @class([
+                            'card lead-card lead-list-item',
+                            $resultTone['card'],
+                            'lead-list-item--compact' => config('branding.active', 'tcc') === 'tcc',
+                        ]) aria-labelledby="admin-lead-name-{{ $lead->id }}">
                             <div class="card-body">
                                 <div class="admin-lead-summary">
 

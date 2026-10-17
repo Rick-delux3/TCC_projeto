@@ -86,7 +86,8 @@ function updateLeadDashboardLead(array $overrides = []): Lead
     ], $overrides));
 }
 
-it('renders the company link action for each lead according to its current company and permission', function (bool $allowed) {
+it('renders the company link action for each lead according to its current company and permission', function (bool $allowed, string $brand) {
+    config(['branding.active' => $brand]);
     $permissions = [CorretorPermissions::VIEW_LEADS, CorretorPermissions::VIEW_REAL_ESTATE_COMPANIES];
     if ($allowed) {
         $permissions[] = CorretorPermissions::LINK_LEAD_COMPANY;
@@ -99,6 +100,13 @@ it('renders the company link action for each lead according to its current compa
     $dom = updateLeadDashboardDom($response->getContent());
 
     foreach ([$linked, $unlinked] as $lead) {
+        $card = $dom['xpath']->query('//article[@aria-labelledby="admin-lead-name-'.$lead->id.'"]')->item(0);
+        expect($card)->not->toBeNull()
+            ->and(str_contains($card->getAttribute('class'), 'lead-list-item--compact'))->toBe($brand === 'tcc')
+            ->and($card->textContent)->toContain($lead->nome, $lead->email, $lead->tel, 'LeadLovers:')
+            ->and($dom['xpath']->query('.//a[@href="mailto:'.$lead->email.'"]', $card)->length)->toBe(1)
+            ->and($dom['xpath']->query('.//button[@data-bs-target="#adminLeadModal'.$lead->id.'"]', $card)->length)->toBe(1);
+
         $buttons = $dom['xpath']->query('//*[@data-lead-company-trigger and @data-lead-id="'.$lead->id.'"]');
         expect($buttons->length)->toBe($allowed ? 1 : 0);
 
@@ -111,7 +119,7 @@ it('renders the company link action for each lead according to its current compa
                 ->and($button->getAttribute('data-link-url'))->toBe(route('admin.leads.company.store', $lead));
         }
     }
-})->with([true, false]);
+})->with([true, false])->with(['tcc', 'client']);
 
 function updateLeadDashboardFailedLead(
     string $errorCode,
