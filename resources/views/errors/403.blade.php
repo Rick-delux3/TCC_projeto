@@ -1,12 +1,20 @@
 @extends('layout-inicial.app')
 
+@section('body-class', config('branding.active', 'tcc') === 'tcc' ? 'tcc-error-body' : '')
+@section('main-class', config('branding.active', 'tcc') === 'tcc' ? 'tcc-error-main' : '')
+@section('hide-header', config('branding.active', 'tcc') === 'tcc' ? 'true' : 'false')
+
 @section('content')
-<div class="container py-4 py-lg-5" style="font-family: 'Sansation', sans-serif;">
-    <section class="row g-0 overflow-hidden bg-white border shadow-lg rounded-3 mx-auto" style="max-width: 960px;">
+<div class="error-page container py-4 py-lg-5" style="font-family: 'Sansation', sans-serif;">
+    <section class="error-shell row g-0 overflow-hidden bg-white border shadow-lg rounded-3 mx-auto" style="max-width: 960px;">
         <aside
-            class="col-lg-5 position-relative overflow-hidden text-white"
+            class="error-aside col-lg-5 position-relative overflow-hidden text-white"
             style="min-height: 420px; background: linear-gradient(150deg, #030133 0%, #0c1d72 54%, #146FB6 100%);"
         >
+            @if (config('branding.active', 'tcc') === 'tcc')
+                <img src="{{ asset('imgs/Logo_NVS.png') }}" class="error-background-logo" alt="" aria-hidden="true">
+                <div class="error-logo-overlay" aria-hidden="true"></div>
+            @else
             <img
                 src="{{ asset('imgs/divulgar-imoveis-online-site-para-imobiliaria.jpg') }}"
                 alt="Acesso bloqueado"
@@ -23,7 +31,9 @@
                 style="width: 46px; height: 46px; object-fit: contain; filter: drop-shadow(0 8px 16px rgba(7, 15, 35, 0.3));"
             />
 
-            <div class="position-relative d-flex h-100 flex-column justify-content-end p-4 p-md-5" style="min-height: 420px;">
+            @endif
+
+            <div class="error-aside-copy position-relative d-flex h-100 flex-column justify-content-end p-4 p-md-5" style="min-height: 420px;">
                 <span class="badge rounded-pill text-bg-danger align-self-start mb-3 px-3 py-2 text-uppercase">
                     Acesso restrito
                 </span>
@@ -36,7 +46,7 @@
             </div>
         </aside>
 
-        <div class="col-lg-7 d-flex flex-column justify-content-center p-4 p-md-5">
+        <div class="error-content col-lg-7 d-flex flex-column justify-content-center p-4 p-md-5">
             <header class="mb-4">
                 <span
                     class="badge rounded-pill mb-3 px-3 py-2 text-uppercase"

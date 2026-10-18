@@ -460,6 +460,23 @@ it('keeps both web two-factor views isolated to the active brand', function (
     $companyHtml = view('auth.2fa', $viewData)->render();
     $adminHtml = view('auth.admin-2fa', $viewData)->render();
 
+    $document = new DOMDocument;
+    $previous = libxml_use_internal_errors(true);
+    $document->loadHTML('<?xml encoding="UTF-8">'.$companyHtml);
+    libxml_clear_errors();
+    libxml_use_internal_errors($previous);
+    $xpath = new DOMXPath($document);
+
+    expect($xpath->query('//body[contains(@class,"tcc-verification-body")]')->length)->toBe($profile === 'tcc' ? 1 : 0)
+        ->and($xpath->query('//aside/img[contains(@class,"tcc-auth-background-logo")]')->length)->toBe($profile === 'tcc' ? 1 : 0)
+        ->and($xpath->query('//img[contains(@class,"verify-brand")]')->length)->toBe($profile === 'tcc' ? 0 : 1)
+        ->and($xpath->query('//div[contains(@class,"standalone-auth-page")]/header')->length)->toBe($profile === 'tcc' ? 0 : 1)
+        ->and($xpath->query('//input[@name="code"][@maxlength="6"][@autocomplete="one-time-code"]')->length)->toBe(1);
+
+    foreach (['2fa.verify.post', '2fa.resend'] as $route) {
+        expect($xpath->query('//form[@method="POST"][@action="'.route($route).'"]//input[@name="_token"]')->length)->toBe(1);
+    }
+
     expect($companyHtml)
         ->toContain('data-brand="'.$profile.'"')
         ->toContain($brandName)

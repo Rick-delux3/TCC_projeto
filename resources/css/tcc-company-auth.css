@@ -1,3 +1,106 @@
+body.auth-layout-body.tcc-error-body {
+    background: #f4f7f9;
+}
+
+body.tcc-error-body .auth-layout-main.tcc-error-main {
+    @apply flex min-h-[100dvh] items-center justify-center px-4 py-6 sm:px-6 sm:py-10;
+    background: #f4f7f9;
+}
+
+.tcc-error-body .error-page {
+    @apply w-full p-0;
+    max-width: 880px;
+    padding: 0 !important;
+}
+
+.tcc-error-body .error-shell {
+    @apply grid grid-cols-1 border-0;
+    border-radius: 0 !important;
+    box-shadow: 0 20px 48px rgb(15 23 42 / 12%) !important;
+}
+
+.tcc-error-body .error-aside {
+    @apply relative w-full overflow-hidden;
+    min-height: 280px !important;
+    background: #030133 !important;
+}
+
+.tcc-error-body .error-background-logo {
+    @apply absolute inset-0 m-auto h-auto w-4/5 max-w-[24rem] object-contain object-center opacity-80;
+    max-height: 75%;
+}
+
+.tcc-error-body .error-logo-overlay {
+    @apply absolute inset-0;
+    background: rgb(3 1 51 / 60%);
+}
+
+.tcc-error-body .error-aside-copy {
+    @apply gap-3;
+    min-height: 280px !important;
+    padding: 28px !important;
+}
+
+.tcc-error-body .error-aside-copy > .badge {
+    border-radius: 0 !important;
+    background: #fd1e6e !important;
+    font-size: 0.6875rem;
+    letter-spacing: 0.08em;
+}
+
+.tcc-error-body .error-aside-copy h2 {
+    @apply mb-0 text-2xl leading-tight;
+}
+
+.tcc-error-body .error-aside-copy p {
+    color: #e2e8f0 !important;
+    font-size: 0.875rem;
+    line-height: 1.6;
+}
+
+.tcc-error-body .error-content {
+    @apply w-full;
+    padding: 28px !important;
+}
+
+.tcc-error-body .error-content h1 {
+    font-size: clamp(1.75rem, 3vw, 2.25rem);
+    line-height: 1.15;
+}
+
+.tcc-error-body .error-content :is(p, small) {
+    font-size: 0.875rem;
+    line-height: 1.6;
+}
+
+.tcc-error-body .error-content .btn {
+    @apply flex min-h-12 items-center justify-center px-4 py-3 text-base;
+    border-radius: 0;
+}
+
+.tcc-error-body .error-content .btn.text-white {
+    background: #030133 !important;
+}
+
+.tcc-error-body .error-content .btn.text-white:hover {
+    background: #17134f !important;
+}
+
+@media (min-width: 768px) {
+    .tcc-error-body .error-shell {
+        grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+    }
+
+    .tcc-error-body .error-aside-copy {
+        min-height: 440px !important;
+        padding: 32px !important;
+    }
+
+    .tcc-error-body .error-content {
+        padding: 36px !important;
+    }
+}
+
 body.auth-layout-body.tcc-company-auth-body {
     background: #f4f7f9;
 }
@@ -281,8 +384,95 @@ body[data-brand="tcc"] .tcc-auth-logo-aside > img.tcc-auth-background-logo {
     mix-blend-mode: normal;
 }
 
-body[data-brand="tcc"] .tcc-auth-logo-aside > :is(.client-auth-overlay, .client-register-overlay, .admin-auth-overlay, .admin-register-overlay, .password-reset-overlay) {
+body[data-brand="tcc"] .tcc-auth-logo-aside > :is(.client-auth-overlay, .client-register-overlay, .admin-auth-overlay, .admin-register-overlay, .password-reset-overlay, .verify-overlay) {
     background: rgb(3 1 51 / 60%);
+}
+
+.tcc-verification-body .standalone-auth-page,
+.tcc-verification-body .standalone-auth-main {
+    background: #f4f7f9;
+}
+
+.tcc-verification-body .standalone-auth-main {
+    @apply flex min-h-[100dvh] items-center justify-center px-4 py-6 sm:px-6 sm:py-10;
+}
+
+.tcc-verification-body .verify-shell {
+    @apply max-w-[980px] grid-cols-1 border-0 rounded-none;
+    animation: none;
+    box-shadow: 0 25px 48px rgb(15 23 42 / 20%);
+}
+
+.tcc-verification-body .verify-aside {
+    @apply min-h-[310px] overflow-hidden;
+    background: #030133;
+}
+
+.tcc-verification-body .verify-overlay {
+    @apply relative flex min-h-[310px] flex-col justify-end gap-4 px-6 py-8;
+    height: 100%;
+}
+
+.tcc-verification-body .verify-badge {
+    @apply mb-0 rounded-none px-3 py-2 text-xs tracking-widest;
+    background: #fd1e6e;
+}
+
+.tcc-verification-body .verify-overlay h2 {
+    @apply mb-0 text-3xl leading-tight;
+}
+
+.tcc-verification-body .verify-card {
+    @apply flex flex-col justify-center px-6 py-8;
+}
+
+.tcc-verification-body .verify-header h1 {
+    @apply text-3xl leading-tight;
+}
+
+.tcc-verification-body :is(.verify-header p, .verify-note, .verify-tip) {
+    @apply text-sm leading-relaxed;
+    color: #55658c;
+}
+
+.tcc-verification-body .status-box {
+    @apply rounded-none border px-4 py-3 text-sm;
+}
+
+.tcc-verification-body .verify-label {
+    @apply mb-2 text-sm;
+    color: #030133;
+}
+
+.tcc-verification-body .code-input {
+    @apply h-14 rounded-none border-2 text-2xl;
+    background: #f9fafb;
+    letter-spacing: 0.35em;
+    font-variant-numeric: tabular-nums;
+}
+
+.tcc-verification-body .code-input:focus {
+    border-color: #030133;
+    box-shadow: 0 0 0 3px rgb(3 1 51 / 12%);
+}
+
+.tcc-verification-body :is(.verify-submit, .verify-resend) {
+    @apply min-h-12 rounded-none px-4 py-3 text-sm;
+}
+
+.tcc-verification-body .verify-submit {
+    background: #030133;
+}
+
+.tcc-verification-body :is(.verify-submit, .verify-resend):focus-visible {
+    outline: 2px solid #146fb6;
+    outline-offset: 3px;
+}
+
+@media (min-width: 768px) {
+    .tcc-verification-body .verify-shell { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .tcc-verification-body .verify-aside { min-height: 560px; }
+    .tcc-verification-body :is(.verify-overlay, .verify-card) { padding: 40px; }
 }
 
 body.auth-layout-body .auth-layout-main.tcc-company-auth-main--standalone {
