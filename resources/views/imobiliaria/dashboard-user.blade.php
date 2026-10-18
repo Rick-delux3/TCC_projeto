@@ -238,7 +238,7 @@
 @endphp
 
 
-<div id="dashboardThemeRoot" class="dashboard-shell" data-dashboard-theme="light">
+<div id="dashboardThemeRoot" class="dashboard-shell company-leads-page" data-dashboard-theme="light">
     <div class="container-fluid px-3 px-lg-4 py-4">
         <x-dashboard-realtime-notice />
         @if (session('success'))
@@ -271,7 +271,7 @@
         @endif
 
         {{-- Cabeçalho moderno --}}
-        <div class="d-flex flex-column flex-xl-row justify-content-between align-items-xl-center gap-3 mb-4">
+        <div class="company-page-heading d-flex flex-column flex-xl-row justify-content-between align-items-xl-center gap-3 mb-4">
             <div>
                 <span class="badge text-bg-primary-subtle text-primary border border-primary-subtle mb-2">
                     Dashboard da imobiliária
@@ -304,7 +304,7 @@
         </div>
 
         {{-- Bloco principal superior --}}
-        <div class="row g-4 mb-4">
+        <div class="row g-4 mb-4 company-overview-grid">
 
             {{-- Hero principal --}}
             <div class="col-12 col-xl-7">
@@ -463,7 +463,7 @@
 
 
         {{-- Métricas --}}
-        <div class="row g-3 mb-4">
+        <div class="row g-3 mb-4 company-metrics">
             <div class="col-6 col-xl-3">
                 <div class="card border-0 shadow-sm rounded-4 dashboard-stat-card h-100">
                     <div class="card-body">
@@ -551,7 +551,7 @@
 
 
         {{-- Cards operacionais superiores --}}
-        <div class="row g-4 mb-4">
+        <div class="row g-4 mb-4 company-operations">
 
             {{-- Resumo operacional --}}
             <div class="col-12 col-xl-4">
@@ -683,7 +683,7 @@
 
 
         {{-- Área principal da lista de leads --}}
-        <div class="row g-4">
+        <div class="row g-4 company-directory">
             <div class="col-12">
 
                 {{-- Filtros --}}
@@ -956,10 +956,10 @@
                             <article class="card border-0 shadow-sm rounded-5 lead-card lead-list-item {{ $leadTone['card'] }}">
                                 <div class="card-body p-3 p-lg-4">
 
-                                    <div class="row g-3 align-items-center">
+                                    <div class="row g-3 align-items-center company-lead-summary">
 
                                         {{-- Identificação --}}
-                                        <div class="col-12 col-md-6 col-xl-3">
+                                        <div class="company-lead-identity col-12 col-md-6 col-xl-3">
                                             <div class="d-flex align-items-center gap-3">
                                                 <div class="lead-avatar rounded-4 bg-primary text-white d-flex align-items-center justify-content-center fw-bold">
                                                     {{ $leadInitials ?: 'L' }}
@@ -978,7 +978,7 @@
                                         </div>
 
                                         {{-- E-mail --}}
-                                        <div class="col-12 col-md-6 col-xl-3">
+                                        <div class="company-lead-email col-12 col-md-6 col-xl-3">
                                             <div class="small text-muted">E-mail</div>
 
                                             @if ($lead->email)
@@ -993,7 +993,7 @@
                                         </div>
 
                                         {{-- Telefone --}}
-                                        <div class="col-6 col-md-3 col-xl-2">
+                                        <div class="company-lead-phone col-6 col-md-3 col-xl-2">
                                             <div class="small text-muted">Telefone</div>
 
                                             <div class="fw-semibold text-truncate">
@@ -1002,7 +1002,7 @@
                                         </div>
 
                                         {{-- Entrada --}}
-                                        <div class="col-6 col-md-3 col-xl-1">
+                                        <div class="company-lead-entry col-6 col-md-3 col-xl-1">
                                             <div class="small text-muted">Entrada</div>
 
                                             <div class="fw-semibold">
@@ -1015,7 +1015,7 @@
                                         </div>
 
                                         {{-- Tag oficial do lead --}}
-                                        <div class="col-12 col-md-4 col-xl-2">
+                                        <div class="company-lead-tag col-12 col-md-4 col-xl-2">
                                             <div class="d-flex flex-wrap gap-2 justify-content-start justify-content-xl-end">
 
                                                 @if ($officialLeadTag)
@@ -1040,7 +1040,7 @@
                                         </div>
 
                                         {{-- Botão --}}
-                                        <div class="col-12 col-md-2 col-xl-1">
+                                        <div class="company-lead-actions col-12 col-md-2 col-xl-1">
                                             <button
                                                 type="button"
                                                 class="btn btn-sm {{ $leadLoversFailureIsCorrectable ? 'btn-danger leadlovers-correction-trigger' : 'btn-outline-primary' }} w-100 text-nowrap"
@@ -1065,7 +1065,7 @@
 
                                     </div>
 
-                                    <div class="d-flex flex-wrap align-items-center gap-2 mt-3 pt-3 border-top">
+                                    <div class="company-lead-sync d-flex flex-wrap align-items-center gap-2 mt-3 pt-3 border-top">
                                         <span class="small text-muted">
                                             LeadLovers:
                                         </span>

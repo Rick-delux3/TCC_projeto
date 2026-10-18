@@ -86,6 +86,28 @@ function updateLeadDashboardLead(array $overrides = []): Lead
     ], $overrides));
 }
 
+it('adapts the company workspace only for tcc while preserving company boundaries and actions', function (string $brand): void {
+    config(['branding.active' => $brand]);
+    $company = updateLeadDashboardCompany(['lead_access_code' => 'NVS789']);
+    $lead = updateLeadDashboardLead(['company_id' => $company->id, 'tags_originais' => 'Aprovado']);
+    $foreign = updateLeadDashboardLead(['company_id' => updateLeadDashboardCompany()->id]);
+    $response = $this->actingAs(updateLeadDashboardCompanyUser($company))
+        ->withSession(['2fa_passed' => true])
+        ->get(route('company.dashboard'))->assertOk();
+    $xpath = updateLeadDashboardDom($response->getContent())['xpath'];
+
+    expect($xpath->query('//body[contains(@class,"company-workspace")]')->length)->toBe($brand === 'tcc' ? 1 : 0)
+        ->and($xpath->query('//header//button[@data-dashboard-theme-toggle]')->length)->toBe($brand === 'tcc' ? 1 : 0)
+        ->and($xpath->query('//header//nav[@aria-label="Seções do painel"]')->length)->toBe(1)
+        ->and($xpath->query('//*[@id="dashboardLeadAccessCode" and @value="NVS789"]')->length)->toBe(1)
+        ->and($xpath->query('//select[@name="tag"]')->length)->toBe(1)
+        ->and($xpath->query('//select[@name="imobiliaria"] | //*[@data-lead-company-trigger]')->length)->toBe(0)
+        ->and($xpath->query('//article[contains(@class,"lead-list-item")]')->length)->toBe(1)
+        ->and($xpath->query('//article//a[@href="'.route('insurance-analyses.lead', $lead).'"]')->length)->toBe(1)
+        ->and($xpath->query('//form[@action="'.route('dashboard.leads.update', $lead).'"]//input[@name="_token"]')->length)->toBe(1);
+    $response->assertSee($lead->email)->assertDontSee($foreign->email);
+})->with(['tcc', 'client']);
+
 it('renders the company link action for each lead according to its current company and permission', function (bool $allowed, string $brand) {
     config(['branding.active' => $brand]);
     $permissions = [CorretorPermissions::VIEW_LEADS, CorretorPermissions::VIEW_REAL_ESTATE_COMPANIES];
