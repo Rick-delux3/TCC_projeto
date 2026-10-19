@@ -71,7 +71,7 @@ class FilterCorretorDashboardRequest extends FormRequest
             'lead_name.string' => 'Informe um texto para buscar leads.',
             'lead_name.max' => 'A busca deve ter no máximo 255 caracteres.',
             'imobiliaria.string' => 'Informe um vínculo válido.',
-            'imobiliaria.regex' => 'Selecione uma imobiliária ou a opção sem vínculo.',
+            'imobiliaria.regex' => \App\Support\BrandingText::choose('Selecione uma imobiliária ou a opção sem vínculo.', 'Selecione uma empresa ou a opção sem vínculo.'),
             'tipo_solicitante.string' => 'Informe um perfil válido.',
             'tipo_solicitante.in' => 'Selecione um perfil válido.',
             'resultado.string' => 'Informe um resultado válido.',

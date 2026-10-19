@@ -138,7 +138,7 @@ class TwoFactorController extends Controller
             ]);
 
             return redirect()->route('2fa')->withErrors([
-                'code' => 'Não foi possível reenviar o código. Verifique o e-mail cadastrado da imobiliária.',
+                'code' => \App\Support\BrandingText::choose('Não foi possível reenviar o código. Verifique o e-mail cadastrado da imobiliária.', 'Não foi possível reenviar o código. Verifique o e-mail cadastrado da empresa.'),
             ]);
         }
 

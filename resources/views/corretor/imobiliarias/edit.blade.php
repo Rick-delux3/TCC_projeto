@@ -30,8 +30,8 @@
                         <div class="company-edit-heading">
                             <span class="company-edit-icon" aria-hidden="true"><i class="bi bi-building-gear"></i></span>
                             <div>
-                                <span class="company-modal-eyebrow">Dados da imobiliária</span>
-                                <h2 class="modal-title" id="company-edit-modal-title">Editar imobiliária</h2>
+                                <span class="company-modal-eyebrow">{{ \App\Support\BrandingText::choose('Dados da imobiliária', 'Dados da empresa') }}</span>
+                                <h2 class="modal-title" id="company-edit-modal-title">{{ \App\Support\BrandingText::choose('Editar imobiliária', 'Editar empresa') }}</h2>
                             </div>
                         </div>
                         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
@@ -39,7 +39,7 @@
 
                     <div class="modal-body">
                         <div class="company-edit-identity">
-                            <span>Imobiliária selecionada</span>
+                            <span>{{ \App\Support\BrandingText::choose('Imobiliária selecionada', 'Empresa selecionada') }}</span>
                             <strong data-edit-company-title>{{ $editingCompany?->name }}</strong>
                         </div>
                         @if ($hasEditErrors)
@@ -55,7 +55,7 @@
                         <div class="row g-3">
                             <div class="col-12">
                                 <label for="edit-company-name" class="form-label fw-semibold">
-                                    Nome da imobiliária <span class="text-danger" aria-hidden="true">*</span>
+                                    {{ \App\Support\BrandingText::choose('Nome da imobiliária', 'Nome da empresa') }} <span class="text-danger" aria-hidden="true">*</span>
                                 </label>
                                 <input
                                     type="text"

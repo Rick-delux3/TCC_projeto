@@ -41,7 +41,7 @@
                 <h2 class="h3 fw-bold mb-3">Área protegida da plataforma</h2>
 
                 <p class="mb-0 text-white-50">
-                    Este ambiente é reservado para acessos autorizados da corretora.
+                    {{ \App\Support\BrandingText::choose('Este ambiente é reservado para acessos autorizados da corretora.', 'Este ambiente é reservado para acessos autorizados da concessionária.') }}
                 </p>
             </div>
         </aside>

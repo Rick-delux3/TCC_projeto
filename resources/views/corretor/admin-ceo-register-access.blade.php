@@ -25,8 +25,7 @@
                 <h2>Acesso restrito ao cadastro do CEO</h2>
 
                 <p>
-                    Informe a chave de configuração para liberar temporariamente
-                    o cadastro do corretor principal.
+                    {{ \App\Support\BrandingText::choose('Informe a chave de configuração para liberar temporariamente o cadastro do corretor principal.', 'Informe a chave de configuração para liberar temporariamente o cadastro do CEO da concessionária.') }}
                 </p>
             </div>
         </aside>

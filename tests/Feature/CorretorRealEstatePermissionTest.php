@@ -102,7 +102,7 @@ it('rejects an inconsistent real estate permission set when creating a team memb
     $response
         ->assertRedirect(route('admin.config-equipe.create'))
         ->assertSessionHasErrors([
-            'permissions' => 'Para cadastrar, editar ou remover imobiliárias, selecione também “Visualizar imobiliárias”.',
+            'permissions' => 'Para cadastrar, editar ou remover empresas, selecione também “Visualizar empresas”.',
         ]);
 
     $this->assertDatabaseMissing('corretores', [
@@ -168,9 +168,9 @@ it('renders grouped permission cards and blocks real estate actions until visual
         ->assertSeeText('Ativar todas as permissões')
         ->assertSee('data-team-permission-toggle-all', false)
         ->assertSee('data-team-permission-toggle-all-status', false)
-        ->assertSeeText('Leads e clientes')
+        ->assertSeeText('Leads e beneficiários')
         ->assertSeeText('Análises')
-        ->assertSeeText('Imobiliárias')
+        ->assertSeeText('Empresas')
         ->assertSeeText('Tags dos leads')
         ->assertSee('data-team-permission-groups', false)
         ->assertSee('data-team-permission-group="real-estate-companies"', false)

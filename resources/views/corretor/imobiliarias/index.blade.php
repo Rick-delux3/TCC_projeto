@@ -95,7 +95,7 @@
                         <li class="breadcrumb-item">
                             <a href="{{ route('Dashboard-Admin') }}">Dashboard</a>
                         </li>
-                        <li class="breadcrumb-item active" aria-current="page">Imobiliárias</li>
+                        <li class="breadcrumb-item active" aria-current="page">{{ \App\Support\BrandingText::choose('Imobiliárias', 'Empresas') }}</li>
                     </ol>
                 </nav>
 
@@ -105,24 +105,23 @@
                             <i class="bi bi-buildings" aria-hidden="true"></i>
                             Gestão de parceiros
                         </span>
-                        <h1 id="companies-page-title" class="display-6 fw-bold mb-2">Imobiliárias cadastradas</h1>
+                        <h1 id="companies-page-title" class="display-6 fw-bold mb-2">{{ \App\Support\BrandingText::choose('Imobiliárias cadastradas', 'Empresas cadastradas') }}</h1>
                         <p class="mb-0">
-                            Consulte os dados de acesso, acompanhe a disponibilidade dos formulários e encontre
-                            rapidamente uma imobiliária.
+                            {{ \App\Support\BrandingText::choose('Consulte os dados de acesso, acompanhe a disponibilidade dos formulários e encontre rapidamente uma imobiliária.', 'Consulte os dados de acesso, acompanhe a disponibilidade dos formulários e encontre rapidamente uma empresa.') }}
                         </p>
                     </div>
 
                     @can('create-real-estate-company')
                         <a href="{{ route('admin.imobiliarias.create') }}" class="btn btn-primary text-white company-index-create">
                             <i class="bi bi-plus-lg" aria-hidden="true"></i>
-                            Cadastrar imobiliária
+                            {{ \App\Support\BrandingText::choose('Cadastrar imobiliária', 'Cadastrar empresa') }}
                         </a>
                     @endcan
                 </div>
             </div>
         </header>
 
-        <section class="company-overview-strip mb-4" aria-label="Resumo das imobiliárias" data-reveal data-reveal-delay="40">
+        <section class="company-overview-strip mb-4" aria-label="{{ \App\Support\BrandingText::choose('Resumo das imobiliárias', 'Resumo das empresas') }}" data-reveal data-reveal-delay="40">
             <div class="company-overview-item">
                 <article class="company-summary-card company-summary-card--total h-100">
                     <div class="card-body">
@@ -130,7 +129,7 @@
                             <i class="bi bi-buildings"></i>
                         </div>
                         <div>
-                            <p class="company-summary-card__label">Total de imobiliárias</p>
+                            <p class="company-summary-card__label">{{ \App\Support\BrandingText::choose('Total de imobiliárias', 'Total de empresas') }}</p>
                             <p class="company-summary-card__value" data-count-up="{{ $summary['total'] ?? 0 }}">{{ number_format($summary['total'] ?? 0, 0, ',', '.') }}</p>
                             <p class="company-summary-card__hint mb-0">parceiros cadastrados</p>
                         </div>
@@ -174,7 +173,7 @@
             <div class="card-body p-3 p-lg-4">
                 <div class="d-flex align-items-center justify-content-between gap-3 mb-3">
                     <div>
-                        <h2 id="company-filter-title" class="h5 fw-bold mb-1">Encontre uma imobiliária</h2>
+                        <h2 id="company-filter-title" class="h5 fw-bold mb-1">{{ \App\Support\BrandingText::choose('Encontre uma imobiliária', 'Encontre uma empresa') }}</h2>
                         <p class="text-muted small mb-0">Use um ou mais filtros para refinar a listagem.</p>
                     </div>
                     @if ($hasFilters)
@@ -234,21 +233,21 @@
                     @if ($hasFilters)
                         <h2 class="h4 fw-bold mt-4">Nenhum resultado para os filtros aplicados</h2>
                         <p class="text-muted mx-auto mb-4">
-                            Revise a busca ou o status selecionado para encontrar outras imobiliárias.
+                            {{ \App\Support\BrandingText::choose('Revise a busca ou o status selecionado para encontrar outras imobiliárias.', 'Revise a busca ou o status selecionado para encontrar outras empresas.') }}
                         </p>
                         <a href="{{ route('admin.imobiliarias.index') }}" class="btn btn-outline-primary">
                             <i class="bi bi-arrow-counterclockwise me-1" aria-hidden="true"></i>
                             Limpar filtros
                         </a>
                     @else
-                        <h2 class="h4 fw-bold mt-4">Nenhuma imobiliária cadastrada</h2>
+                        <h2 class="h4 fw-bold mt-4">{{ \App\Support\BrandingText::choose('Nenhuma imobiliária cadastrada', 'Nenhuma empresa cadastrada') }}</h2>
                         <p class="text-muted mx-auto mb-4">
-                            Assim que uma imobiliária for cadastrada, seus dados aparecerão nesta página.
+                            {{ \App\Support\BrandingText::choose('Assim que uma imobiliária for cadastrada, seus dados aparecerão nesta página.', 'Assim que uma empresa for cadastrada, seus dados aparecerão nesta página.') }}
                         </p>
                         @can('create-real-estate-company')
                             <a href="{{ route('admin.imobiliarias.create') }}" class="btn btn-primary text-white">
                                 <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>
-                                Cadastrar primeira imobiliária
+                                {{ \App\Support\BrandingText::choose('Cadastrar primeira imobiliária', 'Cadastrar primeira empresa') }}
                             </a>
                         @endcan
                     @endif
@@ -259,7 +258,7 @@
                 <div class="card-body p-0">
                     <div class="company-list-card__header">
                         <div>
-                            <h2 id="company-list-title" class="h5 fw-bold mb-1">Lista de imobiliárias</h2>
+                            <h2 id="company-list-title" class="h5 fw-bold mb-1">{{ \App\Support\BrandingText::choose('Lista de imobiliárias', 'Lista de empresas') }}</h2>
                             <p class="text-muted small mb-0">
                                 Exibindo {{ $companies->firstItem() }}–{{ $companies->lastItem() }} de
                                 {{ number_format($companies->total(), 0, ',', '.') }} resultados
@@ -267,12 +266,12 @@
                         </div>
                     </div>
 
-                    <div class="d-none d-lg-block table-responsive" role="region" aria-label="Tabela de imobiliárias" tabindex="0">
+                    <div class="d-none d-lg-block table-responsive" role="region" aria-label="{{ \App\Support\BrandingText::choose('Tabela de imobiliárias', 'Tabela de empresas') }}" tabindex="0">
                         <table class="table company-table align-middle mb-0">
-                            <caption class="visually-hidden">Imobiliárias cadastradas: contatos, localização, código de acesso e status dos formulários.</caption>
+                            <caption class="visually-hidden">{{ \App\Support\BrandingText::choose('Imobiliárias cadastradas: contatos, localização, código de acesso e status dos formulários.', 'Empresas cadastradas: contatos, localização, código de acesso e status dos formulários.') }}</caption>
                             <thead>
                                 <tr>
-                                    <th scope="col">Imobiliária</th>
+                                    <th scope="col">{{ \App\Support\BrandingText::choose('Imobiliária', 'Empresa') }}</th>
                                     <th scope="col">Documentos e contato</th>
                                     <th scope="col">Localização</th>
                                      <th scope="col">Código de acesso</th>
@@ -329,7 +328,7 @@
                                                         class="btn company-copy-button"
                                                         data-copy-code="{{ $company->lead_access_code }}"
                                                         data-copy-feedback="copy-feedback-{{ $company->id }}"
-                                                        aria-label="Copiar o código {{ $company->lead_access_code }} da imobiliária {{ $company->name }}"
+                                                        aria-label="{{ \App\Support\BrandingText::choose('Copiar o código da imobiliária', 'Copiar o código da empresa') }} {{ $company->name }}: {{ $company->lead_access_code }}"
                                                         title="Copiar código"
                                                     >
                                                         <i class="bi bi-copy" aria-hidden="true"></i>
@@ -371,7 +370,7 @@
                                                             data-company-status="{{ $company->lead_form_active ? '1' : '0' }}"
                                                             data-bs-toggle="modal"
                                                             data-bs-target="#companyEditModal"
-                                                            aria-label="Editar a imobiliária {{ $company->name }}"
+                                                            aria-label="{{ \App\Support\BrandingText::choose('Editar a imobiliária', 'Editar a empresa') }} {{ $company->name }}"
                                                             title="Editar"
                                                         >
                                                             <i class="bi bi-pencil-square" aria-hidden="true"></i>
@@ -388,7 +387,7 @@
                                                             data-company-name="{{ $company->name }}"
                                                             data-bs-toggle="modal"
                                                             data-bs-target="#companyDeleteModal"
-                                                            aria-label="Remover a imobiliária {{ $company->name }}"
+                                                            aria-label="{{ \App\Support\BrandingText::choose('Remover a imobiliária', 'Remover a empresa') }} {{ $company->name }}"
                                                             title="Remover"
                                                         >
                                                             <i class="bi bi-trash3" aria-hidden="true"></i>
@@ -462,7 +461,7 @@
                                             class="btn btn-sm company-copy-button company-copy-button--labeled"
                                             data-copy-code="{{ $company->lead_access_code }}"
                                             data-copy-feedback="copy-mobile-feedback-{{ $company->id }}"
-                                            aria-label="Copiar o código {{ $company->lead_access_code }} da imobiliária {{ $company->name }}"
+                                            aria-label="{{ \App\Support\BrandingText::choose('Copiar o código da imobiliária', 'Copiar o código da empresa') }} {{ $company->name }}: {{ $company->lead_access_code }}"
                                         >
                                             <i class="bi bi-copy" aria-hidden="true"></i>
                                             <span data-copy-label>Copiar</span>
@@ -517,9 +516,9 @@
                     </div>
 
                     <footer class="company-directory-footer">
-                        <p class="mb-0">{{ number_format($companies->total(), 0, ',', '.') }} {{ $companies->total() === 1 ? 'imobiliária' : 'imobiliárias' }}</p>
+                        <p class="mb-0">{{ number_format($companies->total(), 0, ',', '.') }} {{ $companies->total() === 1 ? \App\Support\BrandingText::choose('imobiliária', 'empresa') : \App\Support\BrandingText::choose('imobiliárias', 'empresas') }}</p>
                         @if ($companies->hasPages())
-                            <div class="company-pagination" aria-label="Paginação de imobiliárias">
+                            <div class="company-pagination" aria-label="{{ \App\Support\BrandingText::choose('Paginação de imobiliárias', 'Paginação de empresas') }}">
                                 {{ $companies->onEachSide(1)->links('pagination::bootstrap-5') }}
                             </div>
                         @endif
@@ -551,7 +550,7 @@
                         @method('DELETE')
 
                         <div class="modal-header">
-                            <h2 class="modal-title fs-5" id="company-delete-modal-title">Remover imobiliária</h2>
+                            <h2 class="modal-title fs-5" id="company-delete-modal-title">{{ \App\Support\BrandingText::choose('Remover imobiliária', 'Remover empresa') }}</h2>
                             <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
                         </div>
 
@@ -560,7 +559,7 @@
                                 <i class="bi bi-exclamation-triangle-fill"></i>
                             </div>
                             <p id="company-delete-modal-description" class="mb-2">
-                                Confirma a remoção da imobiliária <strong data-delete-company-name></strong>?
+                                {{ \App\Support\BrandingText::choose('Confirma a remoção da imobiliária', 'Confirma a remoção da empresa') }} <strong data-delete-company-name></strong>?
                             </p>
                             <p class="text-danger fw-semibold mb-0">Esta ação é irreversível.</p>
                         </div>

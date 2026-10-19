@@ -68,7 +68,7 @@
             <div class="alert alert-light border d-flex align-items-start gap-2 py-3" role="alert">
                 <span class="badge text-bg-danger flex-shrink-0">{{ config('branding.profiles.'.config('branding.active', 'tcc').'.short_name', 'NVS') }}</span>
                 <small class="text-secondary">
-                    Volte para a página inicial ou acesse o portal da imobiliária para continuar.
+                    {{ \App\Support\BrandingText::choose('Volte para a página inicial ou acesse o portal da imobiliária para continuar.', 'Volte para a página inicial ou acesse o portal da empresa para continuar.') }}
                 </small>
             </div>
 

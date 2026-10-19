@@ -24,7 +24,7 @@
         </div>
 
         <p class="manual-tag-processing-notice__message">
-            Corretor <strong>{{ $processingState['corretor_name'] }}</strong>
+            {{ \App\Support\BrandingText::choose('Corretor', 'Integrante') }} <strong>{{ $processingState['corretor_name'] }}</strong>
             solicitou a alteração dos dados do lead e a sincronização com a
             <strong>LeadLovers</strong>.
         </p>

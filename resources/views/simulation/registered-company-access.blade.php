@@ -2,6 +2,9 @@
 
 @section('inline-feedback', 'true')
 @section('content')
+@php
+    $brandProfileSimulation = config('branding.active', 'tcc');
+@endphp
 @include('simulation.partials.company-access-style')
 
 <div class="company-access-page">
@@ -11,11 +14,17 @@
         </aside>
     <div class="company-access-card">
         <div class="flex flex-col gap-6">
-            <h1>Acesso da imobiliária cadastrada</h1>
+            @if($brandProfileSimulation === 'tcc')
+                <h1>Acesso da Empresa já cadastrada</h1>
+            @else
+                <h1>Acesso da Imobiliária já cadastrada</h1>
+            @endif
 
-            <p>
-                Digite a chave de acesso fornecida para sua imobiliária.
-            </p>
+            @if($brandProfileSimulation === 'tcc')
+                <p>Digite a chave de acesso fornecida para sua empresa.</p>
+            @else
+                <p>Digite a chave de acesso fornecida para sua imobiliária.</p>
+            @endif
 
             <form action="{{ route('simulation.registered-company.verify') }}" method="POST" class="flex flex-col gap-6" data-company-access-form>
                 @csrf

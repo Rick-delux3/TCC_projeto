@@ -1,6 +1,9 @@
 @extends('layout-inicial.simulation')
 @section('inline-feedback', 'true')
 @section('content')
+@php
+    $brandProfileSimulation = config('branding.active', 'tcc');
+@endphp
 @include('simulation.partials.company-access-style')
 <section class="company-access-page" aria-labelledby="recovery-title">
     <div class="company-access-layout">
@@ -15,7 +18,12 @@
         @else
             <div class="flex flex-col gap-3">
                 <h1 id="recovery-title">Receba seu código por email</h1>
-                <p>Informe o email cadastrado da sua imobiliária para receber novamente o código de acesso aos formulários.</p>
+
+                @if($brandProfileSimulation === 'tcc')
+                    <p>Informe o email cadastrado da sua empresa para receber novamente o código de acesso aos formulários.</p>
+                @else
+                    <p>{{ \App\Support\BrandingText::choose('Informe o email cadastrado da sua imobiliária para receber novamente o código de acesso aos formulários.', 'Informe o e-mail cadastrado da sua empresa para receber novamente o código de acesso aos formulários.') }}</p>
+                @endif
             </div>
             <form action="{{ route('simulation.registered-company.code.email') }}" method="POST" class="flex flex-col gap-6" data-company-access-form>
                 @csrf

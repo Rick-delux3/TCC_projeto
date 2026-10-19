@@ -20,10 +20,10 @@ final class CorretorDashboardLeadQuery
     public static function requesterOptions(): array
     {
         return [
-            'imobiliaria_cadastrada' => 'Imobiliária cadastrada',
-            'imobiliaria_nao_cadastrada' => 'Imobiliária não cadastrada',
-            'locador' => 'Proprietário / locador',
-            'locatario' => 'Locatário',
+            'imobiliaria_cadastrada' => \App\Support\BrandingText::choose('Imobiliária cadastrada', 'Empresa cadastrada'),
+            'imobiliaria_nao_cadastrada' => \App\Support\BrandingText::choose('Imobiliária não cadastrada', 'Empresa não cadastrada'),
+            'locador' => \App\Support\BrandingText::choose('Proprietário / locador', 'Consumidor'),
+            'locatario' => \App\Support\BrandingText::choose('Locatário', 'Beneficiário'),
         ];
     }
 

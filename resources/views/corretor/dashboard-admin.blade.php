@@ -73,6 +73,14 @@
         ->filter(fn (?string $label): bool => filled($label));
 
     $leadResultFilterOptions = collect($leadResultFilterOptions ?? []);
+    if (config('branding.active') === 'tcc') {
+        $manualResultOptions = $manualResultOptions->map(
+            fn ($label, $result) => \App\Support\ManualLeadResultTags::displayLabel($result) ?? $label
+        );
+        $leadResultFilterOptions = $leadResultFilterOptions->map(
+            fn ($label, $result) => \App\Support\ManualLeadResultTags::displayLabel($result) ?? $label
+        );
+    }
     $leadRequesterProfiles = $leadRequesterProfiles ?? [];
 
     $manualResultVisuals = [
@@ -296,10 +304,10 @@
     $selectedLeadLoversSync = $selectedLeadLoversSync ?? '';
 
     $tipoSolicitantesOptions = $tipoSolicitantesOptions ?? [
-        'imobiliaria_cadastrada' => 'Imobiliária cadastrada',
-        'imobiliaria_nao_cadastrada' => 'Imobiliária não cadastrada',
-        'locador' => 'Proprietário / locador',
-        'locatario' => 'Locatário',
+        'imobiliaria_cadastrada' => \App\Support\BrandingText::choose('Imobiliária cadastrada', 'Empresa cadastrada'),
+        'imobiliaria_nao_cadastrada' => \App\Support\BrandingText::choose('Imobiliária não cadastrada', 'Empresa não cadastrada'),
+        'locador' => \App\Support\BrandingText::choose('Proprietário / locador', 'Consumidor'),
+        'locatario' => \App\Support\BrandingText::choose('Locatário', 'Beneficiário'),
     ];
 
     $filteredLeads = method_exists($leads, 'total')
@@ -369,7 +377,7 @@
 
     if ($selectedImobiliaria === 'sem_vinculo') {
         $selectedImobiliariaModel = null;
-        $selectedImobiliariaName = 'Sem imobiliária vinculada';
+        $selectedImobiliariaName = \App\Support\BrandingText::choose('Sem imobiliária vinculada', 'Sem empresa vinculada');
     } else {
         $selectedImobiliariaModel = filled($selectedImobiliaria)
             ? $imobiliarias->firstWhere('id', (int) $selectedImobiliaria)
@@ -377,7 +385,7 @@
 
         $selectedImobiliariaName = $selectedImobiliariaModel?->name
             ?? $selectedImobiliariaModel?->nome
-            ?? (filled($selectedImobiliaria) ? 'Imobiliária #'.$selectedImobiliaria.' (indisponível)' : null);
+            ?? (filled($selectedImobiliaria) ? \App\Support\BrandingText::choose('Imobiliária #', 'Empresa #').$selectedImobiliaria.' (indisponível)' : null);
     }
 
     $getLeadResultTone = function ($lead) use ($manualResultOptions): array {
@@ -428,16 +436,16 @@
             return $lead->imobiliariaVinculada?->name
                 ?? $lead->imobiliariaVinculada?->nome
                 ?? (is_string($lead->imobiliaria) ? $lead->imobiliaria : null)
-                ?? 'Imobiliária vinculada';
+                ?? \App\Support\BrandingText::choose('Imobiliária vinculada', 'Empresa vinculada');
         }
 
         if (($leadRequesterProfiles[$lead->id] ?? null) === 'imobiliaria_nao_cadastrada') {
             return $lead->imobiliariaInformada?->nome_imobiliaria_informada
                 ?? (is_string($lead->imobiliaria) ? $lead->imobiliaria : null)
-                ?? 'Imobiliária não cadastrada';
+                ?? \App\Support\BrandingText::choose('Imobiliária não cadastrada', 'Empresa não cadastrada');
         }
 
-        return 'Sem imobiliária vinculada';
+        return \App\Support\BrandingText::choose('Sem imobiliária vinculada', 'Sem empresa vinculada');
     };
 
     $getTipoSolicitanteLabel = function ($lead) use ($tipoSolicitantesOptions, $leadRequesterProfiles) {
@@ -495,7 +503,7 @@
         <div class="admin-page-heading d-flex flex-column flex-xl-row justify-content-between align-items-xl-center gap-3 mb-4">
             <div>
                 <span class="badge text-bg-primary-subtle text-primary border border-primary-subtle mb-2">
-                    {{ $isCeo ? 'Dashboard do CEO' : 'Dashboard do corretor' }}
+                    {{ $isCeo ? 'Dashboard do CEO' : \App\Support\BrandingText::choose('Dashboard do corretor', 'Dashboard do integrante') }}
                 </span>
 
                 <h1 class="h2 fw-bold mb-1" >
@@ -503,7 +511,7 @@
                 </h1>
 
                 <p class="text-muted mb-0">
-                    Visualize leads de imobiliárias cadastradas e solicitações públicas, filtrando por vínculo, perfil e resultado.
+                    {{ \App\Support\BrandingText::choose('Visualize leads de imobiliárias cadastradas e solicitações públicas, filtrando por vínculo, perfil e resultado.', 'Visualize os beneficiários de empresas cadastradas e os contatos públicos, filtrando por vínculo, perfil e resultado comercial.') }}
                 </p>
             </div>
 
@@ -527,13 +535,13 @@
             <section class="dashboard-hero-card admin-leads-overview" aria-labelledby="lead-overview-title">
                 <div>
                     <span class="badge bg-white bg-opacity-10 mb-3">Visão geral</span>
-                    <h2 id="lead-overview-title" class="fw-bold mb-2">Base geral de clientes<br>da corretora.</h2>
-                    <p class="mb-0">Acompanhe os diferentes status comerciais dos leads e o histórico de simulações com as imobiliárias parceiras.</p>
+                    <h2 id="lead-overview-title" class="fw-bold mb-2">{{ \App\Support\BrandingText::choose('Base geral de clientes', 'Base geral de beneficiários') }}<br>{{ \App\Support\BrandingText::choose('da corretora.', 'da concessionária.') }}</h2>
+                    <p class="mb-0">{{ \App\Support\BrandingText::choose('Acompanhe os diferentes status comerciais dos leads e o histórico de simulações com as imobiliárias parceiras.', 'Acompanhe os status comerciais dos leads e o relacionamento com as empresas parceiras.') }}</p>
                 </div>
                 <div class="admin-overview-footer">
                     <div class="d-flex flex-wrap gap-2">
                         <span class="badge bg-white bg-opacity-10 border border-white border-opacity-10 py-2 px-3">{{ $totalLeads }} clientes/leads</span>
-                        <span class="badge bg-white bg-opacity-10 border border-white border-opacity-10 py-2 px-3">{{ $totalImobiliarias }} imobiliárias</span>
+                        <span class="badge bg-white bg-opacity-10 border border-white border-opacity-10 py-2 px-3">{{ $totalImobiliarias }} {{ \App\Support\BrandingText::choose('imobiliárias', 'empresas') }}</span>
                         <span class="badge bg-white bg-opacity-10 border border-white border-opacity-10 py-2 px-3">{{ $recentLeads }} recentes</span>
                     </div>
                     <div class="admin-latest-lead">
@@ -548,12 +556,12 @@
                         <div>
                             <span class="admin-eyebrow">Acesso rápido</span>
                             <h2 id="new-lead-title" class="h5 fw-bold mt-1 mb-2">Novo lead</h2>
-                            <p class="text-muted mb-0">Escolha o vínculo e abra o formulário adequado para cadastrar um novo lead ou simular seguro fiança locatícia.</p>
+                            <p class="text-muted mb-0">{{ \App\Support\BrandingText::choose('Escolha o vínculo e abra o formulário adequado para cadastrar um novo lead ou simular seguro fiança locatícia.', 'Escolha o vínculo e abra o formulário adequado para cadastrar um novo beneficiário.') }}</p>
                         </div>
                         <div class="admin-new-lead-action mt-auto">
                             <p class="small text-muted mb-3">
                                 <i class="bi bi-shield-check text-success me-1" aria-hidden="true"></i>
-                                O corretor não precisa digitar nem visualizar a chave de acesso da imobiliária.
+                                {{ \App\Support\BrandingText::choose('O corretor não precisa digitar nem visualizar a chave de acesso da imobiliária.', 'O integrante não precisa digitar nem visualizar a chave de acesso da empresa.') }}
                             </p>
                             <button type="button" class="btn btn-primary w-100" data-bs-toggle="modal" data-bs-target="#adminSimulationModal" @disabled(! $adminSimulationRouteExists)>
                                 <i class="bi bi-clipboard-plus me-1" aria-hidden="true"></i>
@@ -635,7 +643,7 @@
                     <div class="card-body">
                         <div class="mb-3">
                             <span class="badge text-bg-info-subtle text-info">
-                                Imobiliárias
+                                {{ \App\Support\BrandingText::choose('Imobiliárias', 'Empresas') }}
                             </span>
                         </div>
 
@@ -727,7 +735,7 @@
                             {{-- Vínculo com imobiliária --}}
                             <div class="lead-filter-field">
                                 <label for="admin-imobiliaria-filter" class="lead-filter-field__label">
-                                    Vínculo com imobiliária
+                                    {{ \App\Support\BrandingText::choose('Vínculo com imobiliária', 'Vínculo com empresa') }}
                                 </label>
 
                                 <select id="admin-imobiliaria-filter" name="imobiliaria" class="lead-filter-control">
@@ -741,14 +749,14 @@
                                         value="sem_vinculo"
                                         @selected($selectedImobiliaria === 'sem_vinculo')
                                     >
-                                        Sem imobiliária vinculada
+                                        {{ \App\Support\BrandingText::choose('Sem imobiliária vinculada', 'Sem empresa vinculada') }}
                                     </option>
 
                                     @foreach ($imobiliarias as $imobiliaria)
                                         @php
                                             $imobiliariaName = $imobiliaria->name
                                                 ?? $imobiliaria->nome
-                                                ?? 'Imobiliária #' . $imobiliaria->id;
+                                                ?? \App\Support\BrandingText::choose('Imobiliária #', 'Empresa #') . $imobiliaria->id;
                                         @endphp
 
                                         <option
@@ -966,7 +974,7 @@
                                 ]) }}"
                                 class="lead-filter-chip lead-filter-chip--{{ str_replace('_', '-', $result) }}"
                                 aria-label="{{ $resultIsSelected ? 'Remover filtro: ' : 'Filtrar por: ' }}{{ $label }}"
-                                @if ($result === 'sem_resultado') title="Leads sem resultado comercial e sem edição de dados, com ou sem vínculo com imobiliária." @endif
+                                @if ($result === 'sem_resultado') title="{{ \App\Support\BrandingText::choose('Leads sem resultado comercial e sem edição de dados, com ou sem vínculo com imobiliária.', 'Leads sem resultado comercial e sem edição de dados, com ou sem vínculo com empresa.') }}" @endif
                                 @if ($resultIsSelected) aria-current="true" @endif
                             >
                                 <i class="bi {{ $resultVisual['icon'] }}" aria-hidden="true"></i>
@@ -1089,7 +1097,7 @@
                                             @if ($lead->company_id)
                                                 <i class="bi bi-link-45deg" aria-hidden="true"></i>
                                             @endif
-                                            <span>{{ $lead->company_id ? $imobiliariaName : 'Sem imobiliária vinculada' }}</span>
+                                            <span>{{ $lead->company_id ? $imobiliariaName : \App\Support\BrandingText::choose('Sem imobiliária vinculada', 'Sem empresa vinculada') }}</span>
                                         </div>
 
                                         @if (! $lead->company_id && ($leadRequesterProfiles[$lead->id] ?? null) === 'imobiliaria_nao_cadastrada')
@@ -1098,7 +1106,7 @@
                                             </div>
                                         @elseif (($leadRequesterProfiles[$lead->id] ?? null) === 'locador' && filled($lead->locador?->nome))
                                             <div class="admin-lead-origin-detail">
-                                                Proprietário: {{ $lead->locador->nome }}
+                                                {{ \App\Support\BrandingText::choose('Proprietário:', 'Consumidor:') }} {{ $lead->locador->nome }}
                                             </div>
                                         @endif
 
@@ -1116,10 +1124,10 @@
                                                 data-link-url="{{ route('admin.leads.company.store', $lead) }}"
                                                 aria-controls="adminLeadCompanyModal"
                                                 aria-haspopup="dialog"
-                                                aria-label="{{ $lead->company_id ? 'Substituir a imobiliária de '.$leadName : 'Vincular '.$leadName.' a uma imobiliária' }}"
+                                                aria-label="{{ $lead->company_id ? \App\Support\BrandingText::choose('Substituir a imobiliária de ', 'Substituir a empresa de ').$leadName : 'Vincular '.$leadName.\App\Support\BrandingText::choose(' a uma imobiliária', ' a uma empresa') }}"
                                             >
                                                 <i class="bi {{ $lead->company_id ? 'bi-arrow-left-right' : 'bi-building-add' }}" aria-hidden="true"></i>
-                                                <span data-lead-company-trigger-label>{{ $lead->company_id ? 'Substituir imobiliária' : 'Vincular imobiliária' }}</span>
+                                                <span data-lead-company-trigger-label>{{ $lead->company_id ? \App\Support\BrandingText::choose('Substituir imobiliária', 'Substituir empresa') : \App\Support\BrandingText::choose('Vincular imobiliária', 'Vincular empresa') }}</span>
                                             </button>
                                             <span class="admin-lead-link-status" data-lead-company-status hidden role="status"></span>
                                         @endcan
@@ -1311,7 +1319,7 @@
                             </h3>
 
                             <p class="text-muted">
-                                Assim que uma imobiliária ou um solicitante público enviar uma simulação, o lead aparecerá aqui.
+                                {{ \App\Support\BrandingText::choose('Assim que uma imobiliária ou um solicitante público enviar uma simulação, o lead aparecerá aqui.', 'Assim que uma empresa ou um solicitante público cadastrar um beneficiário, ele aparecerá aqui.') }}
                             </p>
                         @endif
                     </div>
@@ -1333,10 +1341,10 @@
                         <span class="lead-company-modal__icon" aria-hidden="true"><i class="bi bi-building-add"></i></span>
                         <div>
                             <span class="lead-company-modal__eyebrow">Vínculo do lead</span>
-                            <h2 class="modal-title" id="adminLeadCompanyModalTitle">Vincular imobiliária</h2>
+                            <h2 class="modal-title" id="adminLeadCompanyModalTitle">{{ \App\Support\BrandingText::choose('Vincular imobiliária', 'Vincular empresa') }}</h2>
                         </div>
                     </div>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar vínculo de imobiliária"></button>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{ \App\Support\BrandingText::choose('Fechar vínculo de imobiliária', 'Fechar vínculo de empresa') }}"></button>
                 </div>
                 <div class="modal-body">
                     <div class="lead-company-modal__lead">
@@ -1350,16 +1358,16 @@
                     </p>
 
                     <div data-link-fields>
-                        <label class="form-label" for="adminLeadCompanySearch">Buscar imobiliária</label>
+                        <label class="form-label" for="adminLeadCompanySearch">{{ \App\Support\BrandingText::choose('Buscar imobiliária', 'Buscar empresa') }}</label>
                         <div class="lead-company-search">
                             <i class="bi bi-search" aria-hidden="true"></i>
                             <input type="search" class="form-control" id="adminLeadCompanySearch" data-link-search
-                                placeholder="Nome ou cidade da imobiliária" autocomplete="off" maxlength="150"
+                                placeholder="{{ \App\Support\BrandingText::choose('Nome ou cidade da imobiliária', 'Nome ou cidade da empresa') }}" autocomplete="off" maxlength="150"
                                 aria-controls="adminLeadCompanyOptions" aria-describedby="adminLeadCompanyCount">
                         </div>
                         <p class="lead-company-count" id="adminLeadCompanyCount" data-link-count role="status" aria-atomic="true"></p>
                         <fieldset id="adminLeadCompanyOptions" class="lead-company-options" aria-describedby="adminLeadCompanyError">
-                            <legend class="visually-hidden">Selecione a imobiliária que receberá o vínculo</legend>
+                            <legend class="visually-hidden">{{ \App\Support\BrandingText::choose('Selecione a imobiliária que receberá o vínculo', 'Selecione a empresa que receberá o vínculo') }}</legend>
                             @forelse (($simulationCompanies ?? collect()) as $linkCompany)
                                 <label class="lead-company-option" data-link-option>
                                     <input type="radio" name="company_id" value="{{ $linkCompany->id }}"
@@ -1370,7 +1378,7 @@
                                         @if (filled($linkCompany->city))
                                             <span>{{ $linkCompany->city }}@if (filled($linkCompany->state)) · {{ $linkCompany->state }}@endif</span>
                                         @else
-                                            <span>Imobiliária cadastrada</span>
+                                            <span>{{ \App\Support\BrandingText::choose('Imobiliária cadastrada', 'Empresa cadastrada') }}</span>
                                         @endif
                                     </span>
                                     <i class="bi bi-check-circle-fill lead-company-option__check" aria-hidden="true"></i>
@@ -1378,13 +1386,13 @@
                             @empty
                                 <div class="lead-company-empty">
                                     <i class="bi bi-buildings" aria-hidden="true"></i>
-                                    <strong>Nenhuma imobiliária disponível</strong>
-                                    <span>É necessário ter uma imobiliária ativa cadastrada para solicitar o vínculo.</span>
+                                    <strong>{{ \App\Support\BrandingText::choose('Nenhuma imobiliária disponível', 'Nenhuma empresa disponível') }}</strong>
+                                    <span>{{ \App\Support\BrandingText::choose('É necessário ter uma imobiliária ativa cadastrada para solicitar o vínculo.', 'É necessário ter uma empresa ativa cadastrada para solicitar o vínculo.') }}</span>
                                 </div>
                             @endforelse
                             <div class="lead-company-empty" data-link-no-results hidden>
                                 <i class="bi bi-search" aria-hidden="true"></i>
-                                <strong>Nenhuma imobiliária encontrada</strong>
+                                <strong>{{ \App\Support\BrandingText::choose('Nenhuma imobiliária encontrada', 'Nenhuma empresa encontrada') }}</strong>
                                 <span>Tente outro nome ou cidade.</span>
                             </div>
                         </fieldset>
@@ -1445,7 +1453,7 @@
                                 Escolha o formulário
                             </h2>
                             <p class="text-muted small mb-0 mt-2">
-                                Defina se a solicitação será vinculada a uma imobiliária. O formulário será aberto em uma nova aba.
+                                {{ \App\Support\BrandingText::choose('Defina se a solicitação será vinculada a uma imobiliária. O formulário será aberto em uma nova aba.', 'Defina se o beneficiário será vinculado a uma empresa. O formulário será aberto em uma nova aba.') }}
                             </p>
                         </div>
 
@@ -1484,20 +1492,20 @@
                                     @selected(old('vinculo') === 'imobiliaria_cadastrada')
                                     @disabled($simulationCompanies->isEmpty())
                                 >
-                                    Vincular a uma imobiliária cadastrada
+                                    {{ \App\Support\BrandingText::choose('Vincular a uma imobiliária cadastrada', 'Vincular a uma empresa cadastrada') }}
                                 </option>
                                 <option
                                     value="sem_vinculo"
                                     @selected(old('vinculo') === 'sem_vinculo')
                                 >
-                                    Não vincular a uma imobiliária
+                                    {{ \App\Support\BrandingText::choose('Não vincular a uma imobiliária', 'Não vincular a uma empresa') }}
                                 </option>
                             </select>
                         </div>
 
                         <div id="adminSimulationCompanyGroup" class="mb-3 d-none">
                             <label for="adminSimulationCompany" class="form-label fw-semibold">
-                                Imobiliária
+                                {{ \App\Support\BrandingText::choose('Imobiliária', 'Empresa') }}
                             </label>
                             <select
                                 name="company_id"
@@ -1520,12 +1528,12 @@
                                         value="{{ data_get($company, 'id') }}"
                                         @selected((string) old('company_id') === (string) data_get($company, 'id'))
                                     >
-                                        {{ data_get($company, 'name', data_get($company, 'nome', 'Imobiliária')) }}{{ $companyLocation ? ' — '.$companyLocation : '' }}
+                                        {{ data_get($company, 'name', data_get($company, 'nome', \App\Support\BrandingText::choose('Imobiliária', 'Empresa'))) }}{{ $companyLocation ? ' — '.$companyLocation : '' }}
                                     </option>
                                 @endforeach
                             </select>
                             <div class="form-text">
-                                O tipo será registrado automaticamente como imobiliária cadastrada.
+                                {{ \App\Support\BrandingText::choose('O tipo será registrado automaticamente como imobiliária cadastrada.', 'O tipo será registrado automaticamente como empresa cadastrada.') }}
                             </div>
                         </div>
 
@@ -1544,13 +1552,13 @@
                                     value="imobiliaria_nao_cadastrada"
                                     @selected(old('tipo_solicitante') === 'imobiliaria_nao_cadastrada')
                                 >
-                                    Imobiliária não cadastrada
+                                    {{ \App\Support\BrandingText::choose('Imobiliária não cadastrada', 'Empresa não cadastrada') }}
                                 </option>
                                 <option value="locatario" @selected(old('tipo_solicitante') === 'locatario')>
-                                    Locatário
+                                    {{ \App\Support\BrandingText::choose('Locatário', 'Beneficiário') }}
                                 </option>
                                 <option value="locador" @selected(old('tipo_solicitante') === 'locador')>
-                                    Proprietário / locador
+                                    {{ \App\Support\BrandingText::choose('Proprietário / locador', 'Consumidor') }}
                                 </option>
                             </select>
                         </div>
@@ -2175,7 +2183,7 @@
 
                                             <div class="alert alert-info rounded-4 mt-3 mb-0" role="note">
                                                 <i class="bi bi-shield-check me-1" aria-hidden="true"></i>
-                                                Tags de origem, imobiliária, campanha e segmentação serão preservadas.
+                                                {{ \App\Support\BrandingText::choose('Tags de origem, imobiliária, campanha e segmentação serão preservadas.', 'Tags de origem, empresa, campanha e segmentação serão preservadas.') }}
                                             </div>
                                         </div>
                                     </div>

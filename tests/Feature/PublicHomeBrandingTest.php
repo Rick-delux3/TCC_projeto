@@ -62,7 +62,7 @@ it('connects the tcc landing actions and serves local images with valid section 
 
     foreach ([
         'Começar agora' => 'empresa.register.form',
-        'Simular seguro' => 'simulation.start',
+        'Cadastrar beneficiário' => 'simulation.start',
         'Ir para o painel' => 'empresa.login',
         'Entrar' => 'empresa.login',
         'Área do Cliente' => 'empresa.login',
@@ -269,7 +269,7 @@ it('renders the public simulation gateway with the reference composition', funct
         ->assertViewIs('simulation.start')
         ->assertSeeText('Escolha seu perfil')
         ->assertSeeText('Dados da solicitação')
-        ->assertSeeText('É Online, é Simples, é Seguro')
+        ->assertSeeText($profile === 'tcc' ? 'É Online, é Simples, é Rápido' : 'É Online, é Simples, é Seguro')
         ->assertSeeText('Qual opção descreve você?')
         ->assertSeeText('Leva menos de 1 minuto')
         ->assertSeeText('Ambiente seguro')

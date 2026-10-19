@@ -81,7 +81,7 @@
         ? 'Operação ativa'
         : 'Sistema operacional';
     $currentSectionLabel = match (true) {
-        request()->routeIs('admin.imobiliarias.*') => 'Imobiliárias',
+        request()->routeIs('admin.imobiliarias.*') => \App\Support\BrandingText::choose('Imobiliárias', 'Empresas'),
         request()->routeIs('admin.insurance-analyses.*') => 'Propostas',
         request()->routeIs('admin.config-equipe.*') => 'Equipe',
         default => 'Central de leads',
@@ -134,7 +134,7 @@
                     @include('layout-inicial.partials.dashboard-header-notifications', [
                         'notificationCount' => $notificationCount,
                         'leadsRoute' => $leadsRoute,
-                        'notificationDescription' => 'Acompanhe novos clientes recebidos pelas imobiliárias.',
+                        'notificationDescription' => \App\Support\BrandingText::choose('Acompanhe novos clientes recebidos pelas imobiliárias.', 'Acompanhe novos beneficiários recebidos pelas empresas.'),
                         'notificationItemLabel' => 'novo(s) cliente(s)',
                     ])
                     <span class="dashboard-header-separator" aria-hidden="true"></span>
@@ -151,7 +151,7 @@
                     @include('layout-inicial.partials.dashboard-header-notifications', [
                         'notificationCount' => $notificationCount,
                         'leadsRoute' => $leadsRoute,
-                        'notificationDescription' => 'Acompanhe novos clientes recebidos pelas imobiliárias.',
+                        'notificationDescription' => \App\Support\BrandingText::choose('Acompanhe novos clientes recebidos pelas imobiliárias.', 'Acompanhe novos beneficiários recebidos pelas empresas.'),
                         'notificationItemLabel' => 'novo(s) cliente(s)',
                     ])
                     <span class="dashboard-header-separator" aria-hidden="true"></span>
@@ -246,7 +246,7 @@
                         href="{{ $imobiliariasRoute }}"
                         @if (request()->routeIs('admin.imobiliarias.*')) aria-current="page" @endif
                     >
-                        Imobiliárias
+                        {{ \App\Support\BrandingText::choose('Imobiliárias', 'Empresas') }}
                     </a>
                 @endcan
 
@@ -384,7 +384,7 @@
                     @if ($imobiliariasRoute === '#') aria-disabled="true" tabindex="-1" @endif
                 >
                     <i class="bi bi-buildings" aria-hidden="true"></i>
-                    <span>Imobiliárias</span>
+                    <span>{{ \App\Support\BrandingText::choose('Imobiliárias', 'Empresas') }}</span>
                 </a>
             @endcan
 

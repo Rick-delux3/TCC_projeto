@@ -36,9 +36,9 @@ class LinkLeadCompanyRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'company_id.required' => 'Selecione uma imobiliária para vincular ao lead.',
-            'company_id.integer' => 'A imobiliária selecionada é inválida.',
-            'company_id.exists' => 'Selecione uma imobiliária cadastrada e ativa.',
+            'company_id.required' => \App\Support\BrandingText::choose('Selecione uma imobiliária para vincular ao lead.', 'Selecione uma empresa para vincular ao beneficiário.'),
+            'company_id.integer' => \App\Support\BrandingText::choose('A imobiliária selecionada é inválida.', 'A empresa selecionada é inválida.'),
+            'company_id.exists' => \App\Support\BrandingText::choose('Selecione uma imobiliária cadastrada e ativa.', 'Selecione uma empresa cadastrada e ativa.'),
         ];
     }
 }

@@ -274,7 +274,7 @@
         <div class="company-page-heading d-flex flex-column flex-xl-row justify-content-between align-items-xl-center gap-3 mb-4">
             <div>
                 <span class="badge text-bg-primary-subtle text-primary border border-primary-subtle mb-2">
-                    Dashboard da imobiliária
+                    {{ \App\Support\BrandingText::choose('Dashboard da imobiliária', 'Dashboard da empresa') }}
                 </span>
 
                 <h1 class="h2 fw-bold mb-1">
@@ -377,7 +377,7 @@
                                 </span>
 
                                 <h2 class="h4 fw-bold mb-1">
-                                    Chave da imobiliária
+                                    {{ \App\Support\BrandingText::choose('Chave da imobiliária', 'Chave da empresa') }}
                                 </h2>
 
                                 <p class="text-muted small mb-0">
@@ -713,7 +713,7 @@
                             <div class="lead-filter-panel__result" role="status" aria-live="polite">
                                 <span class="lead-filter-panel__result-value">{{ $filteredLeads }}</span>
                                 <span class="lead-filter-panel__result-label">lead(s)</span>
-                                <small>{{ $isFiltering ? 'na seleção atual' : 'na base da imobiliária' }}</small>
+                                <small>{{ $isFiltering ? 'na seleção atual' : \App\Support\BrandingText::choose('na base da imobiliária', 'na base da empresa') }}</small>
                             </div>
                         </header>
 
@@ -1334,7 +1334,7 @@
                                         </h6>
 
                                         <p class="text-muted small mb-0">
-                                            As tags são exibidas apenas para consulta. A alteração de tags será feita pelo corretor no painel administrativo.
+                                            {{ \App\Support\BrandingText::choose('As tags são exibidas apenas para consulta. A alteração de tags será feita pelo corretor no painel administrativo.', 'As tags são exibidas apenas para consulta. A alteração será feita pela equipe da concessionária no painel administrativo.') }}
                                         </p>
                                     </div>
 

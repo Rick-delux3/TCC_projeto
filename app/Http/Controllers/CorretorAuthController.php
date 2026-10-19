@@ -188,8 +188,8 @@ class CorretorAuthController extends Controller
             return redirect()
                 ->route($fallbackLoginRoute)
                 ->withErrors([
-                    'email' => 'Este corretor está inativo. Entre em contato com o CEO da corretora.',
-                    'cpf' => 'Este corretor está inativo. Entre em contato com o CEO da corretora.',
+                    'email' => \App\Support\BrandingText::choose('Este corretor está inativo. Entre em contato com o CEO da corretora.', 'Este integrante está inativo. Entre em contato com o CEO da concessionária.'),
+                    'cpf' => \App\Support\BrandingText::choose('Este corretor está inativo. Entre em contato com o CEO da corretora.', 'Este integrante está inativo. Entre em contato com o CEO da concessionária.'),
                 ]);
         }
 

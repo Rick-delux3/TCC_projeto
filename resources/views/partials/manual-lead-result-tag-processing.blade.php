@@ -23,7 +23,7 @@
         </div>
 
         <p class="manual-tag-processing-notice__message">
-            Corretor <strong>{{ $processingState['corretor_name'] }}</strong>
+            {{ \App\Support\BrandingText::choose('Corretor', 'Integrante') }} <strong>{{ $processingState['corretor_name'] }}</strong>
             solicitou a aplicação da tag
             <strong>{{ $processingState['result_label'] }}</strong>.
         </p>

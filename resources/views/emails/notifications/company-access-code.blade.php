@@ -37,7 +37,7 @@
     </style>
 </head>
 <body style="margin: 0; padding: 0; background-color: #F3F6FC; color: {{ $navy }}; font-family: Arial, Helvetica, sans-serif;">
-    <div style="display: none; max-height: 0; overflow: hidden; opacity: 0; font-size: 1px; line-height: 1px;">Cadastro concluído. Confira o código de acesso da sua imobiliária e saiba como começar.</div>
+    <div style="display: none; max-height: 0; overflow: hidden; opacity: 0; font-size: 1px; line-height: 1px;">{{ \App\Support\BrandingText::choose('Cadastro concluído. Confira o código de acesso da sua imobiliária e saiba como começar.', 'Cadastro concluído. Confira o código de acesso da sua empresa e saiba como começar.') }}</div>
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width: 100%; table-layout: fixed; background-color: #F3F6FC;">
         <tr>
             <td class="welcome-outer" align="center" style="padding: 32px 16px;">
@@ -63,7 +63,7 @@
                                 <tr><td class="welcome-copy" style="padding-bottom: 22px; font-size: 20px; line-height: 28px; overflow-wrap: anywhere; word-wrap: break-word;"><strong>Olá, equipe da {{ $companyName }}.</strong></td></tr>
                                 <tr><td class="welcome-copy" style="padding-bottom: 24px; font-size: 20px; line-height: 29px;">Agora que você é cadastrado, use o código abaixo para enviar solicitações.</td></tr>
                                 <tr><td class="welcome-code-panel" align="center" style="padding: 24px 16px; background-color: #F3F6FC; border: 1px solid {{ $isClient ? '#AFC3FF' : '#4C85E4' }}; border-radius: 11px;">
-                                    <p class="welcome-code-label" style="margin: 0 0 16px; color: {{ $blue }}; font-size: 17px; line-height: 24px; font-weight: 700;">CÓDIGO DE ACESSO DA IMOBILIÁRIA</p>
+                                    <p class="welcome-code-label" style="margin: 0 0 16px; color: {{ $blue }}; font-size: 17px; line-height: 24px; font-weight: 700;">{{ \App\Support\BrandingText::choose('CÓDIGO DE ACESSO DA IMOBILIÁRIA', 'CÓDIGO DE ACESSO DA EMPRESA') }}</p>
                                     <p class="welcome-code" style="margin: 0; color: {{ $blue }}; font-family: Consolas, 'Courier New', monospace; font-size: 48px; line-height: 60px; font-weight: 700; letter-spacing: 7px; overflow-wrap: anywhere; word-break: break-all;">{{ $accessCode }}</p>
                                     <p style="margin: 10px 0 0; color: #53617A; font-size: 15px; line-height: 22px;">Use este código no formulário.</p>
                                 </td></tr>
@@ -71,7 +71,7 @@
                                     <h2 style="margin: 0 0 14px; color: {{ $isClient ? $blue : $navy }}; font-size: 25px; line-height: 32px;">Como começar</h2>
                                     <ol class="welcome-copy" style="margin: 0; padding-left: 25px; font-size: 18px; line-height: 30px;">
                                         <li>Abra o formulário pelo botão abaixo.</li>
-                                        <li>Informe o código de acesso da imobiliária.</li>
+                                        <li>{{ \App\Support\BrandingText::choose('Informe o código de acesso da imobiliária.', 'Informe o código de acesso da empresa.') }}</li>
                                         <li>Preencha e envie sua solicitação.</li>
                                     </ol>
                                 </td></tr>
@@ -84,13 +84,13 @@
                                 @endif
                                 <tr><td class="welcome-notice" style="padding: 16px 22px; background-color: {{ $isClient ? '#F3F6FC' : '#FFF3F7' }}; border: 1px solid {{ $isClient ? '#AFC3FF' : '#FF9ABB' }}; border-radius: 10px;">
                                     <p style="margin: 0 0 4px; color: {{ $isClient ? $navy : '#D9004C' }}; font-size: 18px; line-height: 25px; font-weight: 700;">Guarde este código.</p>
-                                    <p style="margin: 0; color: {{ $navy }}; font-size: 17px; line-height: 25px;">Compartilhe apenas com a equipe autorizada da sua imobiliária.</p>
+                                    <p style="margin: 0; color: {{ $navy }}; font-size: 17px; line-height: 25px;">{{ \App\Support\BrandingText::choose('Compartilhe apenas com a equipe autorizada da sua imobiliária.', 'Compartilhe apenas com a equipe autorizada da sua empresa.') }}</p>
                                 </td></tr>
                                 <tr><td style="padding-top: 18px; font-size: 17px; line-height: 26px;">Precisa de ajuda? Entre em contato com a nossa equipe.</td></tr>
                             </table>
                         </td>
                     </tr>
-                    <tr><td class="welcome-footer" align="center" style="padding: 22px 24px; background-color: {{ $isClient ? $blue : '#F3F6FC' }}; color: {{ $isClient ? '#FFFFFF' : '#14213D' }}; border-top: 1px solid #D8E1EC; font-size: 17px; line-height: 25px; font-weight: {{ $isClient ? '700' : '400' }};">{{ $isClient ? 'Aki Aluga · NEVES corretora de seguros' : 'NVS Seguros · Portal imobiliário' }}</td></tr>
+                    <tr><td class="welcome-footer" align="center" style="padding: 22px 24px; background-color: {{ $isClient ? $blue : '#F3F6FC' }}; color: {{ $isClient ? '#FFFFFF' : '#14213D' }}; border-top: 1px solid #D8E1EC; font-size: 17px; line-height: 25px; font-weight: {{ $isClient ? '700' : '400' }};">{{ $isClient ? 'Aki Aluga · NEVES corretora de seguros' : \App\Support\BrandingText::choose('NVS Seguros · Portal imobiliário', 'NVS · CRM empresarial') }}</td></tr>
                     @unless ($isClient)
                         @include('emails.partials.company-welcome-stripe', ['firstWidth' => '50%', 'stripeBlue' => '#146FB6', 'stripeAccent' => $accent])
                     @endunless

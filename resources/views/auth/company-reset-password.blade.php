@@ -16,8 +16,7 @@
                 <span class="client-badge">Portal da imobiliaria</span>
                 <h2>Defina a nova senha da empresa</h2>
                 <p>
-                    Essa senha sera usada para acessar o painel CRM e acompanhar
-                    as analises de seguro fianca da imobiliaria.
+                    {{ \App\Support\BrandingText::choose('Essa senha sera usada para acessar o painel CRM e acompanhar as analises de seguro fianca da imobiliaria.', 'Essa senha será usada para acessar o CRM e acompanhar os beneficiários da sua empresa.') }}
                 </p>
 
                 <div @class(['password-reset-steps', 'client-auth-points' => $isTcc])>

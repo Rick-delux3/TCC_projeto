@@ -42,6 +42,7 @@ export async function sendLeadCompanyLink(url, companyId, csrfToken, signal) {
 export function initializeLeadCompanyLink() {
     const modal = document.getElementById('adminLeadCompanyModal');
     if (!modal) return;
+    const isTcc = document.body.dataset.brand === 'tcc';
 
     const form = modal.querySelector('[data-lead-company-form]');
     const search = modal.querySelector('[data-link-search]');
@@ -80,7 +81,10 @@ export function initializeLeadCompanyLink() {
             if (visible) matches++;
         });
 
-        count.textContent = `${matches} ${matches === 1 ? 'imobiliária disponível' : 'imobiliárias disponíveis'}`;
+        const label = isTcc
+            ? (matches === 1 ? 'empresa disponível' : 'empresas disponíveis')
+            : (matches === 1 ? 'imobiliária disponível' : 'imobiliárias disponíveis');
+        count.textContent = `${matches} ${label}`;
         empty.hidden = matches > 0 || options.length === 0;
     }
 
@@ -111,9 +115,13 @@ export function initializeLeadCompanyLink() {
 
         trigger = source;
         currentCompanyId = source.dataset.currentCompanyId || '';
-        title.textContent = currentCompanyId ? 'Substituir imobiliária' : 'Vincular imobiliária';
+        title.textContent = isTcc
+            ? (currentCompanyId ? 'Substituir empresa' : 'Vincular empresa')
+            : (currentCompanyId ? 'Substituir imobiliária' : 'Vincular imobiliária');
         description.textContent = currentCompanyId
-            ? 'A imobiliária atual perderá o acesso a este lead e às suas análises, que passarão para a selecionada. A tag da imobiliária anterior será substituída; a origem, as demais tags e os resultados serão mantidos.'
+            ? (isTcc
+                ? 'A empresa atual perderá o acesso a este beneficiário e ao seu histórico, que passarão para a selecionada. A tag da empresa anterior será substituída; a origem, as demais tags e os resultados serão mantidos.'
+                : 'A imobiliária atual perderá o acesso a este lead e às suas análises, que passarão para a selecionada. A tag da imobiliária anterior será substituída; a origem, as demais tags e os resultados serão mantidos.')
             : linkDescription;
         form.reset();
         form.action = source.dataset.linkUrl;
@@ -168,7 +176,7 @@ export function initializeLeadCompanyLink() {
         if (submitting || !confirmation.hidden || !trigger) return;
         const selected = form.querySelector('input[name="company_id"]:checked');
         if (!selected || selected.disabled || selected.value === currentCompanyId) {
-            showError('Selecione a imobiliária que receberá o vínculo.');
+            showError(isTcc ? 'Selecione a empresa que receberá o vínculo.' : 'Selecione a imobiliária que receberá o vínculo.');
             return;
         }
 

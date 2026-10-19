@@ -134,7 +134,10 @@ it('renders the company link action for each lead according to its current compa
 
         if ($allowed) {
             $button = $buttons->item(0);
-            expect(trim($button->textContent))->toBe($lead->company_id ? 'Substituir imobiliária' : 'Vincular imobiliária')
+            $expectedLabel = $brand === 'tcc'
+                ? ($lead->company_id ? 'Substituir empresa' : 'Vincular empresa')
+                : ($lead->company_id ? 'Substituir imobiliária' : 'Vincular imobiliária');
+            expect(trim($button->textContent))->toBe($expectedLabel)
                 ->and($button->getAttribute('data-current-company-id'))->toBe((string) $lead->company_id)
                 ->and($button->getAttribute('class'))->toBe('btn admin-lead-link-button')
                 ->and($button->getAttribute('data-bs-target'))->toBe('#adminLeadCompanyModal')
@@ -386,7 +389,7 @@ it('renders the recovered requester profile and company details used by the filt
     $dom = updateLeadDashboardDom($response->getContent());
     $card = $dom['xpath']->query('//article[contains(@class,"lead-list-item")]')->item(0);
 
-    expect($card?->textContent)->toContain('Imobiliária não cadastrada', 'Imobiliária informada no cadastro')
+    expect($card?->textContent)->toContain('Empresa não cadastrada', 'Imobiliária informada no cadastro')
         ->not->toContain('Perfil não informado');
 });
 
@@ -398,7 +401,7 @@ it('keeps a missing company filter visible instead of displaying all companies',
 
     expect($selected?->getAttribute('value'))->toBe('999999')
         ->and($selected?->textContent)->toContain('indisponível')
-        ->and($response->getContent())->toContain('Vínculo: Imobiliária #999999');
+        ->and($response->getContent())->toContain('Vínculo: Empresa #999999');
 });
 
 it('shows filter validation errors inside the filter instead of lead edit feedback', function (): void {

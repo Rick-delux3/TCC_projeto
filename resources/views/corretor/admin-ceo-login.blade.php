@@ -22,12 +22,10 @@
             <div class="admin-auth-overlay">
                 <span class="admin-badge">Acesso Sigiloso</span>
 
-                <h2>Área exclusiva do CEO da corretora</h2>
+                <h2>{{ \App\Support\BrandingText::choose('Área exclusiva do CEO da corretora', 'Área exclusiva do CEO da concessionária') }}</h2>
 
                 <p>
-                    Este acesso é reservado ao corretor principal responsável
-                    pela administração da plataforma, organização da equipe
-                    e gestão das operações internas.
+                    {{ \App\Support\BrandingText::choose('Este acesso é reservado ao corretor principal responsável pela administração da plataforma, organização da equipe e gestão das operações internas.', 'Este acesso é reservado ao CEO da concessionária, responsável pela administração da plataforma, organização da equipe e gestão das operações internas.') }}
                 </p>
             </div>
         </aside>
@@ -39,7 +37,7 @@
                 <h1>Login do CEO</h1>
 
                 <p>
-                    Informe CPF e senha para acessar o painel principal da corretora.
+                    {{ \App\Support\BrandingText::choose('Informe CPF e senha para acessar o painel principal da corretora.', 'Informe CPF e senha para acessar o painel principal da concessionária.') }}
                 </p>
             </header>
 

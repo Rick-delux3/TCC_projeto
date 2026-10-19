@@ -51,7 +51,7 @@ class ImobiliariaAuthController extends Controller
 
         if (! $user) {
             return redirect()->route('empresa.login')
-                ->withErrors(['email' => 'Não foi possível acessar esta imobiliária. Entre em contato com o suporte.'])
+                ->withErrors(['email' => \App\Support\BrandingText::choose('Não foi possível acessar esta imobiliária. Entre em contato com o suporte.', 'Não foi possível acessar esta empresa. Entre em contato com o suporte.')])
                 ->onlyInput('email');
         }
 

@@ -9,15 +9,14 @@
 <div @class(['password-reset-page', 'tcc-company-auth' => $isTcc])>
     <section @class(['password-reset-shell password-reset-shell--compact', 'client-auth-shell' => $isTcc])>
         <aside @class(['password-reset-aside', 'client-auth-aside' => $isTcc])>
-            <img src="{{ asset('imgs/segure-chave-a-mao-ao-ar-livre.jpg') }}" alt="Recuperacao de acesso da imobiliaria">
+            <img src="{{ asset('imgs/segure-chave-a-mao-ao-ar-livre.jpg') }}" alt="{{ \App\Support\BrandingText::choose('Recuperacao de acesso da imobiliaria', 'Recuperação de acesso da empresa') }}">
             <x-brand-logo class="auth-media-logo" />
 
             <div @class(['password-reset-overlay', 'client-auth-overlay' => $isTcc])>
-                <span class="client-badge">Portal da imobiliaria</span>
+                <span class="client-badge">{{ \App\Support\BrandingText::choose('Portal da imobiliaria', 'Portal da empresa') }}</span>
                 <h2>Retome o acesso da sua empresa</h2>
                 <p>
-                    O link de redefinicao sera enviado para o e-mail de acesso
-                    cadastrado no portal da imobiliaria.
+                    {{ \App\Support\BrandingText::choose('O link de redefinicao sera enviado para o e-mail de acesso cadastrado no portal da imobiliaria.', 'O link de redefinição será enviado para o e-mail de acesso cadastrado no portal da empresa.') }}
                 </p>
 
                 <div @class(['password-reset-steps', 'client-auth-points' => $isTcc])>

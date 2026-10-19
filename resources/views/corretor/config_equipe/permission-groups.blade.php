@@ -182,7 +182,7 @@
                 @if ($groupKey === 'real-estate-companies')
                     <p class="team-permission-dependency-hint" id="{{ $groupHintId }}">
                         <i class="bi bi-info-circle" aria-hidden="true"></i>
-                        Cadastro, edição e remoção exigem a permissão “Visualizar imobiliárias”.
+                        {{ \App\Support\BrandingText::choose('Cadastro, edição e remoção exigem a permissão “Visualizar imobiliárias”.', 'Cadastro, edição e remoção exigem a permissão “Visualizar empresas”.') }}
                     </p>
                 @endif
             </fieldset>

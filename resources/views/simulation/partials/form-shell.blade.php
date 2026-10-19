@@ -4,6 +4,9 @@
     $isTenant = $profile === 'tenant';
     $isRegistered = $profile === 'registered';
     $profileLabel = $isTenant ? 'Pretendente à locação' : ($isRegistered ? 'Imobiliária cadastrada' : 'Imobiliária não cadastrada ou proprietário');
+    if (config('branding.active') === 'tcc') {
+        $profileLabel = $isTenant ? 'Beneficiário' : ($isRegistered ? 'Empresa cadastrada' : 'Empresa não cadastrada ou consumidor');
+    }
     $firstStepLabel = $isTenant ? 'Seus dados' : 'Pessoas e responsável';
     $document = \App\Rules\CpfOrCnpj::normalize(old('cpf', ''));
     $isCompanyDocument = is_string($document) && preg_match('/^[0-9]{14}$/D', $document) === 1;
@@ -17,7 +20,7 @@
     <aside class="simulation-sidebar flex flex-col">
         <div class="simulation-sidebar-heading">
             <p class="simulation-eyebrow">{{ $isAdminSimulation ? 'Preenchimento interno' : 'Nova solicitação' }}</p>
-            <h2>Seguro fiança</h2>
+            <h2>{{ \App\Support\BrandingText::choose('Seguro fiança', 'Cadastro de beneficiário') }}</h2>
             <p>{{ $profileLabel }}</p>
             @if ($isRegistered)<p class="simulation-company-name">{{ $company->name }}</p>@endif
         </div>
@@ -38,15 +41,19 @@
         </nav>
         <div class="simulation-sidebar-help" data-step-help="1">
             @include('simulation.partials.form-icon', ['icon' => 'help'])
-            <div><h3>{{ $isTenant ? 'Tudo começa por você' : 'Quem é o pretendente?' }}</h3><p>{{ $isTenant ? 'Informe seus dados para solicitar a análise do seguro fiança.' : 'É a pessoa ou a empresa que deseja alugar o imóvel.' }}</p></div>
+            @if (config('branding.active') === 'tcc')
+                <div><h3>Quem é o beneficiário?</h3><p>É a pessoa ou empresa cadastrada para acompanhamento. O consumidor é quem solicita e pode ser uma pessoa diferente.</p></div>
+            @else
+                <div><h3>{{ $isTenant ? 'Tudo começa por você' : 'Quem é o pretendente?' }}</h3><p>{{ $isTenant ? 'Informe seus dados para solicitar a análise do seguro fiança.' : 'É a pessoa ou a empresa que deseja alugar o imóvel.' }}</p></div>
+            @endif
         </div>
         <div class="simulation-sidebar-help simulation-sidebar-help-bottom" data-step-help="2" hidden>
             @include('simulation.partials.form-icon', ['icon' => 'help'])
-            <div><h3>Antes de enviar</h3><p>Confira os valores, o endereço e os dados {{ $isTenant ? 'informados' : 'do responsável' }}.</p><p class="simulation-help-note">Dados usados para análise de seguro aluguel.</p></div>
+            <div><h3>Antes de enviar</h3><p>Confira os valores, o endereço e os dados {{ $isTenant ? 'informados' : 'do responsável' }}.</p><p class="simulation-help-note">{{ \App\Support\BrandingText::choose('Dados usados para análise de seguro aluguel.', 'Os dados de imóvel e locação permanecem no formulário atual. O envio registra o beneficiário no CRM.') }}</p></div>
         </div>
     </aside>
 
-    <section class="simulation-form-card" aria-label="Solicitação de seguro fiança">
+    <section class="simulation-form-card" aria-label="{{ \App\Support\BrandingText::choose('Solicitação de seguro fiança', 'Cadastro de beneficiário') }}">
         @if ($errors->any())
             <div class="simulation-form-errors" role="alert">
                 <strong>Revise os campos para continuar.</strong>
@@ -59,7 +66,7 @@
         @endif
         @if (session('error'))<div class="simulation-form-errors" role="alert">{{ session('error') }}</div>@endif
         @if ($isAdminSimulation)
-            <p class="simulation-context">{{ $isRegistered ? 'Solicitação vinculada à imobiliária '.$company->name.'.' : 'Solicitação registrada pelo corretor logado, sem vínculo com imobiliária cadastrada.' }}</p>
+            <p class="simulation-context">{{ $isRegistered ? \App\Support\BrandingText::choose('Solicitação vinculada à imobiliária ', 'Cadastro vinculado à empresa ').$company->name.'.' : \App\Support\BrandingText::choose('Solicitação registrada pelo corretor logado, sem vínculo com imobiliária cadastrada.', 'Cadastro registrado pelo integrante logado, sem vínculo com empresa cadastrada.') }}</p>
         @endif
         <form action="{{ $formAction }}" method="POST" class="simulation-form" data-simulation-form>
             @csrf
@@ -74,13 +81,13 @@
             <section data-form-step="1" aria-labelledby="simulation-people-title">
                 <header class="simulation-form-heading flex flex-wrap items-start justify-between gap-4">
                     <div>
-                        <h1 id="simulation-people-title" tabindex="-1">{{ $isTenant ? 'Seu novo lar começa aqui' : 'Aki sempre o menor valor!' }}</h1>
-                        <p>{{ $isTenant ? 'Cadastro exclusivo para pretendente à locação.' : 'é online, é simples, é seguro' }}</p>
+                        <h1 id="simulation-people-title" tabindex="-1">{{ \App\Support\BrandingText::choose($isTenant ? 'Seu novo lar começa aqui' : 'Aki sempre o menor valor!', $isTenant ? 'Cadastre seus dados' : 'Cadastre o beneficiário') }}</h1>
+                        <p>{{ \App\Support\BrandingText::choose($isTenant ? 'Cadastro exclusivo para pretendente à locação.' : 'é online, é simples, é seguro', 'Preencha os dados para acompanhamento no CRM.') }}</p>
                     </div>
                     <span class="simulation-required-note"><span class="simulation-required">*</span> Campos obrigatórios</span>
                 </header>
-                <h2 class="simulation-section-title">{{ $isTenant ? 'Seus dados' : 'Pretendente à locação' }}</h2>
-                @if ($isRegistered)<p class="simulation-section-description">Preencha abaixo os dados do pretendente à locação. O e-mail e telefone do locatário fazem parte da análise do risco.</p>@endif
+                <h2 class="simulation-section-title">{{ $isTenant ? 'Seus dados' : \App\Support\BrandingText::choose('Pretendente à locação', 'Beneficiário') }}</h2>
+                @if ($isRegistered)<p class="simulation-section-description">{{ \App\Support\BrandingText::choose('Preencha abaixo os dados do pretendente à locação. O e-mail e telefone do locatário fazem parte da análise do risco.', 'Preencha os dados do beneficiário, incluindo seu e-mail e telefone para contato.') }}</p>@endif
                 <div class="simulation-fields grid grid-cols-1 gap-x-6 gap-y-5 md:grid-cols-2">
                     @include('simulation.partials.input', ['field' => ['name' => 'nome', 'label' => 'Nome completo', 'placeholder' => $isTenant ? 'Seu nome completo' : 'Nome do pretendente', 'required' => true, 'minlength' => 3, 'maxlength' => 255, 'autocomplete' => 'name']])
                     @include('simulation.partials.input', ['field' => ['name' => 'email', 'label' => 'E-mail', 'placeholder' => 'email@exemplo.com', 'type' => 'email', 'required' => true, 'maxlength' => 255, 'autocomplete' => 'email']])
@@ -99,7 +106,7 @@
                     <h2 class="simulation-section-title simulation-section-divider">Responsável pelo preenchimento</h2>
                     <div class="simulation-fields grid grid-cols-1 gap-x-6 gap-y-5 md:grid-cols-2">
                         @include('simulation.partials.input', ['field' => ['name' => 'responsavel_preenchimento', 'label' => 'Nome do responsável pelo preenchimento', 'placeholder' => 'Nome do responsável', 'maxlength' => 255]])
-                        <div class="simulation-field"><label for="company_name">Imobiliária</label><input id="company_name" type="text" value="{{ $company->name }}" readonly></div>
+                        <div class="simulation-field"><label for="company_name">{{ \App\Support\BrandingText::choose('Imobiliária', 'Empresa') }}</label><input id="company_name" type="text" value="{{ $company->name }}" readonly></div>
                     </div>
                 @elseif (! $isTenant)
                     @include('simulation.partials.requester-fields')

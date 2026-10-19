@@ -70,6 +70,19 @@ final class ManualLeadResultTags
         return self::definition($result)['label'] ?? null;
     }
 
+    public static function displayLabel(string $result): ?string
+    {
+        if (config('branding.active') === 'tcc') {
+            return match ($result) {
+                self::RENTAL_CONFIRMED => 'Serviço contratado',
+                self::NO_RENT_OR_INSURANCE => 'Não contratado',
+                default => self::label($result),
+            };
+        }
+
+        return self::label($result);
+    }
+
     public static function leadloversKey(string $result): ?string
     {
         return self::definition($result)['leadlovers_key'] ?? null;

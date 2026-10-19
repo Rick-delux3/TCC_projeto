@@ -27,8 +27,13 @@
         <section class="simulation-journey" aria-labelledby="simulation-title">
             <aside class="simulation-journey__aside">
                 <div class="simulation-journey__intro">
-                    <span class="simulation-eyebrow">Seguro fiança locatícia</span>
-                    <h1 id="simulation-title" class="simulation-title">É Online, é Simples, é Seguro</h1>
+                    @if($simulationBrandProfile === 'tcc')
+                        <span class="simulation-eyebrow">Cadastro de beneficiário</span>
+                        <h1 id="simulation-title" class="simulation-title">É Online, é Simples, é Rápido</h1>
+                    @else
+                        <span class="simulation-eyebrow">Seguro Fiança</span>
+                        <h1 id="simulation-title" class="simulation-title">É Online, é Simples, é Seguro</h1>
+                    @endif
                     <p>Escolha o perfil que melhor representa esta solicitação.</p>
                 </div>
 
@@ -98,8 +103,13 @@
                                     </span>
 
                                     <span class="simulation-option__copy">
-                                        <strong>Imobiliária cadastrada</strong>
-                                        <span>Já tenho a chave de acesso para enviar uma nova análise.</span>
+                                        @if($simulationBrandProfile === 'tcc')
+                                            <strong>Empresa já cadastrada</strong>
+                                            <span>Tenho a chave de acesso para cadastrar um beneficiário.</span>
+                                        @else
+                                            <strong>Imobiliária cadastrada</strong>
+                                            <span>Já tenho a chave de acesso para enviar uma nova análise.</span>
+                                        @endif
                                     </span>
 
                                     <span class="simulation-option__indicator" aria-hidden="true"></span>
@@ -125,9 +135,14 @@
                                     </span>
 
                                     <span class="simulation-option__copy">
-                                        <strong>Imobiliária ou proprietário</strong>
-                                        <span>Vou solicitar uma análise sem uma chave de acesso.</span>
-                                        <small>Nova solicitação</small>
+                                        @if($simulationBrandProfile === 'tcc')
+                                            <strong>Empresa ou consumidor</strong>
+                                            <span>Empresa sem cadastro ou consumidor: cadastre um beneficiário, sem dashboard.</span>
+                                        @else
+                                            <strong>Imobiliária ou proprietário</strong>
+                                            <span>Vou solicitar uma análise sem uma chave de acesso.</span>
+                                            <small>Nova solicitação</small>
+                                        @endif
                                     </span>
 
                                     <span class="simulation-option__indicator" aria-hidden="true"></span>
@@ -152,8 +167,13 @@
                                     </span>
 
                                     <span class="simulation-option__copy">
-                                        <strong>Locatário</strong>
-                                        <span>Quero alugar um imóvel e solicitar meu seguro fiança.</span>
+                                        @if($simulationBrandProfile === 'tcc')
+                                            <strong>Beneficiário</strong>
+                                            <span>Quero cadastrar meus próprios dados, sem vínculo obrigatório com uma empresa.</span>
+                                            @else
+                                            <strong>Locatário</strong>
+                                            <span>Quero alugar um imóvel e solicitar meu seguro fiança.</span>
+                                        @endif
                                     </span>
 
                                     <span class="simulation-option__indicator" aria-hidden="true"></span>

@@ -16,17 +16,16 @@
             @endif
 
             <div class="client-auth-overlay">
-                <span class="client-badge">Portal dos corretores</span>
+                <span class="client-badge">{{ \App\Support\BrandingText::choose('Portal dos corretores', 'Portal da equipe') }}</span>
 
-                <h2>Acesse o painel da corretora</h2>
+                <h2>{{ \App\Support\BrandingText::choose('Acesse o painel da corretora', 'Acesse o painel da concessionária') }}</h2>
 
                 <p>
-                    Entre como integrante para acompanhar clientes, visualizar leads,
-                    consultar análises e seguir com as operações liberadas pelo CEO.
+                    {{ \App\Support\BrandingText::choose('Entre como integrante para acompanhar clientes, visualizar leads, consultar análises e seguir com as operações liberadas pelo CEO.', 'Entre como integrante para acompanhar beneficiários, visualizar leads e realizar as operações liberadas pelo CEO.') }}
                 </p>
 
                 <div class="client-auth-points">
-                    <span>Clientes das imobiliárias</span>
+                    <span>{{ \App\Support\BrandingText::choose('Clientes das imobiliárias', 'Beneficiários das empresas') }}</span>
                     <span>Análises centralizadas</span>
                     <span>Acesso seguro por equipe</span>
                 </div>
@@ -37,10 +36,10 @@
             <header class="client-auth-header">
                 <span class="client-auth-kicker">Acesso do integrante</span>
 
-                <h1>Login do corretor integrante</h1>
+                <h1>{{ \App\Support\BrandingText::choose('Login do corretor integrante', 'Login do integrante') }}</h1>
 
                 <p>
-                    Informe o e-mail cadastrado pelo CEO da corretora e sua senha de acesso.
+                    {{ \App\Support\BrandingText::choose('Informe o e-mail cadastrado pelo CEO da corretora e sua senha de acesso.', 'Informe o e-mail cadastrado pelo CEO da concessionária e sua senha de acesso.') }}
                 </p>
             </header>
 
@@ -123,7 +122,7 @@
                 </div>
 
                 <div class="client-recovery-box">
-                    <span>Acesso administrativo da corretora?</span>
+                    <span>{{ \App\Support\BrandingText::choose('Acesso administrativo da corretora?', 'Acesso administrativo da concessionária?') }}</span>
                     <a href="{{ route('admin.ceo.login') }}">Sou CEO</a>
                 </div>
 

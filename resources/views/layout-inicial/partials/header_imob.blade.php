@@ -15,7 +15,7 @@
 
     $companyName = $dashboardCompany?->name
         ?? $dashboardUser?->name
-        ?? 'Imobiliária';
+        ?? \App\Support\BrandingText::choose('Imobiliária', 'Empresa');
 
     $companyEmail = $dashboardCompany?->email
         ?? $dashboardUser?->email
@@ -54,7 +54,7 @@
     $dashboardRoute = route('company.dashboard');
     $leadsRoute = $dashboardRoute.'#leads-section';
     $simulationRoute = route('simulation.registered-company.access');
-    $panelLabel = 'Painel da imobiliária';
+    $panelLabel = \App\Support\BrandingText::choose('Painel da imobiliária', 'Painel da empresa');
     $operationLabel = $brandProfile === 'client'
         ? 'Operação ativa'
         : 'Sistema operacional';
@@ -229,7 +229,7 @@
                 <h5 class="offcanvas-title fw-bold mb-0" id="dashboardClientSidebarLabel">
                     {{ config('branding.profiles.'.config('branding.active', 'tcc').'.name', 'NVS Seguros') }}
                 </h5>
-                <small class="text-muted">Menu da imobiliária</small>
+                <small class="text-muted">{{ \App\Support\BrandingText::choose('Menu da imobiliária', 'Menu da empresa') }}</small>
             </div>
         </div>
 

@@ -170,7 +170,7 @@ class CorretorEquipeController extends Controller
                 'nome.required' => 'Informe o nome.',
                 'email.required' => 'Informe o e-mail.',
                 'email.email' => 'Informe um e-mail válido.',
-                'email.unique' => 'Já existe outro corretor cadastrado com este e-mail.',
+                'email.unique' => \App\Support\BrandingText::choose('Já existe outro corretor cadastrado com este e-mail.', 'Já existe outro integrante cadastrado com este e-mail.'),
                 'password.min' => 'A senha deve ter pelo menos 8 caracteres.',
                 'password.confirmed' => 'A confirmação da senha não confere.',
                 'permissions.*.in' => 'Uma das permissões selecionadas é inválida.',
@@ -260,12 +260,12 @@ class CorretorEquipeController extends Controller
             if (in_array(CorretorPermissions::LINK_LEAD_COMPANY, $permissions, true)
                 && array_diff(CorretorPermissions::dependenciesFor(CorretorPermissions::LINK_LEAD_COMPANY), $permissions) !== []) {
                 throw ValidationException::withMessages([
-                    'permissions' => 'Para vincular leads a imobiliárias, selecione também “Visualizar leads/clientes” e “Visualizar imobiliárias”.',
+                    'permissions' => \App\Support\BrandingText::choose('Para vincular leads a imobiliárias, selecione também “Visualizar leads/clientes” e “Visualizar imobiliárias”.', 'Para vincular beneficiários a empresas, selecione também “Visualizar leads/beneficiários” e “Visualizar empresas”.'),
                 ]);
             }
 
             throw ValidationException::withMessages([
-                'permissions' => 'Para cadastrar, editar ou remover imobiliárias, selecione também “Visualizar imobiliárias”.',
+                'permissions' => \App\Support\BrandingText::choose('Para cadastrar, editar ou remover imobiliárias, selecione também “Visualizar imobiliárias”.', 'Para cadastrar, editar ou remover empresas, selecione também “Visualizar empresas”.'),
             ]);
         }
 
