@@ -239,7 +239,7 @@
 
 
 <div id="dashboardThemeRoot" class="dashboard-shell company-leads-page" data-dashboard-theme="light">
-    <div class="container-fluid px-3 px-lg-4 py-4">
+    <div class="container-fluid px-3 px-lg-4 py-4 company-dashboard-content">
         <x-dashboard-realtime-notice />
         @if (session('success'))
             <div class="alert alert-success rounded-4 border-0 shadow-sm" role="status" aria-live="polite">
@@ -340,24 +340,27 @@
                             </div>
 
                             <div class="col-12 col-lg-4">
-                                <div class="bg-white bg-opacity-10 rounded-4 p-3 border border-white border-opacity-25">
-                                    <div class="small text-white-50 mb-1">
-                                        Última entrada
-                                    </div>
+                                <div class="company-overview-details bg-white bg-opacity-10 rounded-4 p-3 border border-white border-opacity-25">
+                                    <div>
+                                        <div class="small text-white-50 mb-1">
+                                            Última entrada
+                                        </div>
 
-                                    <div class="fw-bold">
-                                        {{ $latestLeadAt ? $latestLeadAt->copy()->setTimezone('America/Sao_Paulo')->format('d/m/Y H:i') : 'Sem leads cadastrados' }}
+                                        <div class="fw-bold">
+                                            {{ $latestLeadAt ? $latestLeadAt->copy()->setTimezone('America/Sao_Paulo')->format('d/m/Y H:i') : 'Sem leads cadastrados' }}
+                                        </div>
                                     </div>
-
                                     <hr class="border-white border-opacity-25">
 
-                                    <div class="small text-white-50 mb-1">
-                                        Origem exibida
-                                    </div>
+                                    <div>
+                                        <div class="small text-white-50 mb-1">
+                                            Origem exibida
+                                        </div>
 
-                                    <span class="badge text-bg-success">
-                                        Formulários do sistema
-                                    </span>
+                                        <span class="badge text-bg-success">
+                                            Formulários do sistema
+                                        </span>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -390,7 +393,7 @@
                             </span>
                         </div>
 
-                        <label class="form-label small text-muted">
+                        <label for="dashboardLeadAccessCode" class="form-label small text-muted">
                             Chave de acesso
                         </label>
 
@@ -414,7 +417,7 @@
                             </button>
                         </div>
 
-                        <label class="form-label small text-muted">
+                        <label for="dashboardLeadFormLink" class="form-label small text-muted">
                             Página de simulação
                         </label>
 
@@ -450,7 +453,7 @@
                                 Abrir página
                             </a>
 
-                            <span id="dashboardLeadFormCopyStatus" class="small {{ $leadFormAvailable ? 'text-muted' : 'text-danger' }}">
+                            <span id="dashboardLeadFormCopyStatus" role="status" class="small {{ $leadFormAvailable ? 'text-muted' : 'text-danger' }}">
                                 {{ $leadFormAvailable ? 'Envie o link e a chave para quem for preencher.' : 'Página indisponível.' }}
                             </span>
                         </div>
@@ -624,7 +627,7 @@
                                     </span>
                                 </a>
                             @empty
-                                <p class="text-muted small mb-0">
+                                <p class="company-tags-empty text-muted small mb-0">
                                     As tags aparecerão aqui assim que existirem leads segmentados.
                                 </p>
                             @endforelse
@@ -953,7 +956,7 @@
                                     && $leadLoversFailure['fields'] !== [];
                             @endphp
 
-                            <article class="card border-0 shadow-sm rounded-5 lead-card lead-list-item {{ $leadTone['card'] }}">
+                            <article aria-labelledby="company-lead-name-{{ $lead->id }}" class="card border-0 shadow-sm rounded-5 lead-card lead-list-item {{ $leadTone['card'] }}">
                                 <div class="card-body p-3 p-lg-4">
 
                                     <div class="row g-3 align-items-center company-lead-summary">
@@ -966,7 +969,7 @@
                                                 </div>
 
                                                 <div class="min-w-0">
-                                                    <h3 class="h6 fw-bold mb-1 text-truncate">
+                                                    <h3 id="company-lead-name-{{ $lead->id }}" class="h6 fw-bold mb-1 text-truncate">
                                                         {{ $leadName }}
                                                     </h3>
 

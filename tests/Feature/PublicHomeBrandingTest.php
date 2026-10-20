@@ -65,6 +65,7 @@ it('connects the tcc landing actions and serves local images with valid section 
         'Cadastrar beneficiário' => 'simulation.start',
         'Ir para o painel' => 'empresa.login',
         'Entrar' => 'empresa.login',
+        'Entrar como administrador' => 'tcc.admin.access',
         'Área do Cliente' => 'empresa.login',
     ] as $label => $routeName) {
         $link = $xpath->query('//a[normalize-space(.)="'.$label.'"]')->item(0);
@@ -106,9 +107,11 @@ it('opens index access links safely in a new tab only for tcc', function (string
     $document = new DOMDocument;
     @$document->loadHTML('<?xml encoding="UTF-8">'.$html);
     $xpath = new DOMXPath($document);
-    $accessLinks = $xpath->query('//a[@href="'.route('empresa.login').'" or @href="'.route('empresa.register.form').'"]');
+    $accessLinks = $xpath->query('//a[@href="'.route('empresa.login').'" or @href="'.route('empresa.register.form').'" or @href="'.route('tcc.admin.access').'"]');
 
     expect($accessLinks->length)->toBeGreaterThan(0);
+    expect($xpath->query('//header//a[@href="'.route('tcc.admin.access').'"]')->length)
+        ->toBe($profile === 'tcc' ? 1 : 0);
 
     foreach ($accessLinks as $link) {
         if ($profile === 'tcc') {

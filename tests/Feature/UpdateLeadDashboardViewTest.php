@@ -100,6 +100,11 @@ it('adapts the company workspace only for tcc while preserving company boundarie
         ->and($xpath->query('//header//button[@data-dashboard-theme-toggle]')->length)->toBe($brand === 'tcc' ? 1 : 0)
         ->and($xpath->query('//header//nav[@aria-label="Seções do painel"]')->length)->toBe(1)
         ->and($xpath->query('//*[@id="dashboardLeadAccessCode" and @value="NVS789"]')->length)->toBe(1)
+        ->and($xpath->query('//label[@for="dashboardLeadAccessCode"]')->length)->toBe(1)
+        ->and($xpath->query('//label[@for="dashboardLeadFormLink"]')->length)->toBe(1)
+        ->and($xpath->query('//*[@id="dashboardLeadFormCopyStatus" and @role="status"]')->length)->toBe(1)
+        ->and($xpath->query('//article[@aria-labelledby="company-lead-name-'.$lead->id.'"]//h3[@id="company-lead-name-'.$lead->id.'"]')->length)->toBe(1)
+        ->and($xpath->query('//*[contains(@class,"company-dashboard-content")]/*[contains(@class,"company-metrics")]/*')->length)->toBe(4)
         ->and($xpath->query('//select[@name="tag"]')->length)->toBe(1)
         ->and($xpath->query('//select[@name="imobiliaria"] | //*[@data-lead-company-trigger]')->length)->toBe(0)
         ->and($xpath->query('//article[contains(@class,"lead-list-item")]')->length)->toBe(1)
@@ -107,6 +112,23 @@ it('adapts the company workspace only for tcc while preserving company boundarie
         ->and($xpath->query('//form[@action="'.route('dashboard.leads.update', $lead).'"]//input[@name="_token"]')->length)->toBe(1);
     $response->assertSee($lead->email)->assertDontSee($foreign->email);
 })->with(['tcc', 'client']);
+
+it('keeps the company workspace useful without leads or tags', function (): void {
+    config(['branding.active' => 'tcc']);
+    $company = updateLeadDashboardCompany(['lead_access_code' => 'NVS789']);
+
+    $response = $this->actingAs(updateLeadDashboardCompanyUser($company))
+        ->withSession(['2fa_passed' => true])
+        ->get(route('company.dashboard'))->assertOk();
+    $xpath = updateLeadDashboardDom($response->getContent())['xpath'];
+
+    expect($xpath->query('//article[contains(@class,"lead-list-item")]')->length)->toBe(0)
+        ->and($xpath->query('//*[contains(@class,"company-tags-empty")]')->length)->toBe(1)
+        ->and($xpath->query('//*[@id="dashboardLeadAccessCode" and @value="NVS789"]')->length)->toBe(1)
+        ->and($xpath->query('//button[@id="dashboardLeadAccessCodeCopyButton" and not(@disabled)]')->length)->toBe(1);
+    $response->assertSee('Nenhum lead encontrado.')
+        ->assertSee('Sem leads cadastrados');
+});
 
 it('renders the company link action for each lead according to its current company and permission', function (bool $allowed, string $brand) {
     config(['branding.active' => $brand]);

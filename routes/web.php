@@ -3,6 +3,7 @@
 use App\Http\Controllers\Admin\ImobiliariaController;
 use App\Http\Controllers\Admin\LeadCompanyController;
 use App\Http\Controllers\AdminLeadTagController;
+use App\Http\Controllers\AdminPortalAccessController;
 use App\Http\Controllers\Auth\CompanyNewPasswordController;
 use App\Http\Controllers\Auth\CompanyPasswordResetLinkController;
 use App\Http\Controllers\CepController;
@@ -20,9 +21,14 @@ use App\Http\Controllers\PublicHomeController;
 use App\Http\Controllers\SimulationController;
 use App\Http\Controllers\TwoFactorController;
 use App\Http\Middleware\EnsureCeoRegistrationIsAuthorized;
+use App\Http\Middleware\RedirectAuthenticatedCompany;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', PublicHomeController::class)->name('index');
+
+Route::get('/acesso/administrador', AdminPortalAccessController::class)
+    ->middleware(['auth.unframed', 'throttle:tcc-auth-pages'])
+    ->name('tcc.admin.access');
 
 Route::get('/simulacao/atividades', \App\Http\Controllers\CommercialActivityController::class)
     ->middleware('throttle:60,1')->name('simulation.activities');
@@ -349,7 +355,7 @@ Route::get('/cep/{cep}', [CepController::class, 'show'])
     ->middleware('throttle:30,1')
     ->name('cep.show');
 
-Route::prefix('/empresa')->middleware(['guest:web', 'auth.unframed', 'throttle:tcc-auth-pages'])->group(function () {
+Route::prefix('/empresa')->middleware([RedirectAuthenticatedCompany::using('web'), 'auth.unframed', 'throttle:tcc-auth-pages'])->group(function () {
     Route::get('/form', [ImobiliariaRegistrationController::class, 'showRegistrationForm'])->name('empresa.register.form');
     Route::post('/register', [ImobiliariaRegistrationController::class, 'store'])
         ->middleware('throttle:5,1')
