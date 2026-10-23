@@ -33,8 +33,7 @@ final class LeadLoversConfirmationRecoveryService
 
     public function canSchedule(): bool
     {
-        return config('branding.active') === 'tcc'
-            && config('services.leadlovers.enabled')
+        return config('services.leadlovers.enabled')
             && ! in_array(config('queue.connections.'.config('queue.default').'.driver'), [null, 'sync', 'null'], true);
     }
 

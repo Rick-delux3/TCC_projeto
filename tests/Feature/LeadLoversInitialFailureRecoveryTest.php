@@ -35,14 +35,14 @@ beforeEach(function () {
     ]);
 });
 
-it('presents tcc confirmation recovery as a scheduled warning', function (string $mode) {
+it('presents confirmation recovery as a scheduled warning', function (string $mode, string $profile) {
     $this->freezeTime();
-    config(['branding.active' => 'tcc']);
+    config(['branding.active' => $profile]);
     $lead = llifrLead(['leadlovers_status' => 'processing', 'leadlovers_lead_id' => 501]);
     $lead->forceFill(['leadlovers_recovery' => [
         'mode' => 'machine_confirmation',
         'status' => 'scheduled',
-        'next_retry_at' => now()->addMinutes(10)->toIso8601String(),
+        'next_retry_at' => now()->addMinute()->toIso8601String(),
     ]])->save();
 
     $description = llifrDescribe($lead);
@@ -60,10 +60,10 @@ it('presents tcc confirmation recovery as a scheduled warning', function (string
     if ($mode === 'full') {
         $view->assertSee('role="status"', false)->assertSee('alert-warning');
     }
-})->with(['compact', 'full']);
+})->with(['compact', 'full'])->with(['tcc', 'client']);
 
-it('distinguishes tcc confirmation failures from actual configuration errors', function (?int $status, ?string $code, string $operation, string $fragment) {
-    config(['branding.active' => 'tcc']);
+it('distinguishes confirmation failures from actual configuration errors', function (?int $status, ?string $code, string $operation, string $fragment, string $profile) {
+    config(['branding.active' => $profile]);
     $lead = llifrLead([
         'leadlovers_lead_id' => 501,
         'leadlovers_initial_error_status' => $status,
@@ -84,24 +84,27 @@ it('distinguishes tcc confirmation failures from actual configuration errors', f
     [503, 'SERVICE_UNAVAILABLE', 'machine_confirmation', 'indisponibilidade interna'],
     [400, 'INVALID_MACHINE', 'machine_request', 'recusou a operação de associação'],
     [null, null, 'machine_configuration', 'não está configurada corretamente'],
-]);
+])->with(['tcc', 'client']);
 
-it('keeps the client presentation unchanged when recovery metadata exists', function () {
+it('updates the client presentation when scheduled recovery closes', function () {
     config(['branding.active' => 'client']);
     $lead = llifrLead(['leadlovers_status' => 'processing']);
     $lead->forceFill(['leadlovers_recovery' => [
         'mode' => 'machine_confirmation',
         'status' => 'scheduled',
-        'next_retry_at' => now()->addMinutes(10)->toIso8601String(),
+        'next_retry_at' => now()->addMinute()->toIso8601String(),
     ]])->save();
-    expect(llifrDescribe($lead)['recovery'])->toBeNull();
+    expect(llifrDescribe($lead)['recovery']['label'])->toBe('Confirmação agendada');
     $this->view('partials.leadlovers-sync-status', ['lead' => $lead->fresh()])
-        ->assertSee('Enviando à LeadLovers')->assertDontSee('Confirmação agendada');
+        ->assertSee('Confirmação agendada')->assertDontSee('Falha na integração');
     $lead->forceFill([
         'leadlovers_status' => 'failed',
         'leadlovers_initial_error_operation' => 'machine_confirmation',
+        'leadlovers_initial_error_status' => null,
+        'leadlovers_initial_error_code' => null,
+        'leadlovers_response' => [],
     ])->save();
-    expect(llifrDescribe($lead)['message'])->toContain('não está configurada corretamente');
+    expect(llifrDescribe($lead)['message'])->toContain('não foi confirmada a tempo');
 });
 
 it('does not advertise an automatic retry for closed disabled or malformed recovery', function (string $status, string $date, bool $enabled) {

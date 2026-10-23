@@ -1145,8 +1145,7 @@ class SendLeadToLeadLoversJob implements ShouldQueue
         array $diagnosticContext = [],
         bool $preservePreviousInitialFailure = false,
     ): void {
-        if (config('branding.active') === 'tcc'
-            && $operation === 'machine_confirmation'
+        if ($operation === 'machine_confirmation'
             && ($exception === null || ($exception->isTransient && ! $exception->isConfigurationError))) {
             $this->scheduleMachineConfirmation($operation, $exception);
 
@@ -1376,8 +1375,7 @@ class SendLeadToLeadLoversJob implements ShouldQueue
                 $resumingAttempt = ($recovery['status'] ?? null) === 'processing'
                     && $this->attempts() > 1;
 
-                if (config('branding.active') !== 'tcc'
-                    || $lead?->leadlovers_status !== 'processing'
+                if ($lead?->leadlovers_status !== 'processing'
                     || (int) $lead->leadlovers_lead_id <= 0
                     || ($recovery['mode'] ?? null) !== 'machine_confirmation'
                     || (! $resumingAttempt && (($recovery['status'] ?? null) !== 'scheduled'

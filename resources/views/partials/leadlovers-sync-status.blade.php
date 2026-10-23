@@ -3,9 +3,7 @@
         ?? app(\App\Support\LeadLoversInitialFailureCatalog::class)
             ->describe($lead);
 
-    $leadLoversRecovery = config('branding.active') === 'tcc'
-        ? ($failure['recovery'] ?? null)
-        : null;
+    $leadLoversRecovery = $failure['recovery'] ?? null;
 
     $leadLoversInitialStatus = filled($lead->leadlovers_status)
         ? (string) $lead->leadlovers_status

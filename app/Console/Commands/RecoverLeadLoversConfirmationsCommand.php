@@ -15,16 +15,10 @@ class RecoverLeadLoversConfirmationsCommand extends Command
         {--limit=100 : Maximo de registros examinados}
         {--apply : Agenda a confirmacao dos IDs explicitamente selecionados}';
 
-    protected $description = 'Exibe ou agenda a recuperacao seletiva de confirmacoes antigas no TCC';
+    protected $description = 'Exibe ou agenda a recuperacao seletiva de confirmacoes antigas na LeadLovers';
 
     public function handle(LeadLoversConfirmationRecoveryService $recovery): int
     {
-        if (config('branding.active') !== 'tcc') {
-            $this->error('Comando disponivel somente no perfil TCC.');
-
-            return self::FAILURE;
-        }
-
         $ids = [];
         foreach ($this->option('id') as $value) {
             $id = filter_var($value, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);

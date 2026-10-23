@@ -79,7 +79,7 @@ final class LeadLoversInitialFailureCatalog
             && $notSent
             && $httpStatus === 400
             && ! $configurationFailure
-            && (config('branding.active') !== 'tcc' || ! str_starts_with($operation ?? '', 'machine_'))
+            && ! str_starts_with($operation ?? '', 'machine_')
             ? (self::CORRECTABLE_FIELDS[$errorCode] ?? [])
             : [];
 
@@ -117,21 +117,16 @@ final class LeadLoversInitialFailureCatalog
         ?string $operation,
     ): string {
         return match (true) {
-            config('branding.active') === 'tcc'
-                && ($operation === 'integration_disabled' || $errorCode === 'INTEGRATION_DISABLED') => 'A integração com a LeadLovers está desativada. Não há novas tentativas automáticas enquanto ela permanecer desativada.',
+            $operation === 'integration_disabled' || $errorCode === 'INTEGRATION_DISABLED' => 'A integração com a LeadLovers está desativada. Não há novas tentativas automáticas enquanto ela permanecer desativada.',
 
-            config('branding.active') === 'tcc'
-                && $operation === 'machine_confirmation'
+            $operation === 'machine_confirmation'
                 && $httpStatus === null && $errorCode === null => 'A associação à máquina da LeadLovers não foi confirmada a tempo. Isso não comprova erro de configuração. A sincronização precisa ser revisada antes de retomar as tentativas.',
 
-            config('branding.active') === 'tcc'
-                && $httpStatus === 429 => 'O limite de requisições da LeadLovers foi atingido e este ciclo de tentativas foi encerrado. A sincronização precisa ser revisada antes de retomar.',
+            $httpStatus === 429 => 'O limite de requisições da LeadLovers foi atingido e este ciclo de tentativas foi encerrado. A sincronização precisa ser revisada antes de retomar.',
 
-            config('branding.active') === 'tcc'
-                && $httpStatus === 403 => 'A LeadLovers negou permissão para esta operação. Um administrador precisa verificar as permissões da integração.',
+            $httpStatus === 403 => 'A LeadLovers negou permissão para esta operação. Um administrador precisa verificar as permissões da integração.',
 
-            config('branding.active') === 'tcc'
-                && str_starts_with($operation ?? '', 'machine_')
+            str_starts_with($operation ?? '', 'machine_')
                 && ! $this->isMachineConfigurationFailure($lead, $operation)
                 && in_array($httpStatus, [400, 404, 409, 422], true)
                 && ! in_array($errorCode, ['TIMEOUT', 'TRANSACTION_FAILED'], true) => 'A LeadLovers recusou a operação de associação à máquina. Um administrador precisa revisar a resposta da integração antes de retomar. Não é necessário alterar os dados do lead.',
@@ -153,8 +148,6 @@ final class LeadLoversInitialFailureCatalog
 
             $httpStatus === 422
                 && $errorCode === 'TRANSACTION_FAILED' => 'A LeadLovers não conseguiu concluir a transação. Nenhuma correção nos dados do lead é necessária.',
-
-            $httpStatus === 429 => 'O limite de requisições da LeadLovers foi atingido. O sistema realizará novas tentativas automaticamente.',
 
             $httpStatus !== null && $httpStatus >= 500 => 'A LeadLovers apresentou uma indisponibilidade interna. Nenhuma correção nos dados do lead é necessária.',
 
@@ -194,16 +187,8 @@ final class LeadLoversInitialFailureCatalog
         Lead $lead,
         ?string $operation,
     ): bool {
-        if (config('branding.active') === 'tcc') {
-            return $lead->leadlovers_status === 'sequence_failed'
-                || $operation === 'machine_configuration';
-        }
-
         return $lead->leadlovers_status === 'sequence_failed'
-            || ($operation !== null && str_starts_with(
-                $operation,
-                'machine_'
-            ));
+            || $operation === 'machine_configuration';
     }
 
     /**
@@ -213,8 +198,7 @@ final class LeadLoversInitialFailureCatalog
     {
         $recovery = $lead->leadlovers_recovery;
 
-        if (config('branding.active') !== 'tcc'
-            || ! config('services.leadlovers.enabled')
+        if (! config('services.leadlovers.enabled')
             || $lead->leadlovers_status !== 'processing'
             || ! is_array($recovery)
             || ! in_array($recovery['status'] ?? null, ['scheduled', 'processing'], true)) {

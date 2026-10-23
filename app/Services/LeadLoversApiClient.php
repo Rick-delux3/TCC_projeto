@@ -353,26 +353,17 @@ final class LeadLoversApiClient
             )
         );
 
-        if (config('branding.active') === 'tcc') {
-            $reserved = Cache::store(config('cache.limiter'))->lock($key.':reservation', 5)
-                ->get(function () use ($key, $maximumRequests, $windowSeconds): bool {
-                    if (RateLimiter::tooManyAttempts($key, $maximumRequests)) {
-                        return false;
-                    }
+        $reserved = Cache::store(config('cache.limiter'))->lock($key.':reservation', 5)
+            ->get(function () use ($key, $maximumRequests, $windowSeconds): bool {
+                if (RateLimiter::tooManyAttempts($key, $maximumRequests)) {
+                    return false;
+                }
 
-                    RateLimiter::hit($key, max(60, $windowSeconds));
+                RateLimiter::hit($key, max(60, $windowSeconds));
 
-                    return true;
-                });
-            $response = $reserved ? $request() : false;
-        } else {
-            $response = RateLimiter::attempt(
-                $key,
-                $maximumRequests,
-                fn (): Response => $request(),
-                $windowSeconds
-            );
-        }
+                return true;
+            });
+        $response = $reserved ? $request() : false;
 
         if (! $response instanceof Response) {
             throw LeadLoversApiException::make(
@@ -566,27 +557,16 @@ final class LeadLoversApiClient
     {
         $rateLimitReset = trim((string) $response->header('RateLimit-Reset'));
         $retryAfter = trim((string) $response->header('Retry-After'));
-        if (config('branding.active') === 'tcc') {
-            return max(
-                1,
-                $this->nonNegativeIntegerHeader($rateLimitReset) ?? 0,
-                $this->retryAfterFallback($retryAfter) ?? 0,
-                ($this->nonNegativeIntegerHeader($rateLimitReset) === null && $this->retryAfterFallback($retryAfter) === null)
-                    ? (int) config('services.leadlovers.rate_limit_retry_seconds', 60) : 0,
-            );
-        }
+        $resetSeconds = $this->nonNegativeIntegerHeader($rateLimitReset);
+        $retrySeconds = $this->retryAfterFallback($retryAfter);
 
-        $delay = $this->nonNegativeIntegerHeader($rateLimitReset)
-            ?? $this->retryAfterFallback($retryAfter)
-            ?? max(
-                1,
-                (int) config(
-                    'services.leadlovers.rate_limit_retry_seconds',
-                    60
-                )
-            );
-
-        return $this->clampRetryDelay($delay);
+        return max(
+            1,
+            $resetSeconds ?? 0,
+            $retrySeconds ?? 0,
+            ($resetSeconds === null && $retrySeconds === null)
+                ? (int) config('services.leadlovers.rate_limit_retry_seconds', 60) : 0,
+        );
     }
 
     private function nonNegativeIntegerHeader(string $value): ?int

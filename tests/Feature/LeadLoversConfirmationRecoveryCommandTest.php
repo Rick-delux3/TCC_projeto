@@ -43,7 +43,8 @@ function confirmationRecoveryLead(array $overrides = []): Lead
     ], $overrides)))->fresh();
 }
 
-it('previews eligible confirmations without changing leads or calling the api', function () {
+it('previews eligible confirmations without changing leads or calling the api', function (string $profile) {
+    config(['branding.active' => $profile]);
     $lead = confirmationRecoveryLead();
     $before = $lead->getAttributes();
     $this->artisan('leadlovers:recover-confirmations')
@@ -52,9 +53,10 @@ it('previews eligible confirmations without changing leads or calling the api', 
     expect($lead->fresh()->getAttributes())->toBe($before);
     Queue::assertNotPushed(ConfirmLeadLoversMachineJob::class);
     Http::assertNothingSent();
-});
+})->with(['tcc', 'client']);
 
-it('schedules only selected leads once and confirms them without remote writes', function () {
+it('schedules only selected leads once and confirms them without remote writes', function (string $profile) {
+    config(['branding.active' => $profile]);
     $this->freezeTime();
     $lead = confirmationRecoveryLead();
     $other = confirmationRecoveryLead(['email' => 'other@example.test', 'leadlovers_lead_id' => 502]);
@@ -82,7 +84,7 @@ it('schedules only selected leads once and confirms them without remote writes',
         ->and($lead->fresh()->leadlovers_lead_id)->toBe(501);
     Http::assertSentCount(1);
     Http::assertNotSent(fn ($request) => $request->method() !== 'GET');
-});
+})->with(['tcc', 'client']);
 
 it('excludes failures that are not proven pending confirmations', function (array $overrides) {
     $lead = confirmationRecoveryLead($overrides);
@@ -113,7 +115,7 @@ it('rejects unsafe command options and environments', function (array $configura
     [[], ['--apply' => true]],
     [[], ['--id' => ['invalid']]],
     [[], ['--limit' => 1001]],
-    [['branding.active' => 'client'], []],
+    [['branding.active' => 'client', 'services.leadlovers.enabled' => false], ['--apply' => true, '--id' => [1]]],
     [['queue.default' => 'sync'], ['--apply' => true, '--id' => [1]]],
     [['services.leadlovers.enabled' => false], ['--apply' => true, '--id' => [1]]],
 ]);
