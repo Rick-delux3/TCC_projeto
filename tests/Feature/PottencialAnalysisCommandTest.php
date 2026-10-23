@@ -266,3 +266,102 @@ it('rolls back even when local initialization throws after inserting an analysis
     expect(json_decode(Artisan::output(), true, flags: JSON_THROW_ON_ERROR)['success'])->toBeFalse();
     Http::assertNothingSent();
 });
+
+it('inspects existing quotes without creating a new quote or using production providers', function () {
+    Http::fake(function (Request $request, array $options) {
+        expect($request->method())->toBe('GET')
+            ->and($request->header('client_id'))->toBe(['test-client'])
+            ->and($request->header('access_token'))->toBe(['private-test-token'])
+            ->and($options['allow_redirects'])->toBeFalse();
+
+        return Http::response(['paymentType' => 'Boleto', 'installments' => [['countInstallments' => 30, 'installments' => array_fill(0, 30, 25.5)]]]);
+    });
+
+    expect(Artisan::call('pottencial:test-analysis', [
+        '--cotacao' => 'existing-quote', '--inspecionar' => ['cotacao', 'pagamentos', 'planos', 'cartas'],
+    ]))->toBe(0);
+    $report = json_decode(Artisan::output(), true, flags: JSON_THROW_ON_ERROR);
+    expect($report['steps'])->toHaveCount(4)
+        ->and($report['steps'][1]['response']['installments'][0]['countInstallments'])->toBe(30)
+        ->and(Artisan::output())->not->toContain('private-test-token', 'test-secret');
+    foreach ([
+        '/insurance/v1/fianca-locaticia/quotes/existing-quote',
+        '/insurance/v1/fianca-locaticia-mensalizado-pf/quotes/existing-quote/payment-simulations',
+        '/riskobject/v1/products/fianca-locaticia/plans',
+        '/insurance/v1/fianca-locaticia/quotes/existing-quote/letters',
+    ] as $path) {
+        Http::assertSent(fn (Request $request): bool => $request->url() === 'https://pottencial.example.test'.$path);
+    }
+    Http::assertSentCount(4);
+});
+
+it('preserves PDF bytes and does not follow document redirects', function (int $status) {
+    $body = "%PDF-1.7\n\xFF\x00\n%%EOF";
+    Http::fake(['*' => Http::response($body, $status, ['Content-Type' => 'application/pdf', 'Location' => 'https://untrusted.example/file'])]);
+    expect(Artisan::call('pottencial:test-analysis', ['--cotacao' => 'existing', '--inspecionar' => ['minuta']]))->toBe($status === 200 ? 0 : 1);
+    $step = json_decode(Artisan::output(), true, flags: JSON_THROW_ON_ERROR)['steps'][0];
+    expect(base64_decode($step['body_base64'], true))->toBe($body)
+        ->and($step['body_sha256'])->toBe(hash('sha256', $body))
+        ->and($step['raw_body'])->toBeNull();
+    Http::assertSentCount(1);
+})->with([200, 302]);
+
+it('can inspect plans without a lead or quote', function () {
+    Http::fake(['*' => Http::response([['name' => 'Complete']])]);
+    expect(Artisan::call('pottencial:test-analysis', ['--inspecionar' => ['planos']]))->toBe(0);
+    Http::assertSentCount(1);
+});
+
+it('selects the monthly consultation route explicitly', function () {
+    Http::fake(['*' => Http::response(['status' => 'Creating'])]);
+    expect(Artisan::call('pottencial:test-analysis', [
+        '--cotacao' => 'existing', '--inspecionar' => ['cotacao'], '--contrato' => 'mensalizado',
+    ]))->toBe(0);
+    Http::assertSent(fn (Request $request): bool => $request->url() === $this->endpoint.'/existing');
+});
+
+it('appends inspection failures without losing the credit decision or repeating creation', function () {
+    Http::fakeSequence()->push(['quoteId' => 'new-quote', 'status' => 'Pending'], 201)
+        ->push(['status' => 'Approved'])->push(['message' => 'Sem simulação'], 422);
+    expect(Artisan::call('pottencial:test-analysis', ['--lead' => $this->lead->id, '--inspecionar' => ['pagamentos']]))->toBe(1);
+    $report = json_decode(Artisan::output(), true, flags: JSON_THROW_ON_ERROR);
+    expect($report['analysis']['status'])->toBe('approved')
+        ->and($report['inspection']['steps'][0]['http_status'])->toBe(422);
+    Http::assertSentCount(3);
+});
+
+it('rejects unsafe or ambiguous diagnostic options before making requests', function (array $options) {
+    expect(Artisan::call('pottencial:test-analysis', $options))->toBe(2);
+    Http::assertNothingSent();
+})->with([
+    [['--cotacao' => 'existing']],
+    [['--cotacao' => '../policies', '--inspecionar' => ['cotacao']]],
+    [['--cotacao' => 'existing', '--lead' => 1, '--inspecionar' => ['cotacao']]],
+    [['--cotacao' => 'existing', '--inspecionar' => ['emitir']]],
+    [['--cotacao' => 'existing', '--inspecionar' => ['cotacao'], '--contrato' => 'pj']],
+]);
+
+it('reports a connection failure while still inspecting independent endpoints', function () {
+    Http::fake([
+        '*payment-simulations' => Http::failedConnection(),
+        '*plans' => Http::response([]),
+    ]);
+    expect(Artisan::call('pottencial:test-analysis', ['--cotacao' => 'existing', '--inspecionar' => ['pagamentos', 'planos']]))->toBe(1);
+    $report = json_decode(Artisan::output(), true, flags: JSON_THROW_ON_ERROR);
+    expect($report['steps'][0]['http_status'])->toBeNull()->and($report['steps'][1]['success'])->toBeTrue();
+});
+
+it('honors the feature switch in inspection-only mode', function () {
+    config(['services.pottencial.enabled' => false]);
+    expect(Artisan::call('pottencial:test-analysis', ['--cotacao' => 'existing', '--inspecionar' => ['pagamentos']]))->toBe(1);
+    expect(Artisan::output())->toContain('desativado');
+    Http::assertNothingSent();
+});
+
+it('does not send a consultation with a missing quote identifier after creation fails', function () {
+    Http::fake(['*' => Http::response(['error' => 'Invalid request'], 422)]);
+    expect(Artisan::call('pottencial:test-analysis', ['--lead' => $this->lead->id, '--inspecionar' => ['pagamentos']]))->toBe(1);
+    $report = json_decode(Artisan::output(), true, flags: JSON_THROW_ON_ERROR);
+    expect($report['inspection']['steps'][0]['error'])->toContain('sem identificador');
+    Http::assertSentCount(1);
+});

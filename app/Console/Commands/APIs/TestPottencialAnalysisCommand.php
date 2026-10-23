@@ -5,6 +5,7 @@ namespace App\Console\Commands\APIs;
 use App\Models\InsuranceAnalysis;
 use App\Models\Lead;
 use App\Services\Insurance\PottencialAnalysisDiagnostic;
+use App\Services\Insurance\PottencialEndpointDiagnostic;
 use Illuminate\Console\Command;
 use Symfony\Component\Console\Output\OutputInterface;
 use Throwable;
@@ -14,12 +15,34 @@ class TestPottencialAnalysisCommand extends Command
     protected $signature = 'pottencial:test-analysis
         {--lead= : ID do lead utilizado no teste}
         {--consultas=3 : Máximo de consultas de resultado (1 a 60)}
-        {--intervalo=10 : Segundos entre consultas (1 a 60)}';
+        {--intervalo=10 : Segundos entre consultas (1 a 60)}
+        {--cotacao= : ID remoto existente; consulta sem criar orçamento ou registros locais}
+        {--inspecionar=* : Operações adicionais: cotacao, pagamentos, planos, minuta, cartas}
+        {--contrato=geral : Rota da consulta cotacao: geral ou mensalizado; não altera a criação atual}';
 
-    protected $description = 'Cria um orçamento real na Pottencial, consulta a análise e retorna JSON, descartando os registros locais de teste';
+    protected $description = 'Diagnostica a Pottencial: cria orçamento com --lead ou inspeciona cotação existente; retorna JSON e descarta registros locais de teste';
 
-    public function handle(PottencialAnalysisDiagnostic $diagnostic): int
+    public function handle(PottencialAnalysisDiagnostic $diagnostic, PottencialEndpointDiagnostic $endpoints): int
     {
+        $operations = array_values(array_unique($this->option('inspecionar')));
+        $quoteId = $this->option('cotacao');
+        $contract = $this->option('contrato');
+        if (array_diff($operations, PottencialEndpointDiagnostic::OPERATIONS) !== []
+            || ! in_array($contract, ['geral', 'mensalizado'], true)
+            || ($quoteId !== null && (! is_string($quoteId) || preg_match('/^[a-zA-Z0-9_-]{1,128}$/D', $quoteId) !== 1))
+            || ($quoteId !== null && ($operations === [] || $this->option('lead') !== null))) {
+            $this->writeJson(['success' => false, 'error' => 'Informe operações válidas e contrato geral/mensalizado. --cotacao exige --inspecionar e não pode ser combinado com --lead.']);
+
+            return self::INVALID;
+        }
+
+        if ($quoteId !== null || ($operations === ['planos'] && $this->option('lead') === null)) {
+            $report = $endpoints->run($quoteId, $operations, $contract);
+            $this->writeJson($report);
+
+            return $report['success'] ? self::SUCCESS : self::FAILURE;
+        }
+
         $leadId = $this->positiveInteger('lead', PHP_INT_MAX);
         $maxChecks = $this->positiveInteger('consultas', 60);
         $interval = $this->positiveInteger('intervalo', 60);
@@ -43,6 +66,10 @@ class TestPottencialAnalysisCommand extends Command
 
             $connection->beginTransaction();
             $report = $diagnostic->run($lead, $maxChecks, $interval);
+            if ($operations !== []) {
+                $report['inspection'] = $endpoints->run($report['analysis']['quote_id'] ?? null, $operations, $contract);
+                $report['success'] = $report['success'] && $report['inspection']['success'];
+            }
             $this->writeJson($report);
 
             return $report['success'] ? self::SUCCESS : ($report['incomplete'] ? self::INVALID : self::FAILURE);

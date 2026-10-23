@@ -8,7 +8,7 @@ Decisão posterior de 13/10/2026: a [regra geral de pagamento e comparação em 
 
 **Revisão de 15/10/2026:** consolidada a branch `feature/testes-com-Apis`, até `a72f029`, incluindo a validação de nascimento presente na árvore de trabalho e ainda não commitada. A seção T14 registra os esclarecimentos posteriores, as estruturas já disponíveis e as lacunas reais para iniciar a integração. As decisões do usuário, a implementação local e o suporte documentado pela Tokio estão identificados separadamente. Esta revisão altera somente este estudo; não ativa a seguradora nem comprova homologação.
 
-**Revisão de 23/10/2026:** incorporados o TXT e a print de regras da cotação Too, a decisão de usar sempre `IGP_M` e a regra transversal de fatura condicionada à presença de imobiliária na cotação; sem imobiliária, usar crédito, com a exceção posterior da Pottencial: boleto. Esta revisão é documental e prevalece sobre referências históricas conflitantes.
+**Revisão de 23/10/2026:** incorporados o TXT e a print de regras da cotação Too, a decisão de usar sempre `IGP_M` e a regra transversal de fatura condicionada à presença de imobiliária na cotação; sem imobiliária, usar crédito, com as exceções posteriores de Pottencial e Too: boleto. Esta revisão é documental e prevalece sobre referências históricas conflitantes.
 
 ## Escopo e fontes
 
@@ -66,13 +66,13 @@ Na Too, o fluxo do YAML começa pela cotação e depois registra proposta vincul
 
 ## Pottencial
 
-As subseções históricas abaixo descrevem a coleção antiga. A revisão PF/PJ de 23/10, ao final desta seção, incorpora os novos contratos e prevalece sobre lacunas antigas agora documentadas (atualização, reanálise, cartas e simulações de pagamento).
+As subseções históricas abaixo descrevem a coleção antiga. A revisão de 23/10, ao final desta seção, incorpora o contrato compartilhado por CPF/CNPJ e prevalece sobre lacunas antigas agora documentadas (atualização, reanálise, cartas e simulações de pagamento).
 
 ### Acesso
 
 - Base referenciada pela coleção: `{{pottencial_api_url}}`. O padrão de `services.pottencial.base_url` é `https://api-hml.pottencial.com.br`; o ambiente pode sobrescrevê-lo.
 - `POST /oauth/v3/access-token`: Basic Auth com `client_id` e `client_secret`; sem body na requisição da coleção.
-- Operações do produto enviam headers `client_id` e `access_token`. Não confundir com Bearer da Too; o contrato Pottencial PJ recebido em 23/10 também usa Bearer, conforme revisão abaixo.
+- Operações do produto enviam headers `client_id` e `access_token`. Não confundir com Bearer da Too. Manter o mesmo contrato para CPF/CNPJ.
 - O service armazena `access_token` em cache por 55 minutos; não calcula esse prazo a partir de `expires_in`.
 
 ### Endpoints
@@ -116,32 +116,21 @@ Proposta: `quoteId`, `policyPeriodStart`, `policyPeriodEnd`, `payment.paymentTyp
 
 O endpoint de cotação é configurável por `services.pottencial.rental_endpoint`; o padrão coincide com a coleção. Os padrões de configuração `Unico`, `Boleto` e `traditional` diferem dos valores do exemplo acima. Isso demanda conferir a transformação do payload e o catálogo aceito, não substituir valores automaticamente.
 
-### Revisão Pottencial PF e PJ — contratos recebidos em 23/10/2026
+### Revisão Pottencial — contrato compartilhado por PF e PJ — 23/10/2026
 
-#### Fontes preservadas e resultado da revisão
+A decisão mais recente do usuário substitui a escolha anterior de uma API exclusiva PJ. Utilizar o contrato que aceita **CPF ou CNPJ** em `participants[].documentNumber` e `tenantDocumentNumber`, com `riskObjects[].occupation = Residencial` ou `Commercial`. Tipo de pessoa e finalidade da locação são independentes: atender PF/PJ residencial/comercial sem uma integração PJ separada.
 
-Os dois arquivos foram copiados integralmente de Downloads para esta pasta, sem reformatar ou corrigir o conteúdo. São **OpenAPI 3.0.3 em JSON**, versão documental `1.0.0`, importáveis no Postman; a coleção antiga permanece intacta. Classificação PF/PJ conforme identificação fornecida pelo usuário. O título PF não exclui CNPJ em todos os seus campos, mas a decisão de integração é usar o contrato PJ específico para locatário principal pessoa jurídica.
+O arquivo exclusivo PJ foi removido do projeto por solicitação do usuário. Suas rotas, autenticação, payloads, callbacks e enums deixam de orientar a implementação. A coleção histórica permanece preservada.
 
-| Fonte | Operações / paths / schemas | SHA-256 da cópia, igual à origem |
-| --- | --- | --- |
-| [PF — Fiança Locatícia](pottencial-—-fiança-locatícia-(aluguel).json) | 18 / 16 / 36 | `1037502D2AF6361FF08E9DF1BBFCB9F2BA65197FBC82DC6CACAE26F643FECA93` |
-| [PJ — Fiança Locatícia Pessoa Jurídica](pottencial---fiança-locatícia-pj-(aluguel-pessoa-jurídica).json) | 10 / 9 / 19 | `7CFB7AE39A33278A0750E18E5B0471F2E71804949F3F5B0F3053358092F457C0` |
-| `Pottencial.postman_collection (6).json` | 11 operações no grupo Fiança locaticia Mensalizado, além da autenticação compartilhada | Coleção histórica multirramo; demais produtos não são contratos de Fiança |
+Fonte mantida: [Fiança Locatícia — CPF/CNPJ](pottencial-—-fiança-locatícia-(aluguel).json), OpenAPI 3.0.3 em JSON, versão 1.0.0, importável no Postman. Contém 18 operações, 16 paths e 36 schemas. SHA-256 preservado: `1037502D2AF6361FF08E9DF1BBFCB9F2BA65197FBC82DC6CACAE26F643FECA93`.
 
-**Resultado: adaptações e esclarecimentos necessários antes de implementar.** Os novos contratos documentam capacidades antes ausentes da coleção: pagamentos, atualização, reanálise e cartas. PJ é uma integração diferente em autenticação, payload, processamento e retorno; não basta trocar a URL do builder PF. Os arquivos são evidência documental fornecida pelo usuário, não comprovação de homologação. Skill `api-design` aplicada à revisão, preservando os contratos externos.
+#### Autenticação e identificação
 
-**Decisão funcional confirmada:** o sistema atenderá PF e PJ, tanto residencial quanto comercial. Tipo de pessoa e finalidade da locação são dimensões independentes. Uma empresa locatária de imóvel residencial deve seguir PJ + `Residential`; comercial não significa automaticamente PJ. Não classificar pelo CPF do responsável quando o locatário principal for a empresa.
+Homologação: `https://api-hml.pottencial.com.br`; produção: `https://api.pottencial.com.br`. Headers obrigatórios documentados: `client_id` e `access_token`. A coleção histórica obtém token via POST `/oauth/v3/access-token` com Basic Auth; o OpenAPI mantido não inclui emissão de token. O array global security declara alternativas OR, embora parâmetros explícitos exijam ambos os headers; preservar ambos.
 
-#### Bases, autenticação e identificadores
+Preservar `quoteId`/`quote_id` remoto por rodada, distinto de `quoteNumber`. Não haverá autenticação separada apenas porque o documento é CNPJ.
 
-Ambos indicam homologação `https://api-hml.pottencial.com.br` e produção `https://api.pottencial.com.br`.
-
-- PF: headers explícitos obrigatórios `client_id` e `access_token`, ambos API keys no contrato. A coleção antiga autentica via POST `/oauth/v3/access-token` com Basic Auth; os novos arquivos não documentam uma operação de emissão de token.
-- PJ: security schemes `client_id` como API key e token como **HTTP Bearer**, portanto `Authorization: Bearer ...`; POST/PUT de cotação também exigem `x-person-id`, UUID do corretor autenticado. Não confundir esse UUID com CNPJ ou ID interno do usuário. Obtenção do UUID e credenciais/escopos PJ ainda precisa ser confirmada.
-- Em ambos, o array global `security` contém dois objetos separados, formalmente alternativas **OR**, não uma exigência conjunta AND. Em PF os parâmetros explícitos exigem os dois headers; em PJ não há a mesma declaração em cada operação. Registrar a ambiguidade para confirmação; não interpretar como autorização para remover credenciais.
-- PF usa `quoteId`/`quote_id`; PJ criação retorna `id` (requestId), usado em `{quote_id}` e `requestId` de consulta de carta. Preservar identificador remoto, família do produto e rodada juntos. UUID não é número sequencial `quoteNumber`.
-
-#### Inventário completo PF
+#### Inventário do contrato mantido
 
 Abreviações somente nesta tabela: **F** = `/insurance/v1/fianca-locaticia`; **M** = `/insurance/v1/fianca-locaticia-mensalizado-pf`.
 
@@ -168,31 +157,12 @@ Abreviações somente nesta tabela: **F** = `/insurance/v1/fianca-locaticia`; **
 
 Erros PF: referências a `400`, `401`, `500`; consultas/documentos incluem `404` conforme operação; planos e simulação também `403`. Erros estruturados usam `errors[].code/message`. Não classificar recusa de crédito por HTTP. Existem schemas de cancelamento sem operação de cancelamento em `paths`: não criar rota por inferência. Renovação, proposta, aceitação e emissão foram estudadas, mas não serão acionadas para apenas analisar e comparar preços.
 
-#### Inventário completo PJ
-
-Prefixo **J** = `/partners/rentalbond/v1`, preservando maiúsculas de `Quotes`, `Policy`, `Subscription` e `Proposals`.
-
-| Método e rota | Entrada / retorno / efeito |
-| --- | --- |
-| POST J`/Quotes` | `QuoteRequest`, `x-person-id`; **201 apenas aceita processamento assíncrono**, JSON `{id}`; resultado por callback |
-| GET J`/Quotes/{quote_id}` | UUID/requestId; 200 `QuoteResponse`, status, limites, coberturas e valores |
-| PUT J`/Quotes/{quote_id}` | `QuoteRequest`, `x-person-id`; permitido antes de emitir proposta/apólice; 201 com `QuoteResponse` |
-| GET J`/Quotes/{quote_id}/pdf` | Somente `Approved`; 200 JSON `pdf` Base64; 400 para status não permitido |
-| GET J`/Policy/Subscription?requestId={id}` | Carta de decisão para `Approved` ou `Refused`; 200 JSON `pdf` Base64; requestId é query obrigatório |
-| PUT J`/Quotes/reanalysis/{quote_id}` | `QuoteReanalysisRequest`; assíncrono, 201 `{id}` e resultado por callback |
-| GET J`/Quotes/{quote_id}/draft` | Minuta em JSON `pdf` Base64, distinta do PDF de cotação e da carta |
-| GET J`/Quotes/{quote_id}/payment-simulation` | Cotação aprovada; 200 objeto com prêmio e alternativas; `Invoice` somente quando houver estipulante vinculado |
-| POST J`/Proposals/pj` | Cotação `Approved`; emissão síncrona de proposta/apólice, 201 `{id}`; fora do orçamento |
-| GET J`/Proposals/pj/{quote_id}/document` | Documento de proposta/apólice via UUID da cotação; 200 JSON `pdf` Base64 |
-
-Erros PJ: criação 400/401/500; consulta 404/500; atualização/reanálise/emissão 400/500; documentos e simulação 400/404/500, minuta também 401. `Error` contém `errors[].code/message`. A ausência de um HTTP no arquivo não garante que ele nunca ocorra. Não há endpoint separado de apólice ou planos PJ documentado neste arquivo.
-
-#### Payload e estados PF
+#### Payload e estados — CPF/CNPJ
 
 - `QuoteBase.required`: `policyType`, `commissionedAgents`, `participants`, `riskObjects`; o schema específico acrescenta `riskObjects` por `allOf`. Valores calculados como `quoteId`, `quoteNumber`, `createdAt`, prêmios e IOF não devem ser fabricados na entrada.
 - `policyType`: `Unique` ou `ItemByItem`. Há contradição entre `required` e descrição que promete default Unique quando omitido; enviar valor explícito na futura montagem.
 - Participantes exigem `documentNumber` e `role`; papéis `PolicyHolder`, `Insured`, `Beneficiary`. Documentos são strings de dígitos preservando zeros; retornos podem ofuscá-los. Beneficiários: participação entre 0.01 e 1.00, soma 1. O texto restringe `main` a Beneficiary, mas o exemplo usa no PolicyHolder: não copiar essa contradição sem confirmação.
-- Agentes: `Broker`, `PolicyOwner`, `InsuranceAgent`; documentos/papéis obrigatórios, comissão com até 3 casas decimais, participação de co-corretagem somando 1. O exemplo de comissão é 0.15; não transportar automaticamente a mesma escala para PJ.
+- Agentes: `Broker`, `PolicyOwner`, `InsuranceAgent`; documentos/papéis obrigatórios, comissão com até 3 casas decimais, participação de co-corretagem somando 1. O exemplo de comissão é 0.15; representação fracionária dos 15% definidos para este contrato compartilhado.
 - Raiz inclui vigências `date`, `paymentConditions`, desconto e agravo mutuamente exclusivos. O exemplo envia ambos zero; confirmar a interpretação de zero versus ausência.
 - Risco exige `startLeaseContract`, `endLeaseContract`, `tenantDocumentNumber`, `expenses`, `planKey`, `multiple`, `occupation`, `inhabited`, `riskLocation`. `planKey`: `Basic`, `Complete`, `Traditional`; `multiple`: 12, 15, 18, 24, 30, 45; `occupation`: **`Residencial` ou `Commercial`**, com essas grafias.
 - `multiple` é múltiplo do aluguel para importância segurada, não número de parcelas nem duração automática do contrato. `Coverage.indemnityPeriod` é descrito em **dias**, não confundir com meses da Too.
@@ -200,85 +170,40 @@ Erros PJ: criação 400/401/500; consulta 404/500; atualização/reanálise/emis
 - `QuoteStatus`: `Creating`, `UnderAnalysis`, `Denied`, `Approved`. Apenas Approved comprova aprovação; Creating/UnderAnalysis devem permanecer não terminais. `commercialPremium` inclui comissão/pró-labore; `grossPremium` é total com IOF e encargos; não representar como parcela.
 - Propostas têm estados `Pending`, `Ready`, `Issued`, `Accepted`; apólices têm seus próprios estados. Não misturar esses catálogos com decisão de crédito.
 
-#### Payload e estados PJ; residencial e comercial
+#### Pagamentos e comparação de uma parcela em 30x
 
-`QuoteRequest` exige `dateInsuranceStart`, `dateInsuranceEnd`, `dateRentalStart`, `dateRentalEnd`, `broker`, `tenants`, `address`, `coverages`, `payment`, `planType`, `rentalType`, `callbackUrl`.
-
-- `planType = Traditional`. `rentalType = Residential` ou `Commercial`: **PJ residencial está explicitamente documentada**. Datas `date-time`; início do seguro entre hoje e hoje + 30 dias; vigência máxima 60 meses. Datas do seguro e contrato são campos distintos.
-- `broker` requer nome/documento, CNPJ válido, comissão entre 5% e 40%; comissão total entre participantes também 5% a 40%. Exemplo PJ usa **20**, diferente de 0.15 PF; confirmar escala por contrato e não compartilhar transformação cega. Regras textuais não estão todas traduzidas em constraints JSON.
-- `policyOwner` (estipulante) e `realEstate` (imobiliária) são **mutuamente exclusivos**. Confirmar qual representação atende ao vínculo de fatura, pois a simulação menciona estipulante, não afirma que qualquer realEstate basta.
-- `tenants`: exatamente um `Principal`, obrigatoriamente CNPJ; até cinco `Solidary`, PF ou PJ. Não substituir a empresa pelo CPF do responsável. Nem adicionar cônjuge como solidário apenas porque a regra Tokio o trata como Sócio: esse mapeamento precisa de regra própria.
-- `insureds`: até dez na cotação. `QuoteAddress` usa **`uf`**, não `state`. Nome/documento obrigatórios nos locatários; email, telefone e endereço disponíveis.
-- `coverages`: exatamente uma `BasicRental`; campos obrigatórios `type`, `multiple`, `value`. Tipos: `BasicRental`, `Condominium`, `Iptu`, `Water`, `Electricity`, `Gas`, `PromotionalFund`, `AirConditioning`, `PropertyDamage`, `Painting`, `FineForTermination`. Fundo promocional/ar condicionado somente com `isShoppingCenter = true`. Não inferir múltiplos permitidos PJ do enum PF: o schema PJ não os limita.
-- `payment`: `type` = `Bill` ou `Invoice`, `installments`, `firstDueDate` (descrita como obrigatória para boleto). Embora payment seja obrigatório na raiz, suas propriedades não têm lista required; validar também as regras textuais. O exemplo Bill omite firstDueDate: lacuna do exemplo, não dispensa comprovada da regra.
-- `QuoteResponse`: `id`, `quoteNumber`, datas, participantes e pagamento; `commercialPremium` sem IOF, `totalPremium` com IOF, `iof`, **`installmentValue`** mensal; coberturas retornam `lmi`/`premium`/`value`. `availableLimit` e `maximumLimit` são limites de aceitação, não preços.
-- Estados: `InAnalysis`, `Approved`, `PreApproved`, `Refused`, `Pending`, `WaitingEmission`, `Emitted`, `Expired`. `statusDescription` é descrito apenas para PreApproved/Pending. Não tratar PreApproved como aprovação final nem usar descrição livre para decidir crédito; definir explicitamente os estados de ciclo posteriores à aprovação.
-- `callbackUrl` é obrigatório; não existe objeto OpenAPI `callbacks` com schema do evento, assinatura, autenticação, política de repetição ou ordem. Projetar recepção autenticada e correlação por rodada após obter esse contrato. GET de consulta existe e pode compor recuperação/polling controlado, sem pressupor frequência autorizada.
-- Reanálise PJ: `requestId`, datas, endereço, `rentalType`, locatários, coberturas, `files` e callback obrigatórios. **Aqui rentalType é inteiro (1 Residential, 2 Commercial)**, diferente da criação. Motivos: `AVALIACAO_TAXA`, `AUMENTO_LIMITE`, `ANALISE_RECUSADA`; aprovadas exigem um dos dois primeiros, recusadas usam o último. Arquivos Base64 `.pdf`, `.jpg`, `.png`, mínimo um, até 10 MB cada. Não reutilizar sem adaptação o DTO de criação.
-- Emissão PJ exige quoteId/paymentType/installments/insureds não vazio; firstDueDate para Bill entre hoje e hoje + 30 dias. Estudada apenas para delimitar o fluxo; nenhuma emissão autorizada.
-
-#### Pagamentos PF/PJ e comparação de uma parcela em 30x
-
-**PF:** GET `/insurance/v1/fianca-locaticia-mensalizado-pf/quotes/{quoteId}/payment-simulations` retorna array de `PaymentSimulationsResponse`. Cada item tem `paymentType`, `firstInstallmentPaymentType`, `minFirstPaymentDate`, `maxFirstPaymentDate` e `installments[]`. Cada alternativa contém:
+GET `/insurance/v1/fianca-locaticia-mensalizado-pf/quotes/{quoteId}/payment-simulations` retorna array de `PaymentSimulationsResponse`. Cada item tem `paymentType`, `firstInstallmentPaymentType`, `minFirstPaymentDate`, `maxFirstPaymentDate` e `installments[]`. Cada alternativa contém:
 
 - `countInstallments`: quantidade a selecionar, **30**;
 - `commercialAmount`, `iofAmount`, `grossAmount`, `additionalAmount`, `financialChargesAmount`: valores da condição, distintos de parcela;
 - **`installments[]` interno: array de números com os valores das parcelas**.
 
-Preservar a diferença entre os dois níveis chamados installments. Conferir quantidade e valores internos, primeira parcela/meio de pagamento e datas. Se as parcelas variarem, não usar a primeira nem média como se fossem 30 iguais; documentar a condição e excluir do ranking simples até definir equivalência. Não dividir grossAmount por 30 nem somar IOF/encargos de novo sem regra de composição.
+Preservar a diferença entre os dois níveis chamados installments. Conferir quantidade e valores internos, primeira parcela/meio de pagamento e datas. Se as parcelas variarem, não usar a primeira nem média como se fossem 30 iguais; documentar a condição e excluir do ranking simples até definir equivalência. Não dividir grossAmount por 30 nem somar IOF/encargos novamente: o usuário confirmou que o valor da parcela já os inclui.
 
-**PJ:** GET `/partners/rentalbond/v1/Quotes/{quote_id}/payment-simulation` retorna objeto `requestId`, `totalPremium` com IOF, `premium` sem IOF, `totalComission` (grafia do contrato) e `installments[]`. Cada alternativa possui **`paymentWay`**, **`installmentAmount` (quantidade)** e **`installmentValue` (valor de cada parcela)**. Selecionar quantidade 30 e forma elegível. Também existe `QuoteResponse.installmentValue`; só usar associado à forma e quantidade confirmadas no `payment` daquela cotação, não solto do seu contexto.
+**Regra para PF e PJ:** sem imobiliária, usar `Boleto`; com imobiliária, `Invoice`, conforme elegibilidade da cotação. Não há crédito na Pottencial. Selecionar **30 meses = 30 parcelas mensais**, sem entrada, com comissão de **15%**. Falta da condição ou falha no GET impede comparar o preço, mas não transforma aprovação em recusa. Repetir a consulta usando a cotação existente, sem criar outra cotação.
 
-**Esclarecimento posterior do usuário — regra Pottencial:** a companhia não oferece crédito; para leads sem vínculo com imobiliária, usar **boleto**. Essa decisão encerra a lacuna de meio de pagamento e constitui exceção à regra geral de crédito. No contrato PF o valor é `Boleto`; no contrato PJ recebido o valor é `Bill`. São representações do mesmo meio em contratos distintos, não autorização para enviar `Boleto` onde o enum exige `Bill`. Com imobiliária, manter `Invoice` conforme elegibilidade. Não usar `AutomaticDebit` ou inventar `CreditCard`. Para PJ, utilizar `Bill` no contrato `/partners/rentalbond/v1` escolhido pelo usuário.
+#### Contrato único e compatibilidade das rotas
 
-A condição Invoice PJ exige estipulante vinculado, segundo a descrição do GET. Conciliar esse requisito com policyOwner versus realEstate e cadastro efetivamente enviado. A documentação não estabelece teto de 30 parcelas nas simulações nem garante disponibilidade em toda cotação; selecionar a opção real de 30x. Ausência de 30x ou falha no GET impede comparação daquele preço, não transforma uma aprovação em recusa. Recuperar consulta sem criar outra cotação.
+O usuário confirmou suporte a CNPJ no POST `/insurance/v1/fianca-locaticia/quotes`. Esse contrato é a referência compartilhada por PF e PJ; a escolha anterior de uma família PJ separada foi revogada.
 
-#### Esclarecimento posterior — boleto e produto mensalizado
+O código atual e a coleção histórica usam `/insurance/v1/fianca-locaticia-mensalizado-pf`. O OpenAPI mantido mistura cotação/consulta em `fianca-locaticia` com simulação e biometria em `fianca-locaticia-mensalizado-pf`. Validar a compatibilidade entre criação, consulta e simulação antes da refatoração: suporte a CNPJ na rota documentada não comprova, isoladamente, que IDs e operações das duas rotas sejam intercambiáveis. Isso não reabre a escolha de uma API PJ separada. A condição comercial permanece mensalizada.
 
-O usuário definiu que **o contrato utilizado deve ser mensalizado, assim como a API PF**. A escolha de produto está encerrada: não migrar o fluxo PF funcional para `/insurance/v1/fianca-locaticia` somente porque o novo OpenAPI contém essas rotas. Preservar cotação/consulta PF em `/insurance/v1/fianca-locaticia-mensalizado-pf` e a simulação mensalizada documentada.
+#### Comparação com a implementação e pendências
 
-**Decisão posterior do usuário — PJ:** como o material recebido não apresenta alternativas tradicional/mensalizada de rota, utilizar a única família documentada, **`/partners/rentalbond/v1`**, com `planType = Traditional`. A escolha do contrato PJ está encerrada; não aguardar uma rota mensalizada PJ. Usar POST `/partners/rentalbond/v1/Quotes`, consultas e demais operações PJ inventariadas acima, incluindo GET `/partners/rentalbond/v1/Quotes/{quote_id}/payment-simulation`. Não inventar `fianca-locaticia-mensalizado-pj` nem enviar o locatário PJ ao endpoint PF. Essa decisão não declara o produto PJ equivalente ao mensalizado PF; cada família preserva seu contrato, e a comparação exige uma condição retornada de exatamente 30 parcelas.
+- `Lead::rentalApplicantDocument()` prioriza CNPJ de lead_empresa; `rentalApplicantCpf()` representa o responsável. Preservar ambos sem substituir empresa pelo responsável. Manter uma análise Pottencial por lead/rodada, sem provider ou builder exclusivo PJ.
+- Service ainda precisa consultar simulações e a comparação local ainda usa total. Preservar quantidade 30, parcelas, moeda, vigência, cobertura, forma e encargos; não fabricar parcela dividindo um total.
+- `Creating` precisa ser mapeado como processamento, como `UnderAnalysis`, em vez de falha.
+- Conferir `policyType` (`Unique`/`ItemByItem`), planos (`Basic`/`Complete`/`Traditional`) e `occupation` frente aos enums e fallbacks atuais.
+- O exemplo antigo coloca pagamento dentro de riskObjects; builder e novo schema usam `paymentConditions` na raiz. `assistanceServices` do builder não aparece no novo schema; ausência documental não comprova rejeição.
+- Alinhar comissão a 15% sem atribuí-la automaticamente a cada agente. O builder observado replica comissão para Broker e PolicyOwner; distribuição não foi definida.
+- Conferir vínculo efetivamente enviado com imobiliária e elegibilidade de `Invoice`.
+- Obter retorno real de simulação para conferir as 30 parcelas, encargos, primeiro vencimento e condição sem entrada.
+- Resolver a interpolação de payment-simulations: path declara `{quoteId}`, mas o parâmetro referenciado se chama `quote_id`. Preservar fonte.
+- Resolver divergências entre texto e exemplos de `main`, default de `policyType` e desconto/agravo.
+- Minuta é PDF binário; `letters` é JSON genérico sem representação definida. Confirmar retorno e regras de retry/idempotência; não repetir mutações após timeout como consultas.
+- PUT e reanálise dedicada estão documentados; sua existência não altera a decisão funcional de nova cotação após editar o lead.
 
-Manter a análise documental das rotas PF tradicionais como referência; para implementação, as famílias escolhidas são PF mensalizado e PJ `/partners/rentalbond/v1`. Permanecem PF/PJ residencial e comercial, comparação em exatamente 30x e exceção Pottencial sem imobiliária = boleto. Nenhuma alteração de código, configuração ou chamada remota nesta atualização.
-
-#### Comparação com a coleção antiga e implementação local
-
-| Aspecto | Coleção antiga / código atual | Novos contratos e impacto |
-| --- | --- | --- |
-| Produto PF | Grupo e default do service usam mensalizado-pf | Novo PF cota/consulta em fianca-locaticia, mas mantém biometria e simulação em mensalizado-pf; não assumir IDs/produtos intercambiáveis |
-| Atualização/reanálise | Ausentes no grupo antigo; provider atual faz nova cotação na reanálise | PUT de cotação + reanálise dedicada PF/PJ agora documentados. Preservar decisão funcional e avaliar operação remota adequada, sem troca automática |
-| Pagamento na entrada | Exemplo antigo dentro de riskObjects; builder atual na raiz | Novo PF confirma raiz paymentConditions; PJ usa payment com outra estrutura |
-| Valores e enums | Exemplo RentalProperty/residencial/Complete; builder type FiancaLocaticia e default traditional | Novo exemplo rentalProperty, enum Residencial/Commercial e planos com maiúsculas; conferir produto aceito antes de alterar código funcional |
-| Assistência | Builder inclui assistanceServices na raiz | Campo não descrito no schema PF novo; ausência não prova rejeição (additionalProperties não está fechado), exige confirmação do produto |
-| Pagamentos de saída | Service atual não tem consulta de simulação | Dois GETs com schemas distintos; necessidade de adapters e normalização compartilhada para 30x |
-| Documentos | Antiga minuta sem schema; código tem letters configurável | PF minuta PDF binário, letters JSON genérico; PJ PDF Base64 e carta própria com Approved/Refused |
-| Pessoa jurídica | Builder aceita CPF/CNPJ mas usa mesmo endpoint e shape PF | PJ exige outro contrato; aceitar CNPJ localmente não equivale a integrar PJ |
-| Auth | Service envia client_id + access_token | PJ especifica Bearer e x-person-id em criação/atualização; não reaproveitar headers cegamente |
-
-O método `Lead::rentalApplicantDocument()` prioriza CNPJ de lead_empresa; `rentalApplicantCpf()` retorna o responsável. A seleção da família Pottencial deve usar a natureza do locatário, preservando ambos os documentos. `rentalGuaranteeProduct()` atual diferencia apenas residencial/comercial; não persiste PF/PJ como família remota. Registrar futuramente o contrato usado por rodada para consultas, retries e documentos continuarem corretos mesmo após alteração cadastral.
-
-O `ProviderAnalysisStatus` atual reconhece Approved/Denied/Refused, UnderAnalysis/Pending e PreApproved, mas **não Creating nem InAnalysis** (caem em failed). Isso precisa de mapeamento antes de conectar os novos contratos. POST PJ 201 com apenas id deve permanecer processando, não passar pelo extrator atual como resposta final vazia. O job também não deve aguardar callback segurando worker ou transação.
-
-A comparação local ainda usa total; PF/PJ devem convergir para um resumo que preserve quantidade 30, valor/parcela(s), moeda, vigência, coberturas, forma e encargos. Manter Pottencial como uma companhia no lote, selecionando PF ou PJ por lead, em vez de contar dois resultados concorrentes para a mesma seguradora.
-
-#### Achados de contrato e decisões pendentes
-
-| Prioridade | Local / evidência | Consequência e encaminhamento |
-| --- | --- | --- |
-| Resolvida pelo usuário | Crédito ausente na Pottencial | Sem imobiliária, usar boleto: PF `Boleto`; PJ documentado `Bill`. Exceção expressa à regra geral de crédito |
-| Resolvida pelo usuário | Escolha da família de produto | PF mantém `/insurance/v1/fianca-locaticia-mensalizado-pf`; PJ usa a única opção recebida, `/partners/rentalbond/v1`, com plano `Traditional`. Não há pendência de procurar outra rota PJ |
-| Alta | PJ callback obrigatório sem contrato de entrega/autenticação | Definir autenticação, correlação, duplicatas e eventos fora de ordem; GET como capacidade de consulta já documentada |
-| Alta | Headers PF/PJ diferentes e security global OR | Confirmar combinação efetiva, obtenção de token/UUID e separar auth por família |
-| Alta | PF payment-simulations usa `{quoteId}`, mas referencia parâmetro `quote_id` | Inconsistência formal OpenAPI; quebra geração automática. Preservar fonte e resolver explicitamente a interpolação na futura integração |
-| Média | Comissão PF exemplo 0.15, PJ exemplo 20 | Normalizar por contrato, sem multiplicação/divisão genérica compartilhada |
-| Média | main PF, default policyType, desconto/agravo, Bill sem firstDueDate no exemplo PJ | Não validar somente exemplos; resolver contradições entre texto, required e payload ilustrativo |
-| Média | PF letters é objeto genérico | Falta localização de bytes/URL/Base64; não afirmar que é PDF binário como draft |
-| Média | Sem contrato de idempotência, limites de consulta ou retry de mutação | Não assumir segurança de repetir POST/PUT após timeout; preservar id conhecido e consultar |
-| Média | Regras PJ textuais sem minItems/maxItems/required correspondentes | Validar regras de negócio explicitamente; parser JSON não comprova validade de um payload |
-
-A política desejada de nova cotação após editar lead continua registrada; a existência de atualização e reanálise remotas não muda essa decisão automaticamente. A página futura de configuração de seguradoras deverá distinguir companhia, família PF/PJ, produto, finalidade e regras de pagamento, sem ser implementada nesta etapa.
-
-**Verificação realizada:** parsing dos três JSONs; enumeração das 28 operações novas e das 11 do grupo antigo; inspeção de schemas, parâmetros, respostas e código local; referências locais `$ref` resolvidas nos dois OpenAPI; hashes das cópias iguais às origens. Identificada a inconsistência de placeholder PF acima. Esta é verificação estrutural e documental, não validação OpenAPI completa nem teste remoto. Nenhum código de aplicação, configuração, migration ou banco alterado. Os arquivos-fonte foram preservados, inclusive exemplos e inconsistências. A implementação de pagamentos Too permanece anterior à Tokio; o suporte Pottencial PF/PJ requer as adaptações aqui descritas.
+A futura configuração continuará por seguradora, produto e condições, sem divisão de API por PF/PJ. Esta revisão documental não altera código, configuração ou banco, nem comprova homologação de todas as combinações. A integração separada PJ e suas pendências deixam de fazer parte do plano.
 
 ## Too Seguros
 
@@ -317,7 +242,7 @@ Cotação: todos os 21 campos abaixo constam em `required` do schema:
 
 `cep`, `cnpjCorretor`, `fimVigencia`, `finalidadeLocacao`, `indiceReajusteAluguel`, `inicioVigencia`, `percentualComissao`, `periodoIndAluguel`, `tipoPessoa`, `tipoSeguro`, `valorAgua`, `valorAluguel`, `valorCondominio`, `valorDanosAMoveis`, `valorDanosAoImovel`, `valorGas`, `valorIptu`, `valorLuz`, `valorMultasContratuais`, `valorPinturaExterna`, `valorPinturaInterna`.
 
-- `percentualComissao` é `number`; o exemplo usa `0.18`. Valores de coberturas e `periodoIndAluguel` estão tipados como inteiros. Não assumir suporte a centavos ou mudar escala com base apenas no exemplo.
+- No YAML histórico, `percentualComissao` é `number` e o exemplo usa `0.18`. **Não aplicar essa escala ao endpoint atual `/fianca/proposta/cotacao`: o usuário confirmou `15.0` para 15% nesse endpoint.** Valores de coberturas e `periodoIndAluguel` estão tipados como inteiros. Não assumir suporte a centavos ou mudar escala com base apenas no exemplo.
 - Exemplos de strings: `Residencial`, `Pessoa Fisica`, `Novo`, `IGPM`. Não há enum completo declarado.
 - A resposta exemplificada de cotação contém `numeroCotacao`, `versaoCotacao`, `dataCriacao`, `request`, `response.coberturas`, `response.condicoesPagamento`, entre outros dados. Está declarada como `text/plain`, contendo exemplo de JSON em string.
 - Proposta exige `numeroCotacao` (string), `pretendentes[]` e `locacao`. Pretendente inclui identificação, nascimento, estado civil, residência/responsabilidade financeira, rendas, emprego, profissão, CEP, RG, telefone e campos de pessoa politicamente exposta.
@@ -339,7 +264,7 @@ Cotação: todos os 21 campos abaixo constam em `required` do schema:
 | `submitReanalysis` | POST `/fianca/credito/{cpf}/{numeroProposta}/solicitar-reanalise` | Não consta |
 | `requestQuote` | POST `/fianca/proposta/cotacao` | Não consta; YAML cota via POST `/fianca/cotacao/aluguel-garantido` |
 | `getCreditOpinion` | GET `/fianca/credito/{cpf}/{numeroProposta}/parecer` | Coincide no caminho; representação PDF ainda precisa de confirmação |
-| `getQuotePdf` | GET `/fianca/proposta/cotacao/{numeroCotacao}/pdf` | Não consta; PDF de proposta do YAML não é PDF de cotação |
+| `getQuotePdf` | GET `/fianca/proposta/cotacao/{numeroCotacao}/pdf` no código atual | Ausente no YAML; print posterior do passo 6.1 exige **POST com body de pagamento**, correção pendente. PDF de proposta não é PDF de cotação |
 
 O comentário de `getProposalStatus` também difere da implementação: o código inclui `/v3/`. Para este estudo foi considerado o caminho executado.
 
@@ -372,7 +297,7 @@ O provider atual faz ficha → análise → status → cotação quando o códig
 - Início futuro do contrato: até 30 dias; nesse cenário, o seguro começa no início do contrato.
 - Vigência do contrato: mínimo 4 e máximo 60 meses; início anterior ao término. O término do seguro deve coincidir com o término do contrato.
 - “Data da transmissão” é expressão da fonte para cálculo de vigência; não autoriza transmitir/emitir proposta no fluxo de orçamento.
-- Comissão: mínimo 10% e máximo 40%. A print não resolve a escala do valor enviado (por exemplo, 0.25 ou 25). O builder tem fallback configurável 0.25; confirmar a escala antes de alterar.
+- Comissão: mínimo 10% e máximo 40%. **Escala confirmada posteriormente pelo usuário após consultar a documentação: `percentualComissao` recebe pontos percentuais decimais; enviar `15.0` para 15%**, como número JSON, não `0.15` nem texto com símbolo %. O campo é opcional no contrato, mas será preenchido pelo sistema com o padrão aprovado. O fallback 0.25 do builder é evidência do código anterior e deverá ser corrigido na implementação.
 - Em `coberturas`, `valorAluguel` é obrigatório, decimal e mínimo 200; aluguel + encargos não pode ultrapassar 24999. Confirmar a composição dos encargos se necessário, sem incluir automaticamente todas as coberturas adicionais na soma.
 - `valorAgua`, `valorCondominio`, `valorGas`, `valorIptu` e `valorLuz`: opcionais, decimais com ponto, mínimo 15 quando informados. O TXT não autoriza zero nesses campos apenas por serem opcionais.
 - `valorDanosAoImovel`, `valorDanosAMoveis`, `valorMultasContratuais`, `valorPinturaExterna` e `valorPinturaInterna`: opcionais, decimais, iguais ao aluguel ou zero.
@@ -381,11 +306,11 @@ Estas são regras para a futura revisão de validação; documentá-las não sig
 
 #### Pagamentos e configuração futura
 
-**Regra comunicada pelo cliente:** fatura só está disponível com imobiliária presente na cotação; **sem imobiliária preenchida, usar crédito**, exceto na Pottencial, para a qual o usuário definiu posteriormente boleto. Considerar os dados da imobiliária efetivamente informados à companhia, não apenas o tipo de solicitante ou um identificador interno. `cnpjCorretor` e `razaoSocialCorretor` identificam a corretora e não substituem imobiliária.
+**Registro anterior, refinado para a Too na revisão do passo 6.1 abaixo:** fatura só está disponível com imobiliária presente na cotação; **sem imobiliária preenchida, usar crédito**, exceto na Pottencial e na Too, para as quais o usuário definiu posteriormente boleto. Considerar os dados da imobiliária efetivamente informados à companhia, não apenas o tipo de solicitante ou um identificador interno. `cnpjCorretor` e `razaoSocialCorretor` identificam a corretora e não substituem imobiliária.
 
-O TXT de solicitar cotação **não contém parâmetro de forma de pagamento nem quantidade de parcelas**. Não adicionar campos presumidos. A consulta GET e os códigos do exemplo estão detalhados na revisão de formas de pagamento abaixo; o código de crédito e a compatibilidade entre catálogos continuam pendentes. Imobiliária presente permite fatura, mas não comprova disponibilidade de 30x.
+O TXT de solicitar cotação **não contém parâmetro de forma de pagamento nem quantidade de parcelas**. Não adicionar campos presumidos. A consulta GET e os códigos do exemplo estão detalhados na revisão de formas de pagamento abaixo; a decisão vigente Too adota Fatura para a origem imobiliaria_cadastrada e Boleto para as demais origens. A estrutura concreta será conferida no retorno real; usar a condição selecionada no PDF, sem contratação. A disponibilidade de 30x deve ser conferida no retorno.
 
-A futura página de configuração de seguradoras no dashboard dos corretores permitirá administrar parâmetros por companhia **após concluir e validar o sistema de análise**. Nesta etapa, não criar tela, tabela, migration ou fluxo de configuração. Manter como decisões aprovadas `IGP_M` e período 30. As revisões deste estudo já incorporam a consulta Too e os contratos Pottencial PF/PJ. Os padrões fixos, incluindo Sem entrada, estão consolidados na seção de configuração futura.
+A futura página de configuração de seguradoras no dashboard dos corretores permitirá administrar parâmetros por companhia **após concluir e validar o sistema de análise**. Nesta etapa, não criar tela, tabela, migration ou fluxo de configuração. Manter como decisões aprovadas `IGP_M` e período 30. As revisões deste estudo já incorporam a consulta Too e o contrato Pottencial compartilhado por PF/PJ. Os padrões fixos, incluindo Sem entrada, estão consolidados na seção de configuração futura.
 
 **Verificação:** leitura do TXT, print e fluxo local; revisão do diff e integridade textual. Nenhum código de aplicação, configuração ou banco foi alterado; nenhuma cotação foi solicitada.
 
@@ -422,20 +347,30 @@ A futura página de configuração de seguradoras no dashboard dos corretores pe
 
 O TXT contém sete grupos: à vista; mensal sem/com entrada; até 4x sem/com entrada; até 36x sem/com entrada. Há 49 alternativas ao todo. Os mesmos IDs e tipos se repetem entre variantes com e sem entrada: **não deduplicar apenas por `id` ou `tipo`**, pois eliminaria condições distintas. O tipo 4 e o rótulo “Até 36x” não garantem uma quantidade específica; ler as alternativas. A quantidade 24 aparece como `1 + 23`, incluindo entrada, enquanto a condição sem entrada do exemplo chega a 23.
 
-A observação da resposta atribui a redução de parcelas à adequação ao fim da vigência. Registrar como explicação fornecida pela API nesse exemplo, não como regra legal independentemente verificada, nem como impedimento geral a 30x. Também não transformar automaticamente 30 meses de contrato em 29 parcelas: a seleção deve seguir a resposta daquela cotação.
+A observação da resposta atribui a redução de parcelas à adequação ao fim da vigência. Registrar como explicação fornecida pela API nesse exemplo, não como regra legal independentemente verificada, nem como impedimento geral a 30x. Esclarecimento posterior: para a Too sem entrada, a base de 30 meses resulta em 29 parcelas; selecionar a alternativa recebida, sem descontar novamente nem recalcular seu valor.
 
-Os valores arredondados podem não recompor exatamente `valorTotal`: no exemplo, 23 × 20,87 = 480,01, enquanto o total informado é 480,00. Preservar total e parcela retornados, sem recalcular ou ajustar silenciosamente. O exemplo não esclarece composição de IOF/juros, desconto nem ajustes da última parcela; confirmar para comparar custos equivalentes entre companhias.
+Os valores arredondados podem não recompor exatamente `valorTotal`: no exemplo, 23 × 20,87 = 480,01, enquanto o total informado é 480,00. Preservar total e parcela retornados, sem recalcular ou ajustar silenciosamente. O usuário confirmou posteriormente que o valor da parcela já inclui IOF/juros e demais encargos. Preservar descontos, observações e eventuais diferenças entre parcelas conforme retornados, sem ajuste local.
 
 #### Seleção futura em 30x e regra de forma de pagamento
 
 1. Consultar após obter `numeroCotacao`, vinculado à rodada atual. Manter `periodoIndenitario = 30` e `indiceDeReajusteAluguel = IGP_M` como decisões de entrada já aprovadas.
-2. Aplicar à Too a regra de fatura condicionada à imobiliária presente e crédito sem imobiliária (a exceção posterior de boleto é específica da Pottencial). O exemplo identifica **Fatura = tipo 2**, mas **não apresenta crédito**. Isso não prova que a Too não oferece crédito; falta o seu código/retorno correspondente. Não mapear Boleto/Individual para crédito nem inventar código.
-3. Validar a associação entre forma de pagamento, entrada e grupo de parcelamento. Os três catálogos aparecem separados; o TXT não informa uma matriz de compatibilidade. Não assumir que todas as combinações são aceitas.
-4. Localizar a alternativa de quantidade **30**, conservando grupo, forma, entrada, vigência, total, desconto e observações. Não escolher a menor parcela de outra quantidade nem fabricar uma opção ausente. Suporte da API a 30x não significa que toda cotação retornará essa condição.
+2. Aplicar a regra vigente por origem: **Fatura para imobiliaria_cadastrada e Boleto para todos os demais formulários na Too**. O exemplo identifica **Boleto/Individual = tipo 1** e **Fatura = tipo 2**. Manter fatura conforme elegibilidade; não procurar ou inventar código de crédito para executar o fluxo documentado. Isso é uma decisão de uso, não prova de inexistência de crédito em toda versão da API.
+3. Consumir as opções efetivamente retornadas para exibição e comparação, sem construir combinações de catálogos nem enviar seleção para contratação. A conferência do retorno real determinará como as condições se relacionam; não atribuir a uma parcela um meio ou condição ausente do retorno.
+4. Localizar a alternativa correspondente ao prazo-base de 30 meses: na Too Sem entrada, **29 parcelas**, conforme correção posterior; conservar grupo, forma, entrada, vigência, total, desconto e observações. Não escolher a menor parcela de outra quantidade nem fabricar uma opção ausente. Suporte da API a 30x não significa que toda cotação retornará essa condição.
 5. Usar `parcelas[].valor` dessa alternativa como valor de parcela Too. A decisão posterior é **Sem entrada**: selecionar `comEntrada = false`, associado ao tipo de entrada 2 do catálogo recebido. Variantes com entrada não participam do ranking padrão; não há mais pendência de escolha entre com/sem entrada.
 6. Se faltar condição elegível, indicar indisponibilidade para comparação; não transformar aprovação em recusa. Falha técnica do GET é diferente de consulta bem-sucedida sem opção de 30x e deve permitir recuperação independente da criação da cotação.
 
 O schema `FormaPagamento` do YAML contém inteiros `tipoPagamento`, `tipoEntrada`, `tipoOpcaoParcelamento`, `quantidadeParcelas`, usado na atualização da proposta aprovada. Isso ajuda a distinguir os códigos numéricos dos UUIDs dos catálogos, mas não autoriza atualizar a proposta nesta etapa nem comprova todas as combinações. A consulta GET não exige enviar esse objeto.
+
+#### Esclarecimentos posteriores para a refatoração Too
+
+- **Origem do formulário — regra vigente Too:** imobiliária cadastrada usa Fatura; todos os demais formulários usam Boleto, conforme orientação posterior do usuário. Não condicionar a implementação à descoberta de um código de crédito.
+- **Objetivo do GET:** capturar as condições retornadas, apresentá-las no projeto e utilizar o valor da parcela de **30 meses/30 parcelas mensais** para comparar o melhor negócio. Não implementar contratação nem transmissão. A seleção de pagamento será enviada somente à consulta do PDF (passo 6.1), conforme esclarecimento posterior, sem executar atualização para emissão. Não é necessário construir uma matriz de combinações possíveis entre os catálogos.
+- **Entrada:** o usuário considera provável que o retorno real não traga simultaneamente Com entrada e Sem entrada, mas aguarda uma resposta para confirmar. Tratar isso como hipótese, não contrato garantido: o exemplo documental contém ambas as variantes. Preservar o padrão aprovado **Sem entrada**; se ambas vierem, selecionar a variante correspondente. Se a condição não puder ser identificada, não rotular silenciosamente como sem entrada. Não criar estruturas especulativas antes de verificar a resposta real.
+- **Comissão — pendência encerrada:** usuário confirmou faixa **mínima de 10% e máxima de 40%** e, após consultar a documentação, confirmou a representação **`"percentualComissao": 15.0`** para o padrão de 15%. Usar número JSON em pontos percentuais; não converter para fração. Essa confirmação corresponde ao endpoint atual POST `/fianca/proposta/cotacao`, não ao schema histórico de outro endpoint.
+- **Imobiliária — esclarecimento posterior:** o usuário identificou seu preenchimento na atualização para emissão (passo 7), fora desta versão. Para a Too, selecionar Fatura apenas na origem imobiliaria_cadastrada; todas as demais origens usam Boleto. O novo passo 6.1 gera o PDF sem executar o passo 7, conforme revisão específica abaixo.
+
+Consequência para o plano: implementar a consulta e a leitura do retorno sem exigir uma etapa remota de seleção de pagamento; a disponibilidade de preço permanece separada da decisão de crédito. Capturar um retorno real autorizado para confirmar estrutura e entrada, aplicando a origem do formulário para selecionar o meio. O passo 7 de atualização para emissão permanece fora do fluxo; o passo 6.1 recebe a seleção para gerar o PDF. Esta atualização apenas consolida decisões no estudo; não implementa a refatoração.
 
 #### Encaixe no sistema e próximos passos autorizáveis
 
@@ -445,6 +380,143 @@ Quando autorizado: adicionar a operação ao service reutilizando autenticação
 
 **Ordem definida pelo usuário:** aplicar esta consulta de pagamentos Too antes da integração Tokio; receber e estudar os dados de pagamento Pottencial para confirmar a mesma base de comparação. Nesta entrega, somente documentação: TXT validado como JSON, catálogos e alternativas conferidos programaticamente, trecho do OpenAPI e código lidos, nenhuma chamada remota ou alteração de código realizada.
 
+### Revisão Too — PDF da cotação e pagamento por origem do formulário — 23/10/2026
+
+Esta decisão posterior prevalece sobre referências anteriores à pendência de imobiliária na ficha e à seleção de pagamento Too apenas pela presença genérica de imobiliária. Fontes: explicação do usuário e prints dos passos **6.1 — Consultar PDF da cotação**, **7 — Atualizar dados da proposta forma de pagamento** e payload do PDF. O YAML versionado não contém a operação 6.1; não confundir com o GET de PDF da proposta que ele documenta.
+
+#### Regra vigente de pagamento Too
+
+| Origem do lead | Condição para exibição, comparação e PDF |
+| --- | --- |
+| Formulário de imobiliária cadastrada (`tipo_solicitante = imobiliaria_cadastrada`) | **Fatura**, `tipoPagamento = 2`, **29 parcelas sem entrada no prazo-base de 30 meses**, conforme correção posterior |
+| Todos os demais formulários | **Boleto**, `tipoPagamento = 1`, **29 parcelas sem entrada no prazo-base de 30 meses**, conforme correção posterior |
+
+Usar a origem persistida do formulário como critério. Uma imobiliária apenas informada em outro formulário não muda essa origem nem autoriza selecionar fatura na Too. Esta precisão é específica da Too; não redefine automaticamente os contratos das outras seguradoras. Permanecem `periodoIndenitario = 30`, `indiceDeReajusteAluguel = IGP_M`, `percentualComissao = 15.0` e `tipoEntrada = 2` (Sem Entrada).
+
+Selecionar a condição efetivamente retornada pelo passo 6, GET `/fianca/proposta/formaspagamento/{numeroCotacao}`, respeitando a origem e a quantidade efetiva: 29 parcelas sem entrada na base de 30 meses. Se a condição faltar, sinalizar indisponibilidade para comparação/download dessa condição, sem inventar valores, trocar silenciosamente a forma ou mudar aprovação para recusa.
+
+#### Passo 6.1 — consultar PDF da cotação
+
+- Método **POST**, apesar de ser uma consulta documental.
+- Homologação: `https://openapi-uat.tooseguros.com.br/fianca/proposta/cotacao/{NumeroCotacao}/pdf`.
+- Headers informados: `Authorization: Bearer <token>`, `ClientId` e `ClientSecret`; enviar o payload como JSON. Não expor credenciais no navegador.
+- Path recebe o número da cotação. O body documentado usa `numeroFicha: {NumeroProposta}`; preservar essa distinção e os identificadores da mesma rodada. Não preencher numeroFicha com numeroCotacao por semelhança de nomes.
+
+Estrutura documentada do body:
+
+```text
+numeroFicha: número da proposta/ficha
+formaPagamento:
+  tipoPagamento: 1 = Boleto; 2 = Fatura
+  tipoEntrada: 1 = Com Entrada; 2 = Sem Entrada
+  opcaoParcelamento: array de objetos
+    tipoOpcaoParcelamento: 1 = À vista; 2 = Mensal; 3 = Até 4x; 4 = Até 36x
+    quantidadeParcelas: quantidade de parcelas
+```
+
+A print traz dois itens ilustrativos em `opcaoParcelamento`; não estabelece que dois itens sejam obrigatórios. Para baixar a cotação exibida no card, preparar a opção correspondente à seleção real de 30 parcelas, sem entrada e ao meio definido pela origem. Aplicar a decisão posterior: Mensal (2) para todas as origens, Fatura (2) para imobiliária cadastrada e Boleto (1) para os demais, sempre quantidadeParcelas 30 no POST. Não escolher tipo 4 apenas porque 30 cabe em até 36x. Não reutilizar o shape plano do endpoint 7: aqui `tipoOpcaoParcelamento` e `quantidadeParcelas` ficam dentro de `formaPagamento.opcaoParcelamento[]`.
+
+O usuário definiu download ao clicar em **Baixar cotação** no cartão Too, após visualizar a parcela. Fluxo pretendido: solicitar cotação → consultar formas de pagamento → selecionar/exibir condição de 30x → ao solicitar download, consultar PDF com os mesmos identificadores e condição. Card, comparação e PDF devem representar a mesma oferta da mesma rodada. Não criar nova cotação nem completar a proposta para obter esse documento.
+
+#### Biometria, emissão e limites do escopo
+
+O PDF contém link e QR Code de validação biométrica facial. Conforme a print, valem por **30 dias desde a pré-aprovação da ficha** e o link não pode ser reutilizado após a biometria. Isso descreve o link, não um prazo comprovado de validade da cotação ou do próprio arquivo PDF. Não reiniciar esse prazo ao baixar novamente.
+
+O usuário esclareceu que os dados da imobiliária podem ser inseridos na atualização dos dados faltantes da proposta para emissão (passo 7). **Esse endpoint não será usado nesta versão**, que apenas analisa, compara e disponibiliza a cotação. Não tornar a atualização pré-requisito do PDF nem adicionar seus campos à ficha por suposição.
+
+A print do passo 7 exige biometria aprovada para atualizar a proposta, nome do proprietário PF e razão social do proprietário PJ. Essas exigências pertencem à preparação de emissão e não foram documentadas como pré-condições da consulta do PDF. Não exigir biometria concluída para baixar um PDF que contém justamente o acesso à biometria.
+
+PDF da cotação é distinto de parecer de crédito, PDF da proposta e apólice. O novo download não substitui o fluxo separado de parecer/cartas de recusa.
+
+#### Impactos registrados para a implementação posterior
+
+- `TooService::getQuotePdf()` ainda faz GET sem body. Adaptá-lo para POST com o payload específico acima quando a implementação for autorizada; o método atual não atende à print recebida.
+- Reutilizar a seleção persistida do passo 6 e os identificadores da rodada, sem recalcular valores no download. Aplicar autorização de acesso ao lead e tratamento de falha documental sem desfazer o resultado da análise.
+- Representação do PDF confirmada pela print posterior: JSON com Base64 em `result.pdfCotacao`. Conferir Content-Type e erros em resposta real; decodificar o campo para disponibilizar o arquivo.
+- Conferir a associação real dos códigos de parcelamento e a condição selecionada no documento gerado. A regra de origem está definida; permanece a necessidade de conferir o retorno efetivo, sem inserir etapa de emissão.
+
+Atualização apenas documental: nenhuma chamada remota, alteração de service/provider/builder, tela, configuração ou banco foi realizada.
+
+### Correção Too — entrada, quantidade efetiva e melhor negócio
+
+**Esclarecimento mais recente do usuário:** no prazo-base de 30 meses, a Too desconta uma parcela quando a condição é **Sem entrada**, retornando **29 parcelas**. Com entrada, a condição corresponde a 30 pagamentos, incluindo a entrada (1 + 29). Essa regra substitui a exigência anterior de exatamente 30 parcelas sem entrada para a Too. Não estender essa redução automaticamente à Pottencial ou Tokio.
+
+As prints ilustram a mesma diferença em uma base de 24: `quantidadeParcelasPossiveis = 24`; grupo mensal `tipo = 2`, `comEntrada = false`, `numeroParcela = 23`, parcela 20,87; grupo mensal com o mesmo ID e tipo, `comEntrada = true`, `numeroParcela = 24`, parcela 20,00, descrição `1 + 23 x R$20.00`. Ambos informam total 480,00. Portanto, ID/tipo não identificam sozinhos a condição: preservar também entrada e alternativa. A diferença de arredondamento (23 × 20,87 = 480,01) não autoriza corrigir valores da API.
+
+`quantidadeParcelasPossiveis` é a referência geral; `parcelas[].numeroParcela` informa a quantidade efetiva da alternativa. A regra de redução explica a seleção, mas não autoriza subtrair novamente da quantidade já retornada nem calcular o preço por divisão. A print comprova o exemplo 24/23; a extensão 30/29 é a confirmação explícita do usuário.
+
+**Melhor negócio:** usar diretamente `opcoesParcelamento[].parcelas[].valor` como valor principal Too. A alternativa de 29 parcelas sem entrada no prazo-base de 30 meses participa da comparação; não excluí-la apenas por não ter 30 parcelas. Comparar o valor da parcela com as demais ofertas elegíveis, preservando moeda, vigência, cobertura, forma e composição dos valores. O destaque é de menor parcela, não garantia de menor custo total. Exibir a quantidade real (por exemplo, 29x sem entrada), sem rotular essa oferta como 30x. O padrão do sistema permanece Sem entrada; a explicação de Com entrada não autoriza trocá-lo silenciosamente para obter parcela menor.
+
+**PDF — passo 6.1:** somente consultar por **POST** `/fianca/proposta/cotacao/{NumeroCotacao}/pdf`, enviando `numeroFicha` e `formaPagamento`. A seleção do pagamento é necessária para localizar/gerar a cotação correspondente. Enviar `tipoPagamento` (1 Boleto, 2 Fatura), `tipoEntrada` (1 Com Entrada, 2 Sem Entrada) e `opcaoParcelamento[]` com `tipoOpcaoParcelamento` definido pela origem e `quantidadeParcelas = 30`, conforme confirmação posterior. A opção mensal das prints tem tipo 2. Não mandar GET sem body nem confundir ficha com cotação. Confirmação posterior: enviar quantidadeParcelas = 30 ao PDF, inclusive quando o GET retornar 29 sem entrada; a API aplica a redução. Não recalcular a parcela. O endpoint 7 de atualização para emissão permanece excluído.
+
+Continuam válidos: origem imobiliaria_cadastrada → Fatura; demais formulários → Boleto; período indenitário 30; IGP_M; comissão 15.0. Persistir prazo-base e quantidade efetiva separadamente, além de entrada, valor da parcela, total, códigos e identificadores da rodada. Card, comparação e PDF devem consumir a mesma seleção.
+
+**Próxima refatoração, ainda não implementada:** ajustar o seletor Too, o resumo compartilhado e o comparador para admitir a condição 30 meses/29 parcelas sem entrada. Validar variantes com IDs repetidos, não descontar duas vezes, não fabricar preço e manter o POST do PDF coerente com a seleção. A solicitação anterior de alterar o comando foi retirada pelo usuário: nesta etapa, atualizar somente este estudo, sem mudar comandos ou fluxo de execução.
+
+### Confirmação Too — payload e retorno do PDF, opções por origem
+
+**Decisão vigente do usuário em 23/10/2026:** Mensal (2) para todas as origens; imobiliária cadastrada usa Fatura (2) e os demais formulários usam Boleto (1). A orientação anterior de À vista para os demais foi revogada. Aplicar a tabela abaixo ao POST `/fianca/proposta/cotacao/{NumeroCotacao}/pdf` (passo 6.1):
+
+| Origem | `tipoPagamento` | `tipoEntrada` padrão | `tipoOpcaoParcelamento` | `quantidadeParcelas` enviada |
+| --- | --- | --- | --- | --- |
+| Imobiliária cadastrada | 2 — Fatura | 2 — Sem Entrada | **2 — Mensal** | **30** |
+| Todos os demais formulários | 1 — Boleto | 2 — Sem Entrada | **2 — Mensal** | **30** |
+
+Boleto é forma de pagamento, não sinônimo de pagamento à vista. Usar tipoOpcaoParcelamento 2 (Mensal) em ambos os cenários. Não selecionar À vista (1), Até 4x (3) ou Até 36x (4) como substitutos automáticos. Conferir no retorno real a condição e sua correspondência com o PDF.
+
+**Quantidade enviada versus quantidade retornada:** enviar sempre **30** ao PDF, mesmo que o GET de pagamentos tenha retornado **29 parcelas sem entrada**. O desconto da parcela é responsabilidade da API; não enviar 29 por inferência nem descontar novamente. Esta confirmação substitui expressamente a orientação anterior de copiar a quantidade efetiva para o payload do PDF. Manter a quantidade efetiva e o valor retornados para exibição/comparação; a configuração de envio não autoriza rotular um retorno de 29 como 30 pagamentos.
+
+**Fonte de entrada:** `C:\Users\Usuario\Downloads\payload-para-envio-opcao-pagamento-para-PDF-cotacao-TOO.txt`, lido nesta revisão. É um modelo documental com placeholders e comentários de domínio, não JSON diretamente executável (também há fechamentos incompletos). Preservar os nomes: `numeroFicha`, `formaPagamento.tipoPagamento`, `formaPagamento.tipoEntrada`, `formaPagamento.opcaoParcelamento[]`, com `tipoOpcaoParcelamento` e `quantidadeParcelas` em cada item. Os dois itens ilustrativos não comprovam obrigação de enviar duas opções; enviar a opção selecionada pela regra de origem.
+
+Exemplo estrutural válido para imobiliária cadastrada, com número de ficha ilustrativo:
+
+```json
+{
+  "numeroFicha": 123456,
+  "formaPagamento": {
+    "tipoPagamento": 2,
+    "tipoEntrada": 2,
+    "opcaoParcelamento": [
+      {
+        "tipoOpcaoParcelamento": 2,
+        "quantidadeParcelas": 30
+      }
+    ]
+  }
+}
+```
+
+Para os demais formulários, alterar somente `tipoPagamento` para 1; manter `tipoOpcaoParcelamento = 2`, entrada 2 e quantidade 30. Usar o identificador real de ficha/proposta no body e o número real da cotação no path, sem confundi-los.
+
+**Retorno confirmado pela documentação enviada:** `result.pdfCotacao` contém o PDF em **Base64**:
+
+```json
+{
+  "result": {
+    "pdfCotacao": "Base 64 do PDF da cotação"
+  }
+}
+```
+
+Na futura implementação, extrair esse campo, validar presença e decodificação Base64 estrita, verificar que o conteúdo decodificado é PDF e disponibilizar o download com autorização de acesso ao lead. Não tratar o texto Base64 como os bytes finais nem interpretar o campo como URL. Resposta ausente, Base64 inválida ou conteúdo que não seja PDF são falhas documentais, sem desfazer a aprovação da análise.
+
+**Impacto na refatoração e melhor negócio:** preservar origem, códigos enviados, quantidade solicitada 30, quantidade efetivamente retornada e valor da alternativa em campos distintos. A opção Mensal (2) é comum a todas as origens; somente a forma Fatura/Boleto varia por origem. Não escolher arbitrariamente a menor parcela entre categorias. Comparação e card usam o valor retornado da alternativa correspondente; não dividir o total por 30, não substituir preço à vista total por mensalidade, nem inventar preço para uma opção ausente. Conferir com uma resposta real a correspondência desse valor com o PDF; a inclusão dos encargos no valor da parcela foi confirmada pelo usuário. Não executar o endpoint 7 de atualização para emissão.
+
+Somente documentação foi atualizada. Comandos, services, providers e sistema de melhor negócio permanecem sem alterações nesta etapa.
+
+#### Retorno de pagamentos recebido — confirmação do parcelamento para Boleto
+
+Fonte: `C:\Users\Usuario\Downloads\retorno-endpoint-consultar-pagamentos-TOO.txt`. JSON validado: **7 grupos de parcelamento e 49 alternativas**, com catálogos separados de pagamento e entrada. O arquivo é corpo de resposta, não definição de uma nova rota; corresponde ao GET de formas de pagamento já estudado.
+
+- `tipoPagamento`: 1 Boleto/Individual; 2 Fatura. `tipoEntrada`: 1 Com Entrada; 2 Sem Entrada. Não confundir esses códigos com os de `opcoesParcelamento[].tipo`.
+- Opção 1 À Vista: uma parcela de 480,00. Ela não será usada no fluxo atual, inclusive para Boleto.
+- Opção 2 Mensal: sem entrada, 23 parcelas de 20,87; com entrada, 24 pagamentos de 20,00, descritos como `1 + 23`. Ambos os grupos têm o mesmo ID e tipo, portanto preservar também `comEntrada` na seleção.
+- Opções 3 Até 4x e 4 Até 36x também apresentam variantes com/sem entrada. Sua presença não altera a prioridade definida de Mensal.
+- O exemplo informa `quantidadeParcelasPossiveis = 24` e vigência de 2023 a 2025; não comprova um teto atual de 24 nem substitui a regra de envio de 30. A observação do retorno explica a redução de 24 para 23 sem entrada; a regra 30/29 foi esclarecida pelo usuário.
+- `valorTotal = 480.00` e `desconto = 0.0` são separados do preço em `parcelas[].valor`. Não recalcular esse preço nem corrigir diferenças de arredondamento. O arquivo não discrimina IOF/juros, mas o usuário confirmou posteriormente que o valor da parcela já inclui esses encargos; não somá-los novamente.
+
+A dúvida anterior sobre usar preço integral à vista no ranking foi encerrada pela correção do usuário: selecionar Mensal em todos os formulários e usar a parcela dessa alternativa. Preservar a quantidade efetiva recebida para apresentação, enviar 30 no POST do PDF, e continuar sem chamar a atualização para emissão.
+
 ## Lacunas relevantes para a próxima etapa
 
 1. **Contrato Too divergente:** obter a documentação correspondente às rotas de ficha, status v3, reanálise e cotação atualmente utilizadas, ou decidir explicitamente pelo fluxo do YAML. Preservar o código até essa definição.
@@ -453,7 +525,7 @@ Quando autorizado: adicionar a operação ao service reutilizando autenticação
 4. **Schemas e catálogos incompletos:** confirmar status, tipos de documentos, planos, coberturas, pagamento, vigências, formatos de datas, escalas monetárias e comissões. Valores exemplificados não são enumerações exaustivas.
 5. **PDF da decisão nos dois resultados:** confirmar parecer em aprovação e recusa, sobretudo a finalidade do `/draft` na Pottencial e a disponibilidade do `/parecer` na Too. Os services atuais tentam interpretar JSON e preservam `raw_body`; não implementam um contrato específico para download.
 6. **Repetição e processamento assíncrono:** não foi encontrado contrato de idempotência, política de retries, limite de chamadas, webhook ou prazo de conclusão nas operações estudadas. Criação, solicitação de análise, atualização e eventual reanálise não devem ser consideradas seguras para repetição automática sem confirmação.
-7. **Pottencial, atualização de 23/10:** os novos contratos PF/PJ documentam atualização, reanálise, decisão e simulação de pagamento. As famílias foram escolhidas: PF mensalizado e PJ `/partners/rentalbond/v1`; boleto sem imobiliária também está definido. Permanecem as confirmações técnicas de autenticação PJ, callback, compatibilidade das operações PF e mapeamento por família, detalhadas na revisão Pottencial. Não reutilizar endpoints de outros produtos por semelhança.
+7. **Pottencial, atualização de 23/10:** um contrato para CPF/CNPJ e locação residencial/comercial. A API PJ separada foi descartada. Boleto sem imobiliária está definido; permanecem compatibilidade das rotas, retornos reais em 30x e ajustes do contrato mantido, detalhados na revisão Pottencial.
 
 Ambos os services dependem de `features.insurance_analysis.enabled` e da flag da companhia. Usam timeout de 30 segundos na autenticação e 60 nas operações; normalizam respostas em `success`, `http_status`, `endpoint`, `url`, `response`, `raw_body`, `headers` e, quando aplicável, `payload`. Sucesso HTTP não comprova aprovação de crédito ou emissão. Há logs de respostas integrais; a próxima implementação deve considerar os dados pessoais presentes nesses retornos.
 
@@ -470,6 +542,10 @@ Entrega documental apenas, com escopo atualizado conforme orientação do usuár
 Definida em **13/10/2026**, a pedido do usuário. Aplica-se a Too, Pottencial, Tokio e Porto, quando integradas, na página de análise, nos resumos e nos documentos. Esta seção prevalece sobre referências históricas a comparação por total ou a um teto de até 30 parcelas.
 
 ### Base de pagamento
+
+**Composição da parcela — pendência encerrada em 23/10/2026:** o usuário confirmou, como regra de negócio do seguro fiança adotada neste projeto para todas as companhias, que o valor da parcela retornado já inclui IOF, juros e demais encargos aplicáveis, representando o valor final cobrado. Usar diretamente o campo de parcela da alternativa selecionada: `opcoesParcelamento[].parcelas[].valor` na Too, o valor de parcela da simulação na Pottencial e `vlPremPar` na Tokio. Não somar encargos novamente nem recalcular a parcela a partir do total. Campos discriminados de juros/IOF servem para detalhamento, não acréscimo ao preço. A ausência dessa discriminação não impede o ranking por parcela. Esta confirmação fornecida pelo usuário substitui as pendências anteriores de composição; não transforma campos de prêmio total ou líquido em parcelas. Nenhuma chamada remota ou alteração de código decorre deste registro.
+
+**Exceção vigente da Too:** a regra histórica de igualdade entre 30 meses e 30 parcelas abaixo foi refinada: Sem entrada resulta em 29 parcelas na base de 30 meses. Essa oferta é elegível pelo valor da parcela retornada. Para as demais companhias, preservar as regras próprias. Esta exceção prevalece sobre menções anteriores a exatamente 30x.
 
 **Confirmação posterior do usuário em 23/10/2026: 30 meses = 30 parcelas mensais, uma parcela por mês.** Para Too e Pottencial, essa é uma única condição de pagamento do sistema, não dois cenários distintos. A regra orienta a comparação compartilhada e a futura integração Tokio: comparar o valor de uma parcela mensal durante 30 meses. Esta confirmação substitui as ressalvas anteriores de periodicidade mensal ainda não definida. Os valores serão extraídos das condições retornadas pelas seguradoras, preservando a forma de pagamento e os encargos de cada oferta.
 
@@ -489,19 +565,21 @@ Definida em **13/10/2026**, a pedido do usuário. Aplica-se a Too, Pottencial, T
 | Prazo e frequência | **30 meses = 30 parcelas mensais**, uma por mês |
 | Entrada | **Sem entrada**; não selecionar condições com entrada para o ranking padrão |
 | Com imobiliária vinculada à cotação | Fatura, conforme elegibilidade e representação exigida pela companhia |
-| Sem imobiliária — Too e Tokio | Crédito, respeitando o contrato de cada API; código de crédito Too ainda precisa de confirmação |
-| Sem imobiliária — Pottencial | Boleto: `Boleto` em PF e `Bill` no contrato PJ escolhido |
+| Origem imobiliária cadastrada — Too | Fatura, tipo 2, no prazo-base de 30 meses, com 29 parcelas sem entrada |
+| Demais origens de formulário — Too | Boleto, tipo 1, no prazo-base de 30 meses, com 29 parcelas sem entrada |
+| Sem imobiliária — Tokio | Crédito, respeitando o contrato da API |
+| Sem imobiliária — Pottencial | `Boleto` para PF e PJ |
 | Comissão por seguradora | **15%**, fixos enquanto não existir a página de configuração; futuramente editáveis pelo corretor para cada companhia |
 | Índice de reajuste Too | `IGP_M` |
-| Família Pottencial | PF mensalizado; PJ `/partners/rentalbond/v1`, plano `Traditional` |
+| Família Pottencial | Contrato compartilhado CPF/CNPJ; conferir compatibilidade com a rota mensalizada atual |
 
 **Comissão — decisão posterior do usuário:** enquanto a página não existir, utilizar **15% para todas as seguradoras**. Na futura página, os corretores poderão alterar o percentual individualmente por companhia, respeitando os limites contratuais. Essa autorização inclui comissão no escopo mesmo que sua alteração afete o prêmio; não significa autorização para modificar a decisão de crédito retornada pela seguradora. Nenhum outro padrão fixo foi alterado.
 
-15% é o valor de negócio; a representação numérica deve seguir cada contrato. Onde a API utiliza fração, 15% corresponde a `0.15`; onde utiliza pontos percentuais, corresponde a `15`. Não enviar o mesmo número indiscriminadamente: PF Pottencial exemplifica escala fracionária; PJ exemplifica pontos percentuais; confirmar as escalas Too/Tokio antes do envio. A faixa documentada Too de 10% a 40% e a PJ Pottencial de 5% a 40% comportam 15%; respeitar também regras de soma de comissões/co-corretagem. O usuário definiu o percentual, não uma distribuição adicional entre corretora, co-corretoras e estipulante; não atribuir 15% a cada participante automaticamente.
+15% é o valor de negócio; a representação numérica deve seguir cada contrato. Onde a API utiliza fração, 15% corresponde a `0.15`; onde utiliza pontos percentuais, corresponde a `15`. Não enviar o mesmo número indiscriminadamente: o contrato Pottencial mantido exemplifica escala fracionária (`0.15`); na Too a escala foi confirmada pelo usuário: `percentualComissao = 15.0` para 15%; confirmar separadamente a escala Tokio antes do envio. A faixa documentada Too de 10% a 40% comporta 15%; respeitar também regras de soma de comissões/co-corretagem. O usuário definiu o percentual, não uma distribuição adicional entre corretora, co-corretoras e estipulante; não atribuir 15% a cada participante automaticamente.
 
 **Estado da implementação:** os valores de configuração e os fallbacks existentes não foram alterados nesta entrega documental. Alinhar a montagem dos payloads com o padrão de 15% na etapa de implementação; até lá, este registro não comprova que o código já envie 15% em todas as companhias.
 
-Na Too, o exemplo documenta `tipoEntrada` tipo **2 = Sem Entrada** e grupos com **`comEntrada = false`**. Selecionar uma alternativa de 30 parcelas dentro de um grupo sem entrada. A decisão de entrada está encerrada: não escolher a variante com entrada para obter 30x quando a condição sem entrada não estiver disponível. Os catálogos de forma, entrada e parcelamento continuam exigindo associação válida.
+Na Too, o exemplo documenta `tipoEntrada` tipo **2 = Sem Entrada** e grupos com **`comEntrada = false`**. Selecionar a alternativa retornada de **29 parcelas sem entrada para a base de 30 meses**, conforme esclarecimento posterior. A decisão de entrada está encerrada: não escolher a variante com entrada para obter 30x quando a condição sem entrada não estiver disponível. Os catálogos de forma, entrada e parcelamento continuam exigindo associação válida.
 
 Na Pottencial e na Tokio, aplicar a mesma condição funcional sem inventar o campo `tipoEntrada` da Too em seus payloads. Usar os atributos documentados de cada contrato e confirmar que a oferta selecionada atende à ausência de entrada. Primeiro vencimento e entrada não são automaticamente sinônimos: um pagamento mensal inicial não deve ser classificado como entrada apenas por ser o primeiro.
 
@@ -513,11 +591,11 @@ A expressão “sem interferir no resultado final” é um critério de elegibil
 
 | Informação | Regra comum |
 | --- | --- |
-| Quantidade e periodicidade | Exatamente 30 parcelas mensais: uma por mês, durante 30 meses; selecionar a condição correspondente no retorno |
+| Quantidade e periodicidade | Prazo-base de 30 meses; Too sem entrada retorna 29 parcelas elegíveis; preservar as regras das demais companhias |
 | Situação | Proposta aprovada com decisão confirmada; HTTP 2xx sozinho não basta |
 | Valor principal | Valor positivo e confirmado de uma parcela da condição de 30x |
 | Total | Conservar o total informado pela companhia em campo separado; não substituir pelo valor da parcela |
-| Juros e IOF | Conservar discriminados e registrar se já integram o valor da parcela; evitar soma duplicada |
+| Juros e IOF | Inclusão no valor final da parcela confirmada pelo usuário para todas as companhias; conservar discriminação quando retornada e nunca somar novamente |
 | Assistência, produto e coberturas | Manter associados à mesma condição escolhida |
 | Entrada | Sem entrada como padrão fixo; excluir condições com entrada, sem fallback silencioso |
 | Parcelas diferentes | Não representar como 30 parcelas iguais; explicitar os valores e retirar da comparação direta até haver regra equivalente |
@@ -529,28 +607,29 @@ Para Too, Pottencial e Porto, mapear os campos equivalentes conforme os respecti
 
 ### Formas de pagamento
 
-- **Regra geral de 23/10/2026:** fatura exige imobiliária presente na cotação; sem imobiliária preenchida, usar crédito, **exceto Pottencial, que usará boleto**, conforme esclarecimento posterior do usuário. Substitui a alternativa anterior débito/crédito para locatários sem imobiliária e resolve também o proprietário sem imobiliária.
+- **Regra geral de 23/10/2026:** fatura exige imobiliária presente na cotação; sem imobiliária preenchida, usar crédito, **exceto Pottencial e Too, que usarão boleto**, conforme esclarecimento posterior do usuário. Substitui a alternativa anterior débito/crédito para locatários sem imobiliária e resolve também o proprietário sem imobiliária.
 - **Com imobiliária presente:** fatura é elegível; manter faturado como padrão das cotações de imobiliárias, conforme contrato e disponibilidade. Tipo de solicitante e `company_id` isolados não comprovam os dados enviados à seguradora.
 - **Tokio sem imobiliária:** `credito`, modalidade `prazo`, quantidade confirmada 30. Não selecionar débito como fallback automático.
-- **Pottencial sem imobiliária:** boleto; PF `Boleto`, PJ recebido `Bill`, respeitando o enum da família efetivamente utilizada. A opção foi autorizada pelo usuário e substitui a exigência anterior de crédito para esta companhia.
-- **Demais companhias:** manter crédito sem imobiliária e fatura conforme elegibilidade, usando os campos/códigos de cada contrato.
+- **Pottencial sem imobiliária:** boleto (`Boleto`) no contrato compartilhado por PF e PJ. A opção foi autorizada pelo usuário e substitui a exigência anterior de crédito para esta companhia.
+- **Too — regra por origem:** imobiliaria_cadastrada usa Fatura (tipo 2); todos os demais formulários usam Boleto (tipo 1), no prazo-base de 30 meses, com 29 parcelas sem entrada. Essa regra específica prevalece sobre o critério genérico de presença de imobiliária.
+- **Tokio:** manter crédito sem imobiliária e fatura conforme elegibilidade, usando os campos/códigos de seu contrato.
 - Se faltar a forma exigida ou a condição de 30x, registrar a indisponibilidade; não mudar para outro meio ou quantidade sem decisão explícita.
 
 ### Comparação e destaque
 
-1. A unidade de comparação é a **parcela confirmada de um plano de 30x**. Todas as ofertas participantes devem usar essa mesma quantidade e uma base monetária equivalente; não comparar prêmio líquido de uma com parcela bruta de outra.
+1. A unidade de comparação é a **parcela confirmada de um plano de 30x**. Na Too, admitir 29 parcelas sem entrada na base de 30 meses; as ofertas devem ter uma base monetária equivalente; não comparar prêmio líquido de uma com parcela bruta de outra.
 2. Comparar propostas da mesma finalidade de locação, com moeda, vigência, periodicidade e escopo de cobertura compatíveis. Mesmo número de parcelas não torna produtos diferentes automaticamente equivalentes.
 3. A proposta vencedora é a de **menor valor por parcela entre as ofertas elegíveis em 30x**. A seleção deve ser única e compartilhada entre página e preparação do PDF, sem repetir a regra em controllers ou Blade.
 4. O destaque definitivo continua condicionado à conclusão do pacote. Análises pendentes não são ofertas vencedoras; falta de preço ou valor zero/null não representa gratuidade.
-5. Uma oferta sem 30x pode continuar visível como resultado da companhia, com indicação “Sem condição de pagamento em 30x”, mas fica fora desse ranking. A ausência de parcelamento não altera uma aprovação para recusa ou falha técnica.
+5. Excetuada a condição Too de 29 parcelas sem entrada na base de 30 meses, uma oferta sem 30x pode continuar visível como resultado da companhia, com indicação “Sem condição de pagamento em 30x”, mas fica fora desse ranking. A ausência de parcelamento não altera uma aprovação para recusa ou falha técnica.
 6. Se houver companhias fora da comparação, apresentar o destaque como **melhor parcela entre as ofertas comparáveis em 30x**, indicando as exclusões. Não afirmar que é a mais barata entre todas as companhias. Se nenhuma oferta for elegível, não há destaque.
-7. Quando a exclusão decorrer de informação desconhecida, como composição de IOF/juros, identificar “Comparação indisponível para esta oferta” e o motivo. Não usar zero como fallback nem tratar desconhecido como condição de 30x inexistente.
+7. Quando a exclusão decorrer de informação desconhecida, como moeda ou valor da parcela ausentes, identificar “Comparação indisponível para esta oferta” e o motivo. Não usar zero como fallback nem tratar desconhecido como condição de 30x inexistente.
 8. Empate em centavos representa empate de preço; não afirmar vantagem exclusiva. A ordenação visual pode ser estável, mas não deve inventar preferência comercial. Para um PDF que exige uma única oferta detalhada, o critério de desempate ainda precisa ser definido.
-9. O ranking é de parcela, não uma afirmação genérica de menor custo total. A composição da parcela deve ser confirmada antes da comparação entre companhias. Para Tokio, a decisão de usar `vlPremPar` está mantida, mas sua inclusão de juros/IOF ainda depende de confirmação.
+9. O ranking é de parcela, não uma afirmação genérica de menor custo total. O usuário confirmou que as parcelas incluem IOF/juros e demais encargos em todas as companhias. Para Tokio, usar `vlPremPar` diretamente, sem adicionar `vlJurPar` ou `vlIofParc`.
 
 ### Página, documentos, persistência e efeitos no código
 
-O card deve informar produto/assistência, situação, **30x**, valor da parcela e forma de pagamento. Total, encargos, coberturas e vigência ficam disponíveis para detalhamento. Na falta de dados válidos, usar mensagem de indisponibilidade, nunca um preço simulado.
+O card deve informar produto/assistência, situação, quantidade efetivamente retornada (**29x sem entrada na Too para base de 30 meses**), valor da parcela e forma de pagamento. Total, encargos, coberturas e vigência ficam disponíveis para detalhamento. Na falta de dados válidos, usar mensagem de indisponibilidade, nunca um preço simulado.
 
 Página, PDF próprio e resumo de envio devem usar a mesma condição de pagamento e a mesma seleção de melhor oferta. Preservar o detalhamento completo da oferta escolhida e os valores de parcela/quantidade das demais comparáveis. Cartas de recusa continuam exclusivas da recusa unânime; falha de comparação ou ausência de 30x não dispara cartas de recusa.
 
@@ -558,7 +637,7 @@ Persistir junto à rodada: quantidade, valor da parcela, total reportado, moeda,
 
 **Implementação pendente:** `AnalysisQuoteSummary` precisa representar parcelas sem alterar o significado dos campos de total; `AnalysisQuoteComparison` precisa selecionar opções elegíveis em 30x e explicar exclusões; página e preparação dos documentos devem consumir essa mesma regra. A lógica atual que ordena por `price.total` e exige `gross_total` não foi alterada por este estudo. A futura mudança também deverá tratar resultados antigos sem dados suficientes e versionar o contrato/snapshot quando necessário.
 
-Validações essenciais futuras: 30x confirmado; opção de 12/24x excluída; quantidade ausente; preço nulo/zero/inválido; meio de pagamento indisponível; juros/IOF de composição desconhecida; parcelas desiguais; moedas/vigências incompatíveis; empate; aprovação sem oferta de 30x; e seleção idêntica entre página e PDF. Não é necessária chamada remota para registrar esta decisão documental.
+Validações essenciais futuras: 30x confirmado; opção de 12/24x excluída; quantidade ausente; preço nulo/zero/inválido; meio de pagamento indisponível; IOF/juros discriminados sem soma duplicada; parcelas desiguais; moedas/vigências incompatíveis; empate; aprovação sem oferta de 30x; e seleção idêntica entre página e PDF. Não é necessária chamada remota para registrar esta decisão documental.
 
 ## Tokio Marine
 
@@ -951,7 +1030,7 @@ Em `opcoesPagamento`, `codFormaPagamento` e `codFormaCobranca` são alfanuméric
 2. Usar o `vlPremPar` confirmado da condição elegível; não usar o menor número encontrado em qualquer parte da resposta. `sugestaoValorParc`, `valorPremio` de cobertura, LMG e IS não são substitutos automáticos.
 3. Exibir “30x de R$ ...” somente para a opção confirmada de 30 parcelas. A periodicidade mensal foi confirmada pelo usuário: uma parcela por mês durante 30 meses. Não dividir arbitrariamente o total por 30. Condições de outra quantidade podem ser informadas como resultado, sem participar do ranking padrão.
 4. A decisão atual é comparar **parcelas de condições de exatamente 30x**. Ofertas com menos ou mais parcelas ficam fora desse ranking; vigências, coberturas e bases monetárias precisam ser compatíveis conforme a regra geral. Não apresentar a menor parcela como prova de menor custo total. Manter total e encargos disponíveis para contexto.
-5. Não há evidência de que `vlPremPar`/`vlPremTot` incluam ou excluam juros e IOF. Não somar `vlJurPar`/`vlIofParc` cegamente, nem denominar a parcela “final com tudo incluso” sem confirmar. A escolha do usuário de destacar `vlPremPar` permanece registrada independentemente dessa pendência.
+5. O usuário confirmou que `vlPremPar`, como valor principal da parcela Tokio, já inclui IOF, juros e demais encargos aplicáveis. Não adicionar `vlJurPar`/`vlIofParc` novamente. Preservar `vlPremTot` e os valores discriminados separadamente; essa confirmação sobre a parcela não autoriza recalcular ou reinterpretar os totais.
 6. Não afirmar que `qtd × vlPremPar = vlPremTot`; arredondamentos, entrada ou estrutura de cobrança não foram documentados. Conservar valores reportados sem fabricar uma reconciliação.
 7. Destacar definitivamente a melhor proposta somente após conclusão do pacote, com aprovação confirmada, preço positivo e condições comparáveis. Pendente, recusada, falha ou sem preço não entram como vencedoras.
 8. Documento e página devem usar a mesma seleção. A disponibilidade de um preço não deve alterar o status de crédito, e uma falha de comparação não deve converter aprovação em recusa.
@@ -1047,7 +1126,7 @@ A resposta fornecida não tem moeda explícita. BRL pode ser configuração de n
 | Alta para comercial | Decisão local `tpPessoa = J` versus documentação somente `F` | Confirmar aceitação do cenário PJ e da data de fundação calculada no ambiente contratado; a estrutura local não comprova esse suporte |
 | Alta para comercial | Catálogo CNAE recebido, com mais de um código em algumas descrições | Definir seleção determinística e validada de um código ativo Tokio por atividade; não descartar códigos, escolher arbitrariamente o primeiro ou enviar a lista no campo numérico |
 | Alta para comercial | Ramo obrigatório no HTML, nullable no Request; outros estados civis e comercial com CPF fora do builder empresarial | Fechar obrigatoriedade e cobertura de cenários no payload completo, com falha explícita para dados insuficientes. As regras S/N e Titular/Sócio dos cenários já definidos não estão mais em aberto |
-| Alta | Inclusão de juros/IOF em `vlPremPar`/`vlPremTot` e formato real de valores | Confirmar composição e tratamento de arredondamentos; manter destaque no campo definido sem inventar total final |
+| Composição da parcela resolvida | Inclusão de juros/IOF em `vlPremPar` confirmada pelo usuário para o valor final da parcela | Usar diretamente, sem soma duplicada; preservar formato, arredondamentos e totais retornados, sem inventar total final |
 | Média | Padrão de exatamente 30x definido, disponibilidade remota não comprovada | Periodicidade mensal confirmada pelo usuário; conferir a condição retornada por meio de pagamento e suas datas; sem 30x a oferta não entra no ranking. Crédito sem imobiliária definido em 23/10; campos e disponibilidade por companhia ainda precisam de confirmação |
 | Média | Recálculo tem headers próprios apesar da mesma URL | Confirmar envio de `sqCdCotac`/`token`, campos alteráveis, reaproveitamento do ID, efeitos na análise e limites para nova cotação |
 | Média | Tabelas divergem de exemplos em tipos e obrigatoriedade | Validar LMI, pintura, capital inicial e códigos numéricos/string. Regra local LMI 30 e capital 450000 só comercial está definida, mas não substitui validação remota |
