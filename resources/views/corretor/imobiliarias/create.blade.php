@@ -51,7 +51,7 @@
             <nav aria-label="Navegação estrutural" class="mb-3">
                 <ol class="breadcrumb mb-0">
                     <li class="breadcrumb-item"><a href="{{ route('Dashboard-Admin') }}">Dashboard</a></li>
-                    <li class="breadcrumb-item"><a href="{{ $indexRoute }}">Imobiliárias</a></li>
+                    <li class="breadcrumb-item"><a href="{{ $indexRoute }}">{{ \App\Support\BrandingText::choose('Imobiliárias', 'Empresas') }}</a></li>
                     <li class="breadcrumb-item active" aria-current="page">Novo cadastro</li>
                 </ol>
             </nav>
@@ -65,7 +65,7 @@
                 <div class="mt-3">
                     <div>
                         <span class="company-eyebrow company-eyebrow--light">Novo parceiro</span>
-                        <h1 class="fw-bold mb-1">Cadastrar imobiliária</h1>
+                        <h1 class="fw-bold mb-1">{{ \App\Support\BrandingText::choose('Cadastrar imobiliária', 'Cadastrar empresa') }}</h1>
                         <p class="mb-0">
                             Informe os dados da empresa e defina as credenciais que serão entregues ao responsável.
                         </p>
@@ -124,7 +124,7 @@
                         <div class="company-form-section__heading">
                             <span class="company-form-section__number">1</span>
                             <div>
-                                <h2 id="company-identification-title" class="h5 fw-bold mb-1">Identificação da imobiliária</h2>
+                                <h2 id="company-identification-title" class="h5 fw-bold mb-1">{{ \App\Support\BrandingText::choose('Identificação da imobiliária', 'Identificação da empresa') }}</h2>
                                 <p class="text-muted small mb-0">Selecione a empresa integrada ou informe um novo nome.</p>
                             </div>
                         </div>
@@ -132,7 +132,7 @@
                         @if ($hasAvailableTags)
                             <div>
                                 <label for="leadlovers_tag_id" class="form-label fw-semibold">
-                                    Imobiliária <span class="text-danger" aria-hidden="true">*</span>
+                                    {{ \App\Support\BrandingText::choose('Imobiliária', 'Empresa') }} <span class="text-danger" aria-hidden="true">*</span>
                                 </label>
                                 <select
                                     id="leadlovers_tag_id"
@@ -141,7 +141,7 @@
                                     aria-describedby="company-tag-help @error('leadlovers_tag_id') company-tag-error @enderror"
                                     required
                                 >
-                                    <option value="">Selecione uma imobiliária</option>
+                                    <option value="">{{ \App\Support\BrandingText::choose('Selecione uma imobiliária', 'Selecione uma empresa') }}</option>
                                     @foreach ($tagsOficiais as $tag)
                                         <option value="{{ $tag->leadlovers_tag_id }}" @selected((string) old('leadlovers_tag_id') === (string) $tag->leadlovers_tag_id)>
                                             {{ $tag->title }}
@@ -149,7 +149,7 @@
                                     @endforeach
                                 </select>
                                 <div id="company-tag-help" class="form-text">
-                                    A lista apresenta somente imobiliárias ativas que ainda não possuem cadastro.
+                                    {{ \App\Support\BrandingText::choose('A lista apresenta somente imobiliárias ativas que ainda não possuem cadastro.', 'A lista apresenta somente empresas ativas que ainda não possuem cadastro.') }}
                                 </div>
                                 @error('leadlovers_tag_id')
                                     <div id="company-tag-error" class="invalid-feedback">{{ $message }}</div>
@@ -158,7 +158,7 @@
                         @else
                             <div>
                                 <label for="company_name" class="form-label fw-semibold">
-                                    Nome da imobiliária <span class="text-danger" aria-hidden="true">*</span>
+                                    {{ \App\Support\BrandingText::choose('Nome da imobiliária', 'Nome da empresa') }} <span class="text-danger" aria-hidden="true">*</span>
                                 </label>
                                 <div class="input-group input-group-lg">
                                     <span class="input-group-text" aria-hidden="true"><i class="bi bi-buildings"></i></span>
@@ -192,7 +192,7 @@
                             <span class="company-form-section__number">2</span>
                             <div>
                                 <h2 id="company-contact-title" class="h5 fw-bold mb-1">Dados da empresa e contato</h2>
-                                <p class="text-muted small mb-0">Esses dados identificam a imobiliária e seu acesso principal.</p>
+                                <p class="text-muted small mb-0">{{ \App\Support\BrandingText::choose('Esses dados identificam a imobiliária e seu acesso principal.', 'Esses dados identificam a empresa e seu acesso principal.') }}</p>
                             </div>
                         </div>
 
@@ -296,7 +296,7 @@
                             <p class="text-danger small mb-0" role="alert">{{ $message }}</p>
                         @enderror
                         <fieldset id="company-department-fields" class="company-department-fields" @disabled(! $departmentsEnabled) @if (! $departmentsEnabled) hidden @endif>
-                            <legend class="visually-hidden">Contatos por setor da imobiliária</legend>
+                            <legend class="visually-hidden">{{ \App\Support\BrandingText::choose('Contatos por setor da imobiliária', 'Contatos por setor da empresa') }}</legend>
                             <div class="company-department-grid" data-department-list>
                                 @foreach ($departmentRows as $index => $sector)
                                     @php
@@ -438,7 +438,7 @@
                             <div>
                                 <strong>Entrega segura das credenciais</strong>
                                 <p class="mb-0">
-                                    O corretor é responsável por entregar o e-mail e a senha diretamente à imobiliária.
+                                    {{ \App\Support\BrandingText::choose('O corretor é responsável por entregar o e-mail e a senha diretamente à imobiliária.', 'O integrante é responsável por entregar o e-mail e a senha diretamente à empresa.') }}
                                     A senha não será exibida novamente após o cadastro.
                                 </p>
                             </div>
@@ -551,7 +551,7 @@
                     <a href="{{ $indexRoute }}" class="btn btn-outline-secondary btn-lg">Cancelar</a>
                     <button type="submit" class="btn btn-primary btn-lg" data-company-submit>
                         <span class="spinner-border spinner-border-sm me-2" data-submit-spinner aria-hidden="true" hidden></span>
-                        <span data-submit-label>Cadastrar imobiliária</span>
+                        <span data-submit-label>{{ \App\Support\BrandingText::choose('Cadastrar imobiliária', 'Cadastrar empresa') }}</span>
                     </button>
                 </div>
             </form>

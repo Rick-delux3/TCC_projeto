@@ -47,6 +47,25 @@ class AppServiceProvider extends ServiceProvider
             return Limit::perMinute(120)->by($request->ip());
         });
 
+        RateLimiter::for('tcc-auth-pages', function (Request $request): Limit {
+            if (config('branding.active', 'tcc') !== 'tcc' || ! $request->isMethodSafe()) {
+                return Limit::none();
+            }
+
+            return Limit::perMinute(30)->by($request->ip())
+                ->response(function (Request $request, array $headers): \Illuminate\Http\Response {
+                    return response('Muitos acessos. Aguarde um minuto antes de tentar novamente.', 429, $headers);
+                });
+        });
+
+        RateLimiter::for('broker-access', function (Request $request): Limit {
+            if (config('branding.active', 'tcc') === 'tcc' && $request->isMethodSafe()) {
+                return Limit::none();
+            }
+
+            return Limit::perMinute(5)->by($request->ip());
+        });
+
         /*
         * Limite para ENVIO da simulação.
         * Esse precisa ser mais protegido para evitar spam.

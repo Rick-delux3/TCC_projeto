@@ -3,6 +3,7 @@
 use App\Exceptions\LeadLoversApiException;
 use App\Services\LeadLoversApiClient;
 use Illuminate\Http\Client\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\RateLimiter;
 
@@ -443,10 +444,12 @@ it('normalizes HTTP errors without legacy response wrappers', function (
     ],
 ]);
 
-it('prefers RateLimit-Reset and falls back defensively to Retry-After', function (
+it('respects the longest server retry delay for both brands', function (
     array $headers,
-    int $expectedDelay
+    int $expectedDelay,
+    string $profile = 'client',
 ) {
+    config(['branding.active' => $profile]);
     fakeLeadLoversStageOneResponse(
         '/tags/',
         ['error' => 'rate_limit', 'message' => 'Too many requests'],
@@ -469,9 +472,9 @@ it('prefers RateLimit-Reset and falls back defensively to Retry-After', function
         ->retryAfterSeconds->toBe($expectedDelay);
     Http::assertSentCount(1);
 })->with([
-    'official reset header wins' => [
+    'longer retry after wins' => [
         ['RateLimit-Reset' => '17', 'Retry-After' => '99'],
-        17,
+        99,
     ],
     'numeric retry after fallback' => [
         ['Retry-After' => '23'],
@@ -481,13 +484,23 @@ it('prefers RateLimit-Reset and falls back defensively to Retry-After', function
         ['RateLimit-Reset' => 'invalid', 'Retry-After' => '31'],
         31,
     ],
-    'zero reset still wins' => [
+    'zero reset does not shorten retry after' => [
         ['RateLimit-Reset' => '0', 'Retry-After' => '31'],
-        1,
+        31,
     ],
     'configured default' => [
         [],
         60,
+    ],
+    'tcc honors the longest server delay' => [
+        ['RateLimit-Reset' => '17', 'Retry-After' => '3600'],
+        3600,
+        'tcc',
+    ],
+    'client honors long server delays' => [
+        ['Retry-After' => '3600'],
+        3600,
+        'client',
     ],
 ]);
 
@@ -959,6 +972,54 @@ it('enforces the shared local rate limit without blocking the process', function
         ->retryAfterSeconds->toBe(7);
     Http::assertSentCount(1);
 });
+
+it('caps all requests at ninety per minute even with permissive configuration', function (string $profile) {
+    $this->freezeTime();
+    config([
+        'branding.active' => $profile,
+        'services.leadlovers.requests_per_minute' => 999,
+        'services.leadlovers.rate_limit_window_seconds' => 1,
+    ]);
+    Http::fake(['*' => Http::response([], 200)]);
+
+    for ($index = 0; $index < 90; $index++) {
+        $client = new LeadLoversApiClient;
+        $index % 2 === 0 ? $client->listTags() : $client->listLeadMachines(501);
+    }
+    $this->travel(59)->seconds();
+    expect(fn () => app(LeadLoversApiClient::class)->listTags())->toThrow(LeadLoversApiException::class);
+    Http::assertSentCount(90);
+    $this->travel(2)->seconds();
+    expect(app(LeadLoversApiClient::class)->listTags())->toBe([]);
+    Http::assertSentCount(91);
+})->with(['tcc', 'client']);
+
+it('does not send requests while another worker reserves the budget', function (string $profile) {
+    config(['branding.active' => $profile]);
+    $lock = Cache::store(config('cache.limiter'))->lock(leadLoversStageOneLimiterKey().':reservation', 5);
+    expect($lock->get())->toBeTrue();
+    try {
+        expect(fn () => app(LeadLoversApiClient::class)->listTags())->toThrow(LeadLoversApiException::class);
+        Http::assertNothingSent();
+        expect(RateLimiter::attempts(leadLoversStageOneLimiterKey()))->toBe(0);
+    } finally {
+        $lock->release();
+    }
+})->with(['tcc', 'client']);
+
+it('counts a connection failure before allowing another request', function (string $profile) {
+    config(['branding.active' => $profile, 'services.leadlovers.requests_per_minute' => 1]);
+    Http::fake(['*' => Http::failedConnection()]);
+    expect(fn () => app(LeadLoversApiClient::class)->listTags())->toThrow(LeadLoversApiException::class);
+    expect(RateLimiter::attempts(leadLoversStageOneLimiterKey()))->toBe(1);
+    Http::fake(['*' => Http::response([], 200)]);
+    try {
+        app(LeadLoversApiClient::class)->listTags();
+        test()->fail('A segunda chamada deveria aguardar o limite local.');
+    } catch (LeadLoversApiException $exception) {
+        expect($exception->errorCode)->toBe('LOCAL_RATE_LIMIT');
+    }
+})->with(['tcc', 'client']);
 
 it('uses the stable token-scoped local rate budget', function () {
     config(['services.leadlovers.requests_per_minute' => 1]);

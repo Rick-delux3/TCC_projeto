@@ -1,6 +1,11 @@
 import './bootstrap';
 import axios from 'axios';
 import Alpine from 'alpinejs';
+import { protectAuthAccessLinks } from './auth-access-links';
+
+if (document.body.classList.contains('nvs-index')) {
+    protectAuthAccessLinks(document);
+}
 
 window.Alpine = Alpine;
 
@@ -109,7 +114,8 @@ document.addEventListener('submit', (event) => {
 document.addEventListener('click', (event) => {
     const trigger = event.target.closest('[data-show-loader]');
 
-    if (trigger) {
+    if (trigger && !event.defaultPrevented && trigger.getAttribute('target') !== '_blank'
+        && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey) {
         pageLoader.show();
     }
 });

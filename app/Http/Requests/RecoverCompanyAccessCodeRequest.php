@@ -34,7 +34,7 @@ class RecoverCompanyAccessCodeRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'email.required' => 'Informe o e-mail cadastrado da imobiliária.',
+            'email.required' => \App\Support\BrandingText::choose('Informe o e-mail cadastrado da imobiliária.', 'Informe o e-mail cadastrado da empresa.'),
             'email.string' => 'Informe um e-mail válido.',
             'email.email' => 'Informe um e-mail válido.',
             'email.max' => 'O e-mail deve ter no máximo 255 caracteres.',

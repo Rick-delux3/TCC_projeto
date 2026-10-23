@@ -238,8 +238,8 @@
 @endphp
 
 
-<div id="dashboardThemeRoot" class="dashboard-shell" data-dashboard-theme="light">
-    <div class="container-fluid px-3 px-lg-4 py-4">
+<div id="dashboardThemeRoot" class="dashboard-shell company-leads-page" data-dashboard-theme="light">
+    <div class="container-fluid px-3 px-lg-4 py-4 company-dashboard-content">
         <x-dashboard-realtime-notice />
         @if (session('success'))
             <div class="alert alert-success rounded-4 border-0 shadow-sm" role="status" aria-live="polite">
@@ -271,10 +271,10 @@
         @endif
 
         {{-- Cabeçalho moderno --}}
-        <div class="d-flex flex-column flex-xl-row justify-content-between align-items-xl-center gap-3 mb-4">
+        <div class="company-page-heading d-flex flex-column flex-xl-row justify-content-between align-items-xl-center gap-3 mb-4">
             <div>
                 <span class="badge text-bg-primary-subtle text-primary border border-primary-subtle mb-2">
-                    Dashboard da imobiliária
+                    {{ \App\Support\BrandingText::choose('Dashboard da imobiliária', 'Dashboard da empresa') }}
                 </span>
 
                 <h1 class="h2 fw-bold mb-1">
@@ -304,7 +304,7 @@
         </div>
 
         {{-- Bloco principal superior --}}
-        <div class="row g-4 mb-4">
+        <div class="row g-4 mb-4 company-overview-grid">
 
             {{-- Hero principal --}}
             <div class="col-12 col-xl-7">
@@ -340,24 +340,27 @@
                             </div>
 
                             <div class="col-12 col-lg-4">
-                                <div class="bg-white bg-opacity-10 rounded-4 p-3 border border-white border-opacity-25">
-                                    <div class="small text-white-50 mb-1">
-                                        Última entrada
-                                    </div>
+                                <div class="company-overview-details bg-white bg-opacity-10 rounded-4 p-3 border border-white border-opacity-25">
+                                    <div>
+                                        <div class="small text-white-50 mb-1">
+                                            Última entrada
+                                        </div>
 
-                                    <div class="fw-bold">
-                                        {{ $latestLeadAt ? $latestLeadAt->copy()->setTimezone('America/Sao_Paulo')->format('d/m/Y H:i') : 'Sem leads cadastrados' }}
+                                        <div class="fw-bold">
+                                            {{ $latestLeadAt ? $latestLeadAt->copy()->setTimezone('America/Sao_Paulo')->format('d/m/Y H:i') : 'Sem leads cadastrados' }}
+                                        </div>
                                     </div>
-
                                     <hr class="border-white border-opacity-25">
 
-                                    <div class="small text-white-50 mb-1">
-                                        Origem exibida
-                                    </div>
+                                    <div>
+                                        <div class="small text-white-50 mb-1">
+                                            Origem exibida
+                                        </div>
 
-                                    <span class="badge text-bg-success">
-                                        Formulários do sistema
-                                    </span>
+                                        <span class="badge text-bg-success">
+                                            Formulários do sistema
+                                        </span>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -377,7 +380,7 @@
                                 </span>
 
                                 <h2 class="h4 fw-bold mb-1">
-                                    Chave da imobiliária
+                                    {{ \App\Support\BrandingText::choose('Chave da imobiliária', 'Chave da empresa') }}
                                 </h2>
 
                                 <p class="text-muted small mb-0">
@@ -390,7 +393,7 @@
                             </span>
                         </div>
 
-                        <label class="form-label small text-muted">
+                        <label for="dashboardLeadAccessCode" class="form-label small text-muted">
                             Chave de acesso
                         </label>
 
@@ -414,7 +417,7 @@
                             </button>
                         </div>
 
-                        <label class="form-label small text-muted">
+                        <label for="dashboardLeadFormLink" class="form-label small text-muted">
                             Página de simulação
                         </label>
 
@@ -450,7 +453,7 @@
                                 Abrir página
                             </a>
 
-                            <span id="dashboardLeadFormCopyStatus" class="small {{ $leadFormAvailable ? 'text-muted' : 'text-danger' }}">
+                            <span id="dashboardLeadFormCopyStatus" role="status" class="small {{ $leadFormAvailable ? 'text-muted' : 'text-danger' }}">
                                 {{ $leadFormAvailable ? 'Envie o link e a chave para quem for preencher.' : 'Página indisponível.' }}
                             </span>
                         </div>
@@ -463,7 +466,7 @@
 
 
         {{-- Métricas --}}
-        <div class="row g-3 mb-4">
+        <div class="row g-3 mb-4 company-metrics">
             <div class="col-6 col-xl-3">
                 <div class="card border-0 shadow-sm rounded-4 dashboard-stat-card h-100">
                     <div class="card-body">
@@ -551,7 +554,7 @@
 
 
         {{-- Cards operacionais superiores --}}
-        <div class="row g-4 mb-4">
+        <div class="row g-4 mb-4 company-operations">
 
             {{-- Resumo operacional --}}
             <div class="col-12 col-xl-4">
@@ -624,7 +627,7 @@
                                     </span>
                                 </a>
                             @empty
-                                <p class="text-muted small mb-0">
+                                <p class="company-tags-empty text-muted small mb-0">
                                     As tags aparecerão aqui assim que existirem leads segmentados.
                                 </p>
                             @endforelse
@@ -683,7 +686,7 @@
 
 
         {{-- Área principal da lista de leads --}}
-        <div class="row g-4">
+        <div class="row g-4 company-directory">
             <div class="col-12">
 
                 {{-- Filtros --}}
@@ -713,7 +716,7 @@
                             <div class="lead-filter-panel__result" role="status" aria-live="polite">
                                 <span class="lead-filter-panel__result-value">{{ $filteredLeads }}</span>
                                 <span class="lead-filter-panel__result-label">lead(s)</span>
-                                <small>{{ $isFiltering ? 'na seleção atual' : 'na base da imobiliária' }}</small>
+                                <small>{{ $isFiltering ? 'na seleção atual' : \App\Support\BrandingText::choose('na base da imobiliária', 'na base da empresa') }}</small>
                             </div>
                         </header>
 
@@ -953,20 +956,20 @@
                                     && $leadLoversFailure['fields'] !== [];
                             @endphp
 
-                            <article class="card border-0 shadow-sm rounded-5 lead-card lead-list-item {{ $leadTone['card'] }}">
+                            <article aria-labelledby="company-lead-name-{{ $lead->id }}" class="card border-0 shadow-sm rounded-5 lead-card lead-list-item {{ $leadTone['card'] }}">
                                 <div class="card-body p-3 p-lg-4">
 
-                                    <div class="row g-3 align-items-center">
+                                    <div class="row g-3 align-items-center company-lead-summary">
 
                                         {{-- Identificação --}}
-                                        <div class="col-12 col-md-6 col-xl-3">
+                                        <div class="company-lead-identity col-12 col-md-6 col-xl-3">
                                             <div class="d-flex align-items-center gap-3">
                                                 <div class="lead-avatar rounded-4 bg-primary text-white d-flex align-items-center justify-content-center fw-bold">
                                                     {{ $leadInitials ?: 'L' }}
                                                 </div>
 
                                                 <div class="min-w-0">
-                                                    <h3 class="h6 fw-bold mb-1 text-truncate">
+                                                    <h3 id="company-lead-name-{{ $lead->id }}" class="h6 fw-bold mb-1 text-truncate">
                                                         {{ $leadName }}
                                                     </h3>
 
@@ -978,7 +981,7 @@
                                         </div>
 
                                         {{-- E-mail --}}
-                                        <div class="col-12 col-md-6 col-xl-3">
+                                        <div class="company-lead-email col-12 col-md-6 col-xl-3">
                                             <div class="small text-muted">E-mail</div>
 
                                             @if ($lead->email)
@@ -993,7 +996,7 @@
                                         </div>
 
                                         {{-- Telefone --}}
-                                        <div class="col-6 col-md-3 col-xl-2">
+                                        <div class="company-lead-phone col-6 col-md-3 col-xl-2">
                                             <div class="small text-muted">Telefone</div>
 
                                             <div class="fw-semibold text-truncate">
@@ -1002,7 +1005,7 @@
                                         </div>
 
                                         {{-- Entrada --}}
-                                        <div class="col-6 col-md-3 col-xl-1">
+                                        <div class="company-lead-entry col-6 col-md-3 col-xl-1">
                                             <div class="small text-muted">Entrada</div>
 
                                             <div class="fw-semibold">
@@ -1015,7 +1018,7 @@
                                         </div>
 
                                         {{-- Tag oficial do lead --}}
-                                        <div class="col-12 col-md-4 col-xl-2">
+                                        <div class="company-lead-tag col-12 col-md-4 col-xl-2">
                                             <div class="d-flex flex-wrap gap-2 justify-content-start justify-content-xl-end">
 
                                                 @if ($officialLeadTag)
@@ -1040,7 +1043,7 @@
                                         </div>
 
                                         {{-- Botão --}}
-                                        <div class="col-12 col-md-2 col-xl-1">
+                                        <div class="company-lead-actions col-12 col-md-2 col-xl-1">
                                             <button
                                                 type="button"
                                                 class="btn btn-sm {{ $leadLoversFailureIsCorrectable ? 'btn-danger leadlovers-correction-trigger' : 'btn-outline-primary' }} w-100 text-nowrap"
@@ -1065,7 +1068,7 @@
 
                                     </div>
 
-                                    <div class="d-flex flex-wrap align-items-center gap-2 mt-3 pt-3 border-top">
+                                    <div class="company-lead-sync d-flex flex-wrap align-items-center gap-2 mt-3 pt-3 border-top">
                                         <span class="small text-muted">
                                             LeadLovers:
                                         </span>
@@ -1334,7 +1337,7 @@
                                         </h6>
 
                                         <p class="text-muted small mb-0">
-                                            As tags são exibidas apenas para consulta. A alteração de tags será feita pelo corretor no painel administrativo.
+                                            {{ \App\Support\BrandingText::choose('As tags são exibidas apenas para consulta. A alteração de tags será feita pelo corretor no painel administrativo.', 'As tags são exibidas apenas para consulta. A alteração será feita pela equipe da concessionária no painel administrativo.') }}
                                         </p>
                                     </div>
 

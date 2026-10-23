@@ -54,7 +54,7 @@ class ImobiliariaRegistrationController extends Controller
 
         return redirect()->route('2fa')->with(
             'success',
-            'Cadastro realizado com sucesso. Enviamos o código de verificação ao e-mail da imobiliária.'
+            \App\Support\BrandingText::choose('Cadastro realizado com sucesso. Enviamos o código de verificação ao e-mail da imobiliária.', 'Cadastro realizado com sucesso. Enviamos o código de verificação ao e-mail da empresa.')
         );
     }
 }

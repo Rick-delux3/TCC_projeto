@@ -3,6 +3,8 @@
         ?? app(\App\Support\LeadLoversInitialFailureCatalog::class)
             ->describe($lead);
 
+    $leadLoversRecovery = $failure['recovery'] ?? null;
+
     $leadLoversInitialStatus = filled($lead->leadlovers_status)
         ? (string) $lead->leadlovers_status
         : 'pending';
@@ -52,6 +54,11 @@
         };
     } else {
         $leadLoversPresentation = match (true) {
+            $leadLoversRecovery !== null => [
+                'label' => $leadLoversRecovery['label'],
+                'class' => 'text-bg-warning text-dark',
+                'icon' => 'bi-clock-history',
+            ],
             $failure['failed'] && $failure['not_sent']
                 && $failure['http_status'] === 400 => [
                     'label' => 'Não enviado à LeadLovers',
@@ -86,11 +93,11 @@
         };
     }
 
-    $leadLoversFailureMessage = $failure['failed']
+    $leadLoversFailureMessage = $leadLoversRecovery['message'] ?? ($failure['failed']
         ? $failure['message']
         : ($leadLoversInitialConfirmed && $leadLoversUpdateStatus === 'failed'
             ? 'Os dados foram salvos no sistema, mas a LeadLovers não confirmou a atualização.'
-            : null);
+            : null));
     $showLeadLoversFailureMessage = $showLeadLoversFailureMessage
         ?? filled($leadLoversFailureMessage);
     $leadLoversFailureMessageMode = $leadLoversFailureMessageMode
@@ -119,8 +126,8 @@
     @if ($showLeadLoversFailureMessage && filled($leadLoversFailureMessage))
         @if ($leadLoversFailureMessageMode === 'full')
             <div
-                class="alert alert-danger rounded-4 mt-3 mb-0 leadlovers-sync-status__alert"
-                role="alert"
+                class="alert {{ $leadLoversRecovery !== null ? 'alert-warning' : 'alert-danger' }} rounded-4 mt-3 mb-0 leadlovers-sync-status__alert"
+                role="{{ $leadLoversRecovery !== null ? 'status' : 'alert' }}"
             >
                 <div>{{ $leadLoversFailureMessage }}</div>
                 @if (filled($leadLoversTechnicalReference))
@@ -130,7 +137,7 @@
                 @endif
             </div>
         @else
-            <span class="small leadlovers-sync-status__message">
+            <span class="small leadlovers-sync-status__message {{ $leadLoversRecovery !== null ? 'text-reset' : '' }}">
                 {{ $leadLoversFailureMessage }}
             </span>
         @endif

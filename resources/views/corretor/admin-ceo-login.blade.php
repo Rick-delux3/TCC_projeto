@@ -1,25 +1,31 @@
 @extends('layout-inicial.app')
 
-@section('content')
-<div class="admin-auth-page">
-    <section class="admin-auth-shell">
-        <aside class="admin-auth-aside">
-            <img
-                src="{{ asset('imgs/divulgar-imoveis-online-site-para-imobiliaria.jpg') }}"
-                alt="Acesso restrito do CEO"
-            >
+@section('body-class', config('branding.active', 'tcc') === 'tcc' ? 'tcc-company-auth-body' : '')
+@section('main-class', config('branding.active', 'tcc') === 'tcc' ? 'tcc-company-auth-main tcc-company-auth-main--standalone' : '')
+@section('hide-header', config('branding.active', 'tcc') === 'tcc' ? 'true' : 'false')
 
-            <x-brand-logo class="auth-media-logo" />
+@section('content')
+<div class="admin-auth-page {{ config('branding.active', 'tcc') === 'tcc' ? 'tcc-company-auth tcc-ceo-login' : '' }}">
+    <section class="admin-auth-shell">
+        <aside @class(['admin-auth-aside', 'tcc-auth-logo-aside' => config('branding.active', 'tcc') === 'tcc'])>
+            @if (config('branding.active', 'tcc') === 'tcc')
+                <img src="{{ asset('imgs/Logo_NVS.png') }}" class="tcc-auth-background-logo" alt="" aria-hidden="true">
+            @else
+                <img
+                    src="{{ asset('imgs/divulgar-imoveis-online-site-para-imobiliaria.jpg') }}"
+                    alt="Acesso restrito do CEO"
+                >
+
+                <x-brand-logo class="auth-media-logo" />
+            @endif
 
             <div class="admin-auth-overlay">
                 <span class="admin-badge">Acesso Sigiloso</span>
 
-                <h2>Área exclusiva do CEO da corretora</h2>
+                <h2>{{ \App\Support\BrandingText::choose('Área exclusiva do CEO da corretora', 'Área exclusiva do CEO da concessionária') }}</h2>
 
                 <p>
-                    Este acesso é reservado ao corretor principal responsável
-                    pela administração da plataforma, organização da equipe
-                    e gestão das operações internas.
+                    {{ \App\Support\BrandingText::choose('Este acesso é reservado ao corretor principal responsável pela administração da plataforma, organização da equipe e gestão das operações internas.', 'Este acesso é reservado ao CEO da concessionária, responsável pela administração da plataforma, organização da equipe e gestão das operações internas.') }}
                 </p>
             </div>
         </aside>
@@ -31,7 +37,7 @@
                 <h1>Login do CEO</h1>
 
                 <p>
-                    Informe CPF e senha para acessar o painel principal da corretora.
+                    {{ \App\Support\BrandingText::choose('Informe CPF e senha para acessar o painel principal da corretora.', 'Informe CPF e senha para acessar o painel principal da concessionária.') }}
                 </p>
             </header>
 
@@ -124,6 +130,11 @@
                     <button type="submit" class="admin-submit">
                         Entrar
                     </button>
+                    @if (config('branding.active', 'tcc') === 'tcc')
+                        <a href="{{ route('admin.login') }}" class="admin-outline-link">
+                            Entrar como integrante
+                        </a>
+                    @endif
                 </div>
 
                 <div class="admin-auth-note">

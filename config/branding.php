@@ -13,7 +13,7 @@ return [
     'profiles' => [
         'tcc' => [
             'key' => 'tcc',
-            'name' => 'NVS Seguros',
+            'name' => 'NVS',
             'short_name' => 'NVS',
             'logo' => 'imgs/Logo_NVS.png',
             'logo_header' => 'imgs/Logo_NVS.png',

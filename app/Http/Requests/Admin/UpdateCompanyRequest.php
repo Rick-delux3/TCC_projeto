@@ -153,22 +153,22 @@ class UpdateCompanyRequest extends FormRequest
     {
         return [
             ...$this->departmentMessages(),
-            'name.required' => 'Informe o nome da imobiliária.',
-            'name.unique' => 'Já existe uma imobiliária com esse nome.',
+            'name.required' => \App\Support\BrandingText::choose('Informe o nome da imobiliária.', 'Informe o nome da empresa.'),
+            'name.unique' => \App\Support\BrandingText::choose('Já existe uma imobiliária com esse nome.', 'Já existe uma empresa com esse nome.'),
 
-            'email.required' => 'Informe o e-mail da imobiliária.',
+            'email.required' => \App\Support\BrandingText::choose('Informe o e-mail da imobiliária.', 'Informe o e-mail da empresa.'),
             'email.email' => 'Informe um e-mail válido.',
             'email.unique' => 'Este e-mail já está sendo utilizado.',
 
-            'phone.required' => 'Informe o telefone da imobiliária.',
+            'phone.required' => \App\Support\BrandingText::choose('Informe o telefone da imobiliária.', 'Informe o telefone da empresa.'),
             'phone.regex' => 'O telefone deve conter 10 ou 11 números.',
             'phone.unique' => 'Este telefone já está sendo utilizado.',
 
-            'cnpj.required' => 'Informe o CPF ou CNPJ da imobiliária.',
+            'cnpj.required' => \App\Support\BrandingText::choose('Informe o CPF ou CNPJ da imobiliária.', 'Informe o CPF ou CNPJ da empresa.'),
             'cnpj.string' => 'Informe um CPF ou CNPJ válido.',
             'cnpj.unique' => 'Este CPF ou CNPJ já está sendo utilizado.',
 
-            'cep.required' => 'Informe o CEP da imobiliária.',
+            'cep.required' => \App\Support\BrandingText::choose('Informe o CEP da imobiliária.', 'Informe o CEP da empresa.'),
             'cep.regex' => 'O CEP deve conter exatamente 8 números.',
 
             'city.required' => 'Informe a cidade.',

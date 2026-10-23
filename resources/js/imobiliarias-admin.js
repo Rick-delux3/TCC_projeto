@@ -716,7 +716,7 @@ if (registrationForm) {
         }
 
         if (submitLabel) {
-            submitLabel.textContent = 'Cadastrar imobiliária';
+            submitLabel.textContent = document.body.dataset.brand === 'tcc' ? 'Cadastrar empresa' : 'Cadastrar imobiliária';
         }
     };
 

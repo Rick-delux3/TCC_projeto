@@ -62,9 +62,10 @@ it('connects the tcc landing actions and serves local images with valid section 
 
     foreach ([
         'Começar agora' => 'empresa.register.form',
-        'Simular seguro' => 'simulation.start',
+        'Cadastrar beneficiário' => 'simulation.start',
         'Ir para o painel' => 'empresa.login',
         'Entrar' => 'empresa.login',
+        'Entrar como administrador' => 'tcc.admin.access',
         'Área do Cliente' => 'empresa.login',
     ] as $label => $routeName) {
         $link = $xpath->query('//a[normalize-space(.)="'.$label.'"]')->item(0);
@@ -95,6 +96,40 @@ it('connects the tcc landing actions and serves local images with valid section 
         ->and($xpath->query('.//a[starts-with(@href, "#")]', $navigation)->length)->toBe(4)
         ->and($xpath->query('//*[@id="nvs-mobile-menu"]')->length)->toBe(0);
 });
+
+it('opens index access links safely in a new tab only for tcc', function (string $profile) {
+    config([
+        'features.public_index_enabled' => true,
+        'branding.active' => $profile,
+    ]);
+
+    $html = $this->get(route('index'))->assertOk()->getContent();
+    $document = new DOMDocument;
+    @$document->loadHTML('<?xml encoding="UTF-8">'.$html);
+    $xpath = new DOMXPath($document);
+    $accessLinks = $xpath->query('//a[@href="'.route('empresa.login').'" or @href="'.route('empresa.register.form').'" or @href="'.route('tcc.admin.access').'"]');
+
+    expect($accessLinks->length)->toBeGreaterThan(0);
+    expect($xpath->query('//header//a[@href="'.route('tcc.admin.access').'"]')->length)
+        ->toBe($profile === 'tcc' ? 1 : 0);
+
+    foreach ($accessLinks as $link) {
+        if ($profile === 'tcc') {
+            $label = trim($link->textContent);
+
+            expect($link->getAttribute('target'))->toBe('_blank')
+                ->and($link->hasAttribute('data-auth-access'))->toBeTrue()
+                ->and(explode(' ', $link->getAttribute('rel')))->toContain('noopener', 'noreferrer')
+                ->and($link->getAttribute('aria-label'))->toBe($label.' (abre em nova guia)');
+        } else {
+            expect($link->getAttribute('target'))->not->toBe('_blank');
+        }
+    }
+
+    foreach ($xpath->query('//a[starts-with(@href, "#") or @href="'.route('simulation.start').'"]') as $link) {
+        expect($link->getAttribute('target'))->not->toBe('_blank');
+    }
+})->with(['tcc', 'client']);
 
 it('renders the new public page with the selected brand', function (
     string $profile,
@@ -237,7 +272,7 @@ it('renders the public simulation gateway with the reference composition', funct
         ->assertViewIs('simulation.start')
         ->assertSeeText('Escolha seu perfil')
         ->assertSeeText('Dados da solicitação')
-        ->assertSeeText('É Online, é Simples, é Seguro')
+        ->assertSeeText($profile === 'tcc' ? 'É Online, é Simples, é Rápido' : 'É Online, é Simples, é Seguro')
         ->assertSeeText('Qual opção descreve você?')
         ->assertSeeText('Leva menos de 1 minuto')
         ->assertSeeText('Ambiente seguro')
@@ -427,6 +462,23 @@ it('keeps both web two-factor views isolated to the active brand', function (
     $viewData = ['errors' => new Illuminate\Support\ViewErrorBag];
     $companyHtml = view('auth.2fa', $viewData)->render();
     $adminHtml = view('auth.admin-2fa', $viewData)->render();
+
+    $document = new DOMDocument;
+    $previous = libxml_use_internal_errors(true);
+    $document->loadHTML('<?xml encoding="UTF-8">'.$companyHtml);
+    libxml_clear_errors();
+    libxml_use_internal_errors($previous);
+    $xpath = new DOMXPath($document);
+
+    expect($xpath->query('//body[contains(@class,"tcc-verification-body")]')->length)->toBe($profile === 'tcc' ? 1 : 0)
+        ->and($xpath->query('//aside/img[contains(@class,"tcc-auth-background-logo")]')->length)->toBe($profile === 'tcc' ? 1 : 0)
+        ->and($xpath->query('//img[contains(@class,"verify-brand")]')->length)->toBe($profile === 'tcc' ? 0 : 1)
+        ->and($xpath->query('//div[contains(@class,"standalone-auth-page")]/header')->length)->toBe($profile === 'tcc' ? 0 : 1)
+        ->and($xpath->query('//input[@name="code"][@maxlength="6"][@autocomplete="one-time-code"]')->length)->toBe(1);
+
+    foreach (['2fa.verify.post', '2fa.resend'] as $route) {
+        expect($xpath->query('//form[@method="POST"][@action="'.route($route).'"]//input[@name="_token"]')->length)->toBe(1);
+    }
 
     expect($companyHtml)
         ->toContain('data-brand="'.$profile.'"')

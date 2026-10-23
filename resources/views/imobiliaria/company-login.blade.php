@@ -1,21 +1,25 @@
 @extends('layout-inicial.app')
 
 @section('body-class', config('branding.active', 'tcc') === 'tcc' ? 'tcc-company-auth-body' : '')
-@section('main-class', config('branding.active', 'tcc') === 'tcc' ? 'tcc-company-auth-main' : '')
+@section('main-class', config('branding.active', 'tcc') === 'tcc' ? 'tcc-company-auth-main tcc-company-auth-main--standalone' : '')
+@section('hide-header', config('branding.active', 'tcc') === 'tcc' ? 'true' : 'false')
 
 @section('content')
 <div class="client-auth-page tcc-company-auth">
     <section class="client-auth-shell">
-        <aside class="client-auth-aside">
-            <img src="{{ asset('imgs/segure-chave-a-mao-ao-ar-livre.jpg') }}" alt="Acesso da imobiliária">
-            <x-brand-logo class="auth-media-logo" />
+        <aside @class(['client-auth-aside', 'tcc-auth-logo-aside' => config('branding.active', 'tcc') === 'tcc'])>
+            @if (config('branding.active', 'tcc') === 'tcc')
+                <img src="{{ asset('imgs/Logo_NVS.png') }}" class="tcc-auth-background-logo" alt="" aria-hidden="true">
+            @else
+                <img src="{{ asset('imgs/segure-chave-a-mao-ao-ar-livre.jpg') }}" alt="Acesso da imobiliária">
+                <x-brand-logo class="auth-media-logo" />
+            @endif
 
             <div class="client-auth-overlay">
-                <span class="client-badge">Portal da imobiliária</span>
+                <span class="client-badge">{{ \App\Support\BrandingText::choose('Portal da imobiliária', 'Portal da empresa') }}</span>
                 <h2>Acesse sua área CRM</h2>
                 <p>
-                    Entre com suas credenciais para acompanhar solicitações,
-                    consultar resultados e seguir com sua operação de locação.
+                    {{ \App\Support\BrandingText::choose('Entre com suas credenciais para acompanhar solicitações, consultar resultados e seguir com sua operação de locação.', 'Entre com suas credenciais para acompanhar os beneficiários e organizar o relacionamento da sua empresa no CRM.') }}
                 </p>
 
                 <div class="client-auth-points">
@@ -24,14 +28,14 @@
                     <span>Fluxo seguro para sua equipe</span>
                 </div>
 
-                <p class="tcc-company-auth-aside-note">&copy; {{ now()->year }} NVS Seguros. Ambiente seguro e monitorado.</p>
+                <p class="tcc-company-auth-aside-note">&copy; {{ now()->year }} {{ \App\Support\BrandingText::choose('NVS Seguros', 'NVS') }}. Ambiente seguro e monitorado.</p>
             </div>
         </aside>
 
         <div class="client-auth-card">
             <header class="client-auth-header">
                 <span class="client-auth-kicker">Acesso ao portal</span>
-                <h1>Login da imobiliária</h1>
+                <h1>{{ \App\Support\BrandingText::choose('Login da imobiliária', 'Login da empresa') }}</h1>
                 <p>Informe o e-mail e a senha cadastrados para continuar.</p>
             </header>
 
@@ -108,7 +112,7 @@
 
                 <div class="client-actions">
                     <button type="submit" class="client-submit">Entrar</button>
-                    <a href="{{ route('empresa.register.form') }}" class="client-outline-link">Cadastrar imobiliária</a>
+                    <a href="{{ route('empresa.register.form') }}" class="client-outline-link">{{ \App\Support\BrandingText::choose('Cadastrar imobiliária', 'Cadastrar empresa') }}</a>
                 </div>
             </form>
         </div>

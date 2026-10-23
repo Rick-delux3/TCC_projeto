@@ -1,23 +1,31 @@
 @extends('layout-inicial.app')
 
-@section('content')
-<div class="admin-register-page">
-    <section class="admin-register-shell">
-        <aside class="admin-register-aside">
-            <img
-                src="{{ asset('imgs/divulgar-imoveis-online-site-para-imobiliaria.jpg') }}"
-                alt="Cadastro inicial do CEO"
-            >
+@section('body-class', config('branding.active', 'tcc') === 'tcc' ? 'tcc-company-auth-body' : '')
+@section('main-class', config('branding.active', 'tcc') === 'tcc' ? 'tcc-company-auth-main tcc-company-auth-main--standalone' : '')
+@section('hide-header', config('branding.active', 'tcc') === 'tcc' ? 'true' : 'false')
 
-            <x-brand-logo class="auth-media-logo" />
+@section('content')
+<div class="admin-register-page {{ config('branding.active', 'tcc') === 'tcc' ? 'tcc-company-auth' : '' }}">
+    <section class="admin-register-shell">
+        <aside @class(['admin-register-aside', 'tcc-auth-logo-aside' => config('branding.active', 'tcc') === 'tcc'])>
+            @if (config('branding.active', 'tcc') === 'tcc')
+                <img src="{{ asset('imgs/Logo_NVS.png') }}" class="tcc-auth-background-logo" alt="" aria-hidden="true">
+            @else
+                <img
+                    src="{{ asset('imgs/divulgar-imoveis-online-site-para-imobiliaria.jpg') }}"
+                    alt="Cadastro inicial do CEO"
+                >
+
+                <x-brand-logo class="auth-media-logo" />
+            @endif
 
             <div class="admin-register-overlay">
                 <span class="admin-badge">Configuração inicial</span>
 
-                <h2>Cadastro único do CEO da corretora</h2>
+                <h2>{{ \App\Support\BrandingText::choose('Cadastro único do CEO da corretora', 'Cadastro único do CEO da concessionária') }}</h2>
 
                 <p>
-                    Este formulário cria o corretor principal da plataforma.
+                    {{ \App\Support\BrandingText::choose('Este formulário cria o corretor principal da plataforma.', 'Este formulário cria o acesso do CEO da concessionária responsável pela plataforma.') }}
                     Após a criação do CEO, esta tela será bloqueada automaticamente.
                 </p>
 
@@ -36,8 +44,7 @@
                 <h1>Cadastrar CEO</h1>
 
                 <p>
-                    Preencha os dados do corretor principal. Esse cadastro só pode
-                    ser realizado uma única vez.
+                    {{ \App\Support\BrandingText::choose('Preencha os dados do corretor principal. Esse cadastro só pode ser realizado uma única vez.', 'Preencha os dados do CEO da concessionária. Esse cadastro só pode ser realizado uma única vez.') }}
                 </p>
             </header>
 

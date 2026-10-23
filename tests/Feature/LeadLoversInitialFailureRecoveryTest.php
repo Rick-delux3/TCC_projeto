@@ -35,6 +35,92 @@ beforeEach(function () {
     ]);
 });
 
+it('presents confirmation recovery as a scheduled warning', function (string $mode, string $profile) {
+    $this->freezeTime();
+    config(['branding.active' => $profile]);
+    $lead = llifrLead(['leadlovers_status' => 'processing', 'leadlovers_lead_id' => 501]);
+    $lead->forceFill(['leadlovers_recovery' => [
+        'mode' => 'machine_confirmation',
+        'status' => 'scheduled',
+        'next_retry_at' => now()->addMinute()->toIso8601String(),
+    ]])->save();
+
+    $description = llifrDescribe($lead);
+    expect($description['failed'])->toBeFalse()
+        ->and($description['correctable'])->toBeFalse()
+        ->and($description['recovery']['label'])->toBe('Confirmação agendada')
+        ->and($description['message'])->toContain('Próxima tentativa prevista', 'sem repetir o cadastro');
+
+    $view = $this->view('partials.leadlovers-sync-status', [
+        'lead' => $lead->fresh(),
+        'leadLoversFailureMessageMode' => $mode,
+    ]);
+    $view->assertSee('Confirmação agendada')->assertSee('Próxima tentativa prevista')
+        ->assertDontSee('Falha na integração')->assertDontSee('alert-danger');
+    if ($mode === 'full') {
+        $view->assertSee('role="status"', false)->assertSee('alert-warning');
+    }
+})->with(['compact', 'full'])->with(['tcc', 'client']);
+
+it('distinguishes confirmation failures from actual configuration errors', function (?int $status, ?string $code, string $operation, string $fragment, string $profile) {
+    config(['branding.active' => $profile]);
+    $lead = llifrLead([
+        'leadlovers_lead_id' => 501,
+        'leadlovers_initial_error_status' => $status,
+        'leadlovers_initial_error_code' => $code,
+        'leadlovers_initial_error_operation' => $operation,
+        'leadlovers_response' => [],
+    ]);
+    $description = llifrDescribe($lead);
+    expect($description['message'])->toContain($fragment)
+        ->not->toContain('realizará novas tentativas automaticamente')
+        ->and($description['correctable'])->toBeFalse()
+        ->and($description['recovery'])->toBeNull();
+})->with([
+    [null, null, 'machine_confirmation', 'não foi confirmada a tempo'],
+    [401, 'UNAUTHORIZED', 'machine_confirmation', 'credenciais'],
+    [403, 'FORBIDDEN', 'machine_confirmation', 'permissões'],
+    [429, 'TOO_MANY_REQUESTS', 'machine_confirmation', 'ciclo de tentativas foi encerrado'],
+    [503, 'SERVICE_UNAVAILABLE', 'machine_confirmation', 'indisponibilidade interna'],
+    [400, 'INVALID_MACHINE', 'machine_request', 'recusou a operação de associação'],
+    [null, null, 'machine_configuration', 'não está configurada corretamente'],
+])->with(['tcc', 'client']);
+
+it('updates the client presentation when scheduled recovery closes', function () {
+    config(['branding.active' => 'client']);
+    $lead = llifrLead(['leadlovers_status' => 'processing']);
+    $lead->forceFill(['leadlovers_recovery' => [
+        'mode' => 'machine_confirmation',
+        'status' => 'scheduled',
+        'next_retry_at' => now()->addMinute()->toIso8601String(),
+    ]])->save();
+    expect(llifrDescribe($lead)['recovery']['label'])->toBe('Confirmação agendada');
+    $this->view('partials.leadlovers-sync-status', ['lead' => $lead->fresh()])
+        ->assertSee('Confirmação agendada')->assertDontSee('Falha na integração');
+    $lead->forceFill([
+        'leadlovers_status' => 'failed',
+        'leadlovers_initial_error_operation' => 'machine_confirmation',
+        'leadlovers_initial_error_status' => null,
+        'leadlovers_initial_error_code' => null,
+        'leadlovers_response' => [],
+    ])->save();
+    expect(llifrDescribe($lead)['message'])->toContain('não foi confirmada a tempo');
+});
+
+it('does not advertise an automatic retry for closed disabled or malformed recovery', function (string $status, string $date, bool $enabled) {
+    config(['branding.active' => 'tcc', 'services.leadlovers.enabled' => $enabled]);
+    $lead = llifrLead(['leadlovers_status' => 'processing']);
+    $lead->forceFill(['leadlovers_recovery' => [
+        'status' => $status,
+        'next_retry_at' => $date,
+    ]])->save();
+    expect(llifrDescribe($lead)['recovery'])->toBeNull();
+})->with([
+    ['failed', '2030-01-01T12:00:00Z', true],
+    ['scheduled', '2030-01-01T12:00:00Z', false],
+    ['scheduled', '<script>private payload</script>', true],
+]);
+
 function llifrCompany(array $overrides = []): Imobiliaria
 {
     static $sequence = 0;

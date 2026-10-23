@@ -283,7 +283,7 @@
             </div>
 
             <span class="auth-topbar__divider" aria-hidden="true"></span>
-            <span class="auth-topbar__product">Seguro fiança locatícia</span>
+            <span class="auth-topbar__product">{{ \App\Support\BrandingText::choose('Seguro fiança locatícia', 'CRM empresarial') }}</span>
 
             <nav class="auth-topbar__nav" aria-label="Opções de acesso">
                 <span class="auth-topbar__help">Precisa de ajuda?</span>

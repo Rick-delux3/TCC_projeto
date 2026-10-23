@@ -1,37 +1,41 @@
 @extends('layout-inicial.app')
 
 @section('body-class', config('branding.active', 'tcc') === 'tcc' ? 'tcc-company-auth-body' : '')
-@section('main-class', config('branding.active', 'tcc') === 'tcc' ? 'tcc-company-auth-main' : '')
+@section('main-class', config('branding.active', 'tcc') === 'tcc' ? 'tcc-company-auth-main tcc-company-auth-main--standalone' : '')
+@section('hide-header', config('branding.active', 'tcc') === 'tcc' ? 'true' : 'false')
 
 @section('content')
 <div class="client-register-page tcc-company-auth">
     <section class="client-register-shell">
-        <aside class="client-register-aside">
-            <img src="{{ asset('imgs/seguro-fianca-locaticia_fundo_login_cadastro.png') }}" alt="Cadastro de imobiliária">
-            <x-brand-logo class="auth-media-logo" />
+        <aside @class(['client-register-aside', 'tcc-auth-logo-aside' => config('branding.active', 'tcc') === 'tcc'])>
+            @if (config('branding.active', 'tcc') === 'tcc')
+                <img src="{{ asset('imgs/Logo_NVS.png') }}" class="tcc-auth-background-logo" alt="" aria-hidden="true">
+            @else
+                <img src="{{ asset('imgs/seguro-fianca-locaticia_fundo_login_cadastro.png') }}" alt="{{ \App\Support\BrandingText::choose('Cadastro de imobiliária', 'Cadastro de empresa') }}">
+                <x-brand-logo class="auth-media-logo" />
+            @endif
 
             <div class="client-register-overlay">
-                <span class="client-badge">Cadastro de imobiliária</span>
-                <h2>Crie o acesso da sua imobiliária</h2>
+                <span class="client-badge">{{ \App\Support\BrandingText::choose('Cadastro de imobiliária', 'Cadastro de empresa') }}</span>
+                <h2>{{ \App\Support\BrandingText::choose('Crie o acesso da sua imobiliária', 'Crie o acesso da sua empresa') }}</h2>
                 <p>
-                    Cadastre sua imobiliária para iniciar as análises de seguro
-                    com fluxo digital e acompanhamento centralizado.
+                    {{ \App\Support\BrandingText::choose('Cadastre sua imobiliária para iniciar as análises de seguro com fluxo digital e acompanhamento centralizado.', 'Cadastre sua empresa para gerenciar seus beneficiários, organizar contatos e acompanhar o relacionamento pelo CRM.') }}
                 </p>
 
                 <div class="client-register-points">
-                    <span>Onboarding rápido da imobiliária</span>
-                    <span>Painel para envio e consulta de análises</span>
-                    <span>Integração com a operação da corretora</span>
+                    <span>{{ \App\Support\BrandingText::choose('Onboarding rápido da imobiliária', 'Cadastro da empresa') }}</span>
+                    <span>{{ \App\Support\BrandingText::choose('Painel para envio e consulta de análises', 'Painel para acompanhamento de beneficiários') }}</span>
+                    <span>{{ \App\Support\BrandingText::choose('Integração com a operação da corretora', 'Integração com a operação da concessionária') }}</span>
                 </div>
 
-                <p class="tcc-company-auth-aside-note">&copy; {{ now()->year }} NVS Seguros. Ambiente seguro e monitorado.</p>
+                <p class="tcc-company-auth-aside-note">&copy; {{ now()->year }} {{ \App\Support\BrandingText::choose('NVS Seguros', 'NVS') }}. Ambiente seguro e monitorado.</p>
             </div>
         </aside>
 
         <div class="client-register-card">
             <header class="client-register-header">
                 <span class="client-register-kicker">Novo acesso</span>
-                <h1>Cadastro da imobiliária</h1>
+                <h1>{{ \App\Support\BrandingText::choose('Cadastro da imobiliária', 'Cadastro da empresa') }}</h1>
                 <p>Preencha os dados abaixo para liberar o acesso ao painel.</p>
             </header>
 
@@ -55,7 +59,7 @@
                         for="{{ $tagsOficiais->isNotEmpty() ? 'leadlovers_tag_id' : 'company_name' }}"
                         class="client-label"
                     >
-                        Nome da imobiliária
+                        {{ \App\Support\BrandingText::choose('Nome da imobiliária', 'Nome da empresa') }}
                     </label>
 
                     @if($tagsOficiais->isNotEmpty())
@@ -73,7 +77,7 @@
                                 required
                             >
                                 <option value="" disabled @selected(! old('leadlovers_tag_id'))>
-                                    Selecione sua imobiliária...
+                                    {{ \App\Support\BrandingText::choose('Selecione sua imobiliária...', 'Selecione sua empresa...') }}
                                 </option>
 
                                 @foreach($tagsOficiais as $tagNome)
@@ -106,7 +110,7 @@
                                 class="client-input client-input--with-icon @error('company_name') is-invalid @enderror"
                                 value="{{ old('company_name') }}"
                                 maxlength="255"
-                                placeholder="Digite o nome da imobiliária"
+                                placeholder="{{ \App\Support\BrandingText::choose('Digite o nome da imobiliária', 'Digite o nome da empresa') }}"
                                 autocomplete="organization"
                                 @error('company_name') aria-describedby="company-name-error" @enderror
                                 required
@@ -120,7 +124,7 @@
                 </div>
 
                 <div class="client-field">
-                    <label for="cnpj" class="client-label">CNPJ da imobiliária</label>
+                    <label for="cnpj" class="client-label">{{ \App\Support\BrandingText::choose('CNPJ da imobiliária', 'CNPJ da empresa') }}</label>
                     <div class="client-input-wrap">
                         <span class="client-input-icon" aria-hidden="true">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
@@ -375,7 +379,7 @@
                 </div>
 
                 <div class="client-actions">
-                    <button type="submit" class="client-submit">Cadastrar imobiliária</button>
+                    <button type="submit" class="client-submit">{{ \App\Support\BrandingText::choose('Cadastrar imobiliária', 'Cadastrar empresa') }}</button>
                     <a href="{{ route('empresa.login') }}" class="client-outline-link">Entrar</a>
                 </div>
             </form>

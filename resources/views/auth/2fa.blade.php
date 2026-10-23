@@ -289,14 +289,23 @@
             }
         }
     </style>
+    @if (config('branding.active', 'tcc') === 'tcc')
+        @vite('resources/css/tcc-company-auth.css')
+    @endif
 </head>
-<body data-brand="{{ config('branding.active', 'tcc') }}">
+<body @class(['tcc-verification-body' => config('branding.active', 'tcc') === 'tcc']) data-brand="{{ config('branding.active', 'tcc') }}">
     <div class="standalone-auth-page">
-        @include('auth.partials.auth-topbar')
+        @unless (config('branding.active', 'tcc') === 'tcc')
+            @include('auth.partials.auth-topbar')
+        @endunless
         <main class="standalone-auth-main">
             <section class="verify-shell">
-                <aside class="verify-aside">
+                <aside @class(['verify-aside', 'tcc-auth-logo-aside' => config('branding.active', 'tcc') === 'tcc'])>
+                    @if (config('branding.active', 'tcc') === 'tcc')
+                        <img src="{{ asset('imgs/Logo_NVS.png') }}" class="tcc-auth-background-logo" alt="" aria-hidden="true">
+                    @else
                     <img src="{{ asset('imgs/trans_bg.png') }}" alt="Seguranca de acesso">
+                    @endif
                     <div class="verify-overlay">
                         <span class="verify-badge">Etapa de Seguranca</span>
                         <h2>Confirme sua identidade para continuar no portal.</h2>
@@ -308,7 +317,9 @@
                 </aside>
 
                 <div class="verify-card">
-                    <x-brand-logo class="verify-brand" />
+                    @unless (config('branding.active', 'tcc') === 'tcc')
+                        <x-brand-logo class="verify-brand" />
+                    @endunless
 
                     <header class="verify-header">
                         <h1>Codigo de verificacao</h1>

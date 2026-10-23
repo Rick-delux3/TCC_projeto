@@ -86,7 +86,52 @@ function updateLeadDashboardLead(array $overrides = []): Lead
     ], $overrides));
 }
 
-it('renders the company link action for each lead according to its current company and permission', function (bool $allowed) {
+it('adapts the company workspace only for tcc while preserving company boundaries and actions', function (string $brand): void {
+    config(['branding.active' => $brand]);
+    $company = updateLeadDashboardCompany(['lead_access_code' => 'NVS789']);
+    $lead = updateLeadDashboardLead(['company_id' => $company->id, 'tags_originais' => 'Aprovado']);
+    $foreign = updateLeadDashboardLead(['company_id' => updateLeadDashboardCompany()->id]);
+    $response = $this->actingAs(updateLeadDashboardCompanyUser($company))
+        ->withSession(['2fa_passed' => true])
+        ->get(route('company.dashboard'))->assertOk();
+    $xpath = updateLeadDashboardDom($response->getContent())['xpath'];
+
+    expect($xpath->query('//body[contains(@class,"company-workspace")]')->length)->toBe($brand === 'tcc' ? 1 : 0)
+        ->and($xpath->query('//header//button[@data-dashboard-theme-toggle]')->length)->toBe($brand === 'tcc' ? 1 : 0)
+        ->and($xpath->query('//header//nav[@aria-label="Seções do painel"]')->length)->toBe(1)
+        ->and($xpath->query('//*[@id="dashboardLeadAccessCode" and @value="NVS789"]')->length)->toBe(1)
+        ->and($xpath->query('//label[@for="dashboardLeadAccessCode"]')->length)->toBe(1)
+        ->and($xpath->query('//label[@for="dashboardLeadFormLink"]')->length)->toBe(1)
+        ->and($xpath->query('//*[@id="dashboardLeadFormCopyStatus" and @role="status"]')->length)->toBe(1)
+        ->and($xpath->query('//article[@aria-labelledby="company-lead-name-'.$lead->id.'"]//h3[@id="company-lead-name-'.$lead->id.'"]')->length)->toBe(1)
+        ->and($xpath->query('//*[contains(@class,"company-dashboard-content")]/*[contains(@class,"company-metrics")]/*')->length)->toBe(4)
+        ->and($xpath->query('//select[@name="tag"]')->length)->toBe(1)
+        ->and($xpath->query('//select[@name="imobiliaria"] | //*[@data-lead-company-trigger]')->length)->toBe(0)
+        ->and($xpath->query('//article[contains(@class,"lead-list-item")]')->length)->toBe(1)
+        ->and($xpath->query('//article//a[@href="'.route('insurance-analyses.lead', $lead).'"]')->length)->toBe(1)
+        ->and($xpath->query('//form[@action="'.route('dashboard.leads.update', $lead).'"]//input[@name="_token"]')->length)->toBe(1);
+    $response->assertSee($lead->email)->assertDontSee($foreign->email);
+})->with(['tcc', 'client']);
+
+it('keeps the company workspace useful without leads or tags', function (): void {
+    config(['branding.active' => 'tcc']);
+    $company = updateLeadDashboardCompany(['lead_access_code' => 'NVS789']);
+
+    $response = $this->actingAs(updateLeadDashboardCompanyUser($company))
+        ->withSession(['2fa_passed' => true])
+        ->get(route('company.dashboard'))->assertOk();
+    $xpath = updateLeadDashboardDom($response->getContent())['xpath'];
+
+    expect($xpath->query('//article[contains(@class,"lead-list-item")]')->length)->toBe(0)
+        ->and($xpath->query('//*[contains(@class,"company-tags-empty")]')->length)->toBe(1)
+        ->and($xpath->query('//*[@id="dashboardLeadAccessCode" and @value="NVS789"]')->length)->toBe(1)
+        ->and($xpath->query('//button[@id="dashboardLeadAccessCodeCopyButton" and not(@disabled)]')->length)->toBe(1);
+    $response->assertSee('Nenhum lead encontrado.')
+        ->assertSee('Sem leads cadastrados');
+});
+
+it('renders the company link action for each lead according to its current company and permission', function (bool $allowed, string $brand) {
+    config(['branding.active' => $brand]);
     $permissions = [CorretorPermissions::VIEW_LEADS, CorretorPermissions::VIEW_REAL_ESTATE_COMPANIES];
     if ($allowed) {
         $permissions[] = CorretorPermissions::LINK_LEAD_COMPANY;
@@ -99,19 +144,29 @@ it('renders the company link action for each lead according to its current compa
     $dom = updateLeadDashboardDom($response->getContent());
 
     foreach ([$linked, $unlinked] as $lead) {
+        $card = $dom['xpath']->query('//article[@aria-labelledby="admin-lead-name-'.$lead->id.'"]')->item(0);
+        expect($card)->not->toBeNull()
+            ->and(str_contains($card->getAttribute('class'), 'lead-list-item--compact'))->toBe($brand === 'tcc')
+            ->and($card->textContent)->toContain($lead->nome, $lead->email, $lead->tel, 'LeadLovers:')
+            ->and($dom['xpath']->query('.//a[@href="mailto:'.$lead->email.'"]', $card)->length)->toBe(1)
+            ->and($dom['xpath']->query('.//button[@data-bs-target="#adminLeadModal'.$lead->id.'"]', $card)->length)->toBe(1);
+
         $buttons = $dom['xpath']->query('//*[@data-lead-company-trigger and @data-lead-id="'.$lead->id.'"]');
         expect($buttons->length)->toBe($allowed ? 1 : 0);
 
         if ($allowed) {
             $button = $buttons->item(0);
-            expect(trim($button->textContent))->toBe($lead->company_id ? 'Substituir imobiliária' : 'Vincular imobiliária')
+            $expectedLabel = $brand === 'tcc'
+                ? ($lead->company_id ? 'Substituir empresa' : 'Vincular empresa')
+                : ($lead->company_id ? 'Substituir imobiliária' : 'Vincular imobiliária');
+            expect(trim($button->textContent))->toBe($expectedLabel)
                 ->and($button->getAttribute('data-current-company-id'))->toBe((string) $lead->company_id)
                 ->and($button->getAttribute('class'))->toBe('btn admin-lead-link-button')
                 ->and($button->getAttribute('data-bs-target'))->toBe('#adminLeadCompanyModal')
                 ->and($button->getAttribute('data-link-url'))->toBe(route('admin.leads.company.store', $lead));
         }
     }
-})->with([true, false]);
+})->with([true, false])->with(['tcc', 'client']);
 
 function updateLeadDashboardFailedLead(
     string $errorCode,
@@ -356,7 +411,7 @@ it('renders the recovered requester profile and company details used by the filt
     $dom = updateLeadDashboardDom($response->getContent());
     $card = $dom['xpath']->query('//article[contains(@class,"lead-list-item")]')->item(0);
 
-    expect($card?->textContent)->toContain('Imobiliária não cadastrada', 'Imobiliária informada no cadastro')
+    expect($card?->textContent)->toContain('Empresa não cadastrada', 'Imobiliária informada no cadastro')
         ->not->toContain('Perfil não informado');
 });
 
@@ -368,7 +423,7 @@ it('keeps a missing company filter visible instead of displaying all companies',
 
     expect($selected?->getAttribute('value'))->toBe('999999')
         ->and($selected?->textContent)->toContain('indisponível')
-        ->and($response->getContent())->toContain('Vínculo: Imobiliária #999999');
+        ->and($response->getContent())->toContain('Vínculo: Empresa #999999');
 });
 
 it('shows filter validation errors inside the filter instead of lead edit feedback', function (): void {

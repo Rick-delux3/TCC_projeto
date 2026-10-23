@@ -151,7 +151,7 @@ class StoreCompanyRequest extends FormRequest
 
                 function (string $attribute, mixed $value, \Closure $fail) use ($companyTags): void {
                     if (! $companyTags->isAvailable((int) $value)) {
-                        $fail('A imobiliária selecionada não está mais disponível.');
+                        $fail(\App\Support\BrandingText::choose('A imobiliária selecionada não está mais disponível.', 'A empresa selecionada não está mais disponível.'));
                     }
                 },
             ];
@@ -200,37 +200,37 @@ class StoreCompanyRequest extends FormRequest
             ...$this->departmentMessages(),
             'website.size' => 'Requisição inválida.',
 
-            'leadlovers_tag_id.required' => 'Informe o nome da imobiliária.',
-            'leadlovers_tag_id.integer' => 'A imobiliária selecionada é inválida.',
-            'leadlovers_tag_id.exists' => 'A imobiliária selecionada não foi encontrada ou não está disponível.',
-            'leadlovers_tag_id.unique' => 'Esta imobiliária já possui cadastro no sistema.',
+            'leadlovers_tag_id.required' => \App\Support\BrandingText::choose('Informe o nome da imobiliária.', 'Informe o nome da empresa.'),
+            'leadlovers_tag_id.integer' => \App\Support\BrandingText::choose('A imobiliária selecionada é inválida.', 'A empresa selecionada é inválida.'),
+            'leadlovers_tag_id.exists' => \App\Support\BrandingText::choose('A imobiliária selecionada não foi encontrada ou não está disponível.', 'A empresa selecionada não foi encontrada ou não está disponível.'),
+            'leadlovers_tag_id.unique' => \App\Support\BrandingText::choose('Esta imobiliária já possui cadastro no sistema.', 'Esta empresa já possui cadastro no sistema.'),
             'leadlovers_tag_id.prohibited' => 'Não é possível utilizar uma tag neste momento. Atualize a página.',
 
-            'company_name.required' => 'Informe o nome da imobiliária.',
+            'company_name.required' => \App\Support\BrandingText::choose('Informe o nome da imobiliária.', 'Informe o nome da empresa.'),
 
-            'company_name.prohibited' => 'Ainda existem imobiliárias disponíveis no campo de seleção.',
+            'company_name.prohibited' => \App\Support\BrandingText::choose('Ainda existem imobiliárias disponíveis no campo de seleção.', 'Ainda existem empresas disponíveis no campo de seleção.'),
 
-            'company_name.string' => 'O nome da imobiliária é inválido.',
+            'company_name.string' => \App\Support\BrandingText::choose('O nome da imobiliária é inválido.', 'O nome da empresa é inválido.'),
 
-            'company_name.max' => 'O nome da imobiliária deve ter no máximo 100 caracteres.',
+            'company_name.max' => \App\Support\BrandingText::choose('O nome da imobiliária deve ter no máximo 100 caracteres.', 'O nome da empresa deve ter no máximo 100 caracteres.'),
 
-            'company_name.unique' => 'Já existe uma imobiliária ou tag cadastrada com esse nome.',
+            'company_name.unique' => \App\Support\BrandingText::choose('Já existe uma imobiliária ou tag cadastrada com esse nome.', 'Já existe uma empresa ou tag cadastrada com esse nome.'),
 
-            'email.required' => 'Informe o e-mail da imobiliária.',
+            'email.required' => \App\Support\BrandingText::choose('Informe o e-mail da imobiliária.', 'Informe o e-mail da empresa.'),
             'email.email' => 'Informe um e-mail válido.',
-            'email.unique' => 'Já existe uma imobiliária cadastrada com esse e-mail.',
+            'email.unique' => \App\Support\BrandingText::choose('Já existe uma imobiliária cadastrada com esse e-mail.', 'Já existe uma empresa cadastrada com esse e-mail.'),
 
-            'phone.required' => 'Informe o telefone da imobiliária.',
+            'phone.required' => \App\Support\BrandingText::choose('Informe o telefone da imobiliária.', 'Informe o telefone da empresa.'),
             'phone.min' => 'O telefone deve ter pelo menos 10 dígitos.',
             'phone.max' => 'O telefone deve ter no máximo 11 dígitos.',
             'phone.regex' => 'O telefone deve conter apenas números.',
-            'phone.unique' => 'Já existe uma imobiliária cadastrada com esse telefone.',
+            'phone.unique' => \App\Support\BrandingText::choose('Já existe uma imobiliária cadastrada com esse telefone.', 'Já existe uma empresa cadastrada com esse telefone.'),
 
-            'cnpj.required' => 'Informe o CPF ou CNPJ da imobiliária.',
+            'cnpj.required' => \App\Support\BrandingText::choose('Informe o CPF ou CNPJ da imobiliária.', 'Informe o CPF ou CNPJ da empresa.'),
             'cnpj.string' => 'Informe um CPF ou CNPJ válido.',
-            'cnpj.unique' => 'Já existe uma imobiliária cadastrada com esse CPF ou CNPJ.',
+            'cnpj.unique' => \App\Support\BrandingText::choose('Já existe uma imobiliária cadastrada com esse CPF ou CNPJ.', 'Já existe uma empresa cadastrada com esse CPF ou CNPJ.'),
 
-            'cep.required' => 'Informe o CEP da imobiliária.',
+            'cep.required' => \App\Support\BrandingText::choose('Informe o CEP da imobiliária.', 'Informe o CEP da empresa.'),
             'cep.string' => 'O CEP deve ser um texto válido.',
             'cep.size' => 'O CEP deve conter exatamente 8 dígitos.',
             'cep.regex' => 'Informe um CEP válido, contendo apenas números.',

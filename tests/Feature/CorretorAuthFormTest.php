@@ -9,6 +9,74 @@ beforeEach(function () {
     ]);
 });
 
+it('offers member login from the CEO form only for tcc', function (string $profile) {
+    config(['branding.active' => $profile]);
+
+    $response = $this->get(route('admin.ceo.login'))->assertOk();
+    $document = new DOMDocument;
+    @$document->loadHTML('<?xml encoding="UTF-8">'.$response->getContent());
+    $xpath = new DOMXPath($document);
+    $links = $xpath->query('//form//a[contains(@class, "admin-outline-link")]');
+
+    expect($links->length)->toBe($profile === 'tcc' ? 1 : 0);
+
+    if ($profile === 'tcc') {
+        expect($links->item(0)->getAttribute('href'))->toBe(route('admin.login'))
+            ->and(trim($links->item(0)->textContent))->toBe('Entrar como integrante');
+
+        $response->assertSee('tcc-ceo-login', false);
+        $this->get($links->item(0)->getAttribute('href'))
+            ->assertOk()
+            ->assertViewIs('corretor.admin-member-login');
+    } else {
+        $response->assertDontSee('tcc-ceo-login', false);
+    }
+})->with(['tcc', 'client']);
+
+it('uses the standalone company layout only for tcc broker access forms', function (string $profile, string $routeName, string $formAction) {
+    config(['branding.active' => $profile]);
+
+    if ($routeName === 'admin.ceo.register.form') {
+        $this->post(route('admin.ceo.register.authorize'), ['key' => 'test-secret'])
+            ->assertRedirect(route($routeName));
+    }
+
+    $response = $this->get(route($routeName))->assertOk();
+    $document = new DOMDocument;
+    @$document->loadHTML('<?xml encoding="UTF-8">'.$response->getContent());
+    $xpath = new DOMXPath($document);
+    $isTcc = $profile === 'tcc';
+
+    $logos = $xpath->query('//aside[contains(@class, "tcc-auth-logo-aside")]/img[contains(@class, "tcc-auth-background-logo")]');
+    $originalImage = $routeName === 'admin.login'
+        ? 'imgs/segure-chave-a-mao-ao-ar-livre.jpg'
+        : 'imgs/divulgar-imoveis-online-site-para-imobiliaria.jpg';
+
+    expect($logos->length)->toBe($isTcc ? 1 : 0);
+
+    if ($isTcc) {
+        expect($logos->item(0)->getAttribute('src'))->toBe(asset('imgs/Logo_NVS.png'))
+            ->and($logos->item(0)->getAttribute('alt'))->toBe('')
+            ->and($logos->item(0)->getAttribute('aria-hidden'))->toBe('true');
+        $response->assertDontSee($originalImage, false);
+    } else {
+        $response->assertSee($originalImage, false);
+    }
+
+    expect($xpath->query('//header[contains(@class, "auth-topbar")]')->length)->toBe($isTcc ? 0 : 1)
+        ->and($xpath->query('//main[contains(@class, "tcc-company-auth-main--standalone")]')->length)->toBe($isTcc ? 1 : 0)
+        ->and($xpath->query('//main/div[contains(@class, "tcc-company-auth")]')->length)->toBe($isTcc ? 1 : 0)
+        ->and($xpath->query('//main//h1')->length)->toBe(1);
+
+    $response->assertSee('action="'.route($formAction).'"', false)
+        ->assertSee('name="_token"', false);
+})->with(['tcc', 'client'])->with([
+    ['admin.login', 'admin.member.login.post'],
+    ['admin.ceo.login', 'admin.ceo.login.post'],
+    ['admin.ceo.register.access', 'admin.ceo.register.authorize'],
+    ['admin.ceo.register.form', 'admin.ceo.register.post'],
+]);
+
 it('renders contextual icons and accessible password controls on the CEO registration form', function () {
     $this
         ->withServerVariables(['REMOTE_ADDR' => '10.0.0.11'])

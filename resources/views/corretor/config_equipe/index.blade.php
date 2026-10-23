@@ -166,7 +166,7 @@
                 </h1>
 
                 <p class="text-muted mb-0">
-                    Visualize o CEO e os integrantes da corretora. O CEO não pode ser editado nesta área.
+                    {{ \App\Support\BrandingText::choose('Visualize o CEO e os integrantes da corretora. O CEO não pode ser editado nesta área.', 'Visualize o CEO e os integrantes da concessionária. O CEO não pode ser editado nesta área.') }}
                 </p>
             </div>
 
@@ -406,7 +406,7 @@
                                                 </div>
 
                                                 <div class="small text-muted">
-                                                    {{ $isCorretorCeo ? 'Dono da corretora' : 'Integrante da equipe' }}
+                                                    {{ $isCorretorCeo ? \App\Support\BrandingText::choose('Dono da corretora', 'CEO da concessionária') : 'Integrante da equipe' }}
                                                 </div>
                                             </div>
                                         </div>

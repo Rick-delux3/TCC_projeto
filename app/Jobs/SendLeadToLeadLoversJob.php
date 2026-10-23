@@ -51,6 +51,8 @@ class SendLeadToLeadLoversJob implements ShouldQueue
 
     protected bool $recoveringOutage = false;
 
+    protected bool $confirmingMachine = false;
+
     public function __construct(
         public int $leadId
     ) {
@@ -789,6 +791,7 @@ class SendLeadToLeadLoversJob implements ShouldQueue
             $lead->forceFill([
                 'leadlovers_status' => 'sent',
                 'leadlovers_response' => $summary,
+                'leadlovers_recovery' => $this->closedRecovery($lead, 'completed'),
                 'sent_to_leadlovers_at' => now(),
 
                 'leadlovers_initial_error_status' => null,
@@ -1142,6 +1145,13 @@ class SendLeadToLeadLoversJob implements ShouldQueue
         array $diagnosticContext = [],
         bool $preservePreviousInitialFailure = false,
     ): void {
+        if ($operation === 'machine_confirmation'
+            && ($exception === null || ($exception->isTransient && ! $exception->isConfigurationError))) {
+            $this->scheduleMachineConfirmation($operation, $exception);
+
+            return;
+        }
+
         if (in_array($exception?->statusCode, LeadLoversApiException::RECOVERABLE_SERVER_STATUSES, true) && ! $exception->isConfigurationError) {
             DB::transaction(function () use ($exception, $operation): void {
                 $lead = Lead::query()->whereKey($this->leadId)
@@ -1151,7 +1161,10 @@ class SendLeadToLeadLoversJob implements ShouldQueue
                     return;
                 }
 
+                $delay = max(600, $exception->retryAfterSeconds ?? 0);
+
                 $lead->forceFill([
+                    'leadlovers_recovery' => $this->scheduledRecovery($lead, $operation, $exception, $delay),
                     'leadlovers_initial_error_status' => $exception->statusCode,
                     'leadlovers_initial_error_code' => $exception->errorCode,
                     'leadlovers_initial_error_operation' => $operation,
@@ -1161,7 +1174,7 @@ class SendLeadToLeadLoversJob implements ShouldQueue
                 RetryLeadLoversOutageJob::dispatch($this->leadId)
                     ->onConnection($this->connection)
                     ->onQueue($this->queue ?? 'leadlovers')
-                    ->delay(now()->addSeconds(max(600, $exception->retryAfterSeconds ?? 0)))
+                    ->delay(now()->addSeconds($delay))
                     ->afterCommit();
 
                 $this->notifyDashboard($lead, 'lead.sync.pending');
@@ -1184,6 +1197,17 @@ class SendLeadToLeadLoversJob implements ShouldQueue
         $delay = $exception?->retryAfterSeconds
             ?? $this->confirmationDelay();
 
+        DB::transaction(function () use ($operation, $exception, $delay): void {
+            $lead = Lead::query()->whereKey($this->leadId)
+                ->where('leadlovers_status', 'processing')->lockForUpdate()->first();
+
+            if ($lead !== null) {
+                $lead->forceFill([
+                    'leadlovers_recovery' => $this->scheduledRecovery($lead, $operation, $exception, $delay),
+                ])->save();
+            }
+        });
+
         Log::notice('Envio inicial devolvido a fila para conciliacao.',
             array_merge(
                 $diagnosticContext,
@@ -1199,6 +1223,72 @@ class SendLeadToLeadLoversJob implements ShouldQueue
         );
 
         $this->release($delay);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function scheduledRecovery(Lead $lead, string $operation, ?LeadLoversApiException $exception, int $delay): array
+    {
+        $previous = $lead->leadlovers_recovery ?? [];
+
+        return array_merge($previous, [
+            'status' => 'scheduled',
+            'retries_scheduled' => (int) ($previous['retries_scheduled'] ?? 0) + 1,
+            'started_at' => $previous['started_at'] ?? now()->toIso8601String(),
+            'last_attempt_at' => now()->toIso8601String(),
+            'next_retry_at' => now()->addSeconds($delay)->toIso8601String(),
+            'operation' => $operation,
+            'reason' => $exception === null ? 'confirmation_pending' : 'transient_error',
+            'http_status' => $exception?->statusCode,
+            'error_code' => $exception?->errorCode,
+            'finished_at' => null,
+        ]);
+    }
+
+    private function scheduleMachineConfirmation(string $operation, ?LeadLoversApiException $exception): void
+    {
+        DB::transaction(function () use ($operation, $exception): void {
+            $lead = Lead::query()->whereKey($this->leadId)
+                ->where('leadlovers_status', 'processing')->lockForUpdate()->first();
+
+            if ($lead === null || (int) $lead->leadlovers_lead_id <= 0) {
+                return;
+            }
+
+            $attempt = (int) data_get($lead->leadlovers_recovery, 'confirmation_retries', 0) + 1;
+            $delay = max(60, $exception?->retryAfterSeconds ?? 0);
+            $recovery = array_merge($this->scheduledRecovery($lead, $operation, $exception, $delay), [
+                'mode' => 'machine_confirmation',
+                'confirmation_retries' => $attempt,
+            ]);
+
+            $lead->forceFill(['leadlovers_recovery' => $recovery])->save();
+
+            ConfirmLeadLoversMachineJob::dispatch($this->leadId)
+                ->onConnection($this->connection)
+                ->onQueue($this->queue ?? 'leadlovers')
+                ->delay(now()->addSeconds($delay))
+                ->afterCommit();
+
+            $this->notifyDashboard($lead, 'lead.sync.pending');
+        });
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    private function closedRecovery(Lead $lead, string $status): ?array
+    {
+        if ($lead->leadlovers_recovery === null) {
+            return null;
+        }
+
+        return array_merge($lead->leadlovers_recovery, [
+            'status' => $status,
+            'next_retry_at' => null,
+            'finished_at' => now()->toIso8601String(),
+        ]);
     }
 
     private function permanentlyFail(
@@ -1278,6 +1368,32 @@ class SendLeadToLeadLoversJob implements ShouldQueue
 
     private function claimInitialSend(): bool
     {
+        if ($this->confirmingMachine) {
+            return DB::transaction(function (): bool {
+                $lead = Lead::query()->whereKey($this->leadId)->lockForUpdate()->first();
+                $recovery = $lead?->leadlovers_recovery;
+                $resumingAttempt = ($recovery['status'] ?? null) === 'processing'
+                    && $this->attempts() > 1;
+
+                if ($lead?->leadlovers_status !== 'processing'
+                    || (int) $lead->leadlovers_lead_id <= 0
+                    || ($recovery['mode'] ?? null) !== 'machine_confirmation'
+                    || (! $resumingAttempt && (($recovery['status'] ?? null) !== 'scheduled'
+                        || empty($recovery['next_retry_at'])
+                        || now()->lt(\Illuminate\Support\Carbon::parse($recovery['next_retry_at']))))) {
+                    return false;
+                }
+
+                $lead->forceFill(['leadlovers_recovery' => array_merge($recovery, [
+                    'status' => 'processing',
+                    'last_attempt_at' => now()->toIso8601String(),
+                    'next_retry_at' => null,
+                ])])->save();
+
+                return true;
+            });
+        }
+
         $allowedStatuses = $this->attempts() > 1
             ? ['pending', 'processing']
             : ['pending', 'tag_failed', 'sequence_failed', 'disabled'];
@@ -1288,6 +1404,11 @@ class SendLeadToLeadLoversJob implements ShouldQueue
 
         return Lead::query()
             ->whereKey($this->leadId)
+            ->where(function ($query): void {
+                $query->whereNull('leadlovers_recovery->mode')
+                    ->orWhere('leadlovers_recovery->mode', '!=', 'machine_confirmation')
+                    ->orWhereNotIn('leadlovers_recovery->status', ['scheduled', 'processing']);
+            })
             ->when($this->recoveringOutage, fn ($query) => $query->whereIn('leadlovers_initial_error_status', LeadLoversApiException::RECOVERABLE_SERVER_STATUSES))
             ->when(! $this->recoveringOutage, fn ($query) => $query->where(function ($query): void {
                 $query->whereNull('leadlovers_initial_error_status')->orWhereNotIn('leadlovers_initial_error_status', LeadLoversApiException::RECOVERABLE_SERVER_STATUSES);
@@ -1314,6 +1435,7 @@ class SendLeadToLeadLoversJob implements ShouldQueue
             $wasProcessing = $lead->leadlovers_status === 'processing';
             $attributes = [
                 'leadlovers_status' => $wasProcessing ? 'failed' : 'disabled',
+                'leadlovers_recovery' => $this->closedRecovery($lead, 'disabled'),
             ];
 
             if ($wasProcessing) {
@@ -1442,6 +1564,7 @@ class SendLeadToLeadLoversJob implements ShouldQueue
             $attributes = [
                 'leadlovers_status' => $status,
                 'leadlovers_response' => $response,
+                'leadlovers_recovery' => $this->closedRecovery($lead, 'failed'),
                 'leadlovers_initial_error_status' => $errorStatus,
                 'leadlovers_initial_error_code' => $errorCode,
                 'leadlovers_initial_error_operation' => $operation,

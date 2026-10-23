@@ -40,7 +40,7 @@ it('renders the recovery email with the existing brand layout and dedicated copy
         ->not->toContain('Cadastro<br>Concluído!')
         ->not->toContain('<script>');
 })->with([
-    ['tcc', 'NVS Seguros', 'imgs/Logo_NVS.png'],
+    ['tcc', 'NVS', 'imgs/Logo_NVS.png'],
     ['client', 'Aki Aluga', 'imgs/logo-akialuga.jpg'],
 ]);
 
@@ -86,7 +86,7 @@ it('renders the welcome email with the correct brand and escapes company data', 
         ->and(substr_count($html, '<h1 '))->toBe(1);
 })->with([
     ['client', 'imgs/logo-akialuga.jpg', 'Aki Aluga · NEVES corretora de seguros'],
-    ['tcc', 'imgs/Logo_NVS.png', 'NVS Seguros · Portal imobiliário'],
+    ['tcc', 'imgs/Logo_NVS.png', 'NVS · CRM empresarial'],
 ]);
 
 it('does not render executable URLs in the company welcome email', function () {
@@ -225,7 +225,7 @@ it('keeps every notification email isolated to the active brand', function (
 })->with([
     'tcc / NVS' => [
         'tcc',
-        'NVS Seguros',
+        'NVS',
         'imgs/Logo_NVS.png',
         'imgs/logo-akialuga.jpg',
         '#146FB6',

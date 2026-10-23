@@ -284,6 +284,119 @@
 .dashboard-admin-body .admin-lead-directory > .lead-list { padding: 24px; }
 .dashboard-admin-body .admin-lead-directory > .card { margin-top: 0 !important; border-radius: 0 !important; box-shadow: none !important; }
 .admin-empty-icon { display: inline-grid; place-items: center; width: 56px; height: 56px; color: #2563eb; background: var(--dash-surface-soft); border: 1px solid var(--dash-border); border-radius: 8px; font-size: 1.5rem; }
+
+.dashboard-admin-body .admin-leads-page .lead-list-item--compact .card-body {
+    padding: 14px 16px 0 !important;
+}
+
+.dashboard-admin-body .lead-list-item--compact .admin-lead-summary {
+    @apply grid items-center gap-x-4 gap-y-3;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-areas: "identity identity" "origin origin" "contact contact" "entry result" "actions actions";
+}
+
+.dashboard-admin-body .lead-list-item--compact .admin-lead-summary > div {
+    @apply min-h-0 border-0 p-0;
+    min-width: 0;
+}
+
+.dashboard-admin-body .lead-list-item--compact .admin-lead-summary__identity > .d-flex {
+    gap: 12px !important;
+}
+
+.dashboard-admin-body .lead-list-item--compact .lead-avatar {
+    @apply h-10 w-10 basis-10 shrink-0 rounded-xl text-sm;
+}
+
+.dashboard-admin-body .lead-list-item--compact .admin-lead-name {
+    @apply mb-1 text-base font-bold leading-tight;
+}
+
+.dashboard-admin-body .lead-list-item--compact :is(.admin-lead-city, .admin-lead-time, .admin-lead-origin-detail, .admin-lead-label) {
+    @apply text-xs leading-normal;
+}
+
+.dashboard-admin-body .lead-list-item--compact :is(.admin-lead-company-name, .admin-lead-contact-line, .admin-lead-date) {
+    @apply gap-2 text-[13px] leading-normal;
+}
+
+.dashboard-admin-body .lead-list-item--compact .admin-lead-contact-line {
+    @apply font-medium;
+    overflow-wrap: anywhere;
+}
+
+.dashboard-admin-body .lead-list-item--compact :is(.admin-lead-company-name, .admin-lead-contact-line, .admin-lead-link-button) > .bi {
+    @apply text-sm;
+}
+
+.dashboard-admin-body .lead-list-item--compact .admin-lead-summary__contact > .admin-lead-label {
+    @apply sr-only;
+}
+
+.dashboard-admin-body .admin-leads-page .lead-list-item--compact :is(.admin-lead-profile, .admin-lead-result, .admin-lead-sync-row .badge) {
+    @apply px-2 py-1 text-xs font-semibold leading-snug;
+    overflow-wrap: anywhere;
+}
+
+.dashboard-admin-body .lead-list-item--compact .admin-lead-result {
+    @apply max-w-full rounded-md;
+}
+
+.dashboard-admin-body .lead-list-item--compact .admin-lead-result .bi {
+    @apply text-sm;
+}
+
+.dashboard-admin-body .admin-leads-page .lead-list-item--compact .admin-lead-link-button {
+    @apply mt-1 min-h-8 gap-1.5 px-0 py-1 text-xs;
+    border-color: transparent;
+    box-shadow: none;
+}
+
+.dashboard-admin-body .admin-leads-page .lead-list-item--compact .admin-lead-actions .admin-lead-action {
+    @apply min-h-9 gap-1.5 px-2.5 py-1.5 text-xs;
+    min-width: 0;
+}
+
+.dashboard-admin-body .lead-list-item--compact .admin-lead-actions > .d-flex {
+    @apply justify-start;
+}
+
+.dashboard-admin-body .lead-list-item--compact .admin-lead-sync-row {
+    @apply mt-3 gap-x-3 gap-y-1.5 px-4 py-2;
+    margin-inline: -16px;
+    background: var(--dash-surface-soft);
+}
+
+@media (min-width: 640px) {
+    .dashboard-admin-body .lead-list-item--compact .admin-lead-summary {
+        grid-template-areas: "identity origin" "contact contact" "entry result" "actions actions";
+    }
+}
+
+@media (min-width: 900px) {
+    .dashboard-admin-body .lead-list-item--compact .admin-lead-summary {
+        grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1.2fr);
+        grid-template-areas: "identity origin contact" "entry result actions";
+    }
+}
+
+@media (min-width: 1200px) {
+    .dashboard-admin-body .lead-list-item--compact .admin-lead-summary {
+        grid-template-columns: minmax(0, 1.5fr) minmax(0, 1.3fr) minmax(0, 1.4fr) minmax(84px, 0.65fr) minmax(0, 0.95fr) 104px;
+        grid-template-areas: "identity origin contact entry result actions";
+        column-gap: 12px;
+    }
+
+    .dashboard-admin-body .lead-list-item--compact :is(.admin-lead-summary__origin, .admin-lead-summary__contact, .admin-lead-summary__entry) {
+        padding-left: 12px;
+        border-left: 1px solid var(--lead-line);
+    }
+
+    .dashboard-admin-body .lead-list-item--compact .admin-lead-actions > .d-flex {
+        @apply w-full flex-col;
+    }
+}
+
 .dashboard-admin-body .admin-leads-page .lead-filter-panel::before,
 .dashboard-admin-body .admin-leads-page .lead-filter-panel::after { content: none; }
 .dashboard-admin-body .admin-leads-page .lead-filter-panel__inner { padding: 0; }

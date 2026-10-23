@@ -55,15 +55,15 @@ class CorretorPermissions
     public static function all(): array
     {
         return [
-            self::VIEW_LEADS => 'Visualizar leads/clientes',
-            self::EDIT_LEADS => 'Editar dados de leads/clientes',
-            self::LINK_LEAD_COMPANY => 'Vincular lead a uma imobiliária',
+            self::VIEW_LEADS => \App\Support\BrandingText::choose('Visualizar leads/clientes', 'Visualizar leads/beneficiários'),
+            self::EDIT_LEADS => \App\Support\BrandingText::choose('Editar dados de leads/clientes', 'Editar dados de leads/beneficiários'),
+            self::LINK_LEAD_COMPANY => \App\Support\BrandingText::choose('Vincular lead a uma imobiliária', 'Vincular beneficiário a uma empresa'),
             self::VIEW_ANALYSIS => 'Visualizar análises',
             self::CREATE_ANALYSIS => 'Solicitar análises',
-            self::VIEW_REAL_ESTATE_COMPANIES => 'Visualizar imobiliárias',
-            self::CREATE_REAL_ESTATE_COMPANIES => 'Cadastrar imobiliárias',
-            self::UPDATE_REAL_ESTATE_COMPANIES => 'Editar dados de imobiliárias',
-            self::DELETE_REAL_ESTATE_COMPANIES => 'Remover imobiliárias',
+            self::VIEW_REAL_ESTATE_COMPANIES => \App\Support\BrandingText::choose('Visualizar imobiliárias', 'Visualizar empresas'),
+            self::CREATE_REAL_ESTATE_COMPANIES => \App\Support\BrandingText::choose('Cadastrar imobiliárias', 'Cadastrar empresas'),
+            self::UPDATE_REAL_ESTATE_COMPANIES => \App\Support\BrandingText::choose('Editar dados de imobiliárias', 'Editar dados de empresas'),
+            self::DELETE_REAL_ESTATE_COMPANIES => \App\Support\BrandingText::choose('Remover imobiliárias', 'Remover empresas'),
             self::VIEW_TAGS => 'Visualizar tags',
             self::MANAGE_LEAD_TAGS => 'Gerenciar tags dos leads',
         ];
@@ -132,7 +132,7 @@ class CorretorPermissions
         $labels = self::all();
         $groups = [
             'leads' => [
-                'label' => 'Leads e clientes',
+                'label' => \App\Support\BrandingText::choose('Leads e clientes', 'Leads e beneficiários'),
                 'description' => 'Consulta e manutenção dos dados comerciais.',
                 'permissions' => [
                     self::VIEW_LEADS,
@@ -149,8 +149,8 @@ class CorretorPermissions
                 ],
             ],
             'real-estate-companies' => [
-                'label' => 'Imobiliárias',
-                'description' => 'Visualização e operações do cadastro de imobiliárias.',
+                'label' => \App\Support\BrandingText::choose('Imobiliárias', 'Empresas'),
+                'description' => \App\Support\BrandingText::choose('Visualização e operações do cadastro de imobiliárias.', 'Visualização e operações do cadastro de empresas.'),
                 'permissions' => [
                     self::VIEW_REAL_ESTATE_COMPANIES,
                     self::CREATE_REAL_ESTATE_COMPANIES,

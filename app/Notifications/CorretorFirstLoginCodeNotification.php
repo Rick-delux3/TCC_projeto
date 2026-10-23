@@ -31,7 +31,7 @@ class CorretorFirstLoginCodeNotification extends Notification
     public function toMail(object $notifiable): MailMessage
     {
         return (new MailMessage)
-            ->subject('Código de verificação - Painel da Corretora')
+            ->subject(\App\Support\BrandingText::choose('Código de verificação - Painel da Corretora', 'Código de verificação - Painel da concessionária'))
             ->view('emails.notifications.corretor-first-login-code', [
                 'admin' => $notifiable,
                 'code' => $this->code,

@@ -201,7 +201,7 @@
         <div class="col-12"><div class="card border rounded-4"><div class="card-body">
             <h6 class="fw-bold mb-3">Vínculo e autorização</h6>
             <dl class="row mb-0 small">
-                <dt class="col-sm-4">Imobiliária vinculada</dt><dd class="col-sm-8">{{ $lead->imobiliariaVinculada?->name ?? 'Sem imobiliária vinculada' }}</dd>
+                <dt class="col-sm-4">{{ \App\Support\BrandingText::choose('Imobiliária vinculada', 'Empresa vinculada') }}</dt><dd class="col-sm-8">{{ $lead->imobiliariaVinculada?->name ?? \App\Support\BrandingText::choose('Sem imobiliária vinculada', 'Sem empresa vinculada') }}</dd>
                 <dt class="col-sm-4">Aceite dos termos</dt><dd class="col-sm-8 mb-0">{{ $lead->aceite_termos ? 'Registrado no cadastro' : 'Não registrado' }}</dd>
             </dl>
         </div></div></div>

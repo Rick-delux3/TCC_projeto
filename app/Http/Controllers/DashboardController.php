@@ -47,12 +47,11 @@ class DashboardController extends Controller
     public function index(Request $request)
     {
         /** @var \App\Models\User|null $user */
-
         $user = $request->user();
 
         if (! $user || ! $user->company_id) {
             return redirect()->route('empresa.login')
-                ->withErrors(['email' => 'Usuário não vinculado a uma imobiliária.']);
+                ->withErrors(['email' => \App\Support\BrandingText::choose('Usuário não vinculado a uma imobiliária.', 'Usuário não vinculado a uma empresa.')]);
         }
 
         $company = $user->imobiliaria;
@@ -64,8 +63,6 @@ class DashboardController extends Controller
                     'email' => 'Empresa não encontrada. Faça login novamente.',
                 ]);
         }
-
-       
 
         $this->ensureLeadAccessCode($company);
 

@@ -174,15 +174,15 @@ class LeadCompanyLinkService
         }
 
         if ($company === null || ! $company->lead_form_active) {
-            return 'A imobiliária selecionada não está disponível ou está inativa.';
+            return \App\Support\BrandingText::choose('A imobiliária selecionada não está disponível ou está inativa.', 'A empresa selecionada não está disponível ou está inativa.');
         }
 
         if ((int) $lead->company_id === (int) $company->id) {
-            return 'Este lead já está vinculado à imobiliária selecionada.';
+            return \App\Support\BrandingText::choose('Este lead já está vinculado à imobiliária selecionada.', 'Este beneficiário já está vinculado à empresa selecionada.');
         }
 
         if ($company->leads()->where('email', $lead->email)->exists()) {
-            return 'A imobiliária selecionada já possui outro lead com este e-mail.';
+            return \App\Support\BrandingText::choose('A imobiliária selecionada já possui outro lead com este e-mail.', 'A empresa selecionada já possui outro beneficiário com este e-mail.');
         }
 
         $batches = $lead->insuranceAnalysesBatches()->whereNotNull('company_id');

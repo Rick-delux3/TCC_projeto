@@ -2,6 +2,30 @@
 
 use App\Models\LeadLoversTag;
 
+it('uses the centered background logo only on tcc company forms', function (string $profile, string $routeName, string $originalImage) {
+    config(['branding.active' => $profile]);
+
+    $response = $this->get(route($routeName))->assertOk();
+    $document = new DOMDocument;
+    @$document->loadHTML('<?xml encoding="UTF-8">'.$response->getContent());
+    $xpath = new DOMXPath($document);
+    $logos = $xpath->query('//aside[contains(@class, "tcc-auth-logo-aside")]/img[contains(@class, "tcc-auth-background-logo")]');
+
+    expect($logos->length)->toBe($profile === 'tcc' ? 1 : 0);
+
+    if ($profile === 'tcc') {
+        expect($logos->item(0)->getAttribute('src'))->toBe(asset('imgs/Logo_NVS.png'))
+            ->and($logos->item(0)->getAttribute('alt'))->toBe('')
+            ->and($logos->item(0)->getAttribute('aria-hidden'))->toBe('true');
+        $response->assertDontSee($originalImage, false);
+    } else {
+        $response->assertSee($originalImage, false);
+    }
+})->with(['tcc', 'client'])->with([
+    ['empresa.login', 'imgs/segure-chave-a-mao-ao-ar-livre.jpg'],
+    ['empresa.register.form', 'imgs/seguro-fianca-locaticia_fundo_login_cadastro.png'],
+]);
+
 it('renders contextual icons and accessible password controls on the company registration form', function () {
     LeadLoversTag::create([
         'leadlovers_tag_id' => 123,
@@ -46,7 +70,8 @@ it('renders the tcc company access pages with the redesign and working destinati
         ->assertSee('tcc-company-auth-body', false)
         ->assertSee('tcc-company-auth-main', false)
         ->assertSee('tcc-company-auth', false)
-        ->assertSee('imgs/segure-chave-a-mao-ao-ar-livre.jpg', false)
+        ->assertSee('imgs/Logo_NVS.png', false)
+        ->assertDontSee('imgs/segure-chave-a-mao-ao-ar-livre.jpg', false)
         ->assertSee(route('company.password.request'), false)
         ->assertSee(route('empresa.register.form'), false)
         ->assertSee(route('empresa.login.post'), false)
@@ -57,12 +82,15 @@ it('renders the tcc company access pages with the redesign and working destinati
         ->assertSee('tcc-company-auth-body', false)
         ->assertSee('tcc-company-auth-main', false)
         ->assertSee('tcc-company-auth', false)
-        ->assertSee('imgs/seguro-fianca-locaticia_fundo_login_cadastro.png', false)
+        ->assertSee('imgs/Logo_NVS.png', false)
+        ->assertDontSee('imgs/seguro-fianca-locaticia_fundo_login_cadastro.png', false)
         ->assertSee(route('empresa.register.post'), false)
         ->assertSee(route('empresa.login'), false);
 });
 
 it('links the company access header to the imobiliaria login throughout the company auth journey', function () {
+    config(['branding.active' => 'client']);
+
     foreach ([
         'registration' => route('empresa.register.form'),
         'login' => route('empresa.login'),
@@ -77,6 +105,29 @@ it('links the company access header to the imobiliaria login throughout the comp
         expect($accessLink)->not->toBeNull()
             ->and($accessLink->getAttribute('href'))->toBe(route('empresa.login'));
     }
+});
+
+it('centers the tcc company forms without the site header', function (string $routeName) {
+    config(['branding.active' => 'tcc']);
+
+    $response = $this->get(route($routeName))->assertOk();
+    $document = new DOMDocument;
+    @$document->loadHTML('<?xml encoding="UTF-8">'.$response->getContent());
+    $xpath = new DOMXPath($document);
+
+    expect($xpath->query('//header[contains(@class, "auth-topbar")]')->length)->toBe(0)
+        ->and($xpath->query('//main[contains(@class, "tcc-company-auth-main--standalone")]')->length)->toBe(1)
+        ->and($xpath->query('//main//h1')->length)->toBe(1)
+        ->and($xpath->query('//main//form[@method="POST"]')->length)->toBe(1);
+})->with(['empresa.login', 'empresa.register.form']);
+
+it('centers tcc password recovery without the site header', function () {
+    config(['branding.active' => 'tcc']);
+
+    $this->get(route('company.password.request'))
+        ->assertOk()
+        ->assertDontSee('auth-topbar__access', false)
+        ->assertSee('tcc-company-auth-main--standalone', false);
 });
 
 it('keeps the original company access layout for the client profile', function () {

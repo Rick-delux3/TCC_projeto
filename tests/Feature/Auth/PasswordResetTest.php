@@ -6,11 +6,30 @@ use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Password;
 use Symfony\Component\Mailer\Exception\TransportException;
 
-test('reset password link screen can be rendered', function () {
+test('reset password link screen can be rendered', function (string $profile) {
+    config(['branding.active' => $profile]);
     $response = $this->get('/forgot-password');
 
-    $response->assertStatus(200);
-});
+    $response->assertOk()
+        ->assertSee('action="'.route('password.email').'"', false)
+        ->assertSee('name="_token"', false);
+
+    $document = new DOMDocument;
+    @$document->loadHTML('<?xml encoding="UTF-8">'.$response->getContent());
+    $xpath = new DOMXPath($document);
+    $logos = $xpath->query('//aside[contains(@class, "tcc-auth-logo-aside")]/img[contains(@class, "tcc-auth-background-logo")]');
+
+    expect($logos->length)->toBe($profile === 'tcc' ? 1 : 0);
+
+    if ($profile === 'tcc') {
+        expect($logos->item(0)->getAttribute('src'))->toBe(asset('imgs/Logo_NVS.png'))
+            ->and($logos->item(0)->getAttribute('alt'))->toBe('')
+            ->and($logos->item(0)->getAttribute('aria-hidden'))->toBe('true');
+        $response->assertDontSee('imgs/segure-chave-a-mao-ao-ar-livre.jpg', false);
+    } else {
+        $response->assertSee('imgs/segure-chave-a-mao-ao-ar-livre.jpg', false);
+    }
+})->with(['tcc', 'client']);
 
 test('reset password link can be requested', function () {
     Notification::fake();

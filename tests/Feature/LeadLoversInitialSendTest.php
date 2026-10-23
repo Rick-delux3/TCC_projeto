@@ -1,6 +1,7 @@
 <?php
 
 use App\Events\DashboardActivityChanged;
+use App\Jobs\ConfirmLeadLoversMachineJob;
 use App\Jobs\RetryLeadLoversOutageJob;
 use App\Jobs\SendLeadToLeadLoversJob;
 use App\Jobs\UpdateLeadOnLeadLoversJob;
@@ -22,11 +23,14 @@ use Illuminate\Support\Facades\Schema;
 
 beforeEach(function () {
     $this->withoutVite();
+    $this->freezeTime();
+    Queue::fake();
 
     Http::preventStrayRequests();
     Http::fake([]);
 
     config([
+        'branding.active' => 'client',
         'services.leadlovers.enabled' => true,
         'services.leadlovers.api_url' => 'https://api.leadlovers.test',
         'services.leadlovers.token' => 'stage-three-test-token',
@@ -157,6 +161,15 @@ it('reschedules outages beyond the regular attempt limit with a ten minute delay
 
     initialSendJob($lead, 12)->handle(app(LeadLoversApiClient::class));
     expect($lead->refresh()->awaitingLeadLoversOutageRecovery())->toBeTrue();
+    expect($lead->leadlovers_recovery)
+        ->toMatchArray([
+            'status' => 'scheduled',
+            'retries_scheduled' => 1,
+            'last_attempt_at' => now()->toIso8601String(),
+            'next_retry_at' => now()->addMinutes(10)->toIso8601String(),
+            'reason' => 'transient_error',
+            'http_status' => $status,
+        ]);
     Queue::assertPushed(RetryLeadLoversOutageJob::class, fn ($job) => $job->delay->equalTo(now()->addMinutes(10)) && $job->queue === 'leadlovers');
 
     $recovery = (new RetryLeadLoversOutageJob($lead->id))->withFakeQueueInteractions();
@@ -164,6 +177,7 @@ it('reschedules outages beyond the regular attempt limit with a ten minute delay
     app(\Illuminate\Bus\UniqueLock::class)->release($recovery);
     $recovery->handle(app(LeadLoversApiClient::class));
     $recovery->assertNotFailed();
+    expect($lead->fresh()->leadlovers_recovery['retries_scheduled'])->toBe(2);
     Queue::assertPushed(RetryLeadLoversOutageJob::class, 2);
 })->with([500, 502, 503, 504]);
 
@@ -176,6 +190,7 @@ it('honors service unavailable retry after without reducing the minimum outage d
     initialSendJob($lead)->handle(app(LeadLoversApiClient::class));
 
     Queue::assertPushed(RetryLeadLoversOutageJob::class, fn ($job) => $job->delay->equalTo(now()->addSeconds($seconds)));
+    expect($lead->fresh()->leadlovers_recovery['next_retry_at'])->toBe(now()->addSeconds($seconds)->toIso8601String());
 })->with([['1800', 1800], ['60', 600], ['invalid', 600]]);
 
 it('ignores obsolete outage jobs for not implemented responses', function () {
@@ -202,11 +217,24 @@ it('creates an absent lead after outage recovery and stops once machine membersh
     $this->travel(10)->minutes();
     $recovery = (new RetryLeadLoversOutageJob($lead->id))->withFakeQueueInteractions();
     $recovery->handle(app(LeadLoversApiClient::class));
-    $recovery->assertReleased(15);
-    $recovery->job->attempts = 2;
-    $recovery->handle(app(LeadLoversApiClient::class));
+    Queue::assertPushed(ConfirmLeadLoversMachineJob::class, fn ($job) => $job->leadId === $lead->id && $job->delay->equalTo(now()->addMinute()));
+    expect($lead->fresh()->leadlovers_recovery)->toMatchArray([
+        'status' => 'scheduled',
+        'retries_scheduled' => 2,
+        'operation' => 'machine_confirmation',
+        'reason' => 'confirmation_pending',
+        'next_retry_at' => now()->addMinute()->toIso8601String(),
+    ]);
+    $this->travel(60)->seconds();
+    (new ConfirmLeadLoversMachineJob($lead->id))->withFakeQueueInteractions()->handle(app(LeadLoversApiClient::class));
     expect($lead->refresh()->leadlovers_status)->toBe('sent')
         ->and($lead->leadlovers_initial_error_status)->toBeNull();
+    expect($lead->leadlovers_recovery)->toMatchArray([
+        'status' => 'completed',
+        'retries_scheduled' => 2,
+        'next_retry_at' => null,
+        'finished_at' => now()->toIso8601String(),
+    ]);
     $requests = count(Http::recorded());
     (new RetryLeadLoversOutageJob($lead->id))->withFakeQueueInteractions()->handle(app(LeadLoversApiClient::class));
     expect(Http::recorded())->toHaveCount($requests);
@@ -222,6 +250,31 @@ it('does not start outage recovery for data authentication or other server error
     expect($lead->refresh()->awaitingLeadLoversOutageRecovery())->toBeFalse();
 })->with([400, 401, 422, 501, 505]);
 
+it('preserves scheduled recovery unless integration is disabled', function (bool $disabled) {
+    Queue::fake();
+    $this->freezeTime();
+    $lead = leadForInitialLeadLoversSend(['leadlovers_lead_id' => 501]);
+    Http::fake([
+        'https://api.leadlovers.test/leads/501/machines' => Http::response([]),
+        'https://api.leadlovers.test/leads/move' => Http::response(['actionId' => 42, 'status' => 'pending', 'total' => 1], 202),
+    ]);
+
+    initialSendJob($lead)->handle(app(LeadLoversApiClient::class));
+    expect($lead->fresh()->leadlovers_recovery['retries_scheduled'])->toBe(1);
+
+    config(['services.leadlovers.enabled' => ! $disabled]);
+    initialSendJob($lead, 12)->handle(app(LeadLoversApiClient::class));
+
+    expect($lead->fresh()->leadlovers_recovery)->toMatchArray([
+        'status' => $disabled ? 'disabled' : 'scheduled',
+        'retries_scheduled' => 1,
+        'next_retry_at' => $disabled ? null : now()->addMinute()->toIso8601String(),
+        'finished_at' => $disabled ? now()->toIso8601String() : null,
+    ])->and($lead->fresh()->leadlovers_lead_id)->toBe(501)
+        ->and($lead->fresh()->leadlovers_response['action']['action_id'])->toBe(42);
+    Http::assertSentCount(2);
+})->with([false, true]);
+
 it('resends an unaccepted machine request after outage without recreating the lead', function () {
     Queue::fake();
     $lead = leadForInitialLeadLoversSend(['leadlovers_lead_id' => 501]);
@@ -232,11 +285,121 @@ it('resends an unaccepted machine request after outage without recreating the le
     initialSendJob($lead)->handle(app(LeadLoversApiClient::class));
     $recovery = (new RetryLeadLoversOutageJob($lead->id))->withFakeQueueInteractions();
     $recovery->handle(app(LeadLoversApiClient::class));
-    $recovery->job->attempts = 2;
-    $recovery->handle(app(LeadLoversApiClient::class));
+    $this->travel(60)->seconds();
+    (new ConfirmLeadLoversMachineJob($lead->id))->withFakeQueueInteractions()->handle(app(LeadLoversApiClient::class));
     expect($lead->refresh()->leadlovers_status)->toBe('sent');
     Http::assertNotSent(fn (Request $request) => str_ends_with($request->url(), '/leads/'));
 });
+
+it('keeps confirming membership beyond the attempt limit without repeating remote writes', function (string $profile) {
+    Queue::fake();
+    $this->freezeTime();
+    config(['branding.active' => $profile]);
+    $lead = leadForInitialLeadLoversSend([
+        'leadlovers_status' => 'processing',
+        'leadlovers_lead_id' => 501,
+        'leadlovers_response' => [
+            'phase' => 'machine_confirmation_pending',
+            'action' => ['action_id' => 42, 'status' => 'pending'],
+        ],
+    ]);
+    Http::fake(['https://api.leadlovers.test/leads/501/machines' => Http::sequence()
+        ->push([])->push([])->push([])->push([])->push([machineAssociationForInitialSend()])]);
+
+    initialSendJob($lead, 12)->handle(app(LeadLoversApiClient::class));
+
+    foreach ([60, 60, 60, 60] as $index => $delay) {
+        expect($lead->fresh()->leadlovers_recovery)->toMatchArray([
+            'status' => 'scheduled',
+            'confirmation_retries' => $index + 1,
+            'next_retry_at' => now()->addSeconds($delay)->toIso8601String(),
+        ])->and($lead->fresh()->awaitingLeadLoversOutageRecovery())->toBeTrue();
+        $job = (new ConfirmLeadLoversMachineJob($lead->id))->withFakeQueueInteractions();
+        $job->handle(app(LeadLoversApiClient::class));
+        initialSendJob($lead, 2)->handle(app(LeadLoversApiClient::class));
+        Http::assertSentCount($index + 1);
+
+        $this->travel($delay)->seconds();
+        app(\Illuminate\Bus\UniqueLock::class)->release($job);
+        $job->handle(app(LeadLoversApiClient::class));
+        $job->assertNotFailed();
+    }
+
+    expect($lead->fresh()->leadlovers_status)->toBe('sent')
+        ->and($lead->fresh()->leadlovers_recovery['status'])->toBe('completed')
+        ->and($lead->fresh()->leadlovers_response['action']['action_id'])->toBe(42);
+    (new ConfirmLeadLoversMachineJob($lead->id))->withFakeQueueInteractions()->handle(app(LeadLoversApiClient::class));
+    Http::assertSentCount(5);
+    Http::assertNotSent(fn (Request $request) => $request->method() !== 'GET');
+    Queue::assertPushed(ConfirmLeadLoversMachineJob::class, 4);
+})->with(['tcc', 'client']);
+
+it('honors long retry after during confirmation and stops on authentication failure', function (string $profile) {
+    Queue::fake();
+    $this->freezeTime();
+    config(['branding.active' => $profile]);
+    $lead = leadForInitialLeadLoversSend([
+        'leadlovers_status' => 'processing',
+        'leadlovers_lead_id' => 501,
+        'leadlovers_response' => ['phase' => 'machine_confirmation_pending'],
+    ]);
+    Http::fake(['https://api.leadlovers.test/leads/501/machines' => Http::sequence()
+        ->push([], 429, ['Retry-After' => '3600', 'RateLimit-Reset' => '60'])
+        ->push([], 401)]);
+    initialSendJob($lead, 12)->handle(app(LeadLoversApiClient::class));
+    expect($lead->fresh()->leadlovers_recovery['next_retry_at'])->toBe(now()->addHour()->toIso8601String());
+    $this->travel(3600)->seconds();
+    $job = (new ConfirmLeadLoversMachineJob($lead->id))->withFakeQueueInteractions();
+    app(\Illuminate\Bus\UniqueLock::class)->release($job);
+    $job->handle(app(LeadLoversApiClient::class));
+    expect($lead->fresh()->leadlovers_status)->toBe('failed')
+        ->and($lead->fresh()->leadlovers_recovery['next_retry_at'])->toBeNull();
+    Queue::assertPushed(ConfirmLeadLoversMachineJob::class, 1);
+    Http::assertSentCount(2);
+})->with(['tcc', 'client']);
+
+it('does not call the api when confirmation recovery is disabled', function (string $profile) {
+    Queue::fake();
+    config(['branding.active' => $profile, 'services.leadlovers.enabled' => false]);
+    $lead = leadForInitialLeadLoversSend([
+        'leadlovers_status' => 'processing',
+        'leadlovers_lead_id' => 501,
+    ]);
+    $lead->forceFill(['leadlovers_recovery' => [
+        'mode' => 'machine_confirmation',
+        'status' => 'scheduled',
+        'next_retry_at' => now()->subMinute()->toIso8601String(),
+    ]])->save();
+    (new ConfirmLeadLoversMachineJob($lead->id))->withFakeQueueInteractions()->handle(app(LeadLoversApiClient::class));
+    expect($lead->fresh()->leadlovers_recovery['status'])->toBe('disabled')
+        ->and($lead->fresh()->leadlovers_recovery['next_retry_at'])->toBeNull();
+    Http::assertNothingSent();
+    Queue::assertNotPushed(ConfirmLeadLoversMachineJob::class);
+})->with(['tcc', 'client']);
+
+it('resumes an interrupted confirmation attempt without resending the lead', function (string $profile) {
+    Queue::fake();
+    config(['branding.active' => $profile]);
+    $lead = leadForInitialLeadLoversSend([
+        'leadlovers_status' => 'processing',
+        'leadlovers_lead_id' => 501,
+        'leadlovers_response' => ['phase' => 'machine_confirmation_pending'],
+    ]);
+    $lead->forceFill(['leadlovers_recovery' => [
+        'mode' => 'machine_confirmation',
+        'status' => 'processing',
+        'next_retry_at' => null,
+    ]])->save();
+    Http::fake(['https://api.leadlovers.test/leads/501/machines' => Http::response([machineAssociationForInitialSend()])]);
+    $job = (new ConfirmLeadLoversMachineJob($lead->id))->withFakeQueueInteractions();
+    $job->handle(app(LeadLoversApiClient::class));
+    Http::assertNothingSent();
+    $job->job->attempts = 2;
+    $job->handle(app(LeadLoversApiClient::class));
+    expect($lead->fresh()->leadlovers_status)->toBe('sent');
+    Http::assertSentCount(1);
+    Http::assertNotSent(fn (Request $request) => $request->method() !== 'GET');
+})->with(['tcc', 'client']);
 
 it('adds and casts the remote lead identifier', function () {
     expect(Schema::hasColumn('leads', 'leadlovers_lead_id'))->toBeTrue();
@@ -281,7 +444,7 @@ it('persists leadId before requesting the machine and keeps a 202 pending', func
     $job = initialSendJob($lead);
     $job->handle(app(LeadLoversApiClient::class));
 
-    $job->assertReleased(15);
+    Queue::assertPushed(ConfirmLeadLoversMachineJob::class, fn ($queued) => $queued->leadId === $lead->id && $queued->delay->equalTo(now()->addMinute()));
     expect($lead->refresh())
         ->leadlovers_lead_id->toBe(501)
         ->leadlovers_status->toBe('processing')
@@ -362,12 +525,13 @@ it('sends company leads without remote company tags and preserves their internal
 
     $job = initialSendJob($lead);
     $job->handle(app(LeadLoversApiClient::class));
-    $job->assertReleased(15);
+    Queue::assertPushed(ConfirmLeadLoversMachineJob::class, fn ($queued) => $queued->leadId === $lead->id && $queued->delay->equalTo(now()->addMinute()));
 
     expect($lead->refresh())->leadlovers_lead_id->toBe(501)
         ->leadlovers_status->toBe('processing');
 
-    $confirmation = initialSendJob($lead, 2);
+    $this->travel(60)->seconds();
+    $confirmation = (new ConfirmLeadLoversMachineJob($lead->id))->withFakeQueueInteractions();
     $confirmation->handle(app(LeadLoversApiClient::class));
     $confirmation->assertNotReleased();
     $confirmation->assertNotFailed();
@@ -616,7 +780,7 @@ it('releases confirmation when the expected machine is not visible and sends no 
     $job = initialSendJob($lead, 2);
     $job->handle(app(LeadLoversApiClient::class));
 
-    $job->assertReleased(30);
+    Queue::assertPushed(ConfirmLeadLoversMachineJob::class, fn ($queued) => $queued->leadId === $lead->id && $queued->delay->equalTo(now()->addMinute()));
     expect($lead->refresh())
         ->leadlovers_status->toBe('processing')
         ->sent_to_leadlovers_at->toBeNull()
@@ -629,7 +793,7 @@ it('releases confirmation when the expected machine is not visible and sends no 
     Http::assertSentCount(1);
 });
 
-it('preserves the accepted action when confirmation attempts are exhausted', function () {
+it('preserves the accepted action beyond the regular attempt limit', function () {
     $lead = leadForInitialLeadLoversSend([
         'leadlovers_status' => 'processing',
         'leadlovers_lead_id' => 501,
@@ -651,9 +815,10 @@ it('preserves the accepted action when confirmation attempts are exhausted', fun
     $job = initialSendJob($lead, 12);
     $job->handle(app(LeadLoversApiClient::class));
 
-    $job->assertFailed();
+    $job->assertNotFailed();
+    Queue::assertPushed(ConfirmLeadLoversMachineJob::class, fn ($queued) => $queued->leadId === $lead->id && $queued->delay->equalTo(now()->addMinute()));
     expect($lead->refresh())
-        ->leadlovers_status->toBe('failed')
+        ->leadlovers_status->toBe('processing')
         ->sent_to_leadlovers_at->toBeNull()
         ->and($lead->leadlovers_response['action'])->toBe([
             'action_id' => 9010,
@@ -828,7 +993,7 @@ it('reconciles EMAIL_EXISTS by exact email and uses leadId instead of record id'
     $job = initialSendJob($lead);
     $job->handle(app(LeadLoversApiClient::class));
 
-    $job->assertReleased(15);
+    Queue::assertPushed(ConfirmLeadLoversMachineJob::class, fn ($queued) => $queued->leadId === $lead->id && $queued->delay->equalTo(now()->addMinute()));
     expect($lead->refresh()->leadlovers_lead_id)->toBe(501);
     Http::assertSent(fn (Request $request): bool => parse_url(
         $request->url(),
@@ -957,7 +1122,7 @@ it('reconciles an ambiguous create on retry without posting another lead', funct
 
     $secondAttempt = (new RetryLeadLoversOutageJob($lead->id))->withFakeQueueInteractions();
     $secondAttempt->handle(app(LeadLoversApiClient::class));
-    $secondAttempt->assertReleased(15);
+    Queue::assertPushed(ConfirmLeadLoversMachineJob::class, fn ($queued) => $queued->leadId === $lead->id && $queued->delay->equalTo(now()->addMinute()));
 
     expect($lead->refresh()->leadlovers_lead_id)->toBe(501);
     $creationRequests = collect(Http::recorded())->filter(

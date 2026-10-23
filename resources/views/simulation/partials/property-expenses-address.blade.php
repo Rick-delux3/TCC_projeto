@@ -1,4 +1,7 @@
-<h2 class="simulation-section-title">Valores da locação</h2>
+@php
+    $isTccMonetaryForm = config('branding.active') === 'tcc';
+@endphp
+<h2 class="simulation-section-title">{{ $isTccMonetaryForm ? 'Valor da solicitação' : 'Valores da locação' }}</h2>
 <div class="simulation-fields grid grid-cols-1 gap-x-5 gap-y-4 md:grid-cols-2">
     @include('simulation.partials.rental-type')
     @include('simulation.partials.conditional-fields', [
@@ -6,7 +9,13 @@
         'visible' => $isCompanyDocument && old('tipo_locacao') === 'comercial',
         'fields' => 'simulation.partials.company-constitution',
     ])
-    @include('simulation.partials.input', ['field' => ['name' => 'valor_aluguel', 'label' => 'Valor do aluguel', 'type' => 'money', 'placeholder' => '1.500,00', 'required' => true]])
+    @include('simulation.partials.input', ['field' => array_merge(
+        ['name' => 'valor_aluguel', 'label' => $isTccMonetaryForm ? 'Valor de referência do serviço' : 'Valor do aluguel', 'type' => 'money', 'placeholder' => '1.500,00', 'required' => true],
+        $isTccMonetaryForm ? ['class' => 'md:col-span-2', 'hint' => 'Informe o valor do serviço que será considerado na análise. Esse valor não é o preço final retornado pela fornecedora.'] : []
+    )])
+    @if ($isTccMonetaryForm)
+        <div hidden data-tcc-internal-expenses>
+    @endif
     <div class="simulation-field">
         <label for="expenseSelector">Despesas adicionais</label>
         <div class="flex gap-2">
@@ -35,6 +44,9 @@
         @include('simulation.partials.form-icon', ['icon' => 'info'])
         <p>Água e luz são preenchidas com 10% do aluguel para cada uma. Você pode editar os valores. Se deixar em branco, será usado esse padrão.</p>
     </div>
+    @if ($isTccMonetaryForm)
+        </div>
+    @endif
 </div>
 <h2 class="simulation-section-title simulation-address-title">Endereço do imóvel</h2>
 <div class="simulation-fields grid grid-cols-1 gap-x-5 gap-y-4 md:grid-cols-3">

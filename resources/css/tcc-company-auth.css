@@ -1,3 +1,106 @@
+body.auth-layout-body.tcc-error-body {
+    background: #f4f7f9;
+}
+
+body.tcc-error-body .auth-layout-main.tcc-error-main {
+    @apply flex min-h-[100dvh] items-center justify-center px-4 py-6 sm:px-6 sm:py-10;
+    background: #f4f7f9;
+}
+
+.tcc-error-body .error-page {
+    @apply w-full p-0;
+    max-width: 880px;
+    padding: 0 !important;
+}
+
+.tcc-error-body .error-shell {
+    @apply grid grid-cols-1 border-0;
+    border-radius: 0 !important;
+    box-shadow: 0 20px 48px rgb(15 23 42 / 12%) !important;
+}
+
+.tcc-error-body .error-aside {
+    @apply relative w-full overflow-hidden;
+    min-height: 280px !important;
+    background: #030133 !important;
+}
+
+.tcc-error-body .error-background-logo {
+    @apply absolute inset-0 m-auto h-auto w-4/5 max-w-[24rem] object-contain object-center opacity-80;
+    max-height: 75%;
+}
+
+.tcc-error-body .error-logo-overlay {
+    @apply absolute inset-0;
+    background: rgb(3 1 51 / 60%);
+}
+
+.tcc-error-body .error-aside-copy {
+    @apply gap-3;
+    min-height: 280px !important;
+    padding: 28px !important;
+}
+
+.tcc-error-body .error-aside-copy > .badge {
+    border-radius: 0 !important;
+    background: #fd1e6e !important;
+    font-size: 0.6875rem;
+    letter-spacing: 0.08em;
+}
+
+.tcc-error-body .error-aside-copy h2 {
+    @apply mb-0 text-2xl leading-tight;
+}
+
+.tcc-error-body .error-aside-copy p {
+    color: #e2e8f0 !important;
+    font-size: 0.875rem;
+    line-height: 1.6;
+}
+
+.tcc-error-body .error-content {
+    @apply w-full;
+    padding: 28px !important;
+}
+
+.tcc-error-body .error-content h1 {
+    font-size: clamp(1.75rem, 3vw, 2.25rem);
+    line-height: 1.15;
+}
+
+.tcc-error-body .error-content :is(p, small) {
+    font-size: 0.875rem;
+    line-height: 1.6;
+}
+
+.tcc-error-body .error-content .btn {
+    @apply flex min-h-12 items-center justify-center px-4 py-3 text-base;
+    border-radius: 0;
+}
+
+.tcc-error-body .error-content .btn.text-white {
+    background: #030133 !important;
+}
+
+.tcc-error-body .error-content .btn.text-white:hover {
+    background: #17134f !important;
+}
+
+@media (min-width: 768px) {
+    .tcc-error-body .error-shell {
+        grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+    }
+
+    .tcc-error-body .error-aside-copy {
+        min-height: 440px !important;
+        padding: 32px !important;
+    }
+
+    .tcc-error-body .error-content {
+        padding: 36px !important;
+    }
+}
+
 body.auth-layout-body.tcc-company-auth-body {
     background: #f4f7f9;
 }
@@ -17,8 +120,8 @@ body.auth-layout-body .auth-layout-main.tcc-company-auth-main {
     justify-content: center;
 }
 
-.tcc-company-auth .client-auth-shell,
-.tcc-company-auth .client-register-shell {
+.tcc-company-auth :is(.client-auth-shell, .admin-auth-shell),
+.tcc-company-auth :is(.client-register-shell, .admin-register-shell) {
     width: min(100%, 1100px);
     min-height: 600px;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -29,18 +132,18 @@ body.auth-layout-body .auth-layout-main.tcc-company-auth-main {
     box-shadow: 0 25px 48px rgb(15 23 42 / 20%);
 }
 
-.tcc-company-auth .client-register-shell {
+.tcc-company-auth :is(.client-register-shell, .admin-register-shell) {
     min-height: 760px;
 }
 
-.tcc-company-auth .client-auth-aside,
-.tcc-company-auth .client-register-aside {
+.tcc-company-auth :is(.client-auth-aside, .admin-auth-aside),
+.tcc-company-auth :is(.client-register-aside, .admin-register-aside) {
     min-height: inherit;
     background: #030133;
 }
 
-.tcc-company-auth .client-auth-aside > img:not(.auth-media-logo),
-.tcc-company-auth .client-register-aside > img:not(.auth-media-logo) {
+.tcc-company-auth :is(.client-auth-aside, .admin-auth-aside) > img:not(.auth-media-logo),
+.tcc-company-auth :is(.client-register-aside, .admin-register-aside) > img:not(.auth-media-logo) {
     min-height: inherit;
     opacity: 0.3;
     filter: grayscale(1);
@@ -51,16 +154,16 @@ body.auth-layout-body .auth-layout-main.tcc-company-auth-main {
     display: none;
 }
 
-.tcc-company-auth .client-auth-overlay,
-.tcc-company-auth .client-register-overlay {
+.tcc-company-auth :is(.client-auth-overlay, .admin-auth-overlay),
+.tcc-company-auth :is(.client-register-overlay, .admin-register-overlay) {
     justify-content: space-between;
     padding: 56px;
     background: rgb(3 1 51 / 80%);
 }
 
-.tcc-company-auth .client-badge,
-.tcc-company-auth .client-auth-kicker,
-.tcc-company-auth .client-register-kicker {
+.tcc-company-auth :is(.client-badge, .admin-badge),
+.tcc-company-auth :is(.client-auth-kicker, .admin-auth-badge),
+.tcc-company-auth :is(.client-register-kicker, .admin-register-kicker) {
     border-radius: 0;
     background: #fff0f6;
     color: #fd1e6e;
@@ -68,35 +171,35 @@ body.auth-layout-body .auth-layout-main.tcc-company-auth-main {
     letter-spacing: 0.14em;
 }
 
-.tcc-company-auth .client-badge {
+.tcc-company-auth :is(.client-badge, .admin-badge) {
     padding: 6px 12px;
     background: #fd1e6e;
     color: #ffffff;
 }
 
-.tcc-company-auth .client-auth-overlay h2,
-.tcc-company-auth .client-register-overlay h2 {
+.tcc-company-auth :is(.client-auth-overlay, .admin-auth-overlay) h2,
+.tcc-company-auth :is(.client-register-overlay, .admin-register-overlay) h2 {
     max-width: 18rem;
     font-size: clamp(1.875rem, 3vw, 2.25rem);
     line-height: 1.15;
 }
 
-.tcc-company-auth .client-auth-overlay p,
-.tcc-company-auth .client-register-overlay p {
+.tcc-company-auth :is(.client-auth-overlay, .admin-auth-overlay) p,
+.tcc-company-auth :is(.client-register-overlay, .admin-register-overlay) p {
     max-width: 21rem;
     color: #d1d5db;
     font-size: 0.875rem;
     line-height: 1.65;
 }
 
-.tcc-company-auth .client-auth-points,
-.tcc-company-auth .client-register-points {
+.tcc-company-auth :is(.client-auth-points, .admin-auth-points),
+.tcc-company-auth :is(.client-register-points, .admin-register-points) {
     display: grid;
     gap: 16px;
 }
 
-.tcc-company-auth .client-auth-points span,
-.tcc-company-auth .client-register-points span {
+.tcc-company-auth :is(.client-auth-points, .admin-auth-points) span,
+.tcc-company-auth :is(.client-register-points, .admin-register-points) span {
     min-height: 52px;
     padding: 14px 16px;
     border: 1px solid rgb(255 255 255 / 20%);
@@ -106,8 +209,8 @@ body.auth-layout-body .auth-layout-main.tcc-company-auth-main {
     font-size: 0.875rem;
 }
 
-.tcc-company-auth .client-auth-points span::before,
-.tcc-company-auth .client-register-points span::before {
+.tcc-company-auth :is(.client-auth-points, .admin-auth-points) span::before,
+.tcc-company-auth :is(.client-register-points, .admin-register-points) span::before {
     width: 8px;
     height: 8px;
     flex-basis: 8px;
@@ -123,41 +226,41 @@ body.auth-layout-body .auth-layout-main.tcc-company-auth-main {
     font-size: 0.75rem;
 }
 
-.tcc-company-auth .client-auth-card,
-.tcc-company-auth .client-register-card {
+.tcc-company-auth :is(.client-auth-card, .admin-auth-card),
+.tcc-company-auth :is(.client-register-card, .admin-register-card) {
     padding: 56px;
     border-radius: 0;
     background: #ffffff;
 }
 
-.tcc-company-auth .client-auth-header,
-.tcc-company-auth .client-register-header {
+.tcc-company-auth :is(.client-auth-header, .admin-auth-header),
+.tcc-company-auth :is(.client-register-header, .admin-register-header) {
     margin-bottom: 36px;
 }
 
-.tcc-company-auth .client-auth-header h1,
-.tcc-company-auth .client-register-header h1 {
+.tcc-company-auth :is(.client-auth-header, .admin-auth-header) h1,
+.tcc-company-auth :is(.client-register-header, .admin-register-header) h1 {
     color: #030133;
     font-size: 1.5rem;
 }
 
-.tcc-company-auth .client-auth-header p,
-.tcc-company-auth .client-register-header p {
+.tcc-company-auth :is(.client-auth-header, .admin-auth-header) p,
+.tcc-company-auth :is(.client-register-header, .admin-register-header) p {
     margin-bottom: 0;
     color: #6b7280;
 }
 
-.tcc-company-auth .client-field {
+.tcc-company-auth :is(.client-field, .admin-field) {
     margin-bottom: 24px;
 }
 
-.tcc-company-auth .client-label {
+.tcc-company-auth :is(.client-label, .admin-label) {
     margin-bottom: 8px;
     color: #030133;
     font-size: 0.875rem;
 }
 
-.tcc-company-auth .client-input {
+.tcc-company-auth :is(.client-input, .admin-input) {
     min-height: 48px;
     padding: 12px 14px;
     border: 2px solid #9ca3af !important;
@@ -165,13 +268,13 @@ body.auth-layout-body .auth-layout-main.tcc-company-auth-main {
     background: #f9fafb !important;
 }
 
-.tcc-company-auth .client-input:focus {
+.tcc-company-auth :is(.client-input, .admin-input):focus {
     border-color: #030133 !important;
     box-shadow: 0 0 0 1px #030133 !important;
     background: #ffffff !important;
 }
 
-.tcc-company-auth .client-input-wrap .client-input--with-icon {
+.tcc-company-auth :is(.client-input-wrap, .admin-input-wrap) :is(.client-input--with-icon, .admin-input--with-icon) {
     padding-left: 42px;
 }
 
@@ -199,29 +302,29 @@ body.auth-layout-body .auth-layout-main.tcc-company-auth-main {
     color: #146fb6;
 }
 
-.tcc-company-auth .client-submit,
-.tcc-company-auth .client-outline-link {
+.tcc-company-auth :is(.client-submit, .admin-submit),
+.tcc-company-auth :is(.client-outline-link, .admin-outline-link) {
     min-height: 52px;
     border-radius: 0;
     text-transform: uppercase;
     letter-spacing: 0.08em;
 }
 
-.tcc-company-auth .client-submit {
+.tcc-company-auth :is(.client-submit, .admin-submit) {
     background: #030133;
 }
 
-.tcc-company-auth .client-submit:hover {
+.tcc-company-auth :is(.client-submit, .admin-submit):hover {
     background: #146fb6;
     transform: none;
 }
 
-.tcc-company-auth .client-outline-link {
+.tcc-company-auth :is(.client-outline-link, .admin-outline-link) {
     margin-top: 12px;
     border: 2px solid #e5e7eb;
 }
 
-.tcc-company-auth .client-outline-link:hover {
+.tcc-company-auth :is(.client-outline-link, .admin-outline-link):hover {
     border-color: #030133;
     background: #f9fafb;
     color: #030133;
@@ -246,33 +349,138 @@ body.auth-layout-body .auth-layout-main.tcc-company-auth-main {
         padding: 20px 12px 32px;
     }
 
-    .tcc-company-auth .client-auth-shell,
-    .tcc-company-auth .client-register-shell {
+    .tcc-company-auth :is(.client-auth-shell, .admin-auth-shell),
+    .tcc-company-auth :is(.client-register-shell, .admin-register-shell) {
         grid-template-columns: 1fr;
     }
 
-    .tcc-company-auth .client-auth-aside,
-    .tcc-company-auth .client-register-aside {
+    .tcc-company-auth :is(.client-auth-aside, .admin-auth-aside),
+    .tcc-company-auth :is(.client-register-aside, .admin-register-aside) {
         min-height: 310px;
     }
 
-    .tcc-company-auth .client-auth-aside > img:not(.auth-media-logo),
-    .tcc-company-auth .client-register-aside > img:not(.auth-media-logo) {
+    .tcc-company-auth :is(.client-auth-aside, .admin-auth-aside) > img:not(.auth-media-logo),
+    .tcc-company-auth :is(.client-register-aside, .admin-register-aside) > img:not(.auth-media-logo) {
         min-height: 310px;
     }
 
-    .tcc-company-auth .client-auth-overlay,
-    .tcc-company-auth .client-register-overlay,
-    .tcc-company-auth .client-auth-card,
-    .tcc-company-auth .client-register-card {
+    .tcc-company-auth :is(.client-auth-overlay, .admin-auth-overlay),
+    .tcc-company-auth :is(.client-register-overlay, .admin-register-overlay),
+    .tcc-company-auth :is(.client-auth-card, .admin-auth-card),
+    .tcc-company-auth :is(.client-register-card, .admin-register-card) {
         padding: 32px 24px;
     }
 
-    .tcc-company-auth .client-auth-points,
-    .tcc-company-auth .client-register-points,
+    .tcc-company-auth :is(.client-auth-points, .admin-auth-points),
+    .tcc-company-auth :is(.client-register-points, .admin-register-points),
     .tcc-company-auth .tcc-company-auth-aside-note {
         display: none;
     }
+}
+
+body[data-brand="tcc"] .tcc-auth-logo-aside > img.tcc-auth-background-logo {
+    @apply absolute inset-0 m-auto h-auto max-h-[75%] min-h-0 w-4/5 max-w-[24rem] object-contain object-center opacity-80;
+    filter: none;
+    mix-blend-mode: normal;
+}
+
+body[data-brand="tcc"] .tcc-auth-logo-aside > :is(.client-auth-overlay, .client-register-overlay, .admin-auth-overlay, .admin-register-overlay, .password-reset-overlay, .verify-overlay) {
+    background: rgb(3 1 51 / 60%);
+}
+
+.tcc-verification-body .standalone-auth-page,
+.tcc-verification-body .standalone-auth-main {
+    background: #f4f7f9;
+}
+
+.tcc-verification-body .standalone-auth-main {
+    @apply flex min-h-[100dvh] items-center justify-center px-4 py-6 sm:px-6 sm:py-10;
+}
+
+.tcc-verification-body .verify-shell {
+    @apply max-w-[980px] grid-cols-1 border-0 rounded-none;
+    animation: none;
+    box-shadow: 0 25px 48px rgb(15 23 42 / 20%);
+}
+
+.tcc-verification-body .verify-aside {
+    @apply min-h-[310px] overflow-hidden;
+    background: #030133;
+}
+
+.tcc-verification-body .verify-overlay {
+    @apply relative flex min-h-[310px] flex-col justify-end gap-4 px-6 py-8;
+    height: 100%;
+}
+
+.tcc-verification-body .verify-badge {
+    @apply mb-0 rounded-none px-3 py-2 text-xs tracking-widest;
+    background: #fd1e6e;
+}
+
+.tcc-verification-body .verify-overlay h2 {
+    @apply mb-0 text-3xl leading-tight;
+}
+
+.tcc-verification-body .verify-card {
+    @apply flex flex-col justify-center px-6 py-8;
+}
+
+.tcc-verification-body .verify-header h1 {
+    @apply text-3xl leading-tight;
+}
+
+.tcc-verification-body :is(.verify-header p, .verify-note, .verify-tip) {
+    @apply text-sm leading-relaxed;
+    color: #55658c;
+}
+
+.tcc-verification-body .status-box {
+    @apply rounded-none border px-4 py-3 text-sm;
+}
+
+.tcc-verification-body .verify-label {
+    @apply mb-2 text-sm;
+    color: #030133;
+}
+
+.tcc-verification-body .code-input {
+    @apply h-14 rounded-none border-2 text-2xl;
+    background: #f9fafb;
+    letter-spacing: 0.35em;
+    font-variant-numeric: tabular-nums;
+}
+
+.tcc-verification-body .code-input:focus {
+    border-color: #030133;
+    box-shadow: 0 0 0 3px rgb(3 1 51 / 12%);
+}
+
+.tcc-verification-body :is(.verify-submit, .verify-resend) {
+    @apply min-h-12 rounded-none px-4 py-3 text-sm;
+}
+
+.tcc-verification-body .verify-submit {
+    background: #030133;
+}
+
+.tcc-verification-body :is(.verify-submit, .verify-resend):focus-visible {
+    outline: 2px solid #146fb6;
+    outline-offset: 3px;
+}
+
+@media (min-width: 768px) {
+    .tcc-verification-body .verify-shell { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .tcc-verification-body .verify-aside { min-height: 560px; }
+    .tcc-verification-body :is(.verify-overlay, .verify-card) { padding: 40px; }
+}
+
+body.auth-layout-body .auth-layout-main.tcc-company-auth-main--standalone {
+    @apply flex min-h-[100dvh] items-center justify-center px-4 py-6 sm:px-6 sm:py-10;
+}
+
+.tcc-company-auth-main--standalone > .tcc-company-auth {
+    @apply min-h-0;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -280,5 +488,41 @@ body.auth-layout-body .auth-layout-main.tcc-company-auth-main {
     .tcc-company-auth * {
         animation: none !important;
         transition: none !important;
+    }
+}
+
+.tcc-company-auth .admin-auth-card {
+    @apply flex flex-col justify-center;
+}
+
+.tcc-company-auth .admin-auth-form .admin-field {
+    @apply mb-6;
+}
+
+
+
+.tcc-ceo-login .admin-input {
+    @apply text-base font-normal leading-normal;
+}
+
+.tcc-ceo-login :is(.admin-label, .admin-submit, .admin-outline-link) {
+    @apply text-sm font-bold leading-normal;
+}
+
+.tcc-ceo-login .admin-outline-link {
+    @apply normal-case tracking-normal focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4;
+}
+
+.tcc-ceo-login .admin-auth-note {
+    @apply mt-5 text-slate-500;
+}
+
+.tcc-ceo-login .admin-auth-note small {
+    @apply block text-[0.8125rem] leading-relaxed;
+}
+
+@media (min-width: 992px) {
+    .tcc-company-auth .admin-auth-shell {
+        @apply max-w-[980px];
     }
 }

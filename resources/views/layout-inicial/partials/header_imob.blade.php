@@ -15,7 +15,7 @@
 
     $companyName = $dashboardCompany?->name
         ?? $dashboardUser?->name
-        ?? 'Imobiliária';
+        ?? \App\Support\BrandingText::choose('Imobiliária', 'Empresa');
 
     $companyEmail = $dashboardCompany?->email
         ?? $dashboardUser?->email
@@ -54,7 +54,7 @@
     $dashboardRoute = route('company.dashboard');
     $leadsRoute = $dashboardRoute.'#leads-section';
     $simulationRoute = route('simulation.registered-company.access');
-    $panelLabel = 'Painel da imobiliária';
+    $panelLabel = \App\Support\BrandingText::choose('Painel da imobiliária', 'Painel da empresa');
     $operationLabel = $brandProfile === 'client'
         ? 'Operação ativa'
         : 'Sistema operacional';
@@ -96,34 +96,17 @@
                 </span>
             </a>
 
-            <nav class="dashboard-header-nav" aria-label="Seções do painel">
-                <a class="dashboard-header-nav__link" href="{{ $dashboardRoute }}">
-                    Visão geral
-                </a>
-                <a
-                    class="dashboard-header-nav__link {{ request()->routeIs('company.dashboard') ? 'active' : '' }}"
-                    href="{{ $leadsRoute }}"
-                    @if (request()->routeIs('company.dashboard')) aria-current="page" @endif
-                >
-                    Leads
-                </a>
-
-                @if ($insuranceAnalysisEnabled)
-                    <a
-                        class="dashboard-header-nav__link {{ request()->routeIs('insurance-analyses.*') ? 'active' : '' }}"
-                        href="{{ route('company.dashboard') }}#leads-section"
-                        @if (request()->routeIs('insurance-analyses.*')) aria-current="page" @endif
-                    >
-                        Análises
-                    </a>
-                @endif
-
-                <a class="dashboard-header-nav__link" href="{{ $simulationRoute }}">
-                    Simulação
-                </a>
-            </nav>
+            @unless ($companyWorkspace ?? false)
+            @include('layout-inicial.partials.company-dashboard-navigation')
+            @endunless
 
             <div class="dashboard-header-actions">
+                @if ($companyWorkspace ?? false)
+                    <button type="button" class="btn company-theme-toggle" data-dashboard-theme-toggle
+                        aria-label="Modo escuro" aria-pressed="false" title="Modo escuro">
+                        <i class="bi bi-moon" data-dashboard-theme-icon aria-hidden="true"></i>
+                    </button>
+                @endif
                 @if ($brandProfile === 'tcc')
                     @include('layout-inicial.partials.dashboard-header-notifications', [
                         'notificationCount' => $notificationCount,
@@ -214,11 +197,18 @@
     </div>
 
     <div class="dashboard-client-header__secondary">
+        @if ($companyWorkspace ?? false)
+        <div class="company-header-secondary-inner">
+            @include('layout-inicial.partials.company-dashboard-navigation')
+        @endif
         <div class="dashboard-header-breadcrumb" aria-label="Localização atual">
             <span>Dashboard</span>
             <i class="bi bi-slash-lg" aria-hidden="true"></i>
             <strong>{{ $currentSectionLabel }}</strong>
         </div>
+        @if ($companyWorkspace ?? false)
+        </div>
+        @endif
     </div>
 </header>
 
@@ -239,7 +229,7 @@
                 <h5 class="offcanvas-title fw-bold mb-0" id="dashboardClientSidebarLabel">
                     {{ config('branding.profiles.'.config('branding.active', 'tcc').'.name', 'NVS Seguros') }}
                 </h5>
-                <small class="text-muted">Menu da imobiliária</small>
+                <small class="text-muted">{{ \App\Support\BrandingText::choose('Menu da imobiliária', 'Menu da empresa') }}</small>
             </div>
         </div>
 
