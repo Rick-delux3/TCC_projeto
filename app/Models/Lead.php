@@ -103,6 +103,7 @@ class Lead extends Model
         'ramo_atividade' => RamoAtividade::class,
         'leadlovers_lead_id' => 'integer',
         'leadlovers_response' => 'array',
+        'leadlovers_recovery' => 'array',
         'sent_to_leadlovers_at' => 'datetime',
         'aceite_termos' => 'boolean',
         'reanalysis_unlocked_at' => 'datetime',
@@ -360,7 +361,9 @@ class Lead extends Model
     public function awaitingLeadLoversOutageRecovery(): bool
     {
         return $this->leadlovers_status === 'processing'
-            && in_array((int) $this->leadlovers_initial_error_status, LeadLoversApiException::RECOVERABLE_SERVER_STATUSES, true);
+            && (in_array((int) $this->leadlovers_initial_error_status, LeadLoversApiException::RECOVERABLE_SERVER_STATUSES, true)
+                || (data_get($this->leadlovers_recovery, 'mode') === 'machine_confirmation'
+                    && in_array(data_get($this->leadlovers_recovery, 'status'), ['scheduled', 'processing'], true)));
     }
 
     public function scopeExpiredRejectedRetention(Builder $query): Builder

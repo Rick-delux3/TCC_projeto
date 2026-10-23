@@ -3,6 +3,7 @@
 use App\Exceptions\LeadLoversApiException;
 use App\Services\LeadLoversApiClient;
 use Illuminate\Http\Client\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\RateLimiter;
 
@@ -443,10 +444,12 @@ it('normalizes HTTP errors without legacy response wrappers', function (
     ],
 ]);
 
-it('prefers RateLimit-Reset and falls back defensively to Retry-After', function (
+it('respects the brand retry header policy', function (
     array $headers,
-    int $expectedDelay
+    int $expectedDelay,
+    string $profile = 'client',
 ) {
+    config(['branding.active' => $profile]);
     fakeLeadLoversStageOneResponse(
         '/tags/',
         ['error' => 'rate_limit', 'message' => 'Too many requests'],
@@ -488,6 +491,16 @@ it('prefers RateLimit-Reset and falls back defensively to Retry-After', function
     'configured default' => [
         [],
         60,
+    ],
+    'tcc honors the longest server delay' => [
+        ['RateLimit-Reset' => '17', 'Retry-After' => '3600'],
+        3600,
+        'tcc',
+    ],
+    'client retains its retry delay cap' => [
+        ['Retry-After' => '3600'],
+        900,
+        'client',
     ],
 ]);
 
@@ -958,6 +971,54 @@ it('enforces the shared local rate limit without blocking the process', function
         ->isTransient->toBeTrue()
         ->retryAfterSeconds->toBe(7);
     Http::assertSentCount(1);
+});
+
+it('caps all tcc requests at ninety per minute even with permissive configuration', function () {
+    $this->freezeTime();
+    config([
+        'branding.active' => 'tcc',
+        'services.leadlovers.requests_per_minute' => 999,
+        'services.leadlovers.rate_limit_window_seconds' => 1,
+    ]);
+    Http::fake(['*' => Http::response([], 200)]);
+
+    for ($index = 0; $index < 90; $index++) {
+        $client = new LeadLoversApiClient;
+        $index % 2 === 0 ? $client->listTags() : $client->listLeadMachines(501);
+    }
+    $this->travel(59)->seconds();
+    expect(fn () => app(LeadLoversApiClient::class)->listTags())->toThrow(LeadLoversApiException::class);
+    Http::assertSentCount(90);
+    $this->travel(2)->seconds();
+    expect(app(LeadLoversApiClient::class)->listTags())->toBe([]);
+    Http::assertSentCount(91);
+});
+
+it('does not send tcc requests while another worker reserves the budget', function () {
+    config(['branding.active' => 'tcc']);
+    $lock = Cache::store(config('cache.limiter'))->lock(leadLoversStageOneLimiterKey().':reservation', 5);
+    expect($lock->get())->toBeTrue();
+    try {
+        expect(fn () => app(LeadLoversApiClient::class)->listTags())->toThrow(LeadLoversApiException::class);
+        Http::assertNothingSent();
+        expect(RateLimiter::attempts(leadLoversStageOneLimiterKey()))->toBe(0);
+    } finally {
+        $lock->release();
+    }
+});
+
+it('counts a tcc connection failure before allowing another request', function () {
+    config(['branding.active' => 'tcc', 'services.leadlovers.requests_per_minute' => 1]);
+    Http::fake(['*' => Http::failedConnection()]);
+    expect(fn () => app(LeadLoversApiClient::class)->listTags())->toThrow(LeadLoversApiException::class);
+    expect(RateLimiter::attempts(leadLoversStageOneLimiterKey()))->toBe(1);
+    Http::fake(['*' => Http::response([], 200)]);
+    try {
+        app(LeadLoversApiClient::class)->listTags();
+        test()->fail('A segunda chamada deveria aguardar o limite local.');
+    } catch (LeadLoversApiException $exception) {
+        expect($exception->errorCode)->toBe('LOCAL_RATE_LIMIT');
+    }
 });
 
 it('uses the stable token-scoped local rate budget', function () {

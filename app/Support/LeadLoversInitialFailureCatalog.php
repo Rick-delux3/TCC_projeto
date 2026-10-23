@@ -3,6 +3,7 @@
 namespace App\Support;
 
 use App\Models\Lead;
+use Illuminate\Support\Carbon;
 
 final class LeadLoversInitialFailureCatalog
 {
@@ -78,6 +79,7 @@ final class LeadLoversInitialFailureCatalog
             && $notSent
             && $httpStatus === 400
             && ! $configurationFailure
+            && (config('branding.active') !== 'tcc' || ! str_starts_with($operation ?? '', 'machine_'))
             ? (self::CORRECTABLE_FIELDS[$errorCode] ?? [])
             : [];
 
@@ -85,6 +87,8 @@ final class LeadLoversInitialFailureCatalog
             && $notSent
             && $httpStatus === 400
             && $fields !== [];
+
+        $recovery = $this->recoveryPresentation($lead);
 
         return [
             'failed' => $failed,
@@ -99,7 +103,8 @@ final class LeadLoversInitialFailureCatalog
                     $errorCode,
                     $operation
                 )
-                : null,
+                : ($recovery['message'] ?? null),
+            'recovery' => $recovery,
             'correctable' => $correctable,
             'fields' => $fields,
         ];
@@ -112,6 +117,25 @@ final class LeadLoversInitialFailureCatalog
         ?string $operation,
     ): string {
         return match (true) {
+            config('branding.active') === 'tcc'
+                && ($operation === 'integration_disabled' || $errorCode === 'INTEGRATION_DISABLED') => 'A integração com a LeadLovers está desativada. Não há novas tentativas automáticas enquanto ela permanecer desativada.',
+
+            config('branding.active') === 'tcc'
+                && $operation === 'machine_confirmation'
+                && $httpStatus === null && $errorCode === null => 'A associação à máquina da LeadLovers não foi confirmada a tempo. Isso não comprova erro de configuração. A sincronização precisa ser revisada antes de retomar as tentativas.',
+
+            config('branding.active') === 'tcc'
+                && $httpStatus === 429 => 'O limite de requisições da LeadLovers foi atingido e este ciclo de tentativas foi encerrado. A sincronização precisa ser revisada antes de retomar.',
+
+            config('branding.active') === 'tcc'
+                && $httpStatus === 403 => 'A LeadLovers negou permissão para esta operação. Um administrador precisa verificar as permissões da integração.',
+
+            config('branding.active') === 'tcc'
+                && str_starts_with($operation ?? '', 'machine_')
+                && ! $this->isMachineConfigurationFailure($lead, $operation)
+                && in_array($httpStatus, [400, 404, 409, 422], true)
+                && ! in_array($errorCode, ['TIMEOUT', 'TRANSACTION_FAILED'], true) => 'A LeadLovers recusou a operação de associação à máquina. Um administrador precisa revisar a resposta da integração antes de retomar. Não é necessário alterar os dados do lead.',
+
             $this->isTagConfigurationFailure($lead, $operation) => 'A tag principal necessária para enviar o lead não está configurada corretamente.',
 
             $this->isMachineConfigurationFailure($lead, $operation) => 'A máquina, sequência ou etapa da LeadLovers não está configurada corretamente ou recusou a associação. Os dados do lead não precisam ser alterados.',
@@ -170,11 +194,67 @@ final class LeadLoversInitialFailureCatalog
         Lead $lead,
         ?string $operation,
     ): bool {
+        if (config('branding.active') === 'tcc') {
+            return $lead->leadlovers_status === 'sequence_failed'
+                || $operation === 'machine_configuration';
+        }
+
         return $lead->leadlovers_status === 'sequence_failed'
             || ($operation !== null && str_starts_with(
                 $operation,
                 'machine_'
             ));
+    }
+
+    /**
+     * @return array{label: string, message: string, next_retry_at: ?string}|null
+     */
+    private function recoveryPresentation(Lead $lead): ?array
+    {
+        $recovery = $lead->leadlovers_recovery;
+
+        if (config('branding.active') !== 'tcc'
+            || ! config('services.leadlovers.enabled')
+            || $lead->leadlovers_status !== 'processing'
+            || ! is_array($recovery)
+            || ! in_array($recovery['status'] ?? null, ['scheduled', 'processing'], true)) {
+            return null;
+        }
+
+        $confirming = ($recovery['mode'] ?? null) === 'machine_confirmation';
+
+        if ($recovery['status'] === 'processing') {
+            return [
+                'label' => $confirming ? 'Confirmando vínculo' : 'Sincronizando com LeadLovers',
+                'message' => 'O sistema está consultando a LeadLovers para verificar a sincronização. Não é necessário reenviar o cadastro.',
+                'next_retry_at' => null,
+            ];
+        }
+
+        try {
+            $nextRetry = filled($recovery['next_retry_at'] ?? null)
+                ? Carbon::parse($recovery['next_retry_at'])
+                : null;
+        } catch (\Throwable) {
+            return null;
+        }
+
+        if ($nextRetry === null) {
+            return null;
+        }
+
+        $message = $confirming
+            ? 'A associação à máquina ainda aguarda confirmação. O sistema verificará o vínculo novamente, sem repetir o cadastro.'
+            : 'A sincronização será verificada novamente de forma automática.';
+        $message .= $nextRetry->isFuture()
+            ? ' Próxima tentativa prevista para '.$nextRetry->copy()->timezone(config('app.timezone'))->format('d/m/Y H:i T').'.'
+            : ' A próxima tentativa aguarda execução na fila.';
+
+        return [
+            'label' => $confirming ? 'Confirmação agendada' : 'Nova tentativa agendada',
+            'message' => $message,
+            'next_retry_at' => $nextRetry->toIso8601String(),
+        ];
     }
 
     private function normalizeHttpStatus(mixed $value): ?int
