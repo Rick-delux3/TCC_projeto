@@ -272,7 +272,7 @@ A print de Solicitar cotação confirma `paymentConditions` com `paymentType` ob
 
 **Planos e coberturas:** Basic, Complete e Traditional diferem em **coberturas e preço**; um plano pode oferecer mais coberturas que outro. Esta confirmação substitui expressamente a orientação anterior de que somente o preço mudava. Manter as três requisições variando planKey, sem atribuir artificialmente as mesmas coberturas aos retornos. Não inferir a hierarquia de cobertura ou preço apenas pelo nome: preservar os dados de cada plano. A regra de selecionar a menor parcela entre os aprovados elegíveis permanece; apresentar o plano e suas coberturas, sem afirmar que o mais barato oferece proteção equivalente ou superior.
 
-**Decisão do usuário:** executar o mesmo fluxo para três cotações do mesmo lead/rodada, variando apenas `riskObjects[].planKey`:
+**Decisão do usuário:** executar o mesmo fluxo para três cotações do mesmo lead/rodada, variando apenas `riskObjects[].planKey`. **Complemento de 28/10:** havendo cônjuge, aplicar esses três planos a cada cenário de pessoas da regra geral de cônjuges: duas individuais e uma conjunta somente após ambas serem recusadas. As três alternativas abaixo são por cenário, não um limite de três requisições para toda a rodada do casal:
 
 | Nome de apresentação | Valor exato no contrato mantido |
 | --- | --- |
@@ -660,7 +660,7 @@ A dúvida anterior sobre usar preço integral à vista no ranking foi encerrada 
 
 ## Lacunas relevantes para a próxima etapa
 
-1. **Contrato Too divergente:** obter a documentação correspondente às rotas de ficha, status v3, reanálise e cotação atualmente utilizadas, ou decidir explicitamente pelo fluxo do YAML. Preservar o código até essa definição.
+1. **Contrato Too divergente:** obter a documentação correspondente às rotas de ficha, status v3 e cotação atualmente utilizadas, ou decidir explicitamente pelo fluxo do YAML. Pela decisão de 28/10, a reanálise futura usará o fluxo de nova solicitação, não a rota dedicada de reanálise. Preservar o código até a etapa de implementação autorizada.
 2. **YAML não parseia como entregue:** Symfony Yaml rejeitou a linha 856, `nome: {{nomeProprietario}}`, por placeholder sem aspas. Para estudar estruturas, os placeholders desse formato foram colocados entre aspas somente em memória. O arquivo original continua intacto. Isso não equivale a validação completa OpenAPI.
 3. **Autenticação Too:** confirmar headers versus Basic Auth/formulário antes de alterar o service.
 4. **Schemas e catálogos incompletos:** confirmar status, tipos de documentos, planos, coberturas, pagamento, vigências, formatos de datas, escalas monetárias e comissões. Valores exemplificados não são enumerações exaustivas.
@@ -678,6 +678,134 @@ Entrega documental apenas, com escopo atualizado conforme orientação do usuár
 
 <a id="regra-geral-de-pagamento-e-comparacao-em-30-parcelas"></a>
 
+## Regra geral de reanálise como nova solicitação — 28/10/2026
+
+**Complemento posterior de 28/10:** quando houver cônjuge, cada nova rodada também segue a regra geral de análises individuais e conjunta condicional descrita abaixo. A terceira solicitação conjunta é autorizada somente pelas duas recusas individuais confirmadas da mesma companhia, não por falhas técnicas ou recusas de outra seguradora.
+
+**Decisão definitiva do usuário para todas as companhias:** a ação de reanálise do sistema iniciará uma **nova cotação ou nova solicitação de análise**, utilizando os endpoints de criação/solicitação de análise de cada seguradora. Não usar endpoints específicos de reanálise, motivos de reanálise ou recálculo da cotação anterior para executar essa ação. Esta regra substitui as propostas e pendências anteriores sobre escolher entre nova solicitação e reanálise dedicada.
+
+| Companhia | Caminho da futura reanálise |
+| --- | --- |
+| Too | Reiniciar o fluxo de criação da ficha/proposta e solicitação de análise, seguindo as etapas obrigatórias de uma nova solicitação; não chamar `solicitar-reanalise` nem buscar motivos exclusivos desse endpoint |
+| Pottencial | Criar novas cotações pelos endpoints de solicitar cotação, mantendo as três alternativas Basic/Complete/Traditional e suas regras de comparação; não chamar `/quotes/reanalysis` nem atualizar a cotação anterior para representar a nova rodada |
+| Tokio | Criar uma nova cotação por POST `/cotar`, sem os headers `sqCdCotac` e `token` da cotação anterior; gerar/obter a autenticação OAuth conforme seu contrato. Não usar o modo de recálculo para a ação de reanálise |
+| Demais companhias | Usar o respectivo fluxo de nova solicitação quando seu contrato estiver estudado e integrado, sem inventar endpoints |
+
+Cada nova rodada usa os dados vigentes do lead e mantém os padrões já definidos de pagamento, comissão, elegibilidade e preenchimento. Preservar o histórico e os identificadores das rodadas anteriores, separando-os dos identificadores retornados na nova solicitação. Os IDs criados durante a nova rodada continuam sendo utilizados nas consultas e etapas subsequentes dessa mesma rodada; não eliminar dependências obrigatórias do fluxo de criação.
+
+Respostas tardias de uma rodada anterior não podem sobrescrever a rodada atual. Reanálise de negócio não é retry de transporte: timeout, falha de conexão ou encaminhamento não devem iniciar novas cotações automaticamente. A única tentativa adicional automática de negócio aqui autorizada é a conjunta, após as duas recusas individuais do casal na mesma companhia, conforme regra específica abaixo; não repetir indefinidamente recusas. A decisão não autoriza emissão de apólice nem modifica o tratamento manual da Tokio para PJ.
+
+Mensagens como `Cadastro Reprovado não passível de reanálise.` continuam preservadas como evidência da decisão anterior, mas a funcionalidade futura não tentará usar a operação dedicada de reanálise desse registro. A escolha do fluxo de nova solicitação está encerrada; não equivale a prometer que a seguradora aceitará ou aprovará uma nova submissão. Se a API impedir a nova solicitação, registrar o retorno efetivo sem contornar a restrição.
+
+**Implementação adiada por determinação do usuário:** desenvolver somente após estudar todas as APIs e definir todas as regras. Nesta atualização, apenas documentação; não remover serviços, métodos, comandos ou testes existentes, nem alterar Jobs, providers ou chamadas atuais. Endpoints específicos antigos permanecem descritos como referência histórica do contrato, fora do caminho futuro de reanálise.
+
+## Regra geral de cônjuges: individuais paralelas e conjunta condicional — 28/10/2026
+
+**Decisão do usuário, aplicável a todas as seguradoras integradas:** quando a solicitação tiver cônjuge, realizar inicialmente duas análises separadas e simultâneas por companhia: uma para o solicitante principal e outra para o cônjuge. Cada análise individual considera somente a respectiva pessoa como pretendente da análise, com sua própria identidade. Se as duas forem recusadas, iniciar uma terceira solicitação com os dois juntos, como casados. Se pelo menos uma aprovar, não realizar a conjunta.
+
+Esta regra substitui a ideia de sempre enviar o casal junto na primeira análise. Solicitações sem cônjuge mantêm o fluxo individual. Aplicar a regra por **seguradora e rodada**, respeitando elegibilidade (inclusive Tokio PJ manual), meios de pagamento, comissão, planos e demais padrões já definidos. Não criar mais seguradoras no lote por haver mais pessoas, planos ou solicitações remotas.
+
+### Fluxo de decisão por companhia
+
+| Resultado individual do solicitante | Resultado individual do cônjuge | Ação |
+| --- | --- | --- |
+| Aprovado | Aprovado | Não enviar conjunta; comparar as ofertas elegíveis e destacar a menor parcela |
+| Aprovado | Recusado | Não enviar conjunta; apresentar a oferta aprovada e o registro de recusa do outro |
+| Recusado | Aprovado | Não enviar conjunta; apresentar a oferta aprovada e o registro de recusa do outro |
+| Recusado | Recusado | Enviar uma única terceira solicitação com os dois como casados |
+| Pendente/processando ou falha técnica em qualquer uma, sem duas recusas confirmadas | Qualquer resultado | Não considerar satisfeita a condição da conjunta; aguardar conclusão ou tratar a falha |
+| Aprovado, mas preço ausente/indisponível | Qualquer resultado | A aprovação impede a conjunta; ausência de preço não é recusa |
+
+A condição é local à companhia: aprovação em outra seguradora não elimina a conjunta de uma companhia cujas duas individuais foram recusadas. Uma recusa individual não gera a conjunta antes de conhecer a decisão da outra. Se uma aprovar enquanto a outra ainda estiver em andamento, a conjunta já está dispensada, mas a outra individual continua para permitir comparar as duas se também aprovar. O destaque definitivo deve respeitar a conclusão das alternativas daquela rodada; não anunciar vencedor final enquanto uma individual ainda puder produzir oferta concorrente.
+
+A terceira usa os dois pretendentes juntos, mantendo suas identidades e os domínios de casado exigidos por cada API. É uma nova cotação/solicitação pelos endpoints de criação, não uma chamada a endpoint específico de reanálise. Se for recusada ou falhar, não criar quarta tentativa de negócio. Recuperações técnicas de consultas não são novas tentativas de crédito, e timeout de criação não autoriza duplicar a solicitação.
+
+### Identidade, estado civil e dados compartilhados
+
+- Congelar os dados de cada pessoa e do imóvel na rodada. O cônjuge não pode herdar nome/CPF do solicitante nem dados pessoais que não lhe pertencem. A separação das solicitações não autoriza alterar silenciosamente o estado civil cadastrado para solteiro.
+- O fato de uma pessoa ser enviada sozinha torna-a a principal daquela solicitação, conforme o contrato da companhia. Não confundir papel principal na requisição com vínculo empresarial, responsabilidade financeira, comissão do corretor ou participação societária.
+- O imóvel, aluguel, condições, origem do formulário e vínculo com imobiliária continuam os mesmos nas duas individuais e na eventual conjunta. Não dividir o aluguel por dois nem somar preços de individuais para fabricar o preço da conjunta.
+- **Responsabilidade financeira confirmada em 28/10:** na Tokio, ambos os pretendentes recebem `respondeFinanceiramente = S`. Nas análises individuais, enviar S para a pessoa analisada; na conjunta condicional, enviar S nos dois objetos pessoais. O cônjuge continua responsável financeiro mesmo com `pretendentePrincipal = N`. Essa decisão encerra a dúvida sobre quem recebe o indicador. Em confirmação posterior, o usuário definiu renda de 4 × aluguel para cada um, inclusive na conjunta, sem divisão e sem proporcionalidade aos 50% de participação. Nas demais APIs, respeitar os respectivos contratos, sem copiar o nome/código do campo Tokio por inferência.
+- A representação de múltiplas pessoas em cada API será aplicada pelo respectivo adapter. Os códigos Tokio não devem ser enviados para campos descritivos das demais companhias. A regra de `commissionedAgents` e a comissão do Broker não mudam por haver casal.
+
+### Tokio comercial PF: dois Titulares, 50% cada
+
+**Definição expressa do usuário:** os dois pretendentes serão **Titulares**, código Tokio `21147`, com **`percentualParticipacao = 50` para cada um** e `vinculoEmpresa = S`. Isso substitui a hipótese de principal Titular/cônjuge Sócio e o exemplo de Sócio `21149` com participação 100 como padrão desse cenário.
+
+Preservar o vínculo e a participação definidos para cada pessoa ao montar as solicitações; separá-las para análise não autoriza redistribuir automaticamente sua participação para 100%. Na conjunta, os dois percentuais somam 100%. Essa definição vale para o casal comercial PF. Para comercial PF sem cônjuge, o usuário confirmou posteriormente Titular com `percentualParticipacao = 100`. Não confundir a pessoa sem cônjuge com uma das análises individuais do casal, cujas participações permanecem 50 cada. Esses campos não são impostos às outras APIs.
+
+Na Tokio, a individual de cada pessoa contém somente ela como pretendente pessoal principal (`pretendentePrincipal = S`), além do objeto empresarial exigido no comercial. Na conjunta, preservar a estrutura observada em T17: um objeto de dados empresariais e dois objetos pessoais; principal original com S e cônjuge com N. Ambos continuam Titulares com 50%, mesmo havendo apenas um indicador principal S. Para a conjunta como casados, `estadoCivil = 18490` nos dois, conforme o domínio Tokio já recebido. Não há CPF cruzado nem necessidade de transformar o cônjuge em Sócio.
+
+Esses preenchimentos descrevem a montagem pretendida com base nas decisões e fragmentos recebidos; a aceitação do payload completo individual/conjunto será validada na integração. A ausência de suporte PJ na API Tokio permanece: não converter lead CNPJ em PF para executar essas tentativas.
+
+### Composição com os três planos da Pottencial
+
+A regra de Basic, Complete e Traditional permanece. **Cada cenário de pessoas** (solicitante sozinho, cônjuge sozinho e eventual casal) tem as suas cotações por plano. Assim, haverá seis cotações iniciais por rodada Pottencial com cônjuge (dois cenários × três planos) e até nove se a conjunta for necessária. São até três cenários de análise, não nove companhias ou nove rodadas.
+
+Dentro de cada individual, qualquer plano aprovado torna aquela individual aprovada; recusa de todos os três planos confirma sua recusa. Falha, processamento ou ausência de preço não equivalem a recusa de plano. A conjunta só começa quando ambas as individuais forem recusadas, isto é, os três planos de cada individual tiverem sido recusados, preservando a regra anterior de recusa total Pottencial. Recusas de dois planos isolados não bastam.
+
+Selecionar primeiro a melhor oferta elegível entre os planos de cada cenário, depois comparar as individuais aprovadas da companhia. Caso ambas sejam recusadas, comparar os planos aprovados da conjunta. Preservar o plano, participantes, coberturas, quoteId e documento correspondentes ao preço escolhido. A proposta de menor parcela pode ter coberturas distintas; não afirmar equivalência de proteção por ser mais barata.
+
+### Painel, e-mail e seleção do melhor negócio
+
+No painel de corretores **e** imobiliárias, a seção da companhia deve apresentar todas as análises de pessoas efetivamente realizadas naquela rodada, identificando individual do solicitante, individual do cônjuge e conjunta quando existir. Para recusas, apresentar **nome do pretendente e mensagem de recusa**; na conjunta recusada, identificar os dois nomes. Não exibir preço zero, total, parcela ou erro técnico como se fossem uma oferta recusada. Mensagens internas de transporte/credenciais não são mensagens de recusa para o cliente.
+
+Havendo aprovação, destacar o **menor valor final de parcela** entre as ofertas elegíveis daquela companhia, indicando de quem é a análise (e o plano, quando aplicável). Se somente uma individual aprovar, usar sua oferta; se ambas aprovarem, calcular a diferença entre seus valores e escolher a menor; se a conjunta aprovar, usar a oferta conjunta. As outras análises permanecem identificadas no histórico do painel, sem esconder recusas nem apresentar todas como a vencedora.
+
+Página e e-mail devem consumir a mesma seleção persistida da rodada, incluindo a identidade do pretendente/casal e a referência da cotação. Não combinar preço de uma pessoa com documento ou coberturas de outra. A comparação geral entre seguradoras usa a melhor oferta elegível de cada uma, mantendo 30 meses/parcelas e a exceção Too Sem entrada já confirmada, sem recalcular o valor unitário retornado. Em empate, informar igualdade de preço; não inventar preferência por solicitante/cônjuge.
+
+A recusa de uma individual não deve concluir a companhia como recusada nem disparar e-mail global de recusa enquanto a outra individual ou a conjunta necessária ainda estiver em andamento. A companhia só conclui recusa do casal quando as duas individuais e a conjunta tiverem sido recusadas. Falha da conjunta após duas recusas individuais não é terceira recusa: preservar os resultados e indicar a falha. Aprovação da companhia depende de ao menos uma aprovação elegível de análise; o preço pode estar indisponível sem alterar essa decisão cadastral.
+
+O download de documentos já previsto permanece vinculado às cotações/planos correspondentes. Falha documental não dispara conjunta nem modifica aprovação/recusa. A regra de menor preço no e-mail não altera os destinatários já definidos por origem do formulário.
+
+### Persistência, concorrência e implementação futura
+
+Registrar sob a mesma rodada e seguradora cada cenário de pessoas, os participantes próprios, resultado, mensagens, identificadores remotos, payload/condições congelados e alternativas de preço/documento. Para Pottencial, acrescentar o plano dentro do cenário. A estrutura concreta de models/migrations/Jobs será definida no desenvolvimento; um único identificador remoto por companhia não representa mais todo esse fluxo.
+
+Disparar as duas individuais em paralelo. A avaliação de suas conclusões deve autorizar a conjunta **uma única vez**, mesmo que os dois Jobs terminem simultaneamente ou uma notificação seja repetida. Conferir os resultados da mesma rodada e companhia, sem misturar respostas antigas. Concluir o progresso da companhia somente após resolver os cenários necessários, mantendo os contadores de seguradoras separados dos de cenários/planos.
+
+Esta é uma exceção de negócio explícita à orientação anterior de não criar nova cotação automaticamente após recusa: somente duas recusas individuais do casal autorizam a conjunta. Não há loop de CPFs, novas combinações ou tentativas até obter aprovação. A regra geral de reanálise manual inicia outra rodada pelo fluxo de criação e reaplica esta mesma sequência quando houver cônjuge.
+
+**Somente estudo nesta etapa:** não alterar comandos, providers, Jobs, banco ou formulários agora. Implementação após concluir o estudo de todas as APIs e as definições de regras. Validações futuras relevantes: duas aprovações; uma aprovação; duas recusas seguidas de conjunta aprovada/recusada; falha técnica; aprovação sem preço; simultaneidade da segunda recusa; resposta de rodada antiga; isolamento entre seguradoras; planos Pottencial; e coerência do vencedor entre painel, e-mail e documentos.
+
+## Regra geral de coberturas por origem do formulário — 28/10/2026
+
+**Decisão do usuário para todas as seguradoras:** solicitar as quatro coberturas adicionais de danos ao imóvel, pintura interna, pintura externa e multa por rescisão, com exceção dos leads originados do formulário de locatário. Na Tokio, enviar os indicadores abaixo como strings S; nas demais companhias, solicitar as coberturas equivalentes usando os nomes, códigos e estruturas dos respectivos contratos, sem copiar literalmente os atributos Tokio.
+
+| Cobertura | Indicador Tokio | Formulários de imobiliária cadastrada e imobiliária não cadastrada/proprietário |
+| --- | --- | --- |
+| Danos ao imóvel | `icDanosImovel` | `S` |
+| Pintura interna | `icPinturaInterna` | `S` |
+| Pintura externa | `icPinturaExterna` | `S` |
+| Multa por rescisão | `icMultaRescisao` | `S` |
+
+**Exceção prioritária — `resources/views/simulation/forms/tenant.blade.php` (locatário):** enviar somente o valor do aluguel como cobertura para qualquer seguradora. Não enviar as quatro coberturas adicionais, água ou luz. A expressão “apenas o valor do aluguel” também exclui os demais encargos/coberturas opcionais, como condomínio, IPTU e gás, do conjunto de coberturas desse fluxo. Os dados obrigatórios de identificação, imóvel, análise e pagamento continuam presentes conforme o contrato; a exceção não transforma o payload inteiro em um único campo de aluguel.
+
+Na Tokio, omitir os quatro indicadores e os valores de encargos no fluxo de locatário, enviando `vlAluguel` no objeto de coberturas. Não substituir a omissão por S, zero ou coberturas extras herdadas de padrões. Nas demais APIs, aplicar a mesma seleção de somente aluguel pela estrutura documentada. Validar na integração eventuais coberturas incluídas automaticamente pela seguradora ou pelo plano; não afirmar que foram excluídas apenas porque não foram solicitadas.
+
+A seleção depende da **origem real do formulário**, e não apenas de haver ou não imobiliária vinculada. O formulário de imobiliária não cadastrada/proprietário mantém as quatro coberturas adicionais, apesar de compartilhar regras de pagamento com locatário em algumas companhias. Fora do fluxo tenant, esta decisão não determina valores fictícios de água, luz ou outros encargos: preservar as regras e os dados próprios desses campos.
+
+Aplicar a mesma seleção de coberturas às duas análises individuais e à eventual conjunta do casal, às novas rodadas e aos planos de cada companhia. Na Pottencial, preservar os três planos e suas diferenças de cobertura retornadas; verificar a compatibilidade da seleção solicitada por origem sem inventar parâmetros ou alterar silenciosamente a regra. Documentos, painel e e-mail devem refletir as coberturas efetivamente retornadas da cotação selecionada.
+
+**Pendência de escolha das quatro coberturas encerrada:** a regra é habilitá-las fora de tenant e enviar somente aluguel em tenant. Permanecem para a implementação o mapeamento por seguradora/plano e a conferência do retorno. Esta atualização é exclusivamente documental; não altera builders, formulários, comandos ou banco.
+## Regra geral de vigência do contrato e do seguro — 28/10/2026
+
+**Definição expressa do usuário para TODAS as seguradoras:** tanto o contrato de locação quanto o seguro terão início na data em que a análise for realizada e término 30 meses após essa data. A duração de ambos será de 30 meses; a origem dessas datas não é mais uma pendência.
+
+| Data | Regra |
+| --- | --- |
+| Início do contrato | Data da análise |
+| Início do seguro | Mesma data de início do contrato |
+| Fim do contrato | Data inicial acrescida de 30 meses de calendário |
+| Fim do seguro | Mesma data de término do contrato |
+
+Exemplo: uma análise realizada em 28/10/2026 terá início de contrato e seguro em 28/10/2026 e término em 28/04/2029. Calcular meses de calendário, não 900 dias. Como critério técnico para fins de mês, preservar o dia quando existir no mês de destino; caso contrário, usar o último dia válido desse mês, sem transbordar para o mês seguinte.
+
+Na implementação, fixar a data-base da rodada no fuso horário do negócio (America/Sao_Paulo) e reutilizá-la nas seguradoras, planos, análises individuais e eventual conjunta daquela rodada, evitando divergências por execução assíncrona ou virada de dia. Uma nova rodada de análise terá nova data-base correspondente à sua realização; consultas, PDFs e recuperação técnica da mesma cotação não devem recalcular sua vigência. Preservar as datas utilizadas no histórico.
+
+Cada integração deverá formatar essas mesmas datas conforme seu contrato. Na Tokio, usar DD/MM/AAAA nos campos de vigência do contrato e do seguro. Não confundir término da vigência com validade da cotação, prazo de transmissão ou vencimento das parcelas. A regra de vigência de 30 meses mantém a exceção de pagamento Too Sem entrada: prazo-base de 30 meses com 29 parcelas efetivas, sem reduzir a duração do contrato ou seguro.
+
+Esta decisão substitui vigências anuais dos exemplos e comandos diagnósticos como referência para produção. Permanecem os limites e validações de cada API; uma divergência no retorno deverá ser identificada, sem alterar silenciosamente as datas solicitadas. Nesta etapa, apenas documentação: não modificar comandos, builders ou execução das análises.
 ## Regra geral de pagamento e comparação em 30 parcelas
 
 Definida em **13/10/2026**, a pedido do usuário. Aplica-se a Too, Pottencial, Tokio e Porto, quando integradas, na página de análise, nos resumos e nos documentos. Esta seção prevalece sobre referências históricas a comparação por total ou a um teto de até 30 parcelas.
@@ -720,8 +848,22 @@ Definida em **13/10/2026**, a pedido do usuário. Aplica-se a Too, Pottencial, T
 
 **Comissão — decisão posterior do usuário:** enquanto a página não existir, utilizar **15% para todas as seguradoras**. Na futura página, os corretores poderão alterar o percentual individualmente por companhia, respeitando os limites contratuais. Essa autorização inclui comissão no escopo mesmo que sua alteração afete o prêmio; não significa autorização para modificar a decisão de crédito retornada pela seguradora. Nenhum outro padrão fixo foi alterado.
 
-15% é o valor de negócio; a representação numérica deve seguir cada contrato. Onde a API utiliza fração, 15% corresponde a `0.15`; onde utiliza pontos percentuais, corresponde a `15`. Não enviar o mesmo número indiscriminadamente: o contrato Pottencial mantido exemplifica escala fracionária (`0.15`); na Too a escala foi confirmada pelo usuário: `percentualComissao = 15.0` para 15%; confirmar separadamente a escala Tokio antes do envio. A faixa documentada Too de 10% a 40% comporta 15%; respeitar também regras de soma de comissões/co-corretagem. Na Pottencial, o usuário definiu posteriormente enviar os 15% somente no Broker e omitir comissão no PolicyOwner; não atribuir 15% a cada agente. Não presumir distribuição adicional nas outras companhias.
+15% é o valor de negócio; a representação numérica deve seguir cada contrato. Onde a API utiliza fração, 15% corresponde a `0.15`; onde utiliza pontos percentuais, corresponde a `15`. Não enviar o mesmo número indiscriminadamente: o contrato Pottencial mantido exemplifica escala fracionária (`0.15`); na Too a escala foi confirmada pelo usuário: `percentualComissao = 15.0` para 15%; na Tokio, enviar `pcComissao = 15`, conforme padrão confirmado e retorno real T19. A faixa documentada Too de 10% a 40% comporta 15%; respeitar também regras de soma de comissões/co-corretagem. Na Pottencial, o usuário definiu posteriormente enviar os 15% somente no Broker e omitir comissão no PolicyOwner; não atribuir 15% a cada agente. Não presumir distribuição adicional nas outras companhias.
 
+**Percentuais adicionais — decisão de 28/10/2026:** a futura página se chamará **Gerenciar seguradoras**, no dashboard dos corretores. Além da comissão por companhia, permitirá ajustar os percentuais adicionais aceitos por cada contrato para influenciar os valores cotados pela API. Enquanto a página não existir, manter os seguintes padrões de entrada Tokio:
+
+| Campo | Padrão numérico enviado |
+| --- | --- |
+| `pcComissao` | `15` (15%) |
+| `pcRemuneracao` | `0` |
+| `pcDesconto` | `0` |
+| `pcAgravo` | `0` |
+
+A escolha desses percentuais está encerrada; zero é regra de negócio atual, não apenas um valor de exemplo. Isso não altera os 50% de participação de cada pretendente nem a participação do Broker: são campos de outra finalidade. Não zerar percentuais calculados e retornados pela seguradora, como juros, nem presumir que o campo de saída `pcProLabore` seja um parâmetro de entrada.
+
+**Preparação para o desenvolvimento:** centralizar os padrões por seguradora em configuração consumida pelos builders, evitando literais repetidos em controllers, Jobs e providers. Prever que essa fonte de parâmetros possa ser substituída pelas configurações persistidas da futura página, mantendo os padrões acima quando não houver configuração. Validar campos permitidos, tipos, escala, limites e permissão de edição por companhia; não criar parâmetros equivalentes inexistentes nas outras APIs. Preservar os valores efetivamente utilizados em cada rodada para histórico e comparação; alterações futuras não devem modificar retroativamente cotações já realizadas. A aplicação dos novos percentuais ocorrerá em novas solicitações, usando os preços efetivamente retornados, sem manipular localmente os resultados da seguradora.
+
+Nesta etapa, registrar o desenho e os padrões; não implementar página, migrations ou refatoração de configuração. A preparação concreta dos builders será feita na etapa de desenvolvimento da integração.
 **Estado da implementação:** os valores de configuração e os fallbacks existentes não foram alterados nesta entrega documental. Alinhar a montagem dos payloads com o padrão de 15% na etapa de implementação; até lá, este registro não comprova que o código já envie 15% em todas as companhias.
 
 Na Too, o exemplo documenta `tipoEntrada` tipo **2 = Sem Entrada** e grupos com **`comEntrada = false`**. Selecionar a alternativa retornada de **29 parcelas sem entrada para a base de 30 meses**, conforme esclarecimento posterior. A decisão de entrada está encerrada: não escolher a variante com entrada para obter 30x quando a condição sem entrada não estiver disponível. Os catálogos de forma, entrada e parcelamento continuam exigindo associação válida.
@@ -730,7 +872,7 @@ Na Pottencial, Sem entrada é regra fixa confirmada pelo usuário; não exigir i
 
 A configuração futura selecionará condições suportadas pela seguradora: enviar parâmetros quando houver campo de requisição documentado; quando o endpoint retornar alternativas, filtrar e selecionar no sistema. Ela não obriga a API a devolver uma opção inexistente, não fabrica valores e não sobrescreve aprovação, recusa ou análise pendente. Se faltar a condição exigida, mostrar indisponibilidade para comparação, preservando a decisão da companhia.
 
-A expressão “sem interferir no resultado final” é um critério de elegibilidade dos parâmetros da futura tela, não uma garantia de que qualquer campo seja neutro. Confirmar por companhia quais alterações não mudam a decisão de aceitação; forma de pagamento, encargos ou desconto podem mudar valores financeiros sem representar nova decisão de crédito. A comissão foi explicitamente autorizada pelo usuário como parâmetro editável por seguradora na futura página. Dados de risco, coberturas, índice e demais parâmetros não ficam automaticamente liberados para edição por essa orientação. Definir a lista permitida com base no contrato e nas regras aprovadas, preservando os valores usados em cada rodada para histórico e comparação.
+A expressão “sem interferir no resultado final” é um critério de elegibilidade dos parâmetros da futura tela, não uma garantia de que qualquer campo seja neutro. Confirmar por companhia quais alterações não mudam a decisão de aceitação; forma de pagamento, encargos ou desconto podem mudar valores financeiros sem representar nova decisão de crédito. A comissão e, posteriormente, os percentuais adicionais foram explicitamente autorizados pelo usuário como parâmetros editáveis por seguradora na futura página Gerenciar seguradoras, conforme os campos suportados por cada contrato. Dados de risco, coberturas, índice e demais parâmetros não ficam automaticamente liberados para edição por essa orientação. Definir a lista permitida com base no contrato e nas regras aprovadas, preservando os valores usados em cada rodada para histórico e comparação.
 
 ### Seleção da condição e do preço
 
@@ -786,6 +928,10 @@ Validações essenciais futuras: 30x confirmado; opção de 12/24x excluída; qu
 
 ## Tokio Marine
 
+**Classificação vigente — suporte confirmado em 28/10/2026 (T20):** não existe encaminhamento para análise via API Tokio. Em uma resposta de negócio válida, `cotacaoInfo.cdSitucCotac = CAL` significa aprovação; qualquer outro código de situação significa recusa. Mensagens são explicativas, não condição adicional para aprovar. Esta confirmação substitui todas as hipóteses históricas de encaminhamento, necessidade de polling e classificação dependente de frases registradas abaixo. Falha técnica ou status ausente/inválido não equivale a um código de recusa.
+
+**Regra vigente — revisão de 27/10/2026:** a resposta do suporte fornecida em `C:\Users\Usuario\Downloads\A API atualmente suporta apenas os.txt` confirma API somente para PF, residencial e não residencial: `tpPessoa = F`, com `icResidencial = S` ou `N`. PJ é exclusivamente via Portal. A seção T15 prevalece sobre orientações históricas de envio de J, validação de suporte comercial e seleção pendente de CNAE. Não converter um lead PJ em PF usando o CPF do responsável para contornar essa restrição.
+
 Consolidação original: **09/10/2026**; revisão: **15/10/2026**. Produto: **Fiança Locatícia**. Estado: catálogo, formulários, persistência e builder parcial de pretendentes implementados localmente; serviço HTTP, provider, payload completo e normalização de resultados Tokio ainda pendentes. Não há comprovação de execução remota da integração nesta revisão.
 
 ### T1. Fontes, evidências e limites
@@ -832,7 +978,7 @@ A skill `api-design` foi aplicada à revisão do contrato externo e das fronteir
 7. O LeadLovers recebe o lead após a conclusão com resultado aprovado/recusado. Indisponibilidade dessa integração não pode impedir cadastro, análise ou consolidação local. Falhas de e-mail também não alteram decisões das seguradoras.
 8. Documento próprio: após conclusão e havendo aprovação, preparar PDF com detalhes das coberturas da melhor oferta e resumo de preços das demais, mantendo coerência com a seleção da página. Regra histórica de cartas: busca somente na recusa unânime. **Exceção posterior Pottencial (26/10):** consultar a carta de cada plano recusado, mesmo havendo outro aprovado; isso não autoriza entrega global de recusa em resultado misto. Falha técnica não dispara carta de recusa. O PDF próprio permanece desativado até a view ter conteúdo.
 9. Entrega por jobs, armazenamento privado e reaproveitamento por rodada. Destinatários: imobiliária vinculada → e-mail principal e setores, sem incluir usuários vinculados; imobiliária não vinculada/proprietário → e-mail do responsável pelo preenchimento; locatário → e-mail do lead. O efeito da nova regra de parcelas no conteúdo final do PDF deve acompanhar a normalização compartilhada.
-10. Reanálise pretendida: editar dados do lead e iniciar nova rodada com os dados atualizados. O usuário propôs estender a criação de nova análise a todas as companhias em lugar de depender de edição/reanálise específica. É uma direção funcional a avaliar por provider, não prova de equivalência entre operações remotas e não autorização para remover etapas obrigatórias das outras APIs.
+10. **Reanálise definida em 28/10:** iniciar nova rodada pelos endpoints de nova cotação/solicitação de análise de cada companhia, com os dados vigentes do lead. Não usar endpoints dedicados de reanálise nem recálculo da cotação anterior. Preservar todas as etapas obrigatórias da nova solicitação e o histórico; implementação somente após concluir os estudos e regras de todas as APIs, conforme a seção geral de reanálise.
 
 ### T3. Ambientes, autenticação e headers
 
@@ -893,16 +1039,16 @@ O usuário esclareceu que T-04 é o mínimo PF residencial. A estrutura completa
 
 | Campo | Tipo | Regra documental / aplicação |
 | --- | --- | --- |
-| `tpPessoa` | Alfanumérico | Obrigatório. Documentado somente `F`; decisão local posterior exige `J` para CNPJ, com suporte remoto ainda a confirmar em T14 |
-| `icResidencial` | Alfanumérico | Obrigatório. Indicador S/N, mas a descrição ainda afirma somente `S` disponível; conflita com tabelas de PF não residencial |
+| `tpPessoa` | Alfanumérico | Obrigatório, sempre `F` na API; suporte confirmou em 27/10 que PJ é somente via Portal. Lead PJ segue atendimento manual, conforme T15 |
+| `icResidencial` | Alfanumérico | Obrigatório: `S` residencial ou `N` não residencial; ambos os cenários PF confirmados pelo suporte em 27/10 |
 | `dadosItem` | Objeto | Obrigatório |
 | `dadosLocacao` | Objeto | Obrigatório |
-| `pretendentes` | Lista de objetos no JSON | Obrigatório; tabela chama “Objeto”, descrição e exemplos mostram lista |
+| `pretendentes` | Lista de objetos no JSON | Obrigatório; tabela chama “Objeto”, descrição e exemplos mostram lista. Fragmentos comerciais recebidos em 27/10 separam dados empresariais e pessoa em dois objetos distintos; ver T17 |
 | `coberturas` | Objeto | Obrigatório, não array |
-| `pcComissao` | Valor | Obrigatório; exemplo `15`, sem decisão de negócio definitiva para Tokio |
-| `pcRemuneracao` | Valor | Obrigatório; exemplo `0` |
-| `pcDesconto` | Valor | Obrigatório; exemplo `0` |
-| `pcAgravo` | Valor | Obrigatório; exemplo `0` |
+| `pcComissao` | Valor | Obrigatório; padrão de negócio confirmado de 15%, enviado como `15` na Tokio e observado no retorno real de T19 |
+| `pcRemuneracao` | Valor | Obrigatório; padrão confirmado `0`, futuramente editável em Gerenciar seguradoras |
+| `pcDesconto` | Valor | Obrigatório; padrão confirmado `0`, futuramente editável em Gerenciar seguradoras |
+| `pcAgravo` | Valor | Obrigatório; padrão confirmado `0`, futuramente editável em Gerenciar seguradoras |
 | `dadosItem.tipoImovel` | Alfanumérico na tabela; número no cURL | Obrigatório; seleção definida em T5 |
 | `dadosItem.motivoContratacao` | Alfanumérico na tabela; número no cURL | Obrigatório; seleção por cenário definida em T5 |
 | `dadosItem.congenere` | Numérico | Opcional; referência à congênere, catálogo não fornecido |
@@ -919,14 +1065,16 @@ O usuário esclareceu que T-04 é o mínimo PF residencial. A estrutura completa
 | `inicioVigenciaSeguro` / `fimVigenciaSeguro` | Alfanumérico | Obrigatórios, `DD/MM/AAAA`; separados da vigência do contrato |
 | `assistenciaDesejada` | Alfanumérico | Obrigatório; decisão: `26203`, Sem assistência |
 | `multiploLMI` | Numérico | Decisão: `30`. Tabela posterior obrigatório, anterior opcional; ausente no cURL mínimo |
-| `pinturaNova` | Alfanumérico | S/N, questionário para cobertura de pintura; tabela posterior opcional, anterior obrigatório |
+| `pinturaNova` | Alfanumérico | S/N; padrão confirmado pelo usuário: S nos cenários com cobertura de pintura interna/externa, preservando a exceção tenant de somente aluguel |
 | `complemento` | Alfanumérico | Opcional no material inicial e presente no template de entrada |
 | `utilizaContratoPadrao` | Alfanumérico | Opcional, S/N, **depreciado** |
 | `cobrancaNoCartao` | Alfanumérico | Opcional, S/N, **depreciado** |
 
-`multiploLMI` possui os valores documentados 12, 18, 24 e 30 meses de limite máximo de indenização. A escolha do usuário é 30. Não confundir essa unidade com a quantidade de parcelas do prêmio. O cURL exemplifica um ano de contrato/seguro; não foi definida uma regra geral de vigência e não se deve estendê-la a 30 meses apenas por causa do LMI ou do parcelamento.
+`multiploLMI` possui os valores documentados 12, 18, 24 e 30 meses de limite máximo de indenização. A escolha do usuário é 30. Não confundir essa unidade com a quantidade de parcelas do prêmio. O cURL exemplifica um ano de contrato/seguro, mas a decisão posterior de 28/10 definiu expressamente, para todas as seguradoras, início na data da análise e término 30 meses depois para contrato e seguro. Essa duração decorre da regra de vigência confirmada, não de inferência a partir do LMI ou do parcelamento.
 
 #### `pretendentes[]`
+
+**Escopo dos objetos — evidência posterior em T17:** nos dois fragmentos comerciais recebidos em 27/10, o primeiro objeto contém dados empresariais e não possui CPF, nome ou indicador de principal; o segundo contém a pessoa principal e seu vínculo. As exigências de identificação pessoal abaixo não devem ser aplicadas indiscriminadamente a todo elemento da lista. Os fragmentos são parciais e não demonstram todos os campos obrigatórios da requisição completa.
 
 | Campo | Tipo | Obrigatoriedade e significado |
 | --- | --- | --- |
@@ -934,10 +1082,10 @@ O usuário esclareceu que T-04 é o mínimo PF residencial. A estrutura completa
 | `pretendentePrincipal` | Alfanumérico | Obrigatório, S/N; o CPF principal é o titular segundo a regra do usuário |
 | `nome` | Alfanumérico | Obrigatório |
 | `residenteNoImovel` | Alfanumérico | Opcional, S/N |
-| `respondeFinanceiramente` | Alfanumérico | Opcional, S/N |
+| `respondeFinanceiramente` | Alfanumérico | Opcional no contrato, S/N; regra do sistema confirmada em 28/10: enviar S para ambos os pretendentes do casal, nas respectivas individuais e na conjunta condicional |
 | `nomeSocial` | Alfanumérico | Opcional |
 | `estadoCivil` | Alfanumérico | Opcional no contrato; domínio recebido posteriormente e registrado em T5. Regras comerciais do builder em T14 |
-| `rendaFixaMensal` | Alfanumérico | Tabela marca opcional, descrição condiciona envio a responsabilidade financeira S; regra de renda do sistema é 4 × aluguel |
+| `rendaFixaMensal` | Alfanumérico | Tabela marca opcional, descrição condiciona envio a responsabilidade financeira S; regra confirmada: 4 × aluguel para cada pretendente, nas individuais e na conjunta, sem dividir entre o casal |
 | `empresaConstituida` | Alfanumérico | S/N; descrito como obrigatório para PF não residencial |
 | `cnpj` | Alfanumérico | CNPJ da empresa, obrigatório no cenário PF não residencial conforme descrição; condições para empresa não constituída precisam ser confirmadas |
 | `CNAE` | Numérico | Obrigatório para PF não residencial; preservar a grafia maiúscula. Catálogo recebido e importador implementado; enviar somente o código, não a descrição |
@@ -948,7 +1096,8 @@ O usuário esclareceu que T-04 é o mínimo PF residencial. A estrutura completa
 | `franquia` | Alfanumérico | Opcional, S/N, indica se a empresa é franquia |
 | `franqueadora` | Numérico | Opcional, código da franqueadora; domínio não recebido |
 | `vinculoEmpresa` | Alfanumérico | S/N; obrigatório para PF não residencial conforme descrição |
-| `tipoVinculo` | Numérico | Obrigatório para PF não residencial; representa o vínculo com a empresa |
+| `tipoVinculo` | Numérico na tabela original; string nos fragmentos T17 | Obrigatório para PF não residencial; representa o vínculo com a empresa. Os dois novos exemplos enviam `"21149"` (Sócio) na pessoa principal |
+| `percentualParticipacao` | Número nos fragmentos T17 | Campo observado na pessoa principal, valor `100` nos dois cenários; não confundir com comissão ou com a escala fracionária da participação na Pottencial. Obrigatoriedade geral e divisão entre múltiplas pessoas não demonstradas |
 
 A regra foi detalhada e implementada para **CNPJ + comercial + solteiro/casado/união estável**: principal como Titular; nos dois últimos estados, cônjuge como Sócio. Trata-se da regra operacional definida pelo usuário, não de uma comprovação cadastral de participação societária. O esclarecimento posterior substitui a ideia de CPF cruzado: **não existe atributo para receber o CPF do cônjuge dentro do outro pretendente**. Cada objeto recebe seu próprio `cpf`, com `pretendentePrincipal = "S"` no principal e `"N"` no secundário. Não colocar CPF em `estadoCivil`. A composição de renda/responsabilidade financeira continua distinta dessa identificação. Ver limites do builder em T14.
 
@@ -1067,7 +1216,7 @@ T-04 é uma chamada de **PF residencial no Aceite W**. Estrutura observada, sem 
 
 Não copiar datas, identidade, imóvel ou credenciais do exemplo para produção. As decisões posteriores prevalecem: Casa 10001, Seguro Novo 26470, Sem assistência 26203 e LMI 30. Adicionar esses padrões produz um payload adaptado ao sistema, ainda a validar, não uma reprodução da chamada original. O fato de o usuário identificar o exemplo como mínimo não resolve sozinho as divergências das tabelas, especialmente LMI.
 
-Não foi recebida resposta preenchida dessa execução. Não se pode afirmar, com os materiais disponíveis, status de aprovação, valores reais, duração, código HTTP ou número de cotação gerado.
+Na revisão original não havia resposta preenchida dessa execução. A print posterior de 27/10/2026, registrada em T16, mostra uma execução no Aceite W com HTTP 200, identificador de cotação, `cdSitucCotac = CAL` e a mensagem explícita `Cadastro aprovado.`. Essa evidência não inclui o corpo completo de pagamentos nem comprova os demais cenários.
 
 ### T7. Retorno: identificação, estado e alternativas
 
@@ -1077,30 +1226,30 @@ Não foi recebida resposta preenchida dessa execução. Não se pode afirmar, co
 | --- | --- | --- |
 | `cotacaoInfo` | Objeto | Informações da cotação |
 | `cotacaoInfo.sqCdCotac` | Numérico | Identificador remoto; conservar sem arredondamento/perda de precisão |
-| `cotacaoInfo.cdSitucCotac` | Alfanumérico | Código da situação; catálogo de valores não fornecido |
+| `cotacaoInfo.cdSitucCotac` | Alfanumérico | Regra confirmada em T20: `CAL` = aprovação; qualquer outro código retornado = recusa. Não exigir mensagem específica nem limitar recusas a REC |
 | `cotacaoInfo.cdNgocoRsvdo` | Numérico | Código de negócio reservado; sem papel adicional confirmado |
 | `cotacaoInfo.dtPrmroCallo` | Alfanumérico | Data do primeiro cálculo; preservar a grafia `dtPrmroCallo` |
 | `cotacaoInfo.dtVldad` | Alfanumérico | Validade da cotação; não é vigência do seguro |
 | `cotacaoInfo.token` | Alfanumérico | Token da cotação, confidencial; não é access token OAuth |
 | `cotacaoInfo.abaInicial` | Objeto | `id` numérico, `descricao` e `rota` alfanuméricos; metadados de navegação, sem necessidade na página própria |
-| `mensagens` | Objeto | `danger`, `warning`, `success`, `info`: alfanuméricos na documentação |
+| `mensagens` | Objeto | T19 confirma listas de strings em `success`, `warning` e `danger`. O recusado também contém success; classificar pelo conteúdo específico e estado, não pela presença da categoria |
 | `calculos` | Objeto no JSON | A tabela de raiz o chama alfanumérico, incompatível com o exemplo e subtabelas |
-| `ordemApresentacaoCalculos` | Alfanumérico | Ordem de apresentação; não há garantia de ordenação por preço |
+| `ordemApresentacaoCalculos` | Array de strings nos retornos T19 | `["N"]` no aprovado e `[]` no recusado; corrige o rótulo alfanumérico da tabela original. Não há garantia de ordenação por preço |
 | `pcComissao`, `pcProLabore`, `pcDesconto`, `pcAgravo` | Valor | Percentuais retornados; entrada usa `pcRemuneracao`, saída usa `pcProLabore`, sem equivalência detalhada confirmada |
 
-HTTP bem-sucedido, `mensagens.success` e presença de valores não provam aprovação de crédito. Guardar o estado bruto e só mapear para aprovação/recusa após obter o catálogo da Tokio. Mensagens são auxiliares; não criar classificação por frases vagas. Se houver estado intermediário, não concluir o pacote nem inventar consulta periódica via POST de cotação.
+HTTP bem-sucedido, mera presença de `mensagens.success` e presença de valores não provam aprovação de crédito. **Regra final do suporte em T20:** classificar pelo código de situação da resposta válida: CAL aprova; qualquer outro código recusa. As mensagens de T19 explicam o resultado, inclusive success operacional no recusado, mas não substituem nem condicionam essa regra. Se o texto divergir do código, preservar a divergência para diagnóstico, mantendo a classificação pelo código. Não criar estado de encaminhamento nem polling para essa API.
 
 #### Alternativas de assistência em `calculos`
 
-| Chave | Significado confirmado nas tabelas |
+| Chave | Referência histórica das tabelas, sujeita à identificação no retorno |
 | --- | --- |
 | `P` | Assistência Completa |
 | `N` | Assistência Básica |
 | `O` | Assistência Intermediária — letra O, não zero |
 
-A print de pagamento usada pelo usuário é de `N`, portanto Básica, mesmo tendo sido inicialmente chamada de Intermediária na conversa. A regra de pagamento se aplica à alternativa selecionada, não exclusivamente a N. Não somar os valores de P/N/O e não contar três análises no pacote. Não presumir que a Básica seja sempre a mais barata.
+**Correção por evidência real em T19:** o retorno de 27/10 contém somente a chave `N`, com `tpSugestao = N` e `opcaoAssistencia = "Plano Completo"`. Portanto, não deduzir assistência Básica apenas da letra N, como sugeria a interpretação anterior. Preservar chave, descrição recebida e assistência solicitada; a tabela histórica acima não pode ser um mapa fixo que sobrescreve o retorno real. Não inferir a identidade de P/O a partir desse único caso. Não somar alternativas nem contá-las como companhias distintas.
 
-**Pendência de compatibilidade:** a entrada definida é Sem assistência 26203, mas o retorno fornecido só mostra P/N/O. Não há chave confirmada de Sem assistência nem prova de como o resultado muda com 26203. Não escolher silenciosamente Básica, Intermediária ou Completa para substituir Sem assistência. Necessária uma resposta preenchida com a entrada escolhida.
+**Pendência de compatibilidade:** a entrada final definida é Sem assistência 26203; o diagnóstico de T19 usou Completa 26206 e retornou N/Plano Completo. Isso não define a representação de Sem assistência nem autoriza trocar o padrão do projeto. Conferir a identificação com o payload final, preservando a escolha já aprovada.
 
 #### Campos de cada `calculos.{P|N|O}`
 
@@ -1119,7 +1268,7 @@ A print de pagamento usada pelo usuário é de `N`, portanto Básica, mesmo tend
 | `valorLMG` | Valor | Valor LMG, limite de garantia; não é preço |
 | `descSugestaoPagto` / `descSugestaoCobranc` | Alfanumérico | Descrições para apresentar a condição sugerida |
 
-Como todos os escalares de T-05 são `null`, os tipos acima vêm das tabelas, não de uma resposta real. Não converter `null`, campo ausente ou texto inválido em zero; não anunciar seguro gratuito ou melhor preço por ausência de valor.
+T-05 era um template com escalares null; T19 acrescenta tipos e valores observados em retornos reais. Manter a diferença entre ausente, null, string vazia e zero. Não anunciar seguro gratuito ou melhor preço por ausência de valor.
 
 ### T8. Pagamentos e comparação por parcela
 
@@ -1145,7 +1294,7 @@ calculos
       qtdParcela
 ```
 
-As tabelas mostram somente a chave `1` com a descrição “Parcela 1 por ir até x parcelas”. Isso não documenta que haverá uma única chave em todas as respostas, nem um calendário de vencimentos, nem que a chave seja a quantidade. Ler as opções recebidas e selecionar a condição com `qtd = 30`. A decisão de 13/10 exige exatamente 30 parcelas para comparação; ela não comprova que a API ofereça essa condição em todo cenário.
+As tabelas iniciais mostravam somente a chave `1`; T19 comprova múltiplas opções com chaves 1 a 12 no diagnóstico de um ano. Elas são alternativas de quantidade, não parcelas sucessivas de um calendário. A regra final reafirmada pelo usuário é **limite de 30 e uso de 30 parcelas**; o exemplo diagnóstico não redefine esse limite. Selecionar pela propriedade `qtd`, não pelo nome da chave. O agrupamento `vista` desse retorno contém opções parceladas, portanto não significa automaticamente uma única parcela; a intenção final de pagamento parcelado permanece e a representação vista/prazo deve ser conferida no retorno do payload final.
 
 | Campo da opção | Tipo documental | Significado e uso |
 | --- | --- | --- |
@@ -1206,10 +1355,10 @@ Não somar `valorPremio` das coberturas e chamar o resultado de total bruto sem 
 | Capacidade desejada | Evidência Tokio | Consequência |
 | --- | --- | --- |
 | Criar orçamento | POST `/cotar` com entrada completa do cenário | Implementável após fechar validações e interpretar resposta real |
-| Solicitar análise | Nenhuma rota separada recebida | Confirmar se `/cotar` faz decisão cadastral final ou apenas cálculo; não inventar `/analisar` |
-| Visualizar resultado | Resposta de `/cotar` tem situação e cálculos | Não há GET de consulta confirmado nem garantia de resposta final síncrona |
-| Recalcular orçamento existente | POST `/cotar`, com header `sqCdCotac` descrito para recálculo e `token` de acesso à cotação | Corpo pode ter regras específicas; confirmar campos alteráveis, efeitos na decisão, ID e validade |
-| Nova rodada após edição do lead | Proposta do usuário de criar nova análise | Separar de recálculo remoto; não reutilizar identificadores antigos inadvertidamente numa criação |
+| Solicitar análise | POST `/cotar` retorna a decisão cadastral, conforme confirmação T20 | Não existe encaminhamento via API; não inventar `/analisar` ou uma segunda etapa de decisão |
+| Visualizar resultado | Resposta de `/cotar` tem situação e cálculos | Classificar CAL como aprovado e outro código como recusado; não aguardar consulta periódica de encaminhamento |
+| Recalcular orçamento existente | POST `/cotar`, com header `sqCdCotac` descrito para recálculo e `token` de acesso à cotação | Referência documental; excluído do fluxo de reanálise pela decisão de 28/10 |
+| Nova rodada de análise | Decisão definitiva de criar nova cotação por POST `/cotar` | Usar dados vigentes e preservar histórico; não enviar headers de identificação da cotação antiga |
 | PDF/carta de recusa | Menu Impressos, sem contrato fornecido | Dependência documental pendente; não confundir cotação/proposta PDF com carta de decisão |
 
 Sequência proposta para integração, não executada: validar cenário e dados → fixar snapshot da rodada → autenticar → cotar → validar envelope/identificação/estado → persistir resultado apenas se a rodada ainda for atual → normalizar alternativas/preços → notificar a página após commit → consolidar pacote quando todos forem terminais → acionar entregas/integradores independentemente.
@@ -1225,7 +1374,7 @@ Os materiais não enumeram respostas HTTP nem catálogo de erros. A tabela abaix
 | Resposta observada futuramente | Tratamento proposto |
 | --- | --- |
 | 2xx com JSON | Validar estrutura e situação; sucesso de transporte não significa aprovação |
-| 202 ou situação pendente | Não finalizar como aprovada/recusada; definir mecanismo documentado de conclusão antes de automatizar |
+| HTTP 202 inesperado sem decisão de negócio válida | Tratar como resposta insuficiente/fora do contrato confirmado, não inventar encaminhamento ou polling. O número HTTP não substitui `cdSitucCotac` |
 | 204, corpo vazio ou 2xx sem dados indispensáveis | Resultado insuficiente, sem fabricar cotação/preço |
 | 3xx | Não seguir automaticamente redirecionamento para host não autorizado com credenciais |
 | 400/422 | Registrar falha de validação/negócio retornada; não repetir payload inválido sem correção |
@@ -1264,21 +1413,21 @@ A resposta fornecida não tem moeda explícita. BRL pode ser configuração de n
 
 | Prioridade | Questão / evidência | Impacto e próximo passo |
 | --- | --- | --- |
-| Alta | `cdSitucCotac` sem catálogo; não há consulta/solicitação de análise separada confirmada | Obter exemplos de aprovação, recusa e pendência; confirmar se cotação já representa análise final e como concluir estados intermediários |
-| Alta | Sem assistência 26203 versus retorno só P/N/O | Obter resposta real desse cenário para não exibir assistência/preço indevidos |
+| Encerrada em 28/10 | Suporte confirmou somente aprovação ou recusa via API, sem encaminhamento | CAL aprova; qualquer outro código de situação recusa. Mensagens explicam a decisão. Não falta exemplo de encaminhamento nem mecanismo para acompanhá-lo |
+| Alta | Sem assistência 26203 versus diagnóstico Completa 26206/N/Plano Completo | Validar a representação da escolha final. Corrigir a inferência histórica fixa N = Básica |
 | Alta | Comparação atual por total versus nova decisão por parcela em exatamente 30x | Refatorar regra compartilhada posteriormente; quantidade e exclusão de outras condições já definidas em 13/10. Confirmar equivalência monetária/vigências/coberturas, formas conforme presença de imobiliária e desempate para PDF |
-| Alta para comercial | `icResidencial` diz somente S, mas catálogos e campos comerciais existem | Confirmar liberação e payload PF não residencial no ambiente/credencial contratados; não declarar suporte apenas por haver domínios |
-| Alta para comercial | Decisão local `tpPessoa = J` versus documentação somente `F` | Confirmar aceitação do cenário PJ e da data de fundação calculada no ambiente contratado; a estrutura local não comprova esse suporte |
-| Alta para comercial | Catálogo CNAE recebido, com mais de um código em algumas descrições | Definir seleção determinística e validada de um código ativo Tokio por atividade; não descartar códigos, escolher arbitrariamente o primeiro ou enviar a lista no campo numérico |
+| Resolvida em 27/10 | Suporte confirmou PF residencial e não residencial | Enviar `tpPessoa = F` e `icResidencial = S/N`; validar payload e retornos durante o desenvolvimento |
+| Resolvida em 27/10 | PJ disponível exclusivamente via Portal | Não chamar API Tokio para lead PJ; apresentar orientação manual conforme perfil, sem classificar como recusa ou falha |
+| Resolvida em 27/10 | Usuário autorizou qualquer código da mesma descrição | Selecionar um código ativo Tokio com ordenação estável, enviar um número e preservar a relação 1:N; ver T15 |
 | Alta para comercial | Ramo obrigatório no HTML, nullable no Request; outros estados civis e comercial com CPF fora do builder empresarial | Fechar obrigatoriedade e cobertura de cenários no payload completo, com falha explícita para dados insuficientes. As regras S/N e Titular/Sócio dos cenários já definidos não estão mais em aberto |
 | Composição da parcela resolvida | Inclusão de juros/IOF em `vlPremPar` confirmada pelo usuário para o valor final da parcela | Usar diretamente, sem soma duplicada; preservar formato, arredondamentos e totais retornados, sem inventar total final |
-| Média | Padrão de exatamente 30x definido, disponibilidade remota não comprovada | Periodicidade mensal confirmada pelo usuário; conferir a condição retornada por meio de pagamento e suas datas; sem 30x a oferta não entra no ranking. Crédito sem imobiliária definido em 23/10; campos e disponibilidade por companhia ainda precisam de confirmação |
-| Média | Recálculo tem headers próprios apesar da mesma URL | Confirmar envio de `sqCdCotac`/`token`, campos alteráveis, reaproveitamento do ID, efeitos na análise e limites para nova cotação |
+| Validação técnica do payload final | Limite de 30 e uso de 30 parcelas reafirmados pelo usuário em 27/10; exemplo diagnóstico de um ano retorna até 12 | Manter regra 30x, sem criar novo teto ou pedir confirmação da quantidade. Validar identificação da opção e agrupamento vista/prazo ao executar o payload final; não extrapolar preço de 12x |
+| Decisão encerrada em 28/10 | Reanálise usa nova cotação, não recálculo | Criar por POST `/cotar` sem headers da cotação anterior; estudar detalhes do recálculo não é mais requisito desta funcionalidade |
 | Média | Tabelas divergem de exemplos em tipos e obrigatoriedade | Validar LMI, pintura, capital inicial e códigos numéricos/string. Regra local LMI 30 e capital 450000 só comercial está definida, mas não substitui validação remota |
 | Média | Token tem `expire_in` no exemplo | Confirmar resposta OAuth real, validade/cache e segregação W/Y/produção |
 | Média | Sem HTTP/errors/idempotência documentados | Obter retornos reais e orientação da Tokio para timeout, repetição, rate limit e consulta/reconciliação |
 | Média | PDFs/recusas sem endpoints recebidos | Obter contrato das cartas somente para o fluxo de recusa unânime; não bloquear resultado local por ausência do documento |
-| Média | Comissão, remuneração, pintura e vigência somente exemplificadas | Definir configurações de negócio; não cristalizar 15%, um ano ou indicadores S por copiar o exemplo |
+| Média | Aplicar e validar os padrões de produção já definidos | Comissão 15%, percentuais adicionais zero, coberturas por origem e vigência de contrato/seguro da data da análise até 30 meses depois estão definidos nas regras gerais. Os fixtures não substituem essas decisões |
 
 ### T13. Registro da verificação original e validações futuras
 
@@ -1328,7 +1477,7 @@ O `TokioCnaeSeeder` valida todo o arquivo antes da escrita: cabeçalho, UTF-8, c
 
 Comando existente para carga em ambiente preparado: `php artisan db:seed --class=TokioCnaeSeeder --no-interaction`. Esta revisão não executa migrations nem carga no banco da aplicação; a existência de migrations/Seeder não comprova que todos os ambientes estejam atualizados.
 
-**Pendência de envio:** a seleção do formulário identifica a atividade, não um código específico. Para atividades com vários códigos Tokio ativos, ainda não há regra implementada de resolução de um único `CNAE`. Preservar todos os códigos e definir o critério antes da montagem final; não usar automaticamente o primeiro, o menor, o ID da atividade, o CNAE fiscal de outra fonte ou a string com `|`. A tipagem numérica do payload deve ser aplicada pelo adapter Tokio ao código escolhido; não alterar o armazenamento textual do catálogo.
+**Decisão de envio encerrada em 27/10/2026:** a seleção do formulário identifica a atividade. O usuário autorizou enviar qualquer um dos códigos Tokio associados à mesma descrição. Na implementação futura, selecionar um código ativo de maneira determinística (critério técnico adotado: menor código numérico ativo), sem preferência comercial atribuída a ele, e congelar a escolha na rodada. Preservar todos os códigos e a relação 1:N. Enviar somente o código escolhido como número em `CNAE`, nunca ID da atividade, objeto, lista ou string com `|`; manter armazenamento textual do catálogo. Ausência de código ativo é inconsistência cadastral, não autorização para inventar outro.
 
 #### Pesquisa e persistência da atividade comercial
 
@@ -1390,11 +1539,11 @@ Permanecem as decisões já registradas: Casa 10001 para residencial, Sala comer
 
 #### O que falta conectar para iniciar a Tokio
 
-1. **Cenários e payload completo:** resolver CNAE múltiplo, ramo ausente e cenários não cobertos pelo builder parcial; confirmar J/comercial e uso da data calculada. Compor raiz, item, locação, pretendentes e coberturas nos níveis corretos, usando os helpers existentes e o mínimo residencial apropriado.
+1. **Cenários e payload completo:** aplicar T15: PF residencial/comercial na API, PJ manual, um código ativo por atividade e PF comercial com empresa não constituída derivada internamente. Corrigir ramo ausente e completar os cenários não cobertos pelo builder parcial. Compor raiz, item, locação, pretendentes e coberturas nos níveis corretos; o builder empresarial CNPJ não deve habilitar chamadas PJ.
 2. **Acesso remoto:** implementar configuração, autenticação, cliente HTTP e provider no padrão existente. `InsuranceProviderResolver` ainda resolve somente Too e Pottencial; não há serviço HTTP Tokio conectado. Confirmar contrato OAuth e respostas reais sem registrar segredos.
-3. **Retorno e estados:** mapear `cdSitucCotac`, aprovação/recusa/pendência, identificadores e alternativas. Preservar a pendência de retorno “Sem assistência”: a tabela recebida identifica P = Completa, N = Básica e O = Intermediária; não tratar N como intermediária com base na descrição inicial da print.
-4. **Pagamento e comparação:** manter exatamente 30x, `prazo`, fatura condicionada à imobiliária presente e `credito` sem imobiliária, conforme revisão de 23/10; destaque em `vlPremPar` da opção cuja quantidade seja 30. A chave `"1"` não é garantia de 30 parcelas. `AnalysisQuoteSummary` ainda não tem ramo Tokio e `AnalysisQuoteComparison` continua exigindo `gross_total` e ordenando total: a refatoração coordenada da página/PDF permanece necessária. Crédito sem imobiliária foi definido em 23/10; encargos, disponibilidade e desempate permanecem pendentes.
-5. **Rodadas e reanálise:** seguir a direção de editar o lead e iniciar nova análise, mantendo histórico e proteção contra resposta obsoleta. Cotar e recalcular usam o mesmo POST, mas headers de cotação existente diferenciam recálculo. A proposta de padronização entre companhias não elimina etapas exigidas pelos demais contratos nem comprova que a orquestração atual já esteja adaptada.
+3. **Retorno e estados:** aplicar T20: CAL/aprovação e qualquer outro código/recusa, sem encaminhamento ou polling. Mensagens explicativas não determinam o status. Preservar Sem assistência e não fixar N = Básica: o retorno diagnóstico real traz N/Plano Completo.
+4. **Pagamento e comparação:** manter limite de 30 e uso de 30 parcelas, fatura com imobiliária e crédito sem imobiliária; destacar `vlPremPar` da opção com `qtd = 30`, já incluindo encargos. O agrupamento `prazo` era a leitura documental inicial; T19 mostra parcelamento dentro de `vista`, exigindo conferir a representação no payload final sem mudar a intenção de pagamento. As opções até 12x do fixture não mudam o padrão 30x nem autorizam extrapolar preços. A refatoração coordenada da normalização e comparação compartilhada continua necessária.
+5. **Rodadas e reanálise:** aplicar a decisão de 28/10 de criar nova cotação/solicitação de análise para todas as companhias, mantendo histórico e proteção contra resposta obsoleta. Na Tokio, POST `/cotar` sem os headers da cotação anterior. Não usar endpoints de reanálise ou recálculo; preservar etapas obrigatórias de criação. A orquestração será adaptada somente na etapa futura autorizada.
 6. **Documentos e conclusão:** obter contrato dos impressos/pareceres necessários e manter resultado, comparação e entrega independentes de falhas técnicas. Não inferir rota de consulta, PDF, polling ou contratação a partir de nomes de menus.
 
 #### Verificação desta revisão documental
@@ -1402,3 +1551,401 @@ Permanecem as decisões já registradas: Casa 10001 para residencial, Sala comer
 Foram confrontados as instruções e prints da conversa, o estudo anterior, o histórico Git, migrations, modelos, Requests, Controllers, serviços, builders, componentes de formulário e testes existentes. Os arquivos originais citados continuam disponíveis em Downloads; os hashes do PDF CNAE e do CSV foram conferidos com a identificação versionada. Não foi necessária nova transcrição do vídeo para registrar os esclarecimentos posteriores. Executado `php artisan test --compact tests/Unit/TokioCnaeCatalogTest.php`: **4 testes aprovados, 7.651 assertions**, sem carga no banco de trabalho; `git diff --check` também passou.
 
 A revisão não executa chamada à seguradora, não altera código de aplicação nem aplica migrations/Seeder no banco de trabalho. As mudanças de nascimento já presentes foram preservadas. Testes locais e catálogo íntegro não substituem exemplos reais e confirmação dos pontos de contrato pendentes em T12.
+
+### T15. PF na API, PJ manual e atividade comercial — 27/10/2026
+
+Esta seção substitui as decisões anteriores incompatíveis, especialmente o envio de `tpPessoa = J`, a tentativa de homologar PJ na API e a pendência de escolher um código entre os associados à mesma descrição. Fontes: esclarecimento do usuário, duas prints do Portal e resposta do suporte em `C:\Users\Usuario\Downloads\A API atualmente suporta apenas os.txt`, lida nesta revisão. Não houve chamada remota nem alteração de código de aplicação.
+
+#### Elegibilidade e atendimento manual
+
+O suporte confirma expressamente: a API suporta somente Pessoa Física, tanto Residencial quanto Não Residencial. Pessoa Jurídica está disponível exclusivamente via Portal. Na API, `tpPessoa` deve ser sempre `F`; `icResidencial` será `S` no residencial e `N` no não residencial.
+
+| Documento/contexto do lead | Tratamento Tokio no sistema |
+| --- | --- |
+| CPF + residencial | Cotação automática PF: `tpPessoa = F`, `icResidencial = S` |
+| CPF + comercial | Cotação automática PF: `tpPessoa = F`, `icResidencial = N`, com dados comerciais aplicáveis |
+| CNPJ + residencial ou comercial | Não iniciar análise remota Tokio; disponibilizar orientação para cotação manual |
+
+Textos determinados pelo usuário para o card Tokio de PJ:
+
+- Visualização por imobiliária: **“entrar em contato com corretor”**.
+- Visualização por corretor: **“realizar cotação manualmente”**.
+
+São mensagens por perfil de quem visualiza, não valores retornados pela API. O texto para eventual visualização por locatário/proprietário não foi especificado nesta decisão; não criar novo acesso à página por causa dela.
+
+Consequências para a implementação futura: registrar explicitamente a indisponibilidade de análise automática para PJ, sem simular aprovação, recusa ou erro técnico e sem preço zero. Esse estado não pode deixar o pacote aguardando indefinidamente nem entrar no ranking ou contar como recusa para declarar recusa unânime. As demais companhias continuam seu fluxo elegível. Não gerar carta de recusa Tokio a partir dessa indisponibilidade. Não chamar cotação Tokio com o CPF do responsável para disfarçar a origem PJ.
+
+As estruturas já persistidas de tipo de pessoa, constituição, data calculada e vínculos permanecem no projeto. A decisão não autoriza remover campos ou modificar a política dos demais providers. O builder parcial anteriormente preparado para comercial com CNPJ passa a ser referência histórica/local, não autorização de envio à Tokio. A data calculada de sete anos não será enviada no novo fluxo automático PF comercial definido abaixo.
+
+#### Comercial com CPF e empresa não constituída
+
+O usuário definiu que esse fluxo atende empreendedores em Pessoa Física. Não haverá CNPJ nem exibição do campo `company-constitution.blade.php` nesse cenário. A interpretação para a montagem interna é `empresaConstituida = N`: a API exige o indicador, mas o solicitante não precisa responder a um novo campo. Não confundir ocultar o campo no formulário com omitir o indicador exigido no payload.
+
+Além dos dados comuns da cotação e dos pretendentes, preencher os campos comerciais obrigatórios **`CNAE`, `ramoAtividade`, `vinculoEmpresa` e `tipoVinculo`**. Omitir `cnpj` e `dataFundacao`, sem valores vazios ou uma data fictícia substituta. A afirmação sobre esses quatro campos delimita os dados empresariais condicionais; não elimina os demais campos comuns obrigatórios da cotação nem revoga automaticamente padrões já definidos, como `capitalInicial` comercial.
+
+A regra se aplica também ao caminho de análise com CPF indicado pelo modal de empresa com menos de dois anos. O sistema não deve bloquear o cenário PF comercial só por derivar empresa não constituída. Não alterar nesta etapa o bloqueio já definido para submissão comercial com CNPJ e resposta Não, nem equiparar juridicamente “menos de dois anos” a “empresa não constituída”: trata-se do caminho operacional PF determinado pelo usuário.
+
+As prints mostram que no Portal a seleção Não exibe CNAE e Ramo de Atividade sem CNPJ/data de fundação, enquanto Sim acrescenta CNPJ e Data de Fundação. Também mostram mensagens de obrigatoriedade de CNAE, Código CNAE e Ramo de Atividade. Essas mensagens não demonstram dois atributos distintos de CNAE no JSON: o contrato estudado continua usando `CNAE` numérico. A obrigatoriedade de `vinculoEmpresa` e `tipoVinculo` vem do contrato e da explicação do usuário, não de campos visíveis nessas duas imagens. A existência de campos CNPJ no Portal não comprova suporte a `tpPessoa = J` na API.
+
+**Casal comercial PF definido em 28/10:** ambos Titulares (21147), com participação 50 para cada pessoa, conforme a regra geral de cônjuges. Fazer as individuais em paralelo e a conjunta somente se ambas forem recusadas. A regra anterior Titular/Sócio não é o padrão desse cenário. Em esclarecimento posterior, o usuário definiu Titular com participação 100 no cenário sem cônjuge, `respondeFinanceiramente = S` para ambos no casal e renda de 4 × aluguel para cada pessoa, inclusive na conjunta, sem divisão.
+
+#### Um código por atividade
+
+O usuário autorizou escolher um dos códigos quando vários correspondem à mesma descrição. A pendência de negócio está encerrada. Critério técnico para a futura implementação: escolher o menor código numérico ativo da Tokio vinculado à atividade selecionada, de maneira estável e reproduzível, sem atribuir vantagem de cobertura ou preço a esse código. Persistir a escolha no snapshot da rodada para que consultas e retries usem o mesmo valor.
+
+Enviar um único número em `pretendentes[].CNAE`. Manter descrições únicas, todos os códigos, metadados de importação, relação 1:N e busca somente por descrição. Não enviar lista, objeto, separador `|` nem ID local. Não escolher código inativo ou de outra seguradora. Se não houver código elegível, tratar a inconsistência antes de cotar.
+
+#### Pendências após este esclarecimento
+
+Encerradas: suporte PF comercial (`icResidencial = N`), restrição de PJ à cotação manual, escolha de um código para descrições com múltiplos códigos e ausência de CNPJ/data de fundação/campo de constituição no fluxo PF comercial, com indicador N derivado internamente.
+
+Atualização de 28/10: vínculo e participação do casal comercial PF definidos como dois Titulares com 50% cada; responsabilidade financeira definida como `respondeFinanceiramente = S` para ambos; fluxo de individuais/conjunta definido na seção geral. Participação sem cônjuge (Titular, 100), renda individual de 4 × aluguel para ambos e pinturaNova S nos cenários com pintura foram posteriormente definidos. Continuam relevantes apenas as validações técnicas: mapeamento/validação das coberturas por origem conforme regra geral de 28/10; validação das datas conforme regra geral de vigência de 30 meses já definida; catálogo de situação e conclusão da análise; identificação do retorno Sem assistência; validação da associação de parceiros Tokio para fatura, cuja fonte e alternativa por cartão estão definidas em T21. Comissão de 15%, valor unitário da parcela já com encargos, parcelas iguais e base de pagamento permanecem definidos pelas regras gerais. Documentos e detalhes de transporte serão validados no desenvolvimento; isso não comprova seu funcionamento antecipadamente.
+
+### T16. Aprovação automática no Aceite W e mensagens — 27/10/2026
+
+**Nota de precedência de 28/10:** as hipóteses históricas abaixo sobre encaminhamento e dependência de mensagens foram substituídas por T20. Os CPFs homologados e os exemplos permanecem úteis; CAL é o critério de aprovação e os demais códigos indicam recusa, sem encaminhamento via API.
+
+Fontes: orientação de homologação reproduzida pelo usuário e print do Postman enviada nesta data. Esta revisão analisa uma execução apresentada pelo usuário; não executa chamadas à Tokio nem transforma o exemplo em garantia de aprovação em produção.
+
+#### Condições de teste informadas
+
+- Ambiente: **Aceite W**.
+- Operação: **POST `https://apim-act.tokiomarine.com.br/massificados/cotador-fianca-service-w/api/cotar`**.
+- Aluguel: **R$ 400,00**, enviado em `coberturas.vlAluguel` como número JSON `400.00`.
+- Usar um dos CPFs previamente homologados abaixo para validar aprovação automática. Conforme orientação recebida, CPFs aleatórios no aceite resultam em encaminhamento para análise ou recusa; não devem ser usados como caso de teste que exige aprovação.
+
+| CPF de teste informado | Valor textual sem máscara para `pretendentes[].cpf` |
+| --- | --- |
+| 092.380.376-98 | `09238037698` |
+| 383.295.608-56 | `38329560856` |
+| 385.669.788-89 | `38566978889` |
+
+São identificadores de teste fornecidos para esse ambiente, não CPFs a aplicar em leads reais ou produção. Preservar zeros iniciais e enviar como string. Não alterar o padrão de aluguel do sistema para R$ 400,00: esse valor é condição do cenário de homologação. Não extrapolar essa autorização para Aceite Y ou outros ambientes. A orientação lista três CPFs; a imagem demonstra a chamada com o primeiro, não três execuções distintas.
+
+#### Evidência visível na imagem
+
+A chamada retorna **HTTP 200 OK**. O objeto `cotacaoInfo` contém identificação, datas, token da cotação e `cdSitucCotac = "CAL"`; `abaInicial.descricao` é `Cálculo` e sua rota é `calculo`. Os identificadores, tokens e credenciais visíveis não são necessários ao estudo e não foram transcritos.
+
+Trecho relevante transcrito, deliberadamente parcial:
+
+```json
+{
+  "cotacaoInfo": {
+    "cdSitucCotac": "CAL"
+  },
+  "mensagens": {
+    "success": [
+      "Dados do imóvel salvos com sucesso.",
+      "Cadastro aprovado."
+    ]
+  }
+}
+```
+
+`mensagens` é o objeto; **`success` é uma lista de mensagens**, não um booleano nem um objeto único de aprovação. O nome do campo não basta para classificar o resultado, pois a própria resposta contém uma mensagem de salvamento e outra de aprovação. A informação de aprovação está no conteúdo explícito **`Cadastro aprovado.`**, conforme esclarecido pelo usuário.
+
+O caso prova que uma chamada de cotação pode retornar aprovação automática nesse ambiente. Não comprova que todas as cotações terminem imediatamente: o suporte também informa encaminhamento para análise. `CAL` fica registrado como código observado em um caso aprovado, sem inferir que sempre significa aprovação ou inventar sua expansão. HTTP 200 continua indicando sucesso HTTP, não uma decisão cadastral por si só.
+
+#### Limites do cenário e aplicação futura
+
+O body visível usa `assistenciaDesejada = "26206"` (Completa), `pinturaNova = "S"`, um pretendente principal e vigência do seguro de 27/10/2026 a 27/10/2027. Esses dados descrevem o exemplo; não substituem os padrões aprovados do projeto, especialmente Sem assistência `26203` e a base de pagamento de 30 meses. Não copiar nome, datas ou credenciais do exemplo para dados reais.
+
+As linhas visíveis de condomínio, IPTU, água, luz e gás estão comentadas. Não tratá-las como valores comprovadamente recebidos pela seguradora; payloads gerados pelo sistema devem ser JSON válido. A print não mostra o corpo completo, os preços, a quantidade de parcelas ou a alternativa Sem assistência. Portanto, a evidência de aprovação não encerra a validação de pagamento, de Sem assistência ou de todos os cenários comerciais.
+
+Na futura normalização, reconhecer a mensagem explícita documentada de aprovação, preservando mensagens e estado bruto. Não usar busca genérica por `sucesso`, mera existência de `success`, preço preenchido ou `CAL` isolado para aprovar. Respostas sem uma decisão reconhecida, ou com sinais conflitantes, devem permanecer sem classificação conclusiva até validação do contrato, sem conversão automática em aprovação ou recusa.
+
+Verificações futuras direcionadas: aprovação com a mensagem documentada; success contendo somente confirmação de salvamento; mensagens ausentes ou formato inesperado; encaminhamento e recusa conforme exemplos ainda a receber. Não realizar POSTs repetidos para tentar transformar um CPF não homologado em aprovado.
+
+**Pendências encerradas:** disponibilidade de dados homologados para testar aprovação no W; aluguel exigido nesse cenário; localização e formato observado da mensagem explícita de aprovação.
+
+**Pendências que permanecem:** mensagens/códigos exatos de recusa e encaminhamento à análise, consulta ou mecanismo de conclusão quando encaminhada e tratamento de eventual conflito entre situação e mensagens. A ausência de um catálogo completo de `cdSitucCotac` não apaga a evidência recebida de aprovação; limita a classificação dos demais retornos. Permanecem também as decisões de negócio não tratadas neste envio, registradas em T15.
+
+### T17. Fragmentos comerciais: empresa constituída e não constituída — 27/10/2026
+
+Fontes lidas integralmente: `C:\Users\Usuario\Downloads\cenário-com-Empresa-Não-constitida.txt` e `C:\Users\Usuario\Downloads\cenario-com-Empresa-constituida.txt`. São exemplos de entrada fornecidos pelo usuário, não respostas de execução nem instruções para alterar as regras do projeto automaticamente. Esta revisão documenta a estrutura e suas consequências; não implementa o payload nem executa chamadas remotas.
+
+#### Formato e comparação estrutural
+
+Ambos os arquivos são **fragmentos** com a propriedade `pretendentes`, sem as chaves do objeto raiz e com vírgula final. Não são documentos JSON completos executáveis isoladamente. A validação local foi feita envolvendo cada fragmento em um objeto raiz e retirando somente a vírgula final: ambos passam no parser e contêm exatamente dois elementos na lista. Os arquivos originais foram preservados.
+
+| Posição / campo | Empresa não constituída | Empresa constituída |
+| --- | --- | --- |
+| `pretendentes[0].empresaConstituida` | `"N"` | `"S"` |
+| `pretendentes[0].CNAE` | `24465` (número) | `24465` (número) |
+| `pretendentes[0].ramoAtividade` | `21205` (número) | `21205` (número) |
+| `pretendentes[0].cnpj` | Ausente | String alfanumérica de exemplo |
+| `pretendentes[0].dataFundacao` | Ausente | `"26/02/2026"` |
+| `pretendentes[1].cpf` | String de 11 dígitos | A mesma string de 11 dígitos |
+| `pretendentes[1].pretendentePrincipal` | `"S"` | `"S"` |
+| `pretendentes[1].vinculoEmpresa` | `"S"` | `"S"` |
+| `pretendentes[1].tipoVinculo` | `"21149"` (string) | `"21149"` (string) |
+| `pretendentes[1].percentualParticipacao` | `100` (número) | `100` (número) |
+
+A diferença entre os dois fragmentos limita-se ao indicador S/N e à presença de `cnpj` e `dataFundacao` no primeiro objeto. O objeto da pessoa principal é idêntico. O CPF desses exemplos não está entre os três CPFs homologados informados em T16; não tratá-lo como dado que garante aprovação automática. Não é necessário reproduzir a identidade pessoal no estudo para preservar a estrutura.
+
+#### Empresa e pessoa são objetos diferentes
+
+O primeiro objeto representa os dados empresariais da atividade. Não contém `cpf`, `nome`, `pretendentePrincipal` nem vínculo. O segundo representa a pessoa física principal, com CPF, indicador de principal e vínculo, sem repetir CNAE, ramo ou constituição. Assim, **dois elementos em `pretendentes` não significam duas pessoas ou um casal** nesses exemplos.
+
+Essa estrutura corrige a hipótese de espalhar os dados da empresa por todos os pretendentes. Na montagem futura do cenário comercial, preservar a separação mostrada e a ordem dos exemplos; não aplicar validação de CPF/nome ao objeto empresarial. Não acrescentar CPF artificial ou `pretendentePrincipal` ao primeiro elemento para satisfazer um modelo local universal. A ordem está observada nos exemplos, sem prova adicional de que seja uma exigência formal da API.
+
+Não há campo `nome` nesses fragmentos, embora a tabela anterior o descreva para pessoas. Isso deve ser conferido ao completar a requisição: um trecho parcial não comprova que nome passou a ser proibido ou dispensável. Tampouco os arquivos incluem `tpPessoa`, `icResidencial`, item, locação ou coberturas, que continuam sujeitos ao contrato e às regras gerais.
+
+#### Vínculo e participação observados
+
+Nos dois exemplos, a pessoa principal recebe `vinculoEmpresa = "S"`, `tipoVinculo = "21149"` (**Sócio**) e `percentualParticipacao = 100`. Ser principal (`pretendentePrincipal = "S"`) não implica necessariamente vínculo Titular (`21147`): são campos com significados distintos, como estes exemplos demonstram.
+
+`percentualParticipacao` é uma informação nova no material Tokio estudado. O exemplo usa 100, não 1 nem 0.15. Não confundir com `pcComissao`, com a comissão geral de 15% ou com `participationPercentage = 1` da Pottencial. Não inferir obrigatoriedade universal, soma exigida ou distribuição de participação entre pessoas sem documentação adicional.
+
+A tipagem também merece preservação: os códigos `CNAE` e `ramoAtividade` são números JSON, enquanto `tipoVinculo` vem entre aspas nos dois arquivos, em contraste com a classificação numérica da tabela anterior. Registrar essa evidência para o adapter e verificar o contrato efetivo na integração, sem alterar o armazenamento interno do catálogo.
+
+**Decisão posterior de 28/10:** para o casal comercial PF, ambos serão Titulares (21147), com participação 50 cada. O exemplo Sócio/100 permanece como evidência do fragmento recebido, não como padrão do casal. A composição de pessoas segue as duas individuais paralelas e a conjunta condicional da regra geral. Não copiar 100 para cada pessoa nem alterar automaticamente 50 para 100 ao separar as análises.
+
+#### Compatibilidade com as regras vigentes
+
+- **PF comercial do projeto:** o cenário Não corresponde à decisão de T15: empresa não constituída derivada internamente, sem novo campo no formulário, sem CNPJ/data de fundação. Os dados de empresa e os de vínculo pessoal agora têm posições distintas comprovadas nos exemplos.
+- **Cenário Sim:** manter documentado para referência contratual. Sua existência não revoga a decisão de não chamar Tokio automaticamente para leads PJ. Uma empresa vinculada dentro de uma requisição não é, por si só, evidência de `tpPessoa = J`; o suporte continua determinando `tpPessoa = F` na API.
+- **CNPJ alfanumérico:** o exemplo contém letras e números, não apenas uma máscara com pontuação. Não remover letras silenciosamente se esse cenário vier a ser utilizado. O exemplo não comprova validação desse identificador nem autoriza modificar a validação atual dos formulários nesta etapa.
+- **Data de fundação:** o exemplo de Sim usa 26/02/2026, menos de dois anos antes desta revisão. É um valor de entrada sem resposta associada; não comprova aprovação para empresa com menos de dois anos nem revoga a política local de elegibilidade. Também não é a referência calculada de sete anos definida anteriormente.
+- **Catálogo:** conferência local encontrou `24465` associado a **Comércio Varejista de Calçados** no CSV versionado; `21205` corresponde a **Comércio**. São valores coerentes entre si no exemplo, mas não padrões para todos os leads. Continuar usando a atividade e o ramo selecionados, com um único código ativo por descrição conforme T15.
+- **Demais campos:** a ausência de capital inicial, estado civil, renda e outros atributos neste trecho não revoga decisões anteriores nem prova que esses campos sejam inválidos. Completar o payload conforme cenário e contrato.
+
+#### Verificação e consequências para o desenvolvimento
+
+Verificado programaticamente: fragmentos inválidos isoladamente e válidos após composição mínima; dois objetos em cada lista; nomes dos campos empresariais e pessoais; `tipoVinculo` string e participação numérica. Conferido o código 24465 no catálogo local. Nenhuma autenticação, cotação, alteração de formulário, migration ou teste remoto foi realizado.
+
+O futuro builder PF comercial deve suportar uma lista com objetos de papéis diferentes. O builder parcial de CNPJ que replicava dados compartilhados nas pessoas não deve ser reutilizado sem adaptação. A implementação deverá testar a separação empresa/pessoa e a ausência de CNPJ/dataFundacao no cenário Não, além dos casos de vínculo que forem confirmados. As pendências de retorno de recusa/encaminhamento e acompanhamento da análise permanecem independentes desses exemplos de entrada.
+
+### T18. Comandos de diagnóstico OAuth e cotação no Aceite W — 27/10/2026
+
+Implementação isolada para inspeção manual, sem habilitar provider Tokio, alterar leads ou disparar Jobs de análise:
+
+```bash
+php artisan tokio:token
+php artisan tokio:token --show
+php artisan tokio:test-quote --cenario=aprovada
+php artisan tokio:test-quote --cenario=aprovada --cpf-aprovado=2
+php artisan tokio:test-quote --cenario=recusada
+php artisan tokio:test-quote --cenario=encaminhada
+```
+
+**Histórico do comando — orientação superada em T20:** `--cenario=encaminhada` foi adicionado para investigar a hipótese anterior usando CPF aleatório. O suporte posteriormente confirmou que esse resultado não existe via API. A opção continua presente no código neste momento, mas apenas envia o mesmo tipo de CPF do cenário recusada; não deve ser apresentada como cenário de negócio disponível. Sua remoção/ajuste fica para alteração de código posterior. Esta revisão é documental e não modifica o comando.
+
+O token é obtido por `TokioAuthentication` com formulário OAuth e credenciais configuradas; não é persistido. `--show` exibe o token somente fora de produção. A autenticação real foi validada na etapa anterior com HTTP 200; isso não comprova o resultado de cotação.
+
+`TestTokioQuoteCommand` chama `TokioQuoteDiagnostic`: valida cenário/configuração, gera token novo e envia POST exclusivamente ao Aceite W. O cenário aprovada seleciona um dos três CPFs homologados por índice 1–3, preservando zeros à esquerda. Recusada gera um CPF com dígitos verificadores válidos fora dessa lista; pode retornar encaminhamento, e não recebe classificação forçada de recusa. Os dois usam aluguel 400 para variar somente o CPF no experimento.
+
+O payload diagnóstico reproduz os campos do exemplo PF residencial: Apartamento 10000, motivo 10008, assistência Completa 26206, pintura interna/externa, comissão 15 e demais percentuais zero; usa nome de teste e endereço do exemplo. Datas são atualizadas para hoje em São Paulo e um ano depois, sem overflow. Esse fixture de homologação não altera os padrões da futura integração (Casa, Seguro Novo, Sem assistência e base de pagamento de 30 meses). Não representa um builder final para leads reais ou comercial.
+
+Saída JSON: cenário, payload efetivamente enviado, resumo da autenticação, origem das credenciais por tentativa, código HTTP, descrição e corpo retornado. Respostas não JSON também são preservadas como texto. `success` do relatório indica HTTP 2xx, não aprovação de crédito. Objetos/listas do retorno são preservados; tokens e credenciais são ocultados. Não há gravação automática dos retornos nem geração de documentos.
+
+**Configuração do operador e fallback autorizado pelo usuário:** `TOKIO_CPF_USUÁRIO` (com acento) é a chave principal; aceita `TOKIO_CPF_USUARIO` como alternativa. Corretor e senha usam `TOKIO_CODIGO_CORRETOR`/`TOKIO_SENHA_OPERADORA`, compatíveis com `COD_CORRETOR`/`SENHA_OP`. Os dados do suporte ficam somente no `.env` local em `TOKIO_SUPORTE_CODIGO_CORRETOR`, `TOKIO_SUPORTE_CPF_USUARIO` e `TOKIO_SUPORTE_SENHA_OPERADORA`; exemplos versionados não contêm seus valores. O valor existente de `TOKIO_CPF_USUÁRIO` foi preservado.
+
+Se o conjunto principal estiver incompleto/inválido, usar o conjunto completo do suporte antes da primeira cotação. Se o POST retornar 401/403 e houver um conjunto alternativo distinto, realizar uma única nova tentativa com os mesmos dados de cotação e headers do suporte. Não misturar partes dos dois conjuntos. Não repetir após timeout, HTTP 400/422/429/5xx, redirecionamento, recusa de negócio ou encaminhamento. Sem fallback entre W, Y e produção. A execução do diagnóstico é bloqueada no ambiente de aplicação production.
+
+O cURL do suporte fornece headers de cotação e um Bearer antigo; não fornece outro conjunto de client_id/client_secret/scope. Por isso o fallback não substitui credenciais OAuth e jamais reutiliza aquele Bearer: se a emissão do token falhar, a cotação não é enviada. Essa limitação é explícita no relatório.
+
+Verificação local: testes Pest de payloads, CPFs, autenticação, respostas, proteção de segredos, fallback limitado e falhas de transporte; Pint e diff conferidos. Nesta etapa do comando de cotação, não foi executado POST real para criar uma cotação.
+
+### T19. Retornos reais de aprovação e recusa: classificação e pagamentos — 27/10/2026
+
+**Precedência e escopo:** esta revisão confronta os dois retornos enviados pelo usuário com as regras já aprovadas. São evidências de resposta do comando diagnóstico, cujo payload não contém todas as regras e os campos da integração final. O usuário reafirmou expressamente: **o limite é 30 parcelas e o sistema utilizará 30 parcelas**. O retorno até 12x deste fixture de um ano não é um limite geral da Tokio, não modifica a base de 30 meses/parcelas e não cria uma nova pendência de negócio sobre a quantidade. Não substituir regras finais por datas, assistências, coberturas ou sugestões desse experimento.
+
+#### Fontes e integridade
+
+| Arquivo recebido em Downloads | Bytes | SHA-256 |
+| --- | --- | --- |
+| `retorno-cotacao-aprovada.txt` | 33198 | `59d703464ce9209c74c4d727e92aff9b74ffde8eabe23c8c6af3715458c093b2` |
+| `retorno-cotacao-recusada.txt` | 1529 | `475824be71b19fe19a61279638b30147844e861f448a14239b13d6035b806c8f` |
+
+Os arquivos são recortes que começam em `"cotacaoInfo":` sem a abertura da raiz e terminam com um fechamento externo excedente. Para análise programática, acrescentou-se somente `{` no início e removeu-se um `}` final, sem modificar campos/valores. Ambos foram então interpretados integralmente. Os originais foram preservados, sem copiar para o repositório identidades, identificadores de negócio ou credenciais. O token já estava `[OCULTO]` nos anexos.
+
+Esses recortes não incluem `http_status`, `authentication`, `fallback_used` ou o payload enviado. Por isso não permitem afirmar o código HTTP destas duas execuções, se o fallback foi usado ou que o request final já foi homologado. A origem no comando e o objetivo de cada teste foram informados pelo usuário; o resultado de negócio é sustentado pelo corpo recebido, não apenas pelo nome do arquivo.
+
+#### Comparação dos resultados
+
+| Informação | Aprovado | Recusado |
+| --- | --- | --- |
+| `cotacaoInfo.cdSitucCotac` | `CAL` | `REC` |
+| `abaInicial` | id 4, Cálculo, rota `calculo` | id 2, Ficha Cadastral, rota `fichaCadastral` |
+| `dtPrmroCallo` | `27/10/2026` | `27/10/2026` |
+| `dtVldad` | `11/12/2026` | String vazia |
+| `success` | Salvamento do imóvel e `Cadastro aprovado.` | Salvamento do imóvel e confirmação de envio de e-mail de recusa |
+| `warning` | 6 mensagens | 3 mensagens |
+| `danger` | Categoria ausente no recorte | 2 mensagens explícitas de reprovação |
+| `calculos` | Um objeto `N` | Objeto vazio `{}` |
+| `ordemApresentacaoCalculos` | Lista `["N"]` | Lista vazia `[]` |
+| Percentuais da raiz | Comissão 15, pró-labore 0, desconto 0, agravo 0 | Ausentes no recorte |
+| `biometrias` | Objeto com CPF como chave e booleano true | Ausente no recorte |
+
+Ambas as respostas possuem identificadores de cotação e negócio reservado: **ter número de cotação não implica aprovação**. A validade vazia da recusa deve permanecer ausência de validade; não convertê-la para hoje nem para uma data padrão. `abaInicial` é metadado do portal, não rota local nem contrato de consulta de status.
+
+#### Filtragem de mensagens e decisão cadastral
+
+Mensagens exatas observadas:
+
+- Aprovação: **`Cadastro aprovado.`** em `mensagens.success[]`.
+- Recusa: **`Cadastro Reprovado não passível de reanálise.`** e **`Análise cadastral não aprovada.`** em `mensagens.danger[]`.
+- Sucesso operacional sem decisão positiva: **`Dados do imóvel salvos com sucesso.`**, presente nos dois retornos.
+- Sucesso operacional da recusa: **`Email de recusa enviado com sucesso. - <referência>`**, presente no recusado; o identificador variável não precisa ser exposto ao cliente.
+
+A hipótese de classificar somente pela existência de success/danger é insuficiente: **success e danger coexistem no recusado**. O campo `success` é uma categoria de mensagens de operações bem-sucedidas, não um booleano de aprovação. Danger também pode vir a conter erros de validação; não converter qualquer mensagem dessa categoria em recusa cadastral sem reconhecê-la.
+
+Critério proposto para o adapter futuro, sem implementação nesta entrega:
+
+| Evidência | Interpretação |
+| --- | --- |
+| Código válido `CAL`, com ou sem mensagem específica | Aprovação cadastral, conforme T20; preço e condições posteriores são tratados separadamente |
+| Qualquer outro código válido, inclusive `REC` | Recusa cadastral, conforme T20; success de salvamento/e-mail não modifica a decisão |
+| Somente success de salvamento ou e-mail, sem código válido | Resposta insuficiente; não inferir aprovação ou recusa por texto |
+| Somente cálculos/preços, sem código válido | Não inventar decisão a partir da existência de valores |
+| Erro HTTP/validação sem decisão cadastral reconhecida | Falha técnica ou de dados, conforme o contrato; não recusa automática |
+| Texto de mensagem divergente de um código válido | Preservar a divergência para diagnóstico; classificar pelo código conforme T20 |
+| Status ausente, null, vazio ou de tipo inválido | Falha de contrato/dados insuficientes; não é encaminhamento nem código de recusa |
+
+**Substituído pela confirmação T20:** filtrar mensagens para explicação/exibição, preservando seu conteúdo, não para determinar aprovação/recusa. O critério é o código: CAL aprova e qualquer outro código recusa. Não exigir uma frase reconhecida, nem manter outro código como pendente por faltar em uma lista local. Status ausente ou malformado continua sendo problema técnico, não código de negócio.
+
+#### Avisos com consequências para o fluxo
+
+1. **Vigência máxima de cinco anos (60 meses):** aviso presente nos dois retornos. Esse limite refere-se ao contrato de locação e não substitui a regra de pagamento em 30 parcelas. O período final escolhido deve continuar respeitando essa condição contratual.
+2. **Mais de um responsável financeiro:** o aviso exige inclusão como novo pretendente. Reforça a separação entre pessoas efetivamente responsáveis. O aviso sozinho não define renda, vínculo ou participação. A decisão posterior do usuário encerrou a dúvida sobre responsabilidade do casal: `respondeFinanceiramente = S` para ambos; vínculo Titular e participação 50 cada no comercial PF, conforme seção geral.
+3. **Validação OnLine indisponível:** aparece no recusado, junto de REC e das duas mensagens de reprovação. Um warning de indisponibilidade não deve apagar a recusa explícita recebida; tampouco autoriza repetir automaticamente o POST. Um retorno contendo apenas esse aviso precisa de tratamento próprio, ainda não demonstrado.
+4. **Não passível de reanálise:** a recusa contém essa restrição explícita. Pela decisão posterior de 28/10, a ação do sistema será uma nova solicitação pelos endpoints de criação, sem tentar reanalisar ou recalcular o registro recusado. Não criar automaticamente cotações após uma recusa para procurar aprovação; preservar a mensagem anterior e qualquer restrição retornada na nova solicitação. A escolha entre criação e reanálise dedicada não é mais uma pendência.
+5. **Envio de e-mail pela companhia:** a resposta afirma que um e-mail de recusa foi enviado. Há, portanto, indicação de efeito externo do POST mesmo sem Jobs locais de notificação. O texto não comprova entrega ao destinatário nem informa qual é o destinatário. Considerar esse efeito em testes e retries; não declarar que criar a cotação não pode disparar comunicação da seguradora.
+6. **Aprovação cadastral não equivale a emissão/aceitação final:** o retorno aprovado informa validade do cálculo, condiciona confirmação das condições à biometria facial e não recomenda entrega de chaves antes dessa etapa. O sistema pode apresentar o resultado cadastral e a cotação no escopo atual, preservando as condições; não apresentar apólice emitida ou cobertura garantida. A revisão não autoriza implementar emissão ou biometria.
+7. **Datas distintas:** há prazo de transmissão até 27/10/2026 e validade do cálculo até 11/12/2026. O aviso também condiciona garantia dos valores à transmissão até o início da vigência. Não usar `dtVldad` como vigência, prazo único de contratação ou garantia incondicional de preço.
+8. **Pintura:** a resposta exige pintura nova e previsões no contrato/laudo para aceitação dessas coberturas. A presença de pinturas no fixture não define a contratação incondicional para todos os leads; apresentar condições junto às coberturas pertinentes.
+
+`biometrias` é um campo novo em relação ao template inicialmente estudado: objeto indexado por CPF, com booleano true no exemplo aprovado. Não é lista de pretendentes nem confirmação documentada de que o sistema executou uma biometria. Falta a definição formal do significado de true/false e do comportamento com múltiplos CPFs; o warning de condição biométrica permanece. Não expor as chaves CPF desnecessariamente no card.
+
+#### Identificação da alternativa: correção do mapa histórico
+
+O retorno aprovado contém somente `calculos.N`, `tpSugestao = "N"` e **`opcaoAssistencia = "Plano Completo"`**, com ordem `["N"]`. Isso contradiz a interpretação anterior que fixava N como Básica. A evidência real prevalece para este caso: manter a chave e a descrição retornadas, sem sobrescrever o nome a partir daquela tabela.
+
+Não generalizar agora que N sempre significa Completa, nem deduzir os significados de P/O ausentes. O comando diagnóstico usou assistência Completa 26206. O padrão final **Sem assistência 26203** permanece e sua representação deverá ser validada com o payload final. Não somar alternativas nem tratá-las como companhias independentes.
+
+#### Pagamentos: 36 opções do fixture, sem alteração da regra 30x
+
+Há quatro chaves de meios de pagamento e metadados comuns:
+
+| Meio | `qtdMaxVista` | Opções em `vista` | `qtdMaxPrazo` / `prazo` |
+| --- | --- | --- | --- |
+| `debito` | 12 | 12 alternativas, qtd 1–12 | 0 / null |
+| `credito` | 12 | 12 alternativas, qtd 1–12 | 0 / null |
+| `ficha` | 12 | 12 alternativas, qtd 1–12 | 0 / null |
+| `faturado` | Não se aplica | O meio inteiro é null | Não se aplica |
+
+Total conferido: **36 alternativas**, todas em `calculos.N`. As opções de débito e crédito são idênticas neste exemplo. As chaves `"1"` a `"12"` identificam alternativas com quantidades distintas; cada objeto fornece um único `vlPremPar`, e não uma lista das parcelas individuais. Isso corresponde à regra confirmada de usar diretamente o valor unitário retornado, igual para as parcelas da alternativa escolhida.
+
+A presença de qtd maior que 1 dentro de **`vista`** prova que não podemos traduzir esse nome automaticamente como pagamento de uma parcela. Também não devemos exigir `prazo` sem verificar a representação do payload final. A intenção de negócio continua parcelamento em 30 vezes, com crédito sem imobiliária e faturado para o cenário de imobiliária aplicável; selecionar a combinação compatível, usando o `qtd` retornado. Não converter 12x em 30x nem dividir seu total para inventar preço.
+
+O limite 12 mostrado por `qtdMaxVista` vale para esta resposta de diagnóstico, não para todo o produto. O usuário reafirmou o limite de 30 e a quantidade final 30; a tarefa futura é validar a resposta gerada com os campos/regras finais, não solicitar novamente a decisão de quantidade. Faturado null neste teste não elimina a regra de fatura, já que o fixture não implementa o vínculo final da imobiliária.
+
+#### Valores observados e composição
+
+Valores abaixo servem somente para descrever esta amostra; não são tabela de preços fixa:
+
+| Meio / quantidade | `vlPremPar` | `vlPremTot` | `vlJurTot` | `vlIofTot` |
+| --- | --- | --- | --- | --- |
+| Crédito ou débito, 1 | 693,48 | 693,48 | 0 | 47,66 |
+| Crédito ou débito, 2 | 346,75 | 693,48 | 0 | 47,66 |
+| Crédito ou débito, 12 | 57,79 | 693,48 | 0 | 47,66 |
+| Ficha, 5 | 148,41 | 742,01 | 45,21 | 50,98 |
+| Ficha, 12 | 72,75 | 873,10 | 167,28 | 60,00 |
+
+Em ficha, as opções de 1–4 não têm juros; de 5–12 retornam juros e totais diferentes. `pcJur` aparece como valores como 0.07, 0.088 e 0.259: preservar a representação até mapear sua apresentação, sem confundir com os pontos percentuais usados em comissão. A presença de ficha não comprova equivalência com boleto e não altera o meio escolhido para Tokio.
+
+A soma dos prêmios de coberturas contratadas é 645,82; com o IOF total de 47,66 resulta em 693,48. Em ficha 5x, 645,82 + juros 45,21 + IOF 50,98 = 742,01, total reportado. Esses exemplos corroboram a regra já confirmada de não adicionar novamente juros/IOF ao `vlPremPar`; não são autorização para reconstruir parcelas de outras condições.
+
+Arredondamentos observados: 2 × 346,75 = 693,50, enquanto o total informado é 693,48; em ficha 12x, 12 × 72,75 = 873,00, enquanto o total é 873,10. Preservar ambos os valores reportados. Isso não documenta uma parcela final diferente nem revoga a regra de parcelas iguais; não fabricar ajuste residual, média ou última parcela a partir dessa diferença.
+
+Metadados de sugestão: `codFormaPagamento = V`, `codFormaCobranca = DC`, `qtdParcela = 12`; sugestão total 693,48, parcela 57,79, 12 parcelas, `sem juros`, `descSugestaoPagto = vista` e descrição de cobrança `no Débito ou Cartão de Crédito`. São valores sugeridos pela API para esse fixture. Não substituem a seleção final 30x nem o meio definido por origem do lead; não atribuir significado universal a V/DC fora da evidência recebida.
+
+#### Coberturas, limites e diferenciais
+
+O array contém **12 coberturas**, das quais três apresentam valores:
+
+| Código / descrição | `valorPremio` | `valorIS` | `valorVerba` |
+| --- | --- | --- | --- |
+| 401 — Aluguel | 471,27 | 12000 | 400 |
+| 410 — Pintura interna | 89,11 | 1200 | 400 |
+| 425 — Pintura externa | 85,44 | 1200 | 400 |
+
+As outras nove (13º aluguel, fundo de promoção, condomínio, IPTU, água, luz, gás, danos e multa) aparecem com valores null e `caracteristica = "Não Contratada"`. Não mostrar essas coberturas como contratadas gratuitamente; diferenciar null de zero. Há espaços finais em algumas descrições: é possível apará-los para exibição sem alterar o significado cadastral. Os campos de franquia são null neste exemplo; isso não comprova ausência de franquia em todos os cenários.
+
+`valorLMG = 14400`, igual à soma das três importâncias seguradas desse caso. O aluguel possui IS de 12000 para verba 400 (relação 30), mas isso é cobertura, não preço nem prova de parcelamento em 30x. Não confundir LMG, IS, verba, `multiploLMI` e prêmio. O retorno contém 20 diferenciais de serviços (chaveiro, elétrica, hidráulica, manutenção e outros); pertencem à alternativa recebida, não a todas as ofertas futuras.
+
+#### Pendências revisadas e próximas validações
+
+**Resolvido por estes materiais:** exemplos de aprovação e recusa; frases exatas de decisão; coexistência de success e danger no recusado; códigos CAL/REC observados; cálculos vazios na recusa; formato de listas de mensagens e ordem; múltiplas opções de pagamento; campos monetários preenchidos; necessidade de corrigir a associação fixa de N e o significado presumido de vista. Quantidade final 30 e inclusão de encargos já estavam definidas e permanecem encerradas.
+
+**Ainda necessário, sem reabrir regras fechadas:**
+
+1. **Encerrado em T20:** não existe encaminhamento via API; não solicitar exemplo, endpoint de acompanhamento ou polling. Aplicar CAL/aprovado e demais códigos/recusado na resposta de negócio válida.
+2. Executar e conferir o payload final de 30 parcelas, Sem assistência e vínculo de imobiliária quando aplicável. A verificação será da representação retornada e aceitação dos campos, não da escolha de quantidade feita pelo usuário. Não usar o fixture para revogar esses padrões.
+3. Esclarecer o significado de `biometrias`, se necessário às ações que serão disponibilizadas. A reanálise foi definida em 28/10 como nova solicitação, sem endpoint dedicado; preservar a restrição da resposta anterior e validar o retorno da nova criação. Aprovação cadastral e emissão/aceitação definitiva continuam distintas.
+4. Validar na implementação as decisões de entrada já confirmadas em T15/T17: Titular com participação 100 sem cônjuge, renda de 4 × aluguel por pretendente inclusive na conjunta, pinturaNova S nos cenários com pintura, mapeamento/validação das coberturas por origem (seleção já definida na regra geral de 28/10), validação das vigências de 30 meses já definidas e da associação Tokio da imobiliária conforme T21 (fonte e regra sem parceiro já definidas). O casal comercial PF já foi definido em 28/10: ambos Titulares, participação 50 cada e `respondeFinanceiramente = S` para ambos, individuais paralelas e conjunta somente após duas recusas, conforme seção geral. As respostas de teste não preenchem as demais decisões por inferência.
+5. Documentos continuam para estudo/validação na etapa correspondente, conforme orientação anterior do usuário; estes arquivos não trazem PDF ou endpoint de impressos.
+
+Verificação desta revisão: arquivos lidos integralmente, hashes/estrutura conferidos, 36 alternativas e 12 coberturas enumeradas, igualdade das opções débito/crédito e contas monetárias verificadas com decimal. Somente o estudo foi editado; não houve alteração nos comandos, no runtime, nos testes de aplicação ou chamadas à seguradora. Os futuros testes do adapter deverão cobrir recusa com success operacional, aprovação com warnings, mensagens conflitantes/desconhecidas, nulls de pagamento/cobertura e seleção do preço no payload final.
+
+### T20. Decisão final do suporte: CAL aprova, demais códigos recusam — 28/10/2026
+
+Fonte: print da resposta do suporte Tokio apresentada pelo usuário nesta data. O suporte esclareceu que **não existe encaminhamento para análise via API**: o cálculo retorna aprovado ou reprovado, e qualquer status diferente de CAL deve ser interpretado como recusa. Esta confirmação substitui a orientação anterior sobre CPF aleatório poder encaminhar para análise e as interpretações provisórias de T7, T12, T16, T18 e T19.
+
+Regra para o futuro adapter, depois de validar a resposta HTTP e a estrutura do retorno:
+
+| `cotacaoInfo.cdSitucCotac` | Resultado |
+| --- | --- |
+| `CAL` | Aprovado |
+| Outro código de situação válido e não vazio | Recusado, incluindo REC; não depende de catálogo fechado dos outros códigos |
+| Ausente, null, vazio ou de tipo inválido | Resposta insuficiente/falha técnica; não há um código de situação de negócio a interpretar |
+
+A classificação não depende de encontrar `Cadastro aprovado.` ou frases específicas de reprovação. `mensagens.success`, `danger`, `warning` e `info` serão preservadas e filtradas para explicar o resultado, exibir avisos e apoiar diagnóstico; não substituirão a decisão do código. CAL com warnings continua aprovado; outro código com success operacional continua recusado. Divergências textuais são registradas sem inverter o resultado definido pelo código.
+
+HTTP 401/403, erro de validação, indisponibilidade, timeout, HTML ou corpo inválido não são códigos de situação da análise: não aplicar a regra de recusa ao código HTTP ou ao valor null. Falhas técnicas permanecem distintas da recusa de crédito. Aprovação cadastral não equivale a emissão, cobertura em vigor ou eliminação das condições de biometria informadas anteriormente.
+
+Consequências para a implementação futura:
+
+- A resposta válida de `/cotar` encerra a decisão cadastral daquela solicitação Tokio como aprovada ou recusada. Havendo cônjuge, a rodada da companhia ainda deve consolidar as individuais e a eventual conjunta conforme a regra geral. Não criar estado de encaminhamento, Job de polling, webhook ou endpoint de acompanhamento para um encaminhamento inexistente.
+- Estados locais de fila/processamento antes da resposta, falhas técnicas e PJ com atendimento manual continuam necessários; não são estados de encaminhamento da seguradora.
+- `--cenario=encaminhada` e a observação equivalente no comando diagnóstico ficaram semanticamente desatualizados. O código ainda existe e usa CPF aleatório; não comprova suporte a encaminhamento. Ajustar em alteração posterior de código, sem tentar repetidamente gerar esse retorno.
+- Reanálise permanece a regra de nova cotação/solicitação pelos endpoints de criação, com nova rodada e histórico; a confirmação de status não autoriza repetição automática de recusas. A exceção expressamente autorizada é uma única conjunta após as duas individuais recusadas, conforme a regra geral de cônjuges de 28/10.
+- Mantidos os padrões de 30 parcelas, pagamento por vínculo, Sem assistência, comissão e demais campos. Esta confirmação trata somente da decisão cadastral.
+
+**Pendência encerrada:** não falta mais exemplo de encaminhamento, catálogo para distinguir estados pendentes nem mecanismo de conclusão dessa etapa na Tokio. Permanecem as decisões de payload e validações técnicas já registradas, exceto as substituídas expressamente aqui.
+
+Somente a documentação foi atualizada nesta entrega, sem alterar o comando, provider, Jobs ou testes e sem chamadas à API.
+
+### T21. Imobiliárias parceiras, associação de códigos e alternativa de pagamento — 28/10/2026
+
+**Fonte indicada pelo usuário:** `C:\Users\Usuario\Downloads\planilha_imobiliaria.xlsx`, contendo os códigos dos parceiros atuais do cliente. Nesta etapa foi registrada a ideia; o conteúdo, as colunas e as correspondências da planilha ainda não foram inspecionados ou validados.
+
+**Sistema futuro solicitado:** um comando deverá consultar os cadastros de imobiliárias do banco e comparar seus nomes com os da planilha, para associar corretamente cada imobiliária ao seu código de parceiro Tokio. Reaproveitar os cadastros existentes e identificar os parceiros que ainda precisam de cadastro, evitando duplicações. A criação dos cadastros e a associação serão realizadas na etapa de implementação, não nesta atualização documental.
+
+A conferência deverá distinguir correspondências inequívocas, nomes semelhantes/ambíguos e registros sem correspondência. Normalizar espaços, caixa e acentos para auxiliar a comparação, preservando os nomes originais. Semelhança textual isolada não comprova identidade: não associar automaticamente homônimos ou resultados ambíguos. A estrutura efetiva da planilha e eventuais identificadores adicionais serão examinados na implementação. Preservar o código externo como identificador, inclusive zeros à esquerda, e registrar a origem da associação. O código Tokio não é o ID local da imobiliária.
+
+**Regra de envio e pagamento confirmada pelo usuário:**
+
+| Situação da imobiliária | Identificação na requisição Tokio | Pagamento usado para exibição e comparação |
+| --- | --- | --- |
+| Cadastrada no sistema e corretamente associada ao parceiro da planilha | Enviar `codigoParceiro` associado e `tipoParceiro = 5`, conforme contrato dos headers | Faturado, utilizando o valor da parcela retornado pela API |
+| Cadastrada no sistema, mas ausente da planilha | Fazer a análise sem `codigoParceiro`; omitir também `tipoParceiro`, pois não há parceiro a identificar | Cartão de crédito, utilizando o valor da parcela retornado pela API; segundo o usuário, a cotação não disponibilizará ficha faturada nesse cenário |
+
+Esta é uma exceção específica da Tokio à regra geral de faturamento por origem de imobiliária cadastrada: cadastro local, sozinho, não garante faturamento. A ausência na planilha não bloqueia a análise nem transforma a imobiliária em não cadastrada no sistema; mantém-se a origem real do lead e muda a condição de pagamento Tokio. Não inventar um código, enviar o ID local como parceiro ou reutilizar o código de outra imobiliária. Essa exceção não muda Boleto/Fatura nas demais companhias.
+
+Preservar a base de 30 parcelas e comparar diretamente o valor unitário final retornado para a condição correspondente. Se a opção esperada não vier na resposta, tratar a indisponibilidade explicitamente, sem fabricar preço ou selecionar silenciosamente outro meio de pagamento. Uma associação ambígua não equivale a ausência comprovada na planilha: o comando deverá destacá-la para conferência.
+
+**Pendência de origem dos códigos resolvida:** a planilha indicada será a fonte para associação. Permanecem para a implementação a inspeção dos dados, o vínculo persistido, o comando de conferência/associação e a validação do retorno com e sem parceiro. Não foram alterados banco, cadastros, comandos ou chamadas à API nesta etapa.
+
+### T22. Participação individual, renda por pretendente e pintura nova — 28/10/2026
+
+**Três pendências de preenchimento encerradas expressamente pelo usuário:**
+
+- **Comercial PF sem cônjuge:** `tipoVinculo = 21147` (Titular) e `percentualParticipacao = 100`. O casal mantém a regra já definida de dois Titulares com 50 cada.
+- **Renda:** cada pretendente recebe `rendaFixaMensal` correspondente a **4 × o valor integral do aluguel**. Aplicar tanto nas análises individuais quanto na conjunta condicional. Não dividir a renda por dois nem reduzi-la em razão da participação de 50%. Exemplo: aluguel de R$ 1.000,00 implica renda informada de R$ 4.000,00 em cada objeto pessoal. Ambos mantêm `respondeFinanceiramente = S`.
+- **Pintura nova:** enviar `pinturaNova = S` para os cenários com cobertura de pintura interna e externa, conforme orientação do usuário. Esse campo é distinto de `icPinturaInterna` e `icPinturaExterna`, que também recebem S nesses cenários. A seleção não comprova antecipadamente a aceitação das coberturas pela API.
+
+**Preservação da exceção por origem:** leads do formulário tenant continuam com somente aluguel, sem solicitar coberturas de pintura ou demais adicionais. O padrão pinturaNova S não deve reativar essas coberturas; omitir o questionário opcional de pintura nesse fluxo de somente aluguel, validando sua aceitação na implementação.
+
+As definições acima substituem as pendências anteriores sobre esses três pontos. Nenhuma alteração de código, formulário, banco ou chamada remota foi realizada nesta atualização documental.
