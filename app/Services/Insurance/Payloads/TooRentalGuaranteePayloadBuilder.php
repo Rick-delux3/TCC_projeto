@@ -3,7 +3,7 @@
 namespace App\Services\Insurance\Payloads;
 
 use App\Enums\TipoLocacao;
-use App\Models\InsuranceAnalysis;
+use App\Models\InsuranceExecution;
 use App\Models\Lead;
 use App\Rules\CpfOrCnpj;
 use Illuminate\Support\Carbon;
@@ -19,7 +19,7 @@ class TooRentalGuaranteePayloadBuilder
      * Esse é o primeiro payload da Too.
      * Ele cria a ficha/proposta de seguro fiança.
      */
-    public function buildFichaPayload(InsuranceAnalysis $analysis): array
+    public function buildFichaPayload(InsuranceExecution $analysis): array
     {
         $this->loadRelations($analysis);
 
@@ -35,9 +35,7 @@ class TooRentalGuaranteePayloadBuilder
             'cnpjCorretor' => $this->brokerCnpj(),
             'razaoSocialCorretor' => $this->brokerName(),
 
-            'pretendentes' => [
-                $this->pretendentePayload($lead),
-            ],
+            'pretendentes' => $this->quoteApplicants($analysis),
 
             'locacao' => $this->locacaoPayload($lead),
 
@@ -45,7 +43,7 @@ class TooRentalGuaranteePayloadBuilder
         ];
     }
 
-    public function buildBasicDataPayload(InsuranceAnalysis $analysis): array
+    public function buildBasicDataPayload(InsuranceExecution $analysis): array
     {
         $this->loadRelations($analysis);
 
@@ -76,7 +74,7 @@ class TooRentalGuaranteePayloadBuilder
      *
      * Esse payload deve ser usado depois que a ficha/proposta já existir.
      */
-    public function buildQuotePayload(InsuranceAnalysis $analysis, string|int $numeroFicha): array
+    public function buildQuotePayload(InsuranceExecution $analysis, string|int $numeroFicha): array
     {
         $this->loadRelations($analysis);
 
@@ -138,6 +136,20 @@ class TooRentalGuaranteePayloadBuilder
         ];
     }
 
+    private function quoteApplicants(InsuranceExecution $analysis): array
+    {
+        $applicants = [$this->pretendentePayload($analysis->lead)];
+        if ($analysis instanceof \App\Models\InsuranceQuote && $analysis->scenario->kind === 'joint') {
+            $spouse = app(\App\Services\Insurance\InsuranceLeadSnapshot::class)->restore(
+                $analysis->scenario->providerRun->round->lead_snapshot, 'spouse',
+            );
+            $this->validateBaseLeadData($spouse);
+            $applicants[] = array_replace($this->pretendentePayload($spouse), ['principal' => false]);
+        }
+
+        return $applicants;
+    }
+
     private function locacaoPayload(Lead $lead): array
     {
         return [
@@ -164,7 +176,7 @@ class TooRentalGuaranteePayloadBuilder
      *
      * Não use lead.imobiliaria aqui, porque no seu banco esse campo pode ser string.
      */
-    private function loadRelations(InsuranceAnalysis $analysis): void
+    private function loadRelations(InsuranceExecution $analysis): void
     {
         $analysis->loadMissing([
             'lead.lead_empresa',
@@ -348,7 +360,7 @@ class TooRentalGuaranteePayloadBuilder
         }
     }
 
-    private function leaseStartDate(InsuranceAnalysis $analysis): Carbon
+    private function leaseStartDate(InsuranceExecution $analysis): Carbon
     {
         if ($analysis->lease_start_date) {
             return Carbon::parse($analysis->lease_start_date);
@@ -357,7 +369,7 @@ class TooRentalGuaranteePayloadBuilder
         return now();
     }
 
-    private function leaseEndDate(InsuranceAnalysis $analysis, Carbon $startDate): Carbon
+    private function leaseEndDate(InsuranceExecution $analysis, Carbon $startDate): Carbon
     {
         if ($analysis->lease_end_date) {
             return Carbon::parse($analysis->lease_end_date);

@@ -122,6 +122,11 @@ class PottencialService
         return $this->getJson($this->rentalEndpoint()."/{$quoteId}");
     }
 
+    public function getPaymentSimulations(string $quoteId): array
+    {
+        return $this->getJson($this->rentalEndpoint().'/'.rawurlencode($quoteId).'/payment-simulations');
+    }
+
     public function getRentalGuaranteeRefusalLetter(string $quoteId): string
     {
         $this->ensureEnabled();

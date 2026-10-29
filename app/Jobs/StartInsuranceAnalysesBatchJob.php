@@ -344,6 +344,7 @@ class StartInsuranceAnalysesBatchJob implements ShouldQueue
                     ),
                 ]);
 
+                app(\App\Services\Insurance\InsuranceQuoteCoordinator::class)->prepare($analysis, $attemptId, false);
                 $analysisIds[] = $analysis->id;
             }
 

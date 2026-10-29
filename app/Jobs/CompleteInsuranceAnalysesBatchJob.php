@@ -59,6 +59,11 @@ class CompleteInsuranceAnalysesBatchJob implements ShouldQueue
                 return null;
             }
 
+            $analyses->load('currentProviderRun');
+            if ($analyses->contains(fn ($analysis) => $analysis->currentProviderRun && ! $analysis->currentProviderRun->finished_at)) {
+                return null;
+            }
+
             /*
             |--------------------------------------------------------------------------
             | Uma análise por provider dentro do lote

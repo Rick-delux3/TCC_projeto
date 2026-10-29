@@ -9,7 +9,7 @@ final class ProviderAnalysisStatus
         return match (mb_strtolower(trim((string) $status))) {
             'approved' => 'approved',
             'denied', 'rejected', 'refused', 'recused' => 'rejected',
-            'underanalysis', 'under_analysis', 'pending' => 'processing',
+            'underanalysis', 'under_analysis', 'pending', 'creating' => 'processing',
             'manual_review', 'preapproved' => 'manual_review',
             default => 'failed',
         };

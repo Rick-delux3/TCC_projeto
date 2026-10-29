@@ -103,6 +103,24 @@ class InsuranceAnalysisPageService
                     'gross_premium' => $analysis->gross_premium,
                     'total_monthly_amount' => $analysis->total_monthly_amount,
                     'quote' => $quotes[$analysis->id],
+                    'quote_attempts' => $analysis->currentProviderRun?->scenarios->flatMap(function ($scenario) use ($analysis): array {
+                        $snapshot = $analysis->currentProviderRun->round->lead_snapshot;
+                        $names = $scenario->kind === 'spouse'
+                            ? [data_get($snapshot, 'relations.conjuge.nome')]
+                            : [data_get($snapshot, 'attributes.nome')];
+                        if ($scenario->kind === 'joint') {
+                            $names[] = data_get($snapshot, 'relations.conjuge.nome');
+                        }
+
+                        return $scenario->quotes->map(fn ($quote): array => [
+                            'id' => $quote->id, 'scenario' => $scenario->kind, 'applicants' => $names,
+                            'plan_key' => $quote->plan_key, 'status' => $quote->status,
+                            'message' => $quote->error_message ?? $quote->rejection_reason ?? $quote->provider_status,
+                            'installment_amount' => $quote->installment_amount, 'installments' => $quote->installments,
+                            'payment_status' => $quote->payment_status,
+                            'selected' => $analysis->currentProviderRun->selected_quote_id === $quote->id,
+                        ])->all();
+                    })->values()->all() ?? [],
                     'requested_at' => $analysis->requested_at?->toIso8601String(),
                     'finished_at' => $analysis->finished_at?->toIso8601String(),
                     'updated_at' => $analysis->updated_at?->toIso8601String(),
@@ -155,6 +173,9 @@ class InsuranceAnalysisPageService
 
     private function canReanalyze(InsuranceAnalysis $analysis): bool
     {
+        if ($analysis->currentProviderRun) {
+            return $analysis->canRequestProviderReanalysis();
+        }
         $payload = $analysis->providerResponsePayload();
 
         return $analysis->canRequestProviderReanalysis()
@@ -166,6 +187,9 @@ class InsuranceAnalysisPageService
 
     private function canSync(InsuranceAnalysis $analysis): bool
     {
+        if ($analysis->currentProviderRun) {
+            return ! ProviderAnalysisStatus::isTerminal($analysis->status);
+        }
         if (! $analysis->isTooProvider()) {
             return filled($analysis->quote_id);
         }

@@ -398,7 +398,10 @@ class InsuranceAnalysisController extends Controller
             && $tooManualSyncAvailable
             && ! in_array($normalizedStatus, $finalStatuses, true);
 
-        if (! $canSyncByQuote && ! $canSyncTooManually) {
+        $canSyncScenarios = $analysis->currentProviderRun !== null
+            && ! \App\Services\Insurance\ProviderAnalysisStatus::isTerminal($analysis->status);
+
+        if (! $canSyncByQuote && ! $canSyncTooManually && ! $canSyncScenarios) {
             return back()->with(
                 'error',
                 'Essa análise ainda não está disponível para sincronização manual.'

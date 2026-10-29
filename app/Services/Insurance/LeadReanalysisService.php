@@ -1011,38 +1011,6 @@ class LeadReanalysisService
                 );
             }
 
-            $isToo = $analysis->isTooProvider();
-
-            $previousResponsePayload = $analysis->response_payload ?? [];
-
-            if (is_string($previousResponsePayload)) {
-                $previousResponsePayload =
-                    json_decode($previousResponsePayload, true) ?: [];
-            }
-
-            $tooNumeroProposta =
-                data_get($previousResponsePayload, 'numeroProposta')
-                ?? data_get($previousResponsePayload, 'numero_proposta')
-                ?? $analysis->proposal_id;
-
-            $tooNumeroFicha =
-                data_get($previousResponsePayload, 'numeroFicha')
-                ?? data_get($previousResponsePayload, 'numero_ficha')
-                ?? data_get($previousResponsePayload, 'numeroProposta')
-                ?? $analysis->proposal_id;
-
-            if (
-                $isToo
-                && (
-                    blank($tooNumeroProposta)
-                    || blank($tooNumeroFicha)
-                )
-            ) {
-                throw new DomainException(
-                    'A análise da Too não possui número de proposta/ficha para solicitar reanálise.'
-                );
-            }
-
             /*
             |--------------------------------------------------------------------------
             | Valores atuais do lead
@@ -1121,10 +1089,7 @@ class LeadReanalysisService
                 'result' => null,
                 'provider_status' => null,
 
-                // Too mantém proposta. Outros providers podem criar nova solicitação.
-                'proposal_id' => $isToo
-                    ? (string) $tooNumeroProposta
-                    : null,
+                'proposal_id' => null,
 
                 'quote_id' => null,
                 'quote_number' => null,
@@ -1136,18 +1101,7 @@ class LeadReanalysisService
 
                 'request_payload' => null,
 
-                // Não carregamos status e resultados antigos para a rodada nova.
-                'response_payload' => $isToo
-                    ? [
-                        'provider' => 'too',
-                        'numeroProposta' => (string) $tooNumeroProposta,
-                        'numeroFicha' => (string) $tooNumeroFicha,
-                        'too_reanalysis_attempt_id' => $attemptId,
-                        'too_reanalysis_started_at' => now()->toDateTimeString(),
-                        'too_status_check_stopped' => false,
-                        'too_manual_sync_available' => false,
-                    ]
-                    : null,
+                'response_payload' => null,
 
                 'available_plans' => null,
                 'available_assistances' => null,
@@ -1196,6 +1150,7 @@ class LeadReanalysisService
                 ])->save();
             }
 
+            app(InsuranceQuoteCoordinator::class)->prepare($analysis, $attemptId, true);
         });
 
         return $attemptId;
@@ -1322,6 +1277,7 @@ class LeadReanalysisService
                     'started_at' => now(),
                 ])->save();
             }
+            app(InsuranceQuoteCoordinator::class)->prepare($analysis, $attemptId, false);
         });
 
         RunProviderAnalysisJob::dispatch(

@@ -7,6 +7,8 @@ use App\Jobs\CompleteInsuranceAnalysesBatchJob;
 use App\Models\InsuranceAnalysis;
 use App\Models\InsuranceAnalysisBatch;
 use App\Models\InsuranceAnalysisEvent;
+use App\Models\InsuranceExecution;
+use App\Models\InsuranceQuote;
 use Closure;
 use Illuminate\Support\Facades\DB;
 
@@ -14,7 +16,7 @@ class InsuranceAnalysisAttempt
 {
     public const START_EVENTS = ['created', 'analysis_restarted', 'analysis_started', 'reanalysis_requested', 'reanalysis_started', 'technical_retry_requested'];
 
-    public static function assertCurrent(InsuranceAnalysis $analysis, ?string $attemptId): void
+    public static function assertCurrent(InsuranceExecution $analysis, ?string $attemptId): void
     {
         $current = $analysis->currentAttemptContext();
         if (! $attemptId || ($current['attempt_id'] ?? null) !== $attemptId) {
@@ -22,10 +24,14 @@ class InsuranceAnalysisAttempt
         }
     }
 
-    public static function run(InsuranceAnalysis $analysis, string $attemptId, Closure $callback): mixed
+    public static function run(InsuranceExecution $analysis, string $attemptId, Closure $callback): mixed
     {
         return DB::transaction(function () use ($analysis, $attemptId, $callback) {
-            $locked = InsuranceAnalysis::query()->lockForUpdate()->find($analysis->id);
+            if ($analysis instanceof InsuranceQuote) {
+                $parent = InsuranceAnalysis::query()->lockForUpdate()->findOrFail($analysis->scenario->providerRun->insurance_analysis_id);
+                self::assertCurrent($parent, $attemptId);
+            }
+            $locked = $analysis->newQuery()->lockForUpdate()->find($analysis->id);
             if (! $locked || ($locked->currentAttemptContext(true)['attempt_id'] ?? null) !== $attemptId) {
                 throw new ObsoleteInsuranceAnalysisAttempt('Resposta de uma rodada obsoleta descartada.');
             }

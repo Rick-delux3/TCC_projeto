@@ -28,6 +28,8 @@ class InsuranceAnalysisReadService
             'conjuge',
             'latestInsuranceAnalysisBatch.analyses' => fn (HasMany $query): HasMany => $query
                 ->orderBy('id')->with([
+                    'currentProviderRun.round',
+                    'currentProviderRun.scenarios.quotes',
                     'latestAttemptEvent' => fn (HasOne $query): HasOne => $query->select(
                         $query->getRelated()->qualifyColumns(['id', 'insurance_analysis_id', 'event_type', 'payload'])
                     ),

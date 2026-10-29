@@ -223,6 +223,11 @@ class TooService
         return $this->postJson('/fianca/proposta/cotacao', $payload);
     }
 
+    public function getPaymentOptions(string $quoteId): array
+    {
+        return $this->getJson('/fianca/proposta/formaspagamento/'.rawurlencode($quoteId));
+    }
+
     /**
      * Futuro: consultar carta/parecer de crédito.
      *

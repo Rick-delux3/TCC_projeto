@@ -17,6 +17,16 @@ class InsuranceAnalysisFailure
 
         try {
             InsuranceAnalysisAttempt::run($analysis, $attemptId, function () use ($analysis, $attemptId, $isReanalysis, $exception): void {
+                $coordinator = app(InsuranceQuoteCoordinator::class);
+                if ($run = $coordinator->findRun($analysis, $attemptId)) {
+                    $run->load('scenarios.quotes');
+                    foreach ($run->scenarios->flatMap(fn ($scenario) => $scenario->quotes)->where('status', 'pending') as $quote) {
+                        $quote->update(['status' => 'failed', 'finished_at' => now(), 'error_message' => 'Não foi possível despachar a cotação.']);
+                    }
+                    $coordinator->consolidate($run->id);
+
+                    return;
+                }
                 if (ProviderAnalysisStatus::isTerminal($analysis->status)) {
                     return;
                 }

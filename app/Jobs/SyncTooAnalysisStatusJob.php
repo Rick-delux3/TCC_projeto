@@ -73,6 +73,13 @@ class SyncTooAnalysisStatusJob implements ShouldQueue
             return;
         }
 
+        $coordinator = app(\App\Services\Insurance\InsuranceQuoteCoordinator::class);
+        if ($run = $coordinator->findRun($analysis, $this->attemptId)) {
+            $coordinator->resume($run);
+
+            return;
+        }
+
         if (mb_strtolower((string) $analysis->provider) !== 'too') {
             return;
         }

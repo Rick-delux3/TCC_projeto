@@ -112,6 +112,13 @@ class SyncProviderAnalysisStatusJob implements ShouldQueue
             'batch',
         ])->findOrFail($this->analysisId);
 
+        $coordinator = app(\App\Services\Insurance\InsuranceQuoteCoordinator::class);
+        if ($run = $coordinator->findRun($analysis, $this->attemptId)) {
+            $coordinator->resume($run);
+
+            return;
+        }
+
         InsuranceAnalysisAttempt::assertCurrent($analysis, $this->attemptId);
         $analysis->executionAttemptId = $this->attemptId;
         if ($this->automatic && ProviderAnalysisStatus::isTerminal($analysis->status)) {

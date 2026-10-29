@@ -39,6 +39,7 @@ class AnalysisQuoteSummary
         }
 
         $total = $this->money($gross);
+        $selection = $payload['quote_selection'] ?? null;
 
         return [
             'analysis_id' => $analysis->id,
@@ -53,6 +54,10 @@ class AnalysisQuoteSummary
                 'currency' => strtoupper(trim((string) ($quote['currency'] ?? 'BRL'))),
                 'period_start' => $this->date($start),
                 'period_end' => $this->date($end),
+                'comparison_basis' => is_array($selection) ? 'installment' : 'gross_total',
+                'installment_amount' => is_array($selection) ? $this->money($selection['installment_amount'] ?? null) : null,
+                'installments' => $selection['installments'] ?? null,
+                'payment_type' => $selection['payment_type'] ?? null,
             ],
             'coverages' => $analysis->isApprovedResult() ? collect($coverages)->filter(fn ($coverage): bool => is_array($coverage))
                 ->map(fn (array $coverage): array => [

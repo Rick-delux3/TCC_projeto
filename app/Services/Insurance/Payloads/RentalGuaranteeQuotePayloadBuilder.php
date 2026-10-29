@@ -3,7 +3,7 @@
 namespace App\Services\Insurance\Payloads;
 
 use App\Enums\TipoLocacao;
-use App\Models\InsuranceAnalysis;
+use App\Models\InsuranceExecution;
 use App\Models\Lead;
 use App\Rules\CpfOrCnpj;
 use Illuminate\Support\Carbon;
@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\Validator;
 
 class RentalGuaranteeQuotePayloadBuilder
 {
-    public function build(InsuranceAnalysis $analysis): array
+    public function build(InsuranceExecution $analysis): array
     {
         /*
          * Carrega os relacionamentos necessários para montar o payload.
@@ -79,7 +79,9 @@ class RentalGuaranteeQuotePayloadBuilder
              * somente PolicyHolder.
              * Não enviar Beneficiary agora.
              */
-            'participants' => $this->participants($lead, $policyHolderDocument),
+            'participants' => $analysis instanceof \App\Models\InsuranceQuote
+                ? $this->quoteParticipants($analysis)
+                : $this->participants($lead, $policyHolderDocument),
 
             /*
              * paymentConditions fica no nível raiz.
@@ -128,7 +130,7 @@ class RentalGuaranteeQuotePayloadBuilder
         ];
     }
 
-    private function commissionedAgents(InsuranceAnalysis $analysis): array
+    private function commissionedAgents(InsuranceExecution $analysis): array
     {
         $lead = $analysis->lead;
 
@@ -195,6 +197,20 @@ class RentalGuaranteeQuotePayloadBuilder
                 main: true
             ),
         ];
+    }
+
+    private function quoteParticipants(\App\Models\InsuranceQuote $quote): array
+    {
+        $participants = [['documentNumber' => $quote->lead->rentalApplicantDocument(), 'role' => 'PolicyHolder']];
+        if ($quote->scenario->kind === 'joint') {
+            $document = CpfOrCnpj::normalize($quote->lead->conjuge?->cpf);
+            if (Validator::make(['document' => $document], ['document' => ['required', new CpfOrCnpj]])->fails()) {
+                throw new \App\Exceptions\InvalidInsuranceAnalysisPayload('CPF do cônjuge inválido para a cotação conjunta.');
+            }
+            $participants[] = ['documentNumber' => $document, 'role' => 'PolicyHolder'];
+        }
+
+        return $participants;
     }
 
     private function participant(

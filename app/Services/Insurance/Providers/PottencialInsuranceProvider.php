@@ -2,7 +2,7 @@
 
 namespace App\Services\Insurance\Providers;
 
-use App\Models\InsuranceAnalysis;
+use App\Models\InsuranceExecution;
 use App\Services\Insurance\InsuranceAnalysisAttempt;
 use App\Services\Insurance\Payloads\RentalGuaranteeQuotePayloadBuilder;
 use App\Services\Insurance\PottencialService;
@@ -19,7 +19,7 @@ class PottencialInsuranceProvider implements CreatesInsuranceQuotes, InsurancePr
         return 'Pottencial';
     }
 
-    public function createQuote(InsuranceAnalysis $analysis): array
+    public function createQuote(InsuranceExecution $analysis): array
     {
         $this->ensureEnabled();
 
@@ -27,7 +27,7 @@ class PottencialInsuranceProvider implements CreatesInsuranceQuotes, InsurancePr
     }
 
     public function requestAnalysis(
-        InsuranceAnalysis $analysis,
+        InsuranceExecution $analysis,
         string $attemptId
     ): array {
         $this->ensureEnabled();
@@ -42,7 +42,7 @@ class PottencialInsuranceProvider implements CreatesInsuranceQuotes, InsurancePr
     }
 
     public function requestReanalysis(
-        InsuranceAnalysis $analysis,
+        InsuranceExecution $analysis,
         string $attemptId,
         array $options = []
     ): array {
@@ -71,7 +71,7 @@ class PottencialInsuranceProvider implements CreatesInsuranceQuotes, InsurancePr
         );
     }
 
-    public function getStatus(InsuranceAnalysis $analysis): array
+    public function getStatus(InsuranceExecution $analysis): array
     {
         $this->ensureEnabled();
         $analysis->executionAttemptId ??= $analysis->currentAttemptContext()['attempt_id'] ?? null;
@@ -89,7 +89,7 @@ class PottencialInsuranceProvider implements CreatesInsuranceQuotes, InsurancePr
     }
 
     private function requestQuote(
-        InsuranceAnalysis $analysis,
+        InsuranceExecution $analysis,
         string $attemptId,
         bool $isReanalysis
     ): array {

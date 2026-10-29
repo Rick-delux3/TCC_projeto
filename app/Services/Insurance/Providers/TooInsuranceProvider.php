@@ -2,7 +2,7 @@
 
 namespace App\Services\Insurance\Providers;
 
-use App\Models\InsuranceAnalysis;
+use App\Models\InsuranceExecution;
 use App\Services\Insurance\InsuranceAnalysisAttempt;
 use App\Services\Insurance\Payloads\TooRentalGuaranteePayloadBuilder;
 use App\Services\Insurance\TooService;
@@ -20,7 +20,7 @@ class TooInsuranceProvider implements CreatesInsuranceQuotes, InsuranceProviderI
         return 'too';
     }
 
-    public function createQuote(InsuranceAnalysis $analysis): array
+    public function createQuote(InsuranceExecution $analysis): array
     {
         $this->ensureEnabled();
         if ($analysis->status !== 'approved' || blank($analysis->tooNumeroFicha())) {
@@ -41,7 +41,7 @@ class TooInsuranceProvider implements CreatesInsuranceQuotes, InsuranceProviderI
      * 4. Se status 8, solicita cotação.
      * 5. Se status 5 ou 16, mantém em análise/manual_review.
      */
-    public function requestAnalysis(InsuranceAnalysis $analysis, string $attemptId): array
+    public function requestAnalysis(InsuranceExecution $analysis, string $attemptId): array
     {
         $this->ensureEnabled();
         $analysis->executionAttemptId = $attemptId;
@@ -242,7 +242,7 @@ class TooInsuranceProvider implements CreatesInsuranceQuotes, InsuranceProviderI
     }
 
     public function requestReanalysis(
-        InsuranceAnalysis $analysis,
+        InsuranceExecution $analysis,
         string $attemptId,
         array $options = [],
     ): array {
@@ -439,7 +439,7 @@ class TooInsuranceProvider implements CreatesInsuranceQuotes, InsuranceProviderI
     }
 
     public function getStatus(
-        InsuranceAnalysis $analysis
+        InsuranceExecution $analysis
     ): array {
         $this->ensureEnabled();
         $analysis->executionAttemptId ??= $analysis->currentAttemptContext()['attempt_id'] ?? null;
@@ -540,7 +540,7 @@ class TooInsuranceProvider implements CreatesInsuranceQuotes, InsuranceProviderI
      * requestAnalysis() e getStatus() passam por aqui.
      */
     private function handleStatusAndMaybeQuote(
-        InsuranceAnalysis $analysis,
+        InsuranceExecution $analysis,
         array $statusResponse,
         array $baseResponses,
         array $baseExtra = [],
@@ -616,7 +616,7 @@ class TooInsuranceProvider implements CreatesInsuranceQuotes, InsuranceProviderI
      * Solicita cotação depois que a Too retornar status 8.
      */
     private function requestQuoteAfterApprovedStatus(
-        InsuranceAnalysis $analysis,
+        InsuranceExecution $analysis,
         string|int|null $numeroFicha,
         array $statusResponse,
         array $baseResponses,
@@ -643,7 +643,18 @@ class TooInsuranceProvider implements CreatesInsuranceQuotes, InsuranceProviderI
             ]),
         ]);
 
-        $quoteResponse = $this->tooService->requestQuote($quotePayload);
+        $savedQuote = data_get($analysis->providerResponsePayload(), 'quote_latest');
+        if ($analysis instanceof \App\Models\InsuranceQuote && filled($analysis->quote_id) && is_array($savedQuote)) {
+            $quoteResponse = $savedQuote;
+        } else {
+            if ($analysis instanceof \App\Models\InsuranceQuote) {
+                if (data_get($analysis->providerResponsePayload(), 'quote_creation_started')) {
+                    return $this->failResult('Resultado da criação anterior da cotação não confirmado. Verifique antes de repetir.', 'quote_creation_unknown');
+                }
+                $analysis->updateForAttempt(['response_payload' => array_merge($analysis->providerResponsePayload(), ['quote_creation_started' => true])]);
+            }
+            $quoteResponse = $this->tooService->requestQuote($quotePayload);
+        }
 
         $responses = array_merge($baseResponses, [
             'quote' => $quoteResponse,
@@ -783,7 +794,7 @@ class TooInsuranceProvider implements CreatesInsuranceQuotes, InsuranceProviderI
         };
     }
 
-    private function loadTooRelations(InsuranceAnalysis $analysis): void
+    private function loadTooRelations(InsuranceExecution $analysis): void
     {
         $analysis->loadMissing([
             'lead.lead_empresa',
