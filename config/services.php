@@ -131,6 +131,23 @@ return [
         'default_reanalysis_reason' => env('TOO_DEFAULT_REANALYSIS_REASON', 10),
     ],
 
+    'tokio' => [
+        'base_url_w' => env('TOKIO_BASE_URL_W', 'https://apim-act.tokiomarine.com.br/massificados/cotador-fianca-service-w/api'),
+        'codigo_corretor' => env('TOKIO_CODIGO_CORRETOR', env('COD_CORRETOR')),
+        'cpf_usuario' => env('TOKIO_CPF_USUÁRIO', env('TOKIO_CPF_USUARIO')),
+        'senha_operadora' => env('TOKIO_SENHA_OPERADORA', env('SENHA_OP')),
+        'support' => [
+            'codigo_corretor' => env('TOKIO_SUPORTE_CODIGO_CORRETOR'),
+            'cpf_usuario' => env('TOKIO_SUPORTE_CPF_USUARIO'),
+            'senha_operadora' => env('TOKIO_SUPORTE_SENHA_OPERADORA'),
+        ],
+        'token_url' => env('TOKIO_TOKEN_URL', 'https://apim.tokiomarine.com.br/oauth2/v2.0/token'),
+        'client_id' => env('TOKIO_CLIENT_ID', env('CLIENT_ID')),
+        'client_secret' => env('TOKIO_CLIENT_SECRET', env('CLIENT_SECRET')),
+        'scope' => env('TOKIO_SCOPE', env('SCOPE')),
+        'grant_type' => env('TOKIO_GRANT_TYPE', env('GRANT_TYPE', 'client_credentials')),
+    ],
+
     'porto' => [
         'enabled' => env('PORTO_ENABLED', false),
         'base_url' => env('PORTO_BASE_URL'),

@@ -1,0 +1,2155 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Pottencial — Fiança Locatícia (Aluguel)",
+    "version": "1.0.0",
+    "description": "<p>API para cotação, proposta e emissão de apólices do produto <strong>Fiança Locatícia (Aluguel)</strong> da Pottencial Seguradora.</p>",
+    "contact": {
+      "name": "Pottencial Seguradora",
+      "url": "https://pottencial.com.br/fale-conosco/"
+    }
+  },
+  "servers": [
+    {
+      "url": "https://api-hml.pottencial.com.br",
+      "description": "Homologação"
+    },
+    {
+      "url": "https://api.pottencial.com.br",
+      "description": "Produção"
+    }
+  ],
+  "security": [
+    {
+      "clientId": []
+    },
+    {
+      "accessToken": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "Cotações"
+    },
+    {
+      "name": "Planos"
+    },
+    {
+      "name": "Propostas"
+    },
+    {
+      "name": "Apólices"
+    },
+    {
+      "name": "Renovações"
+    }
+  ],
+  "paths": {
+    "/insurance/v1/fianca-locaticia/quotes": {
+      "post": {
+        "operationId": "fianca-locaticia-quote-v1-post",
+        "descriptionn": "<p>Solicita uma nova cotação para Fiança Locatícia (Aluguel).</p>",
+        "summary": "Solicitar cotação",
+        "tags": [
+          "Cotações"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/clientId"
+          },
+          {
+            "$ref": "#/components/parameters/accessToken"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FiancaLocaticiaQuote"
+              },
+              "example": {
+                "policyPeriodStart": "2021-01-01",
+                "policyPeriodEnd": "2021-12-31",
+                "policyType": "Unique",
+                "discountPercentage": 0,
+                "commercialLoadingFee": 0,
+                "commissionedAgents": [
+                  {
+                    "documentNumber": "11111111111111",
+                    "role": "Broker",
+                    "commissionPercentage": 0.15,
+                    "lead": true
+                  }
+                ],
+                "participants": [
+                  {
+                    "documentNumber": "22222222222",
+                    "role": "PolicyHolder",
+                    "main": true,
+                    "address": {
+                      "street": "Av. Raja Gabáglia",
+                      "number": "1143",
+                      "district": "Luxemburgo",
+                      "city": "Belo Horizonte",
+                      "state": "MG",
+                      "zipCode": "30380403",
+                      "complement": "20º andar",
+                      "country": "BRA",
+                      "type": "Residential"
+                    },
+                    "contact": {
+                      "name": "nome do contato",
+                      "email": "teste.teste@gmail.com",
+                      "phoneNumber": "31999999999",
+                      "cellPhoneNumber": "31999999999"
+                    }
+                  },
+                  {
+                    "documentNumber": "33333333333",
+                    "role": "Insured",
+                    "address": {
+                      "street": "Av. Raja Gabáglia",
+                      "number": "1143",
+                      "district": "Luxemburgo",
+                      "city": "Belo Horizonte",
+                      "state": "MG",
+                      "zipCode": "30380403",
+                      "complement": "20º andar",
+                      "country": "BRA",
+                      "type": "Residential"
+                    },
+                    "contact": {
+                      "name": "nome do contato",
+                      "email": "teste.teste@gmail.com",
+                      "phoneNumber": "31999999999",
+                      "cellPhoneNumber": "31999999999"
+                    }
+                  },
+                  {
+                    "documentNumber": "33333333333",
+                    "role": "Beneficiary",
+                    "participationPercentage": 1,
+                    "address": {
+                      "street": "Av. Raja Gabáglia",
+                      "number": "1143",
+                      "district": "Luxemburgo",
+                      "city": "Belo Horizonte",
+                      "state": "MG",
+                      "zipCode": "30380403",
+                      "complement": "20º andar",
+                      "country": "BRA",
+                      "type": "Residential"
+                    },
+                    "contact": {
+                      "name": "nome do contato",
+                      "email": "teste.teste@gmail.com",
+                      "phoneNumber": "31999999999",
+                      "cellPhoneNumber": "31999999999"
+                    }
+                  }
+                ],
+                "riskObjects": [
+                  {
+                    "type": "rentalProperty",
+                    "tenantDocumentNumber": "7777777777777",
+                    "startLeaseContract": "2022-12-27",
+                    "endLeaseContract": "2023-12-27",
+                    "coverages": [
+                      {
+                        "key": "basica",
+                        "insuredAmount": 50000
+                      }
+                    ],
+                    "riskLocation": {
+                      "nationalCoverage": false,
+                      "address": {
+                        "street": "Av. Raja Gabáglia",
+                        "number": "1143",
+                        "district": "Luxemburgo",
+                        "city": "Belo Horizonte",
+                        "state": "MG",
+                        "zipCode": "30380403",
+                        "complement": "20º andar",
+                        "country": "BRA",
+                        "type": "Residential"
+                      }
+                    },
+                    "expenses": [
+                      {
+                        "description": "VALOR_ALUGUEL",
+                        "value": 2500
+                      },
+                      {
+                        "description": "VALOR_CONDOMINIO",
+                        "value": 500
+                      }
+                    ],
+                    "planKey": "Basic",
+                    "occupation": "Residencial",
+                    "inhabited": true,
+                    "multiple": 30
+                  }
+                ],
+                "paymentConditions": {
+                  "paymentType": "Invoice",
+                  "installments": 2
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Cotação cadastrada com sucesso.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FiancaLocaticiaQuote"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/401Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/500InternalServerError"
+          }
+        }
+      }
+    },
+    "/insurance/v1/fianca-locaticia/quotes/renew-policy": {
+      "post": {
+        "operationId": "fianca-locaticia-quote-v1-renew-policy",
+        "description": "<p>Solicita uma cotação de renovação de uma apólice do Fiança Locatícia (Aluguel).</p>",
+        "summary": "Solicitar cotação de renovação",
+        "tags": [
+          "Renovações"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/clientId"
+          },
+          {
+            "$ref": "#/components/parameters/accessToken"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RenewPolicyRequest"
+              },
+              "example": {
+                "renewalPolicyNumber": "0306920259907460043779000"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Cotação criada com sucesso.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FiancaLocaticiaQuote"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/401Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/500InternalServerError"
+          }
+        }
+      }
+    },
+    "/insurance/v1/fianca-locaticia/quotes/{quote_id}": {
+      "get": {
+        "operationId": "fianca-locaticia-quote-v1-get",
+        "summary": "Consultar cotação",
+        "tags": [
+          "Cotações",
+          "Renovações"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/clientId"
+          },
+          {
+            "$ref": "#/components/parameters/accessToken"
+          },
+          {
+            "$ref": "#/components/parameters/quoteId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Cotação localizada com sucesso.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FiancaLocaticiaQuote"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/401Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/404NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/500InternalServerError"
+          }
+        }
+      },
+      "put": {
+        "operationId": "fianca-locaticia-quote-v1-put",
+        "summary": "Atualizar cotação",
+        "tags": [
+          "Cotações",
+          "Renovações"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/clientId"
+          },
+          {
+            "$ref": "#/components/parameters/accessToken"
+          },
+          {
+            "$ref": "#/components/parameters/quoteId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FiancaLocaticiaQuote"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Cotação atualizada com sucesso.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FiancaLocaticiaQuote"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/401Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/404NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/500InternalServerError"
+          }
+        }
+      }
+    },
+    "/insurance/v1/fianca-locaticia/quotes/{quote_id}/draft": {
+      "get": {
+        "operationId": "fianca-locaticia-quote-v1-draft",
+        "summary": "Consultar documento da minuta",
+        "tags": [
+          "Cotações",
+          "Renovações"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/clientId"
+          },
+          {
+            "$ref": "#/components/parameters/accessToken"
+          },
+          {
+            "$ref": "#/components/parameters/quoteId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Documento da minuta localizado com sucesso.",
+            "content": {
+              "application/pdf": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/401Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/404NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/500InternalServerError"
+          }
+        }
+      }
+    },
+    "/insurance/v1/fianca-locaticia/quotes/{quote_id}/letters": {
+      "get": {
+        "operationId": "fianca-locaticia-quote-v1-letters",
+        "summary": "Consultar carta de aprovação/recusa",
+        "tags": [
+          "Cotações",
+          "Renovações"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/clientId"
+          },
+          {
+            "$ref": "#/components/parameters/accessToken"
+          },
+          {
+            "$ref": "#/components/parameters/quoteId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Carta de aprovação/recusa localizada com sucesso.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/401Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/404NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/500InternalServerError"
+          }
+        }
+      }
+    },
+    "/insurance/v1/fianca-locaticia-mensalizado-pf/quotes/facial-biometrics/{quote_id}": {
+      "get": {
+        "operationId": "fianca-locaticia-mensalizado-pf-quote-v1-facial-biometrics",
+        "summary": "Consultar link de biometria facial do locatário",
+        "description": "Retorna o link de biometria facial para validação do locatário.",
+        "tags": [
+          "Cotações"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/clientId"
+          },
+          {
+            "$ref": "#/components/parameters/accessToken"
+          },
+          {
+            "$ref": "#/components/parameters/quoteId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Link de biometria localizado com sucesso.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FacialBiometricsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/401Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/404NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/500InternalServerError"
+          }
+        }
+      }
+    },
+    "/insurance/v1/fianca-locaticia/quotes/reanalysis": {
+      "post": {
+        "operationId": "fianca-locaticia-quote-v1-reanalysis",
+        "summary": "Solicitar reanálise de cotação recusada",
+        "tags": [
+          "Cotações",
+          "Renovações"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/clientId"
+          },
+          {
+            "$ref": "#/components/parameters/accessToken"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReanalysisRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Reanálise solicitada com sucesso.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FiancaLocaticiaQuote"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/401Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/500InternalServerError"
+          }
+        }
+      }
+    },
+    "/insurance/v1/fianca-locaticia-mensalizado-pf/quotes/{quoteId}/payment-simulations": {
+      "get": {
+        "operationId": "getPaymentSimulations",
+        "summary": "Simulador de pagamento",
+        "tags": [
+          "Cotações",
+          "Renovações"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/quoteId"
+          },
+          {
+            "$ref": "#/components/parameters/clientId"
+          },
+          {
+            "$ref": "#/components/parameters/accessToken"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Simulação de pagamento retornada",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PaymentSimulationsResponse"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/401Unauthorized"
+          },
+          "403": {
+            "description": "Acesso negado"
+          },
+          "500": {
+            "$ref": "#/components/responses/500InternalServerError"
+          }
+        }
+      }
+    },
+    "/riskobject/v1/products/fianca-locaticia/plans": {
+      "get": {
+        "operationId": "getPlans",
+        "summary": "Consultar planos",
+        "tags": [
+          "Planos"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/clientId"
+          },
+          {
+            "$ref": "#/components/parameters/accessToken"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Planos retornados",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PlansDetails"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/401Unauthorized"
+          },
+          "403": {
+            "description": "Acesso negado"
+          },
+          "500": {
+            "$ref": "#/components/responses/500InternalServerError"
+          }
+        }
+      }
+    },
+    "/insurance/v1/fianca-locaticia/proposals": {
+      "post": {
+        "operationId": "fianca-locaticia-proposal-v1-post",
+        "summary": "Enviar proposta",
+        "tags": [
+          "Propostas",
+          "Renovações"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/clientId"
+          },
+          {
+            "$ref": "#/components/parameters/accessToken"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProposalV1"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Proposta submetida com sucesso.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProposalV1"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/401Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/500InternalServerError"
+          }
+        }
+      }
+    },
+    "/insurance/v1/fianca-locaticia/proposals/{proposal_id}/accept": {
+      "post": {
+        "operationId": "fianca-locaticia-proposal-v1-accept",
+        "summary": "Aceitar proposta",
+        "tags": [
+          "Propostas",
+          "Renovações"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/clientId"
+          },
+          {
+            "$ref": "#/components/parameters/accessToken"
+          },
+          {
+            "$ref": "#/components/parameters/proposalId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Proposta aceita com sucesso."
+          },
+          "400": {
+            "$ref": "#/components/responses/400BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/401Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/500InternalServerError"
+          }
+        }
+      }
+    },
+    "/insurance/v1/fianca-locaticia/proposals/{proposal_id}": {
+      "get": {
+        "operationId": "fianca-locaticia-proposal-v1-get",
+        "summary": "Consultar proposta",
+        "tags": [
+          "Propostas",
+          "Renovações"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/clientId"
+          },
+          {
+            "$ref": "#/components/parameters/accessToken"
+          },
+          {
+            "$ref": "#/components/parameters/proposalId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Proposta localizada com sucesso.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProposalV1"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/401Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/500InternalServerError"
+          }
+        }
+      }
+    },
+    "/insurance/v1/fianca-locaticia/proposals/{proposal_id}/document": {
+      "get": {
+        "operationId": "fianca-locaticia-proposal-v1-document",
+        "summary": "Consultar documento da proposta",
+        "tags": [
+          "Propostas",
+          "Renovações"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/clientId"
+          },
+          {
+            "$ref": "#/components/parameters/accessToken"
+          },
+          {
+            "$ref": "#/components/parameters/proposalId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Documento da proposta localizado com sucesso.",
+            "content": {
+              "application/pdf": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/401Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/404NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/500InternalServerError"
+          }
+        }
+      }
+    },
+    "/policiesmanagement/v1/policies": {
+      "get": {
+        "operationId": "policiesmanagement-v1-policies-list-renewable",
+        "summary": "Consultar apólices elegíveis para renovação",
+        "tags": [
+          "Renovações"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/clientId"
+          },
+          {
+            "$ref": "#/components/parameters/accessToken"
+          },
+          {
+            "name": "ProductKey",
+            "in": "query",
+            "description": "Chave do produto para filtrar apólices.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "EligibleForRenewal",
+            "in": "query",
+            "description": "Filtra apenas apólices elegíveis à renovação, calculando a janela de vencimento a partir das regras de renovação do produto. Quando este parâmetro for `true`, `ProductKey` é obrigatório.",
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Apólices elegíveis para renovação localizadas com sucesso.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PolicyListResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/401Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/404NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/500InternalServerError"
+          }
+        }
+      },
+      "post": {
+        "operationId": "fianca-locaticia-policy-v1-post",
+        "summary": "Emitir apólice",
+        "tags": [
+          "Apólices",
+          "Renovações"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/clientId"
+          },
+          {
+            "$ref": "#/components/parameters/accessToken"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Policy"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Apólice emitida com sucesso.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Policy"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/401Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/500InternalServerError"
+          }
+        }
+      }
+    },
+    "/insurance/v1/fianca-locaticia/policies/{policy_id}": {
+      "get": {
+        "operationId": "fianca-locaticia-policy-v1-get",
+        "summary": "Consultar apólice",
+        "tags": [
+          "Apólices",
+          "Renovações"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/clientId"
+          },
+          {
+            "$ref": "#/components/parameters/accessToken"
+          },
+          {
+            "$ref": "#/components/parameters/policyId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Apólice localizada com sucesso.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Policy"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/401Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/404NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/500InternalServerError"
+          }
+        }
+      }
+    },
+    "/insurance/v1/fianca-locaticia/policies/{policy_id}/document": {
+      "get": {
+        "operationId": "fianca-locaticia-policy-v1-document",
+        "summary": "Consultar documento da apólice",
+        "tags": [
+          "Apólices",
+          "Renovações"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/clientId"
+          },
+          {
+            "$ref": "#/components/parameters/accessToken"
+          },
+          {
+            "$ref": "#/components/parameters/policyId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Documento da apólice localizado com sucesso.",
+            "content": {
+              "application/pdf": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/401Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/404NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/500InternalServerError"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "clientId": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "client_id"
+      },
+      "accessToken": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "access_token"
+      }
+    },
+    "parameters": {
+      "clientId": {
+        "in": "header",
+        "name": "client_id",
+        "schema": {
+          "type": "string"
+        },
+        "required": true,
+        "description": "<p>Client ID da App.</p>"
+      },
+      "accessToken": {
+        "in": "header",
+        "name": "access_token",
+        "schema": {
+          "type": "string"
+        },
+        "required": true,
+        "description": "<p>Token de acesso gerado para a App.</p>"
+      },
+      "quoteId": {
+        "in": "path",
+        "name": "quote_id",
+        "schema": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "required": true,
+        "description": "<p>ID da cotação para consulta.</p>"
+      },
+      "proposalId": {
+        "in": "path",
+        "name": "proposal_id",
+        "schema": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "required": true,
+        "description": "<p>ID da proposta.</p>"
+      },
+      "policyId": {
+        "in": "path",
+        "name": "policy_id",
+        "schema": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "required": true,
+        "description": "<p>ID da apólice.</p>"
+      }
+    },
+    "responses": {
+      "400BadRequest": {
+        "description": "Os dados da requisição estão inválidos.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResult"
+            }
+          }
+        }
+      },
+      "401Unauthorized": {
+        "description": "Parceiro não autorizado a realizar a operação.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResult"
+            }
+          }
+        }
+      },
+      "404NotFound": {
+        "description": "Registro não encontrado.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResult"
+            }
+          }
+        }
+      },
+      "500InternalServerError": {
+        "description": "Erro interno da API.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResult"
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "FiancaLocaticiaQuote": {
+        "description": "Representa uma cotação de Fiança Locatícia.",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/QuoteBase"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "riskObjects": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/FiancaLocaticiaRiskObject"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "PolicyType": {
+        "description": "<p>Tipo da apólice informa se é contratação única ou item a item.</p> <ul>\n  <li><strong>Unique</strong>: Contratação única.</li>\n  <li><strong>ItemByItem</strong>: Contratação item a item.</li>\n</ul>",
+        "enum": [
+          "Unique",
+          "ItemByItem"
+        ],
+        "type": "string"
+      },
+      "QuoteStatus": {
+        "description": "<p>Situação da cotação define o passo do fluxo que a cotação se encontra.</p> <ul>\n  <li><strong>Creating</strong>: A cotação foi criada, porém ainda não foi encaminhada para a subscrição.</li>\n  <li><strong>UnderAnalysis</strong>: A cotação está sob análise da subscrição.</li>\n  <li><strong>Denied</strong>: A cotação não foi aprovada.</li>\n  <li><strong>Approved</strong>: A cotação foi aprovada.</li>\n</ul>",
+        "enum": [
+          "Creating",
+          "UnderAnalysis",
+          "Denied",
+          "Approved"
+        ],
+        "type": "string"
+      },
+      "Participant": {
+        "description": "<p>Representa um participante dentro da apólice.</p>",
+        "type": "object",
+        "required": [
+          "documentNumber",
+          "role"
+        ],
+        "properties": {
+          "documentNumber": {
+            "description": "<p>CPF/CNPJ do participante. Devem ser informados somente os dígitos, incluindo zeros à esquerda.</p> <p>Essa informação é ofuscada no retorno da API para atender a LGPD, trazendo somente alguns dígitos visíveis.</p>",
+            "type": "string"
+          },
+          "participationPercentage": {
+            "description": "<p>Percentual do prêmio a que o beneficiário tem direito. O valor deve ter no máximo duas casas decimais e estar entre 0.01 e 1.00.</p> <p>Obrigatório para os beneficiários; a soma da participação de todos os beneficiários deve ser igual a 1.</p>",
+            "type": "number"
+          },
+          "role": {
+            "description": "<p>Papel do participante na cotação.</p>",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ParticipantRole"
+              }
+            ]
+          },
+          "address": {
+            "description": "<p>Endereço do participante.</p>",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Address"
+              }
+            ]
+          },
+          "contact": {
+            "description": "<p>Contato do participante.</p>",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Contact"
+              }
+            ]
+          },
+          "isPayer": {
+            "description": "<p>Informa quem é o pagador da apólice.</p>",
+            "type": "boolean"
+          },
+          "main": {
+            "description": "<p>Indicação que o participante é o beneficiário principal. Só deve ser usada para participantes com o papel Beneficiary.</p>",
+            "type": "boolean"
+          }
+        }
+      },
+      "ParticipantRole": {
+        "description": "<p>Lista de possíveis valores para os participantes da apólice.</p> <ul>\n  <li><strong>Beneficiary</strong>: O beneficiário é a pessoa da apólice que tem direito a indenização do seguro em caso de sinistro.</li>\n  <li><strong>Insured</strong>: O segurado é a pessoa, física ou jurídica, cujos interesses estão garantidos pela apólice de seguro.</li>\n  <li><strong>PolicyHolder</strong>: Devedor das obrigações por ele assumidas no contrato principal. (Circular SUSEP 232/03).</li>\n</ul>",
+        "enum": [
+          "Beneficiary",
+          "Insured",
+          "PolicyHolder"
+        ],
+        "type": "string"
+      },
+      "CommissionedAgent": {
+        "description": "<p>Representa um agente comissionado dentro da apólice.</p>",
+        "type": "object",
+        "required": [
+          "documentNumber",
+          "role"
+        ],
+        "properties": {
+          "documentNumber": {
+            "description": "<p>CPF/CNPJ do agente comissionado. Devem ser informados somente os dígitos, incluindo zeros à esquerda.</p> <p>Essa informação é ofuscada no retorno da API para atender a LGPD.</p>",
+            "type": "string"
+          },
+          "role": {
+            "description": "<p>Papel desempenhado pelo agente comissionado.</p>",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CommissionedAgentRole"
+              }
+            ]
+          },
+          "lead": {
+            "description": "<p>Identifica a corretora principal na cotação. Pode ser omitido quando houver somente uma única corretora.</p>",
+            "type": "boolean"
+          },
+          "commissionPercentage": {
+            "description": "<p>Percentual de comissão (corretora) ou pró-labore (estipulante). O valor deve ter no máximo 3 casas decimais.</p>",
+            "type": "number"
+          },
+          "commissionAmount": {
+            "description": "<p>Valor de comissão ou pró-labore. Preenchido automaticamente no retorno da cotação.</p>",
+            "type": "number",
+            "readOnly": true
+          },
+          "participationPercentage": {
+            "description": "<p>Percentual de participação na comissão em co-corretagem. A soma para todas as corretoras deve ser igual a 1.</p>",
+            "type": "number"
+          },
+          "isPayer": {
+            "description": "<p>Informa quem é o pagador da apólice.</p>",
+            "type": "boolean"
+          },
+          "address": {
+            "description": "<p>Endereço do pagador.</p>",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Address"
+              }
+            ]
+          }
+        }
+      },
+      "CommissionedAgentRole": {
+        "description": "<p>Lista de possíveis valores para os agentes comissionados da apólice.</p> <ul>\n  <li><strong>Broker</strong>: É o profissional especializado e habilitado a intermediar contratos de seguros entre as seguradoras e os consumidores.</li>\n  <li><strong>PolicyOwner</strong>: O estipulante é a pessoa que contrata o seguro, preenche e assina a proposta, paga o prêmio e solicita modificações durante a vigência.</li>\n  <li><strong>InsuranceAgent</strong>: Agente de seguros.</li>\n</ul>",
+        "enum": [
+          "Broker",
+          "PolicyOwner",
+          "InsuranceAgent"
+        ],
+        "type": "string"
+      },
+      "Coverage": {
+        "description": "<p>Contém informações das coberturas para cotação.</p>",
+        "type": "object",
+        "required": [
+          "key"
+        ],
+        "properties": {
+          "key": {
+            "description": "<p>ID da cobertura, conforme cada produto.</p>",
+            "type": "string"
+          },
+          "insuredAmount": {
+            "description": "<p>Valor segurado da cobertura.</p>",
+            "type": "number"
+          },
+          "lmi": {
+            "description": "<p>Limite máximo de indenização.</p>",
+            "type": "number"
+          },
+          "feeMultiple": {
+            "description": "<p>Múltiplo da taxa aplicado à cobertura.</p>",
+            "type": "number"
+          },
+          "indemnityPeriod": {
+            "description": "<p>Período de indenização em dias.</p>",
+            "type": "number"
+          },
+          "commercialPremium": {
+            "description": "<p>Prêmio comercial da cobertura. Preenchido automaticamente no retorno da cotação.</p>",
+            "type": "number",
+            "readOnly": true
+          },
+          "grossPremium": {
+            "description": "<p>Prêmio bruto da cobertura. Preenchido automaticamente no retorno da cotação.</p>",
+            "type": "number",
+            "readOnly": true
+          }
+        }
+      },
+      "Address": {
+        "description": "<p>Representa uma localidade com endereço.</p>",
+        "type": "object",
+        "required": [
+          "street",
+          "number",
+          "district",
+          "city",
+          "state",
+          "zipCode"
+        ],
+        "properties": {
+          "street": {
+            "description": "<p>Nome da avenida, rua ou praça da localidade.</p>",
+            "type": "string"
+          },
+          "number": {
+            "description": "<p>Número da localidade.</p>",
+            "type": "string"
+          },
+          "district": {
+            "description": "<p>Bairro da localidade.</p>",
+            "type": "string"
+          },
+          "city": {
+            "description": "<p>Nome da cidade da localidade, conforme cadastrado nos Correios.</p>",
+            "type": "string"
+          },
+          "state": {
+            "description": "<p>Sigla do estado da localidade, com duas letras.</p>",
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 2
+          },
+          "zipCode": {
+            "description": "<p>CEP da localidade. Devem ser informados somente os dígitos.</p>",
+            "type": "string"
+          },
+          "complement": {
+            "description": "<p>Complemento da localidade. Apartamento, andar.</p>",
+            "type": "string"
+          },
+          "country": {
+            "description": "<p>País de origem.</p>",
+            "type": "string"
+          },
+          "type": {
+            "description": "<p>Tipo do endereço.</p> <ul>\n  <li><strong>Residential</strong>: Endereço Residencial.</li>\n  <li><strong>Business</strong>: Endereço Empresarial.</li>\n  <li><strong>Billing</strong>: Endereço de Cobrança.</li>\n</ul>",
+            "type": "string"
+          }
+        }
+      },
+      "Contact": {
+        "description": "<p>Representa os dados de contato.</p>",
+        "type": "object",
+        "properties": {
+          "name": {
+            "description": "<p>Nome para identificação do contato.</p>",
+            "type": "string"
+          },
+          "email": {
+            "description": "<p>E-mail de contato.</p>",
+            "type": "string"
+          },
+          "phoneNumber": {
+            "description": "<p>Número do telefone, com DDD.</p>",
+            "type": "string"
+          },
+          "cellPhoneNumber": {
+            "description": "<p>Número do celular, com DDD.</p>",
+            "type": "string"
+          }
+        }
+      },
+      "PaymentConditions": {
+        "description": "<p>Representa um objeto informando forma de pagamento na Pottencial.</p>",
+        "type": "object",
+        "required": [
+          "paymentType",
+          "installments"
+        ],
+        "properties": {
+          "paymentType": {
+            "description": "<p>Forma de pagamento da apólice.</p>",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PaymentType"
+              }
+            ]
+          },
+          "installments": {
+            "description": "<p>Número de parcelas que será dividido o pagamento da apólice.</p>",
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      },
+      "PaymentType": {
+        "description": "<p>Lista as possíveis formas de pagamento da apólice.</p> <ul>\n  <li><strong>Invoice</strong>: Pagamento através de fatura.</li>\n  <li><strong>Boleto</strong>: Pagamento através de boleto bancário.</li>\n  <li><strong>AutomaticDebit</strong>: Pagamento através de débito em conta.</li>\n</ul>",
+        "enum": [
+          "Invoice",
+          "Boleto",
+          "AutomaticDebit"
+        ],
+        "type": "string"
+      },
+      "ProposalV1": {
+        "description": "<p>Representa uma proposta de um produto.</p>",
+        "type": "object",
+        "required": [
+          "quoteId",
+          "payment"
+        ],
+        "properties": {
+          "proposalId": {
+            "description": "<p>ID único da proposta. Preenchido automaticamente quando a proposta é criada.</p>",
+            "type": "string",
+            "format": "uuid",
+            "readOnly": true
+          },
+          "quoteId": {
+            "description": "<p>ID da cotação associada à proposta.</p>",
+            "type": "string",
+            "format": "uuid"
+          },
+          "proposalNumber": {
+            "description": "<p>Número da proposta.</p>",
+            "type": "number",
+            "readOnly": true
+          },
+          "policyPeriodStart": {
+            "description": "<p>Data de início de vigência da apólice.</p>",
+            "type": "string",
+            "format": "date"
+          },
+          "policyPeriodEnd": {
+            "description": "<p>Data de fim de vigência da apólice.</p>",
+            "type": "string",
+            "format": "date"
+          },
+          "payment": {
+            "description": "<p>Dados de pagamento da proposta.</p>",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Payment"
+              }
+            ]
+          },
+          "createdAt": {
+            "description": "<p>Data e hora de criação da proposta. Preenchido automaticamente.</p>",
+            "type": "string",
+            "format": "date-time",
+            "readOnly": true
+          },
+          "status": {
+            "description": "<p>Situação atual da proposta. Preenchido automaticamente.</p>",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ProposalStatusV1"
+              }
+            ]
+          }
+        }
+      },
+      "ProposalStatusV1": {
+        "description": "<p>Situação da proposta define o passo do fluxo que a proposta se encontra.</p> <ul>\n  <li><strong>Pending</strong>: A proposta foi criada, porém ainda não foi definido meio de pagamento.</li>\n  <li><strong>Ready</strong>: A proposta está pronta para ser aceita.</li>\n  <li><strong>Issued</strong>: A proposta foi emitida.</li>\n  <li><strong>Accepted</strong>: A proposta foi aceita.</li>\n</ul>",
+        "enum": [
+          "Pending",
+          "Ready",
+          "Issued",
+          "Accepted"
+        ],
+        "type": "string"
+      },
+      "Payment": {
+        "description": "<p>Representa os dados referentes ao pagamento da apólice.</p>",
+        "type": "object",
+        "required": [
+          "paymentType",
+          "installments"
+        ],
+        "properties": {
+          "paymentType": {
+            "description": "<p>Forma de pagamento da apólice.</p>",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PaymentType"
+              }
+            ]
+          },
+          "installments": {
+            "description": "<p>Número de parcelas que será dividido o pagamento da apólice.</p>",
+            "type": "integer",
+            "minimum": 1
+          },
+          "firstDueDate": {
+            "description": "<p>Data de vencimento da primeira parcela.</p>",
+            "type": "string"
+          },
+          "firstInstallmentDueDateDelay": {
+            "description": "<p>Atraso em dias para o vencimento da primeira parcela.</p>",
+            "type": "integer"
+          },
+          "paymentInstructions": {
+            "description": "<p>Instruções de pagamento.</p>",
+            "type": "string"
+          },
+          "automaticDebitAccount": {
+            "description": "<p>Dados da conta para débito automático.</p>",
+            "type": "object",
+            "properties": {
+              "bankCode": {
+                "type": "string"
+              },
+              "bankNumber": {
+                "type": "string"
+              },
+              "accountNumber": {
+                "type": "string"
+              },
+              "accountDigit": {
+                "type": "string"
+              },
+              "accountExtension": {
+                "type": "string"
+              },
+              "documentNumber": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "Policy": {
+        "description": "<p>Representa uma apólice de um produto.</p>",
+        "type": "object",
+        "required": [
+          "proposalId"
+        ],
+        "properties": {
+          "policyId": {
+            "description": "<p>ID único da apólice. Preenchido automaticamente quando a apólice é emitida.</p>",
+            "type": "string",
+            "format": "uuid",
+            "readOnly": true
+          },
+          "proposalId": {
+            "description": "<p>ID da proposta associada à apólice.</p>",
+            "type": "string",
+            "format": "uuid"
+          },
+          "policyNumber": {
+            "description": "<p>Número da apólice. Preenchido automaticamente.</p>",
+            "type": "string",
+            "readOnly": true
+          },
+          "policyPeriodStart": {
+            "description": "<p>Data de início de vigência da apólice.</p>",
+            "type": "string",
+            "format": "date",
+            "readOnly": true
+          },
+          "policyPeriodEnd": {
+            "description": "<p>Data de fim de vigência da apólice.</p>",
+            "type": "string",
+            "format": "date",
+            "readOnly": true
+          },
+          "status": {
+            "description": "<p>Situação atual da apólice.</p>",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PolicyStatus"
+              }
+            ]
+          },
+          "createdAt": {
+            "description": "<p>Data e hora de emissão da apólice. Preenchido automaticamente.</p>",
+            "type": "string",
+            "format": "date-time",
+            "readOnly": true
+          }
+        }
+      },
+      "PolicyStatus": {
+        "description": "<p>Situação da apólice define o passo do fluxo que a apólice se encontra.</p> <ul>\n  <li><strong>Creating</strong>: A apólice está sendo criada.</li>\n  <li><strong>Modifying</strong>: A apólice está sendo modificada.</li>\n  <li><strong>Canceling</strong>: A apólice está em processo de cancelamento.</li>\n  <li><strong>Active</strong>: A apólice está ativa.</li>\n  <li><strong>Cancelled</strong>: A apólice foi cancelada.</li>\n  <li><strong>Expired</strong>: A apólice expirou.</li>\n</ul>",
+        "enum": [
+          "Creating",
+          "Modifying",
+          "Canceling",
+          "Active",
+          "Cancelled",
+          "Expired"
+        ],
+        "type": "string"
+      },
+      "PolicyCancellationRequest": {
+        "description": "<p>Representa um objeto para requerer o cancelamento de uma apólice.</p>",
+        "type": "object",
+        "required": [
+          "policyNumber"
+        ],
+        "properties": {
+          "policyNumber": {
+            "description": "<p>Número da apólice a ser cancelada.</p>",
+            "type": "string"
+          },
+          "attachments": {
+            "description": "<p>Lista de anexos relacionados ao cancelamento da apólice.</p>",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CancellationAttachment"
+            }
+          }
+        }
+      },
+      "PolicyCancellationResponse": {
+        "description": "<p>Representa um objeto contendo o resultado da operação de cancelamento de apólice.</p>",
+        "type": "object",
+        "properties": {
+          "status": {
+            "description": "<p>Status da operação.</p>",
+            "type": "string"
+          },
+          "message": {
+            "description": "<p>Mensagem informativa após o fim da operação.</p>",
+            "type": "string"
+          }
+        }
+      },
+      "CancellationAttachment": {
+        "description": "<p>Representa um objeto contendo anexos relacionados ao cancelamento de apólice.</p>",
+        "type": "object",
+        "required": [
+          "name",
+          "content"
+        ],
+        "properties": {
+          "name": {
+            "description": "<p>Nome do arquivo anexo.</p>",
+            "type": "string"
+          },
+          "content": {
+            "description": "<p>Conteúdo do arquivo em base64.</p>",
+            "type": "string",
+            "format": "base64"
+          }
+        }
+      },
+      "ErrorResult": {
+        "description": "<p>Representa um resultado de erro na chamada da plataforma.</p>",
+        "type": "object",
+        "properties": {
+          "errors": {
+            "description": "<p>Lista de erros da solicitação.</p>",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ErrorMessage"
+            }
+          }
+        }
+      },
+      "ErrorMessage": {
+        "description": "<p>Contém informações de um erro.</p>",
+        "type": "object",
+        "properties": {
+          "code": {
+            "description": "<p>Código de identificação do erro.</p>",
+            "type": "string"
+          },
+          "message": {
+            "description": "<p>Descrição do erro.</p>",
+            "type": "string"
+          }
+        }
+      },
+      "FacialBiometricsResponse": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "URL para validação biométrica do locatário."
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Data e hora de expiração do link."
+          }
+        }
+      },
+      "ReanalysisRequest": {
+        "type": "object",
+        "required": [
+          "quoteId"
+        ],
+        "properties": {
+          "quoteId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "observation": {
+            "type": "string",
+            "description": "Justificativa para reanálise."
+          },
+          "attachments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReanalysisAttachment"
+            }
+          }
+        }
+      },
+      "ReanalysisAttachment": {
+        "type": "object",
+        "required": [
+          "name",
+          "content"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "content": {
+            "type": "string",
+            "format": "base64"
+          }
+        }
+      },
+      "FiancaLocaticiaRiskObject": {
+        "type": "object",
+        "description": "Objeto de risco de imóvel locado para Fiança Locatícia.",
+        "required": [
+          "startLeaseContract",
+          "endLeaseContract",
+          "tenantDocumentNumber",
+          "expenses",
+          "planKey",
+          "multiple",
+          "occupation",
+          "inhabited",
+          "riskLocation"
+        ],
+        "properties": {
+          "type": {
+            "type": "string"
+          },
+          "startLeaseContract": {
+            "type": "string",
+            "format": "date",
+            "description": "Data de início do contrato de locação."
+          },
+          "endLeaseContract": {
+            "type": "string",
+            "format": "date",
+            "description": "Data de fim do contrato de locação."
+          },
+          "tenantDocumentNumber": {
+            "type": "string",
+            "description": "CPF ou CNPJ do locatário."
+          },
+          "expenses": {
+            "type": "array",
+            "description": "Despesas do imóvel.",
+            "items": {
+              "$ref": "#/components/schemas/Expense"
+            }
+          },
+          "planKey": {
+            "type": "string",
+            "enum": [
+              "Basic",
+              "Complete",
+              "Traditional"
+            ],
+            "description": "Plano de cobertura."
+          },
+          "multiple": {
+            "type": "number",
+            "enum": [
+              12,
+              15,
+              18,
+              24,
+              30,
+              45
+            ],
+            "description": "Múltiplo do aluguel para IS."
+          },
+          "occupation": {
+            "type": "string",
+            "enum": [
+              "Residencial",
+              "Commercial"
+            ]
+          },
+          "inhabited": {
+            "type": "boolean",
+            "description": "Indica se o imóvel está habitado."
+          },
+          "riskLocation": {
+            "$ref": "#/components/schemas/RiskLocation"
+          },
+          "coverages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Coverage"
+            }
+          }
+        }
+      },
+      "Expense": {
+        "type": "object",
+        "description": "Despesa do imóvel locado.",
+        "properties": {
+          "description": {
+            "type": "string",
+            "enum": [
+              "VALOR_ALUGUEL",
+              "VALOR_CONDOMINIO",
+              "VALOR_IPTU",
+              "VALOR_GAS",
+              "VALOR_AGUA",
+              "VALOR_LUZ"
+            ]
+          },
+          "value": {
+            "type": "number"
+          }
+        }
+      },
+      "RiskLocation": {
+        "type": "object",
+        "description": "Localização do imóvel segurado.",
+        "properties": {
+          "address": {
+            "$ref": "#/components/schemas/Address"
+          },
+          "nationalCoverage": {
+            "type": "boolean",
+            "description": "Indica se a cobertura é nacional."
+          }
+        }
+      },
+      "PlansDetailsItems": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "multiples": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "PlansDetails": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "coverages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlansDetailsItems"
+            }
+          },
+          "expense": {
+            "type": "string"
+          }
+        }
+      },
+      "RenewPolicyRequest": {
+        "type": "object",
+        "required": [
+          "renewalPolicyNumber"
+        ],
+        "properties": {
+          "renewalPolicyNumber": {
+            "type": "string",
+            "description": "Número da apólice a ser renovada."
+          }
+        }
+      },
+      "QuoteBase": {
+        "type": "object",
+        "required": [
+          "policyType",
+          "commissionedAgents",
+          "participants",
+          "riskObjects"
+        ],
+        "properties": {
+          "quoteId": {
+            "description": "<p>ID único da cotação que a identifica dentro da Pottencial. Esse campo é preenchido automaticamente e retornado quando uma cotação é criada com sucesso.</p> <p>Ele deve ser armazenado pois é utilizado nas demais operações de consulta e proposta.</p>",
+            "type": "string",
+            "format": "uuid",
+            "readOnly": true
+          },
+          "policyType": {
+            "description": "<p>Tipo de contratação da apólice, que pode ser única ou item a item. Caso não seja informado, será considerada como apólice de contratação única.</p>",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PolicyType"
+              }
+            ]
+          },
+          "quoteNumber": {
+            "description": "<p>Número da cotação.</p>",
+            "type": "number",
+            "readOnly": true
+          },
+          "renewalPolicyNumber": {
+            "description": "<p>Número da apólice a ser renovada.</p>",
+            "type": "string",
+            "readOnly": true
+          },
+          "discountPercentage": {
+            "description": "<p>Percentual de desconto a ser aplicado no valor do prêmio.</p> <p>O percentual de desconto e a taxa de agravo são mutuamente exclusivos, então somente um deles pode ser informado para uma cotação.</p>",
+            "type": "number"
+          },
+          "commercialLoadingFee": {
+            "description": "<p>Taxa de agravo comercial a ser aplicada no valor do prêmio.</p> <p>O percentual de desconto e a taxa de agravo são mutuamente exclusivos, então somente um deles pode ser informado para uma cotação.</p>",
+            "type": "number"
+          },
+          "createdAt": {
+            "description": "<p>Data e hora de criação da cotação. Esse campo é preenchido automaticamente e retornado quando uma cotação é criada com sucesso.</p>",
+            "type": "string",
+            "format": "date-time",
+            "readOnly": true
+          },
+          "status": {
+            "description": "<p>Situação atual da cotação. Esse campo é preenchido automaticamente e retornado quando uma cotação é criada com sucesso.</p>",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/QuoteStatus"
+              }
+            ]
+          },
+          "commercialPremium": {
+            "description": "<p>Valor de prêmio considerando-se subscrição e comercial, incluindo valores de comissão e prolabore.</p> <p>Esse campo é preenchido automaticamente e retornado quando uma cotação é criada com sucesso.</p>",
+            "type": "number",
+            "readOnly": true
+          },
+          "grossPremium": {
+            "description": "<p>Valor de prêmio total incluindo, além do prêmio comercial, o IOF e encargos financeiros.</p> <p>Esse campo é preenchido automaticamente e retornado quando uma cotação é criada com sucesso.</p>",
+            "type": "number",
+            "readOnly": true
+          },
+          "iof": {
+            "description": "<p>Valor do IOF da cotação. Esse campo é preenchido automaticamente e retornado quando uma cotação é criada com sucesso.</p>",
+            "type": "number",
+            "readOnly": true
+          },
+          "externalControlNumber": {
+            "description": "<p>Número de controle do parceiro para a cotação.</p>",
+            "type": "string"
+          },
+          "policyPeriodStart": {
+            "description": "<p>Data de início de vigência da apólice.</p>",
+            "type": "string",
+            "format": "date"
+          },
+          "policyPeriodEnd": {
+            "description": "<p>Data do fim de vigência da apólice.</p>",
+            "type": "string",
+            "format": "date"
+          },
+          "commissionedAgents": {
+            "description": "<p>Lista de agentes comissionados da apólice, que inclui corretoras e estipulantes.</p>",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CommissionedAgent"
+            }
+          },
+          "participants": {
+            "description": "<p>Lista de participantes da apólice, que inclui segurado, tomador e beneficiário.</p>",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Participant"
+            }
+          },
+          "paymentConditions": {
+            "description": "<p>Representa um objeto informando forma de pagamento na Pottencial.</p>",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PaymentConditions"
+              }
+            ]
+          }
+        }
+      },
+      "PaymentSimulationsInstallmentsResponse": {
+        "type": "object",
+        "properties": {
+          "countInstallments": {
+            "type": "integer",
+            "description": "Quantidade da Parcelas"
+          },
+          "commercialAmount": {
+            "type": "number",
+            "description": "Valor do prêmio comercial"
+          },
+          "iofAmount": {
+            "type": "number",
+            "description": "Valor de Iof"
+          },
+          "grossAmount": {
+            "type": "number",
+            "description": "Valor do prêmio bruto"
+          },
+          "additionalAmount": {
+            "type": "number",
+            "description": "Valor dos juros/adicional de fracionamento"
+          },
+          "financialChargesAmount": {
+            "type": "number",
+            "description": "Encargos financeiros"
+          },
+          "installments": {
+            "type": "array",
+            "description": "Valores das parcelas",
+            "items": {
+              "type": "number"
+            }
+          }
+        }
+      },
+      "PaymentSimulationsResponse": {
+        "type": "object",
+        "properties": {
+          "paymentType": {
+            "type": "string",
+            "description": "Método de pagamento"
+          },
+          "firstInstallmentPaymentType": {
+            "type": "string",
+            "nullable": true,
+            "description": "Método de pagamento da primeira parcela"
+          },
+          "minFirstPaymentDate": {
+            "type": "string",
+            "description": "Data mínima para a primeira parcela"
+          },
+          "maxFirstPaymentDate": {
+            "type": "string",
+            "description": "Data máxima para a primeira parcela"
+          },
+          "installments": {
+            "type": "array",
+            "description": "Detalhes das parcelas",
+            "items": {
+              "$ref": "#/components/schemas/PaymentSimulationsInstallmentsResponse"
+            }
+          }
+        }
+      },
+      "Policy-2": {
+        "type": "object",
+        "properties": {
+          "policyId": {
+            "type": "string",
+            "format": "uuid",
+            "example": "e3f94b32-841a-4d43-9821-4f4b23821a00"
+          },
+          "policyNumber": {
+            "type": "string",
+            "example": "POL-2024-000123"
+          },
+          "productCode": {
+            "type": "string",
+            "example": "RC"
+          },
+          "productName": {
+            "type": "string",
+            "example": "Responsabilidade Civil"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "expired",
+              "cancelled",
+              "suspended"
+            ]
+          },
+          "insuredName": {
+            "type": "string",
+            "example": "Empresa Segurada LTDA"
+          },
+          "insuredDocument": {
+            "type": "string",
+            "example": "12.345.678/0001-99"
+          },
+          "startDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "endDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "premiumValue": {
+            "type": "number",
+            "format": "float",
+            "example": 1250.5
+          },
+          "partnerId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "PolicyListResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Policy-2"
+            }
+          },
+          "pagination": {
+            "type": "object",
+            "properties": {
+              "page": {
+                "type": "integer"
+              },
+              "pageSize": {
+                "type": "integer"
+              },
+              "total": {
+                "type": "integer"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
