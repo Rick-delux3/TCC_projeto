@@ -5,7 +5,7 @@ namespace App\Services\Insurance\Providers;
 use App\Models\InsuranceAnalysis;
 use App\Services\Insurance\InsuranceAnalysisAttempt;
 use App\Services\Insurance\Payloads\RentalGuaranteeQuotePayloadBuilder;
-use App\Services\PottencialService;
+use App\Services\Insurance\PottencialService;
 
 class PottencialInsuranceProvider implements CreatesInsuranceQuotes, InsuranceProviderInterface
 {

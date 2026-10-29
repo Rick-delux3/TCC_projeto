@@ -9,7 +9,7 @@ use App\Models\InsuranceAnalysis;
 use App\Models\InsuranceAnalysisBatch;
 use App\Models\Lead;
 use App\Services\Insurance\InsuranceAnalysisPageService;
-use App\Services\LeadReanalysisService;
+use App\Services\Insurance\LeadReanalysisService;
 use DomainException;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;

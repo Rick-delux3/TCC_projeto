@@ -2,7 +2,7 @@
 
 @section('content_a')
 @php
-    use App\Services\CorretorDashboardLeadQuery;
+    use App\Services\Dashboard\CorretorDashboardLeadQuery;
     use App\Support\LeadLoversInitialFailureCatalog;
     use Illuminate\Support\Facades\Gate;
     use Illuminate\Support\Facades\Route;

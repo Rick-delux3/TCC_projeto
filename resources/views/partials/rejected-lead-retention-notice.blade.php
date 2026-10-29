@@ -8,9 +8,9 @@
         : null;
     $resultChangeInProgress = $tagOperation !== null
         && in_array($tagOperation->phase, [
-            \App\Services\LeadLoversTagOperationCoordinator::PHASE_PENDING,
-            \App\Services\LeadLoversTagOperationCoordinator::PHASE_POSTING,
-            \App\Services\LeadLoversTagOperationCoordinator::PHASE_CONFIRMING,
+            \App\Services\LeadLovers\LeadLoversTagOperationCoordinator::PHASE_PENDING,
+            \App\Services\LeadLovers\LeadLoversTagOperationCoordinator::PHASE_POSTING,
+            \App\Services\LeadLovers\LeadLoversTagOperationCoordinator::PHASE_CONFIRMING,
         ], true)
         && filled($tagOperation->desired_tag_key)
         && $tagOperation->desired_tag_key !== 'ruim';

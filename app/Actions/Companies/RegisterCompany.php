@@ -7,7 +7,7 @@ use App\Models\CorretorActivityLog;
 use App\Models\Imobiliaria;
 use App\Models\LeadLoversTag;
 use App\Models\User;
-use App\Services\CompanyTagService;
+use App\Services\LeadLovers\CompanyTagService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\ValidationException;

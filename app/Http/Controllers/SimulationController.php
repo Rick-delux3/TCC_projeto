@@ -10,7 +10,7 @@ use App\Jobs\StartInsuranceAnalysesBatchJob;
 use App\Models\Imobiliaria;
 use App\Models\InsuranceAnalysisBatch;
 use App\Models\Lead;
-use App\Services\CompanyApplicantService;
+use App\Services\Leads\CompanyApplicantService;
 use App\Support\CompanyConstitution;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;

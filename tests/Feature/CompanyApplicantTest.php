@@ -6,8 +6,8 @@ use App\Models\AtividadeEconomicaCodigo;
 use App\Models\Corretor;
 use App\Models\Imobiliaria;
 use App\Models\Lead;
-use App\Services\CompanyApplicantService;
 use App\Services\Insurance\Payloads\TokioCompanyApplicantsPayloadBuilder;
+use App\Services\Leads\CompanyApplicantService;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 

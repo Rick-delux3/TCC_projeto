@@ -6,7 +6,7 @@ use App\Models\Imobiliaria;
 use App\Models\InsuranceAnalysis;
 use App\Models\Lead;
 use App\Models\User;
-use App\Services\LeadReanalysisService;
+use App\Services\Insurance\LeadReanalysisService;
 use App\Support\CorretorPermissions;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;

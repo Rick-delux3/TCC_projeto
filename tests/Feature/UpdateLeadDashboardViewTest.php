@@ -6,7 +6,7 @@ use App\Models\Imobiliaria;
 use App\Models\Lead;
 use App\Models\LeadLoversTag;
 use App\Models\User;
-use App\Services\LeadLoversTagOperationCoordinator;
+use App\Services\LeadLovers\LeadLoversTagOperationCoordinator;
 use App\Support\CorretorPermissions;
 use App\Support\LeadLoversInitialFailureCatalog;
 use App\Support\ManualLeadResultTags;

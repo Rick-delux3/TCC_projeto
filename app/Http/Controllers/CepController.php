@@ -2,7 +2,7 @@
 
 namespace App\Http\Controllers;
 
-use App\Services\CepService;
+use App\Services\Lookup\CepService;
 use Illuminate\Http\JsonResponse;
 
 class CepController extends Controller
@@ -26,7 +26,7 @@ class CepController extends Controller
 
         $address = $cepService->find($cep);
 
-        if (!$address) {
+        if (! $address) {
             return response()->json([
                 'success' => false,
                 'message' => 'CEP não encontrado.',

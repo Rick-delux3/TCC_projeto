@@ -13,7 +13,7 @@ use App\Services\Insurance\Payloads\TooRentalGuaranteePayloadBuilder;
 use App\Services\Insurance\Providers\InsuranceProviderInterface;
 use App\Services\Insurance\Providers\InsuranceProviderResolver;
 use App\Services\Insurance\Providers\TooInsuranceProvider;
-use App\Services\TooService;
+use App\Services\Insurance\TooService;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 

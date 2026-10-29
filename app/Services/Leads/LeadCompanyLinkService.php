@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Services;
+namespace App\Services\Leads;
 
 use App\Events\DashboardActivityChanged;
 use App\Jobs\LinkLeadToCompanyJob;

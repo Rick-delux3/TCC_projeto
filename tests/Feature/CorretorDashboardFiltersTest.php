@@ -6,7 +6,7 @@ use App\Models\Imobiliaria;
 use App\Models\Lead;
 use App\Models\LeadLoversTag;
 use App\Models\User;
-use App\Services\CorretorDashboardLeadQuery;
+use App\Services\Dashboard\CorretorDashboardLeadQuery;
 use App\Support\CorretorPermissions;
 use App\Support\LeadLoversInitialFailureCatalog;
 use Illuminate\Database\Events\QueryExecuted;
@@ -164,7 +164,7 @@ it('filters explicit requester profiles independently of the company link', func
 
     $response = $this->get(route('Dashboard-Admin', ['tipo_solicitante' => $profile]))->assertOk();
     expect($response->viewData('leads')->pluck('id')->all())->toBe([$match->id]);
-})->with(array_keys(CorretorDashboardLeadQuery::requesterOptions()));
+})->with(['imobiliaria_cadastrada', 'imobiliaria_nao_cadastrada', 'locador', 'locatario']);
 
 it('recovers missing requester profiles from a known origin or registered requester details', function (): void {
     $origin = dashboardFilterLead(['tipo_solicitante' => null, 'origem' => 'imobiliaria_nao_cadastrada']);
@@ -399,7 +399,7 @@ it('keeps internal linking and automatic tag operations separate from data edits
 });
 it('removes leads after an actual data edit but not after saving unchanged data', function (): void {
     $lead = dashboardFilterLead();
-    $service = app(\App\Services\LeadReanalysisService::class);
+    $service = app(\App\Services\Insurance\LeadReanalysisService::class);
     $service->updateLeadDataAndMaybeUnlock($lead, ['nome' => $lead->nome]);
     expect($lead->fresh()->data_edited_at)->toBeNull();
     $service->updateLeadDataAndMaybeUnlock($lead, ['nome' => 'Edited name']);

@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Services;
+namespace App\Services\Leads;
 
 use App\Exceptions\PermanentLeadTagException;
 use App\Models\Lead;
@@ -22,7 +22,7 @@ final class RejectedLeadRetentionService
             ManualLeadResultTags::REJECTED
         );
 
-        if(! is_string($tagKey) || blank($tagKey)) {
+        if (! is_string($tagKey) || blank($tagKey)) {
             throw new PermanentLeadTagException(
                 'A chave da tag recusada não está configurada.'
             );
@@ -31,8 +31,8 @@ final class RejectedLeadRetentionService
         return $tagKey;
     }
 
-     /**
-     * @param array<int, array{id: int, name: string, linkedAt: string}> $remoteTags
+    /**
+     * @param  array<int, array{id: int, name: string, linkedAt: string}>  $remoteTags
      */
     public function confirmedAtForRemoteTag(
         array $remoteTags,
@@ -68,7 +68,7 @@ final class RejectedLeadRetentionService
      * O método deve ser chamado somente depois que a tag estiver confirmada
      * na resposta de listLeadTags().
      *
-     * @param array<int, array{id: int, name: string, linkedAt: string}> $remoteTags
+     * @param  array<int, array{id: int, name: string, linkedAt: string}>  $remoteTags
      */
     public function applyConfirmedFinalTag(
         Lead $lead,
@@ -141,6 +141,4 @@ final class RejectedLeadRetentionService
             ],
         ]);
     }
-
-
 }

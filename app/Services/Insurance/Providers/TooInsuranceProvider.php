@@ -5,7 +5,7 @@ namespace App\Services\Insurance\Providers;
 use App\Models\InsuranceAnalysis;
 use App\Services\Insurance\InsuranceAnalysisAttempt;
 use App\Services\Insurance\Payloads\TooRentalGuaranteePayloadBuilder;
-use App\Services\TooService;
+use App\Services\Insurance\TooService;
 use Illuminate\Support\Facades\Log;
 
 class TooInsuranceProvider implements CreatesInsuranceQuotes, InsuranceProviderInterface

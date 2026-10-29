@@ -9,7 +9,7 @@ use App\Models\Lead;
 use App\Services\Insurance\AnalysisDocumentService;
 use App\Services\Insurance\ProviderDocumentDownload;
 use App\Services\Insurance\ProviderRefusalLetterService;
-use App\Services\TooService;
+use App\Services\Insurance\TooService;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Mail;

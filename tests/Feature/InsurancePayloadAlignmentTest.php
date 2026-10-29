@@ -4,12 +4,12 @@ use App\Jobs\RunProviderAnalysisJob;
 use App\Jobs\StartInsuranceAnalysesBatchJob;
 use App\Models\InsuranceAnalysis;
 use App\Models\Lead;
-use App\Services\CpfLookupService;
 use App\Services\Insurance\Payloads\RentalGuaranteeQuotePayloadBuilder;
 use App\Services\Insurance\Payloads\TooRentalGuaranteePayloadBuilder;
 use App\Services\Insurance\Providers\InsuranceProviderResolver;
 use App\Services\Insurance\Providers\TooInsuranceProvider;
-use App\Services\TooService;
+use App\Services\Insurance\TooService;
+use App\Services\Lookup\CpfLookupService;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Http;
 

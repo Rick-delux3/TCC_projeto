@@ -4,8 +4,8 @@ namespace App\Http\Requests\Admin;
 
 use App\Models\Corretor;
 use App\Rules\CpfOrCnpj;
-use App\Services\CepService;
-use App\Services\CompanyTagService;
+use App\Services\LeadLovers\CompanyTagService;
+use App\Services\Lookup\CepService;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;

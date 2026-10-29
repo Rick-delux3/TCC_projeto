@@ -2,7 +2,7 @@
 
 namespace App\Jobs;
 
-use App\Services\LeadCompanyLinkService;
+use App\Services\Leads\LeadCompanyLinkService;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Queue\Middleware\WithoutOverlapping;

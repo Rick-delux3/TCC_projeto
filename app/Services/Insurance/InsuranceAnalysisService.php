@@ -5,7 +5,6 @@ namespace App\Services\Insurance;
 use App\Models\InsuranceAnalysis;
 use App\Models\Lead;
 use App\Services\Insurance\Payloads\RentalGuaranteeQuotePayloadBuilder;
-use App\Services\PottencialService;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
 

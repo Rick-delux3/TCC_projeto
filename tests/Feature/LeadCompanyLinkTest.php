@@ -12,7 +12,7 @@ use App\Models\Lead;
 use App\Models\LeadLoversTag;
 use App\Models\User;
 use App\Services\Insurance\Providers\InsuranceProviderResolver;
-use App\Services\LeadCompanyLinkService;
+use App\Services\Leads\LeadCompanyLinkService;
 use App\Support\CorretorPermissions;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Event;

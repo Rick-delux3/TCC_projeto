@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Services;
+namespace App\Services\LeadLovers;
 
 use App\Models\Lead;
 use App\Models\LeadLoversTagOperation;

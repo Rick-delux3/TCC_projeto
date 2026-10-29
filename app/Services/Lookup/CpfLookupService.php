@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Services;
+namespace App\Services\Lookup;
 
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
@@ -10,22 +10,25 @@ use Illuminate\Support\Facades\Log;
 class CpfLookupService
 {
     private ?int $cache_minutes;
+
     private string $baseUrl;
+
     private string $apiKey;
+
     private string $provider;
+
     private bool $enable;
 
-
-    
-    public function __construct() {
+    public function __construct()
+    {
         $this->cache_minutes = (int) config('services.cpf_lookup.cache_minutes', 10080);
         $this->baseUrl = rtrim((string) config('services.cpf_lookup.cpfhub.base_url'), '/');
         $this->apiKey = config('services.cpf_lookup.cpfhub.api_key');
         $this->provider = config('services.cpf_lookup.provider', 'cpfhub');
         $this->enable = config('services.cpf_lookup.enabled');
 
-
     }
+
     /**
      * Retorna a data de nascimento no formato exigido pela Too:
      *
@@ -55,7 +58,7 @@ class CpfLookupService
         | - evitar rate limit;
         | - evitar cobrar novamente em reanálises.
         */
-        $cacheKey = 'cpfhub_birthdate_' . sha1($cpf);
+        $cacheKey = 'cpfhub_birthdate_'.sha1($cpf);
 
         return Cache::remember(
             $cacheKey,
@@ -73,7 +76,7 @@ class CpfLookupService
      */
     private function fetchBirthdate(string $cpf): ?string
     {
-        if (!$this->enable) {
+        if (! $this->enable) {
             return null;
         }
 
@@ -99,7 +102,7 @@ class CpfLookupService
         $baseUrl = $this->baseUrl;
         $apiKey = $this->apiKey;
 
-        if (!$baseUrl || !$apiKey) {
+        if (! $baseUrl || ! $apiKey) {
             Log::warning('CPFHub não configurado corretamente.');
 
             return null;
@@ -187,7 +190,7 @@ class CpfLookupService
                 return null;
             }
 
-            if (!$response->successful()) {
+            if (! $response->successful()) {
                 Log::warning('Falha inesperada ao consultar CPFHub', [
                     'http_status' => $response->status(),
                     'body' => config('app.debug') ? $response->body() : null,
@@ -232,7 +235,7 @@ class CpfLookupService
      */
     private function formatBirthdateForToo(?string $birthdate): ?string
     {
-        if (!$birthdate) {
+        if (! $birthdate) {
             return null;
         }
 

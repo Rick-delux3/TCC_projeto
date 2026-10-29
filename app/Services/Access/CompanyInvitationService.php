@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Services;
+namespace App\Services\Access;
 
 use App\Models\Corretor;
 use App\Models\CorretorActivityLog;

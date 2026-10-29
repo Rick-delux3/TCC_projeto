@@ -3,7 +3,7 @@
 use App\Models\Corretor;
 use App\Models\CorretorLoginVerificacaoCode;
 use App\Notifications\CorretorIntegranteLoginNotification;
-use App\Services\CorretorInvitationService;
+use App\Services\Access\CorretorInvitationService;
 use Illuminate\Contracts\Queue\ShouldBeEncrypted;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Http\Request;

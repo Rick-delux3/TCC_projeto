@@ -4,7 +4,7 @@ namespace App\Actions\Companies;
 
 use App\Models\TwoFactorCode;
 use App\Models\User;
-use App\Services\CompanyTwoFactorMailService;
+use App\Services\Access\CompanyTwoFactorMailService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;

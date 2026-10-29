@@ -4,7 +4,7 @@ use App\Models\Corretor;
 use App\Models\CorretorActivityLog;
 use App\Models\Imobiliaria;
 use App\Notifications\CompanyAcessCodeNotification;
-use App\Services\CompanyInvitationService;
+use App\Services\Access\CompanyInvitationService;
 use Illuminate\Contracts\Queue\ShouldBeEncrypted;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Http\Request;

@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Services;
+namespace App\Services\Lookup;
 
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
@@ -27,12 +27,12 @@ class CepService
 
     private function fromViaCep(string $cep): ?array
     {
-         try {
+        try {
             $response = Http::timeout(5)
                 ->retry(2, 300)
                 ->get("https://viacep.com.br/ws/{$cep}/json/");
 
-            if (!$response->successful()) {
+            if (! $response->successful()) {
                 return null;
             }
 
@@ -64,12 +64,12 @@ class CepService
 
     private function fromBrasilApi(string $cep): ?array
     {
-         try {
+        try {
             $response = Http::timeout(5)
                 ->retry(2, 300)
                 ->get("https://brasilapi.com.br/api/cep/v2/{$cep}");
 
-            if (!$response->successful()) {
+            if (! $response->successful()) {
                 return null;
             }
 

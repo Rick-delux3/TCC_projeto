@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Services;
+namespace App\Services\Insurance;
 
 use App\Events\DashboardActivityChanged;
 use App\Jobs\CompleteInsuranceAnalysesBatchJob;
@@ -12,6 +12,7 @@ use App\Models\CorretorActivityLog;
 use App\Models\InsuranceAnalysis;
 use App\Models\InsuranceAnalysisBatch;
 use App\Models\Lead;
+use App\Services\Leads\CompanyApplicantService;
 use DomainException;
 use Illuminate\Bus\Batch;
 use Illuminate\Support\Facades\Bus;

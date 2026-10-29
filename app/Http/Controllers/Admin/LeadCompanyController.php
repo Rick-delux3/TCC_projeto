@@ -5,7 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\LinkLeadCompanyRequest;
 use App\Models\Lead;
-use App\Services\LeadCompanyLinkService;
+use App\Services\Leads\LeadCompanyLinkService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 

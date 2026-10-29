@@ -3,8 +3,6 @@
 namespace App\Services\Insurance;
 
 use App\Models\InsuranceAnalysisBatch;
-use App\Services\PottencialService;
-use App\Services\TooService;
 use RuntimeException;
 
 class ProviderRefusalLetterService

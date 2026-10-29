@@ -7,7 +7,7 @@ use App\Models\CorretorActivityLog;
 use App\Models\Imobiliaria;
 use App\Models\Lead;
 use App\Models\User;
-use App\Services\LeadLoversInitialFailureRecoveryService;
+use App\Services\LeadLovers\LeadLoversInitialFailureRecoveryService;
 use App\Support\LeadLoversInitialFailureCatalog;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Routing\Route;
