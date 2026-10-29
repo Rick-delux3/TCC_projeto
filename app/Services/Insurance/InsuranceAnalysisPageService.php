@@ -115,7 +115,9 @@ class InsuranceAnalysisPageService
                         return $scenario->quotes->map(fn ($quote): array => [
                             'id' => $quote->id, 'scenario' => $scenario->kind, 'applicants' => $names,
                             'plan_key' => $quote->plan_key, 'status' => $quote->status,
-                            'message' => $quote->error_message ?? $quote->rejection_reason ?? $quote->provider_status,
+                            'message' => $quote->status === 'failed'
+                                ? 'Não foi possível concluir esta cotação.'
+                                : ($quote->rejection_reason ?? $quote->provider_status),
                             'installment_amount' => $quote->installment_amount, 'installments' => $quote->installments,
                             'payment_status' => $quote->payment_status,
                             'selected' => $analysis->currentProviderRun->selected_quote_id === $quote->id,

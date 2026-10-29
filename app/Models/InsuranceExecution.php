@@ -2,11 +2,8 @@
 
 namespace App\Models;
 
-
-
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-
 
 abstract class InsuranceExecution extends Model
 {
@@ -22,8 +19,6 @@ abstract class InsuranceExecution extends Model
             fn () => $this->forceFill($attributes)->save(),
         );
     }
-
-
 
     protected $fillable = [
         'insurance_analysis_batch_id',

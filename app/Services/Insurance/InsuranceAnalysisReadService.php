@@ -29,7 +29,10 @@ class InsuranceAnalysisReadService
             'latestInsuranceAnalysisBatch.analyses' => fn (HasMany $query): HasMany => $query
                 ->orderBy('id')->with([
                     'currentProviderRun.round',
-                    'currentProviderRun.scenarios.quotes',
+                    'currentProviderRun.scenarios.quotes' => fn (HasMany $query): HasMany => $query->select([
+                        'id', 'insurance_applicant_scenario_id', 'plan_key', 'status', 'provider_status',
+                        'rejection_reason', 'installment_amount', 'installments', 'payment_status',
+                    ]),
                     'latestAttemptEvent' => fn (HasOne $query): HasOne => $query->select(
                         $query->getRelated()->qualifyColumns(['id', 'insurance_analysis_id', 'event_type', 'payload'])
                     ),

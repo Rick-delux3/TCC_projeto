@@ -2,10 +2,10 @@
 
 namespace App\Models;
 
+use App\Services\Insurance\InsuranceAnalysisAttempt;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
-use Illuminate\Database\Eloquent\Builder;
-use App\Services\Insurance\InsuranceAnalysisAttempt;
 
 class InsuranceAnalysis extends InsuranceExecution
 {
@@ -18,6 +18,7 @@ class InsuranceAnalysis extends InsuranceExecution
     {
         return $this->hasMany(InsuranceProviderRun::class);
     }
+
     protected $table = 'analises_seguro';
 
     public function events(): \Illuminate\Database\Eloquent\Relations\HasMany

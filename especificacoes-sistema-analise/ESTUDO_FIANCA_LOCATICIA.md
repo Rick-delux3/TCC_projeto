@@ -1,5 +1,52 @@
 # Estudo das APIs de Fiança Locatícia
 
+## Estado da implementação e próximos payloads — revisão de 29/10/2026
+
+Esta seção prevalece sobre as referências históricas a trabalho ainda não implementado nas revisões anteriores. Distinguir **implementado no backend**, **validado localmente** e **homologado na seguradora**. A revisão atual altera somente este estudo; os passos 2 (Too) e 3 (Pottencial) aguardam comando do usuário.
+
+### Entregas concluídas no backend; validação integrada pendente
+
+| Entrega | Estado e evidência no código |
+| --- | --- |
+| Organização dos services por domínio | Implementada, preservando o domínio `Services/Insurance` e os contratos dos consumidores. Não requer nova reorganização para refatorar os payloads |
+| Persistência de múltiplas cotações | Implementada: `insurance_analysis_rounds`, `insurance_provider_runs`, `insurance_applicant_scenarios`, `insurance_quotes` e `insurance_quote_events`. A migration `2026_10_29_121802_create_insurance_quote_orchestration_tables` foi conferida via `migrate:status` nesta revisão: **Ran, lote 12**, após o usuário ativar MySQL e aplicá-la |
+| Pacote de análises por lead | Preservado: lote operacional, uma análise consolidada por companhia e cotações independentes sob cada rodada. `StartInsuranceAnalysesBatchJob` mantém o batch; `RunProviderAnalysisJob` encaminha para `InsuranceQuoteCoordinator` e `RunInsuranceQuoteJob` |
+| Cenários e planos | Implementados: individuais de titular/cônjuge, conjunta somente após ambas recusadas, sem interpretar falha técnica como recusa. Pottencial usa Basic, Complete e Traditional: 3 cotações individuais sem cônjuge; 6 iniciais com cônjuge e até 3 conjuntas, total máximo 9 |
+| Rodadas e execução | Implementados snapshot do lead, datas congeladas de 30 meses, IDs/eventos próprios, proteção contra respostas antigas, coordenação da conjunta e retomada dos jobs. Nova reanálise usa nova rodada e criação de cotação; métodos antigos de reanálise ainda existentes não comprovam seu uso nesse novo fluxo |
+| Pagamentos Too | `TooService::getPaymentOptions()` e `InsuranceQuotePayment` implementados. Seleção Mensal, Sem entrada, 29 parcelas efetivas na base de 30 meses; Fatura para origem cadastrada vinculada, Boleto para demais origens. Preservação da resposta e do valor unitário, sem divisão do prêmio |
+| Pagamentos Pottencial | `PottencialService::getPaymentSimulations()` implementado, mantendo a rota configurada. Seleção Invoice/Boleto conforme origem e alternativa com 30 parcelas; uso do valor unitário retornado |
+| Consolidação e comparação | Implementadas escolha da menor parcela aprovada, separação entre aprovação e indisponibilidade de preço, e comparação por parcela em `AnalysisQuoteSummary`/`AnalysisQuoteComparison`. Registros antigos preservam tratamento legado; não misturar total antigo com parcela nova |
+| Leitura dos resultados | Backend entrega cenários/planos por `quote_attempts`, com nomes, status, mensagem, preço e seleção. Isso **não significa** que as views, os downloads por plano e a apresentação dos e-mails já tenham sido adaptados |
+
+Validação local registrada na entrega anterior: 25 testes de múltiplas cotações aprovados; após os últimos ajustes, esses testes e os testes da visualização do lead totalizaram 76 aprovados. Na execução ampla anterior houve duas falhas: uma de status/redirecionamento já observada na base e outra de lock SQLite no teste de filas; o arquivo de filas passou isoladamente. Esses resultados não equivalem a homologação remota nem a teste de concorrência em MySQL. Nesta revisão documental foi conferido o status da migration; não foram executadas chamadas às seguradoras ou novos testes de aplicação.
+
+### Passo 2 — refatoração Too, aguardando autorização
+
+1. Alinhar `TooRentalGuaranteePayloadBuilder` e configuração à comissão **15.0**, em pontos percentuais, respeitando a faixa 10–40. Hoje o default em `config/services.php` é 0.10 e o fallback do builder é 0.25: ambos divergem da regra. Não assumir o valor efetivo de um ambiente sem conferir sua configuração resolvida. Preservar IGP_M, período indenitário 30 e datas da rodada.
+2. Aplicar a regra de coberturas por origem. O builder ainda zera multas e pinturas; para as origens autorizadas deve solicitar os adicionais conforme o contrato. Para tenant, enviar somente aluguel, sem despesas/adicionais e sem reintroduzir água/luz por fallback.
+3. Revisar a identidade e os dados de cada cenário no payload de ficha e cotação, usando os snapshots já implementados. Não recriar a orquestração nem usar endpoints de emissão/reanálise dedicada.
+4. **Nascimento do cônjuge:** o usuário propôs reutilizar a data do principal para evitar outro campo. A estrutura atual não possui data própria do cônjuge; o snapshot não copia a do principal e a validação Too exige nascimento. Registrar a proposta como pendente de validação contratual, pois a data reaproveitada não é um dado confirmado do cônjuge. Não declarar esse cenário homologado nem alterar silenciosamente a identidade enviada.
+5. Validar o GET de pagamentos já implementado com respostas reais de ambas as formas. A regra está encerrada: Mensal para todos, Fatura/Boleto por origem, Sem entrada e 29 parcelas efetivas. Catálogo ou preço indisponível não deve virar recusa cadastral.
+6. Implementar posteriormente o PDF 6.1 por **POST**, usando numeroFicha e formaPagamento: tipoPagamento 1/2, tipoEntrada 2, tipoOpcaoParcelamento 2 e quantidadeParcelas **30**. Decodificar `result.pdfCotacao` em Base64. O método atual `getQuotePdf` ainda usa GET e não implementa esse contrato; não marcá-lo como concluído. O passo 7 de atualização para emissão permanece fora do escopo.
+
+### Passo 3 — refatoração Pottencial, aguardando autorização
+
+1. Alinhar `RentalGuaranteeQuotePayloadBuilder`: Broker com documento, role, lead=true, participationPercentage=1 e commissionPercentage=0.15. Remover a comissão hoje adicionada a PolicyOwner; este deve conter apenas documento e role, somente para imobiliária cadastrada vinculada. Validar seu documento antes do envio.
+2. Preservar participants mínimos (documentNumber e PolicyHolder), já aplicados às novas cotações, e coerência com tenantDocumentNumber/riskObjects em cada cenário. Não enviar dados de contato de proprietário/imobiliária não cadastrada como participantes ou agentes.
+3. Aplicar a mesma exceção tenant somente aluguel. Nas demais origens, conferir a representação das coberturas adicionais no contrato Pottencial e nas três alternativas de plano, sem copiar nomes de campos da Tokio ou Too.
+4. Preservar Invoice/Boleto por origem, 30 parcelas, Sem entrada e vigência de 30 meses da rodada. Não reduzir para 29 na Pottencial. Corrigir fallbacks antigos ainda existentes para que caminhos alternativos não revertam os padrões aprovados.
+5. Manter a rota atual; a alternativa permanece para teste controlado caso necessário. Validar os três planos e os retornos de simulação sem recriar o serviço de consulta já entregue. `Creating` já foi mapeado como processamento.
+6. Completar a obtenção e disponibilização dos documentos de cada cotação/plano e a carta de recusa. O formato real de letters continua para validação durante o desenvolvimento; a presença de um método de consulta não comprova download funcional por plano.
+
+### Pendências que permanecem abertas
+
+- Homologar os payloads finais, elegibilidade e valores de parcelas com as seguradoras; validar concorrência, retomada e conclusão no ambiente MySQL/filas.
+- Aplicar o backend completo da Tokio: provider, builder final, normalização, seleção das alternativas e exceção PJ manual. Comandos de diagnóstico e componentes parciais não equivalem à integração concluída.
+- Associar códigos de parceiro Tokio às imobiliárias, conforme a planilha e regras já definidas.
+- Implementar apresentação de todas as tentativas, vencedor e PDFs nos painéis/e-mails; o DTO e o comparador disponíveis são a base dessa etapa.
+- Desenvolver futuramente Gerenciar seguradoras. Centralizar agora os padrões aprovados nos payloads não significa que a página já exista.
+
+
 Levantamento original: 25/09/2026. Estado atual: preparação da integração Tokio; os dados de formulário e parte da montagem dos pretendentes já foram implementados, mas o provider remoto ainda não existe.
 
 Atualização documental: 09/10/2026 — estudo consolidado da Tokio Marine na seção [Tokio Marine](#tokio-marine). As seções originais de Too/Pottencial abaixo preservam o levantamento de 25/09; referências a “código atual” nessas seções são históricas, anteriores às refatorações. Para as decisões posteriores sobre parcelas, PDF e reanálise, prevalece o contexto atualizado da seção Tokio. Esta atualização não implementa nem testa a integração.
@@ -244,8 +291,8 @@ Esta revisão altera somente o estudo. A futura refatoração deverá alinhar bu
 #### Comparação com a implementação e pendências
 
 - `Lead::rentalApplicantDocument()` prioriza CNPJ de lead_empresa; `rentalApplicantCpf()` representa o responsável. Preservar ambos sem substituir empresa pelo responsável. Manter uma companhia Pottencial por lead/rodada, com três cotações por plano conforme revisão de 26/10, sem provider ou builder exclusivo PJ.
-- Service ainda precisa consultar simulações e a comparação local ainda usa total. Preservar quantidade 30, parcelas, moeda, vigência, cobertura, forma e encargos; não fabricar parcela dividindo um total.
-- `Creating` precisa ser mapeado como processamento, como `UnderAnalysis`, em vez de falha.
+- **Implementado em 29/10:** service consulta simulações e novas rodadas comparam a parcela confirmada; registros legados mantêm tratamento próprio. Falta homologação remota. Preservar quantidade 30, parcelas, moeda, vigência, cobertura, forma e encargos; não fabricar parcela dividindo um total.
+- **Implementado em 29/10:** `Creating` está mapeado como processamento, como `UnderAnalysis`. Validar o fluxo com resposta real.
 - Conferir `policyType` (`Unique`/`ItemByItem`), planos (`Basic`/`Complete`/`Traditional`) e `occupation` frente aos enums e fallbacks atuais.
 - O exemplo antigo coloca pagamento dentro de riskObjects; builder e novo schema usam `paymentConditions` na raiz. `assistanceServices` do builder não aparece no novo schema; ausência documental não comprova rejeição.
 - Alinhar comissão a 15% somente no Broker. O usuário definiu omitir commissionPercentage e lead de PolicyOwner; remover a replicação observada no builder na futura refatoração. Nos três formulários, Broker usa lead = true e participationPercentage = 1, além da comissão 0.15.
@@ -592,7 +639,7 @@ As prints ilustram a mesma diferença em uma base de 24: `quantidadeParcelasPoss
 
 Continuam válidos: origem imobiliaria_cadastrada → Fatura; demais formulários → Boleto; período indenitário 30; IGP_M; comissão 15.0. Persistir prazo-base e quantidade efetiva separadamente, além de entrada, valor da parcela, total, códigos e identificadores da rodada. Card, comparação e PDF devem consumir a mesma seleção.
 
-**Próxima refatoração, ainda não implementada:** ajustar o seletor Too, o resumo compartilhado e o comparador para admitir a condição 30 meses/29 parcelas sem entrada. Validar variantes com IDs repetidos, não descontar duas vezes, não fabricar preço e manter o POST do PDF coerente com a seleção. A solicitação anterior de alterar o comando foi retirada pelo usuário: nesta etapa, atualizar somente este estudo, sem mudar comandos ou fluxo de execução.
+**Atualização de 29/10 — implementado, aguardando validação integrada:** o seletor Too, o resumo compartilhado e o comparador já admitem 30 meses/29 parcelas sem entrada. O POST do PDF continua pendente. Validar variantes com IDs repetidos, não descontar duas vezes, não fabricar preço e manter o POST do PDF coerente com a seleção. A solicitação anterior de alterar o comando foi retirada pelo usuário: nesta etapa, atualizar somente este estudo, sem mudar comandos ou fluxo de execução.
 
 ### Confirmação Too — payload e retorno do PDF, opções por origem
 
@@ -760,7 +807,7 @@ O download de documentos já previsto permanece vinculado às cotações/planos 
 
 ### Persistência, concorrência e implementação futura
 
-Registrar sob a mesma rodada e seguradora cada cenário de pessoas, os participantes próprios, resultado, mensagens, identificadores remotos, payload/condições congelados e alternativas de preço/documento. Para Pottencial, acrescentar o plano dentro do cenário. A estrutura concreta de models/migrations/Jobs será definida no desenvolvimento; um único identificador remoto por companhia não representa mais todo esse fluxo.
+Registrar sob a mesma rodada e seguradora cada cenário de pessoas, os participantes próprios, resultado, mensagens, identificadores remotos, payload/condições congelados e alternativas de preço/documento. Para Pottencial, acrescentar o plano dentro do cenário. **Implementado em 29/10:** models, migration e jobs representam rodada, execução da companhia, cenário e cotação; cada cotação possui identificação própria. Falta validação integrada com as seguradoras.
 
 Disparar as duas individuais em paralelo. A avaliação de suas conclusões deve autorizar a conjunta **uma única vez**, mesmo que os dois Jobs terminem simultaneamente ou uma notificação seja repetida. Conferir os resultados da mesma rodada e companhia, sem misturar respostas antigas. Concluir o progresso da companhia somente após resolver os cenários necessários, mantendo os contadores de seguradoras separados dos de cenários/planos.
 
@@ -1397,7 +1444,7 @@ Verificação inicial em 09/10, atualizada em 15/10/2026 nos componentes abaixo;
 | `app/Services/Insurance/Providers/InsuranceProviderResolver.php` e `InsuranceProviderInterface.php` | Ponto existente para resolução/contrato dos providers; inserir Tokio no padrão vigente quando autorizada, sem desviar os fluxos de Too/Pottencial |
 | `app/Services/Insurance/Payloads/` | Já existe `TokioCompanyApplicantsPayloadBuilder`, restrito aos pretendentes empresariais de T14. Ainda falta builder completo de cotação, incluindo PF residencial, CNAE, percentuais, vigências, coberturas e validação final |
 | `app/Services/Insurance/AnalysisQuoteSummary.php` | Atualmente distingue Too e um ramo alternativo com campos da Pottencial. Tokio exige normalização explícita de `calculos`, pagamento e cobertura. Não deixá-la cair nesse ramo genérico |
-| `app/Services/Insurance/AnalysisQuoteComparison.php` | Atualmente filtra aprovadas, exige `basis = gross_total`, total positivo, mesma moeda e períodos comparáveis; ordena por `price.total`. **Ainda não implementa comparação por parcelas** |
+| `app/Services/Insurance/AnalysisQuoteComparison.php` | **Atualizado em 29/10:** compara parcelas confirmadas nas novas rodadas, preservando o tratamento legado por total; exige valores e períodos comparáveis. A normalização específica Tokio permanece pendente |
 | `app/Services/Insurance/InsuranceAnalysisPageService.php` | Compartilha normalização/comparação e só destaca melhor oferta após pacote concluído. Preservar leitura local, autorização e motivos de indisponibilidade |
 | `app/Services/Insurance/AnalysisResultPreparationService.php` | Também usa comparação compartilhada e registra preparação por rodada. Seleção de parcela/assistência deve permanecer coerente com a página e com os dados congelados do envio |
 | Jobs de execução/conclusão e `InsuranceAnalysisAttempt` | Preservar fila de análises, proteção de rodada, falhas finais e eventos após commit. Só criar sincronização Tokio quando existir operação documentada para ela |

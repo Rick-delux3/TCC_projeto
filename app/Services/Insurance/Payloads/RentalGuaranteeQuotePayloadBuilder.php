@@ -81,17 +81,16 @@ class RentalGuaranteeQuotePayloadBuilder
              */
             'participants' => $analysis instanceof \App\Models\InsuranceQuote
                 ? $this->quoteParticipants($analysis)
-                : $this->participants($lead, $policyHolderDocument),
+                : [['documentNumber' => $policyHolderDocument, 'role' => 'PolicyHolder']],
 
             /*
              * paymentConditions fica no nível raiz.
              */
             'paymentConditions' => [
-                'paymentType' => $analysis->payment_type
-                    ?? config('services.pottencial.default_payment_type', 'Boleto'),
+                'paymentType' => $lead->tipo_solicitante === 'imobiliaria_cadastrada' ? 'Invoice' : 'Boleto',
 
                 'installments' => $analysis->installments
-                    ?? (int) config('services.pottencial.default_installments', 12),
+                    ?? (int) config('services.pottencial.default_installments', 30),
             ],
 
             /*
@@ -107,8 +106,7 @@ class RentalGuaranteeQuotePayloadBuilder
             'riskObjects' => [
                 [
                     'type' => 'FiancaLocaticia',
-                    'planKey' => $analysis->plan_key
-                        ?? config('services.pottencial.default_plan_key', 'traditional'),
+                    'planKey' => $this->planKey($analysis),
 
                     'multiple' => $leaseMonths,
                     'occupation' => $occupation,
@@ -136,16 +134,22 @@ class RentalGuaranteeQuotePayloadBuilder
 
         $brokerDocument = \only_numbers(config('services.pottencial.broker_document'));
 
-        if (! $brokerDocument) {
-            throw new \App\Exceptions\InvalidInsuranceAnalysisPayload('Documento do broker não configurado para envio da cotação.');
+        if (Validator::make(['document' => $brokerDocument], ['document' => ['required', new CpfOrCnpj]])->fails()) {
+            throw new \App\Exceptions\InvalidInsuranceAnalysisPayload('CPF/CNPJ do broker ausente ou inválido para envio da cotação.');
+        }
+
+        $commission = config('services.pottencial.default_commission', 0.15);
+        if (! is_numeric($commission) || ! is_finite((float) $commission) || $commission < 0 || $commission > 1) {
+            throw new \App\Exceptions\InvalidInsuranceAnalysisPayload('Comissão da Pottencial deve ser uma fração entre 0 e 1.');
         }
 
         $agents = [
             [
                 'documentNumber' => $brokerDocument,
                 'role' => 'Broker',
-                'commissionPercentage' => (float) config('services.pottencial.default_commission', 0.10),
+                'commissionPercentage' => (float) $commission,
                 'lead' => true,
+                'participationPercentage' => 1,
             ],
         ];
 
@@ -156,23 +160,14 @@ class RentalGuaranteeQuotePayloadBuilder
 
         $companyDocument = \only_numbers($imobiliaria?->cnpj ?? '');
 
-        if ($lead?->tipo_solicitante === 'imobiliaria_cadastrada' && $companyDocument) {
-            $policyOwner = [
+        if ($lead?->tipo_solicitante === 'imobiliaria_cadastrada') {
+            if (! $lead->company_id || Validator::make(['document' => $companyDocument], ['document' => ['required', new CpfOrCnpj]])->fails()) {
+                throw new \App\Exceptions\InvalidInsuranceAnalysisPayload('Imobiliária cadastrada sem vínculo ou CPF/CNPJ válido para a Pottencial.');
+            }
+            $agents[] = [
                 'documentNumber' => $companyDocument,
                 'role' => 'PolicyOwner',
             ];
-
-            /*
-             * Só envia commissionPercentage do PolicyOwner se você configurar.
-             * Isso evita mandar 0 ou campos desnecessários.
-             */
-            $policyOwnerCommission = (float) config('services.pottencial.default_commission', 0.15);
-
-            if ($policyOwnerCommission > 0) {
-                $policyOwner['commissionPercentage'] = $policyOwnerCommission;
-            }
-
-            $agents[] = $policyOwner;
         }
 
         return $agents;
@@ -180,23 +175,21 @@ class RentalGuaranteeQuotePayloadBuilder
 
     private function policyType(): string
     {
-        $policyType = (string) config('services.pottencial.default_policy_type', 'Unico');
-
-        return in_array(mb_strtolower($policyType), ['unique', 'unico'], true)
-            ? 'Unico'
-            : $policyType;
+        return match (mb_strtolower((string) config('services.pottencial.default_policy_type', 'Unique'))) {
+            'unique', 'unico' => 'Unique',
+            'itembyitem' => 'ItemByItem',
+            default => throw new \App\Exceptions\InvalidInsuranceAnalysisPayload('Tipo de apólice inválido para a Pottencial.'),
+        };
     }
 
-    private function participants(Lead $lead, string $policyHolderDocument): array
+    private function planKey(InsuranceExecution $analysis): string
     {
-        return [
-            $this->participant(
-                role: 'PolicyHolder',
-                document: $policyHolderDocument,
-                contact: $this->leadContact($lead),
-                main: true
-            ),
-        ];
+        return match (mb_strtolower((string) ($analysis->plan_key ?? config('services.pottencial.default_plan_key', 'Traditional')))) {
+            'basic' => 'Basic',
+            'complete' => 'Complete',
+            'traditional' => 'Traditional',
+            default => throw new \App\Exceptions\InvalidInsuranceAnalysisPayload('Plano inválido para a Pottencial.'),
+        };
     }
 
     private function quoteParticipants(\App\Models\InsuranceQuote $quote): array
@@ -211,41 +204,6 @@ class RentalGuaranteeQuotePayloadBuilder
         }
 
         return $participants;
-    }
-
-    private function participant(
-        string $role,
-        string $document,
-        array $contact,
-        bool $main = false
-    ): array {
-        $participant = [
-            'documentNumber' => $document,
-            'role' => $role,
-            'address' => $this->addressFromLead($contact['lead']),
-            'contact' => [
-                'name' => $contact['name'],
-                'email' => $contact['email'],
-                'phoneNumber' => '',
-                'cellPhoneNumber' => $contact['phone'],
-            ],
-        ];
-
-        if ($main) {
-            $participant['main'] = true;
-        }
-
-        return $participant;
-    }
-
-    private function leadContact(Lead $lead): array
-    {
-        return [
-            'lead' => $lead,
-            'name' => $lead->nome,
-            'email' => $lead->email,
-            'phone' => \only_numbers($lead->tel ?? ''),
-        ];
     }
 
     private function addressFromLead(Lead $lead): array
@@ -268,6 +226,9 @@ class RentalGuaranteeQuotePayloadBuilder
     private function coverages(Lead $lead, int $months): array
     {
         $aluguel = $this->expenseValue($lead, 'valor_aluguel') ?? 0.0;
+        if ($lead->tipo_solicitante === 'locatario') {
+            return [['key' => 'basica', 'insuredAmount' => max($aluguel * $months, 12000)]];
+        }
         $condominio = $this->expenseValue($lead, 'valor_condominio') ?? 0.0;
         $iptu = $this->expenseValue($lead, 'valor_iptu') ?? 0.0;
         $gas = $this->expenseValue($lead, 'valor_gas') ?? 0.0;
@@ -316,6 +277,10 @@ class RentalGuaranteeQuotePayloadBuilder
 
     private function expenses(Lead $lead): array
     {
+        if ($lead->tipo_solicitante === 'locatario') {
+            return [['description' => 'VALOR_ALUGUEL', 'value' => $this->expenseValue($lead, 'valor_aluguel')]];
+        }
+
         /*
          * Não enviar OUTRAS_DESPESAS porque o exemplo da Pottencial
          * não mostra essa description como aceita.
@@ -381,14 +346,6 @@ class RentalGuaranteeQuotePayloadBuilder
 
     private function validateRequiredLeadData(Lead $lead): void
     {
-        if (! filled($lead->nome)) {
-            throw new \App\Exceptions\InvalidInsuranceAnalysisPayload('Nome do solicitante não informado para envio da cotação.');
-        }
-
-        if (! filled($lead->email)) {
-            throw new \App\Exceptions\InvalidInsuranceAnalysisPayload('E-mail do solicitante não informado para envio da cotação.');
-        }
-
         $aluguel = $this->expenseValue($lead, 'valor_aluguel') ?? 0.0;
 
         if ($aluguel <= 0) {

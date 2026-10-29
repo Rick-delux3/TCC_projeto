@@ -98,13 +98,13 @@ return [
         'default_commission' => (float) env('POTTENCIAL_DEFAULT_COMMISSION', 0.15),
         'commercial_loading_fee' => (float) env('POTTENCIAL_COMMERCIAL_LOADING_FEE', 0.10),
         'default_payment_type' => env('POTTENCIAL_DEFAULT_PAYMENT_TYPE', 'Boleto'),
-        'default_installments' => (int) env('POTTENCIAL_DEFAULT_INSTALLMENTS', 1),
-        'default_plan_key' => env('POTTENCIAL_DEFAULT_PLAN_KEY', 'traditional'),
+        'default_installments' => (int) env('POTTENCIAL_DEFAULT_INSTALLMENTS', 30),
+        'default_plan_key' => env('POTTENCIAL_DEFAULT_PLAN_KEY', 'Traditional'),
         'default_assistance' => env('POTTENCIAL_DEFAULT_ASSISTANCE', 'Complete'),
         'policy_owner_document' => env('POTTENCIAL_POLICY_OWNER_DOCUMENT'),
         'default_multiple' => env('POTTENCIAL_DEFAULT_MULTIPLE', 30),
         'default_lease_months' => env('POTTENCIAL_DEFAULT_LEASE_MONTHS', 30),
-        'default_policy_type' => env('POTTENCIAL_DEFAULT_POLICY_TYPE', 'Unico'),
+        'default_policy_type' => env('POTTENCIAL_DEFAULT_POLICY_TYPE', 'Unique'),
 
     ],
 

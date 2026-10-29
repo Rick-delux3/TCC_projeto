@@ -264,6 +264,7 @@ it('retries payment retrieval without issuing another quote', function (): void 
         if (++$calls === 1) {
             throw new RuntimeException('Temporary payment failure');
         }
+
         return ['success' => true, 'response' => ['paymentType' => 'Boleto', 'installments' => [
             ['countInstallments' => 30, 'installments' => [90]],
         ]]];
@@ -328,4 +329,24 @@ it('rolls back the new persistence without deleting existing analyses', function
     expect(InsuranceAnalysis::count())->toBe(1)
         ->and(\Illuminate\Support\Facades\Schema::hasTable('insurance_quotes'))->toBeFalse();
     $migration->up();
+});
+
+it('exposes quote scenarios through the authorized backend without raw payloads', function (): void {
+    $company = \App\Models\Imobiliaria::factory()->create();
+    $user = \App\Models\User::factory()->create(['company_id' => $company->id]);
+    $analysis = multipleQuoteAnalysis();
+    $analysis->lead->update(['company_id' => $company->id]);
+    $analysis->update(['company_id' => $company->id]);
+    $run = app(InsuranceQuoteCoordinator::class)->prepare($analysis, 'round-one', false);
+    $quote = InsuranceQuote::first();
+    $quote->update(['request_payload' => ['private' => 'request-secret'], 'response_payload' => ['private' => 'response-secret']]);
+    $this->actingAs($user)->withSession(['2fa_passed' => true])
+        ->getJson(route('insurance-analyses.data', $analysis->lead_id))
+        ->assertOk()
+        ->assertJsonCount(1, 'data.analyses')
+        ->assertJsonCount(6, 'data.analyses.0.quote_attempts')
+        ->assertJsonPath('data.analyses.0.quote_attempts.0.applicants.0', 'Primeiro pretendente')
+        ->assertJsonPath('data.analyses.0.quote_attempts.3.applicants.0', 'Segundo pretendente')
+        ->assertDontSee('request-secret')->assertDontSee('response-secret');
+    expect($run->fresh()->finished_at)->toBeNull();
 });

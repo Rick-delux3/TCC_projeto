@@ -2,24 +2,19 @@
 
 namespace App\Services\Insurance\Providers;
 
-use App\Models\InsuranceAnalysis;
+use App\Models\InsuranceExecution;
 
 interface InsuranceProviderInterface
 {
     public function name(): string;
 
-    public function requestAnalysis(InsuranceAnalysis $analysis, string $attemptId): array;
+    public function requestAnalysis(InsuranceExecution $analysis, string $attemptId): array;
 
     public function requestReanalysis(
-        InsuranceAnalysis $analysis,
+        InsuranceExecution $analysis,
         string $attemptId,
         array $options = []
     ): array;
-    
-    public function getStatus(InsuranceAnalysis $analysis): array;
+
+    public function getStatus(InsuranceExecution $analysis): array;
 }
-
-
-
-
-

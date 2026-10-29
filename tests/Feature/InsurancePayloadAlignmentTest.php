@@ -159,3 +159,74 @@ it('selects the rental product for all providers when starting the batch', funct
         expect($created->product)->toBe('fianca_locaticia_'.$rentalType);
     }
 })->with(['residencial', 'comercial']);
+
+it('applies the Pottencial agents payment and coverage rules by form origin', function (string $origin) {
+    config(['services.pottencial.default_commission' => 0.15, 'services.pottencial.default_policy_type' => 'Unico']);
+    $analysis = alignedInsuranceAnalysis();
+    $company = \App\Models\Imobiliaria::factory()->create(['cnpj' => '11222333000181']);
+    $analysis->lead->update(['tipo_solicitante' => $origin, 'company_id' => $company->id]);
+    $analysis->lead->despesas->update(['valor_condominio' => 200, 'valor_iptu' => 100, 'valor_gas' => 50, 'valor_agua' => null, 'valor_luz' => null]);
+    $analysis->forceFill(['installments' => 30, 'multiple' => 30, 'lease_start_date' => '2026-10-29', 'lease_end_date' => '2029-04-29', 'plan_key' => 'Traditional']);
+    $payload = app(RentalGuaranteeQuotePayloadBuilder::class)->build($analysis);
+    $agents = [[
+        'documentNumber' => '11222333000181', 'role' => 'Broker',
+        'commissionPercentage' => 0.15, 'lead' => true, 'participationPercentage' => 1,
+    ]];
+    if ($origin === 'imobiliaria_cadastrada') {
+        $agents[] = ['documentNumber' => '11222333000181', 'role' => 'PolicyOwner'];
+    }
+    expect($payload['commissionedAgents'])->toBe($agents)
+        ->and($payload['participants'])->toBe([['documentNumber' => '07234828702', 'role' => 'PolicyHolder']])
+        ->and($payload['paymentConditions'])->toBe(['paymentType' => $origin === 'imobiliaria_cadastrada' ? 'Invoice' : 'Boleto', 'installments' => 30])
+        ->and($payload['policyType'])->toBe('Unique')
+        ->and($payload['policyPeriodStart'])->toBe('2026-10-29')
+        ->and($payload['policyPeriodEnd'])->toBe('2029-04-29');
+    $risk = $payload['riskObjects'][0];
+    if ($origin === 'locatario') {
+        expect($risk['coverages'])->toBe([['key' => 'basica', 'insuredAmount' => 45000.0]])
+            ->and($risk['expenses'])->toBe([['description' => 'VALOR_ALUGUEL', 'value' => 1500.0]]);
+    } else {
+        expect(array_column($risk['coverages'], 'key'))->toContain('danos', 'pintura', 'multa-rescisao', 'agua', 'luz');
+    }
+    Http::assertNothingSent();
+})->with(['imobiliaria_cadastrada', 'imobiliaria_nao_cadastrada', 'locador', 'locatario']);
+
+it('rejects invalid Pottencial agent and contract settings before any request', function (string $invalid) {
+    $analysis = alignedInsuranceAnalysis();
+    switch ($invalid) {
+        case 'broker':
+            config(['services.pottencial.broker_document' => '00000000000000']);
+            break;
+        case 'company':
+            $company = \App\Models\Imobiliaria::factory()->create(['cnpj' => '00000000000000']);
+            $analysis->lead->update(['tipo_solicitante' => 'imobiliaria_cadastrada', 'company_id' => $company->id]);
+            break;
+        case 'missing company':
+            $analysis->lead->update(['tipo_solicitante' => 'imobiliaria_cadastrada']);
+            break;
+        case 'commission':
+            config(['services.pottencial.default_commission' => 15]);
+            break;
+        case 'plan':
+            $analysis->plan_key = 'unknown';
+            break;
+        case 'policy':
+            config(['services.pottencial.default_policy_type' => 'unknown']);
+            break;
+    }
+    expect(fn () => app(RentalGuaranteeQuotePayloadBuilder::class)->build($analysis))
+        ->toThrow(\App\Exceptions\InvalidInsuranceAnalysisPayload::class);
+    Http::assertNothingSent();
+})->with(['broker', 'company', 'missing company', 'commission', 'plan', 'policy']);
+
+it('builds the Pottencial minimal participant without optional contact data and canonicalizes plans', function (string $plan, string $expected) {
+    $analysis = alignedInsuranceAnalysis();
+    $analysis->lead->forceFill(['nome' => null, 'email' => null]);
+    $analysis->plan_key = $plan;
+    config(['services.pottencial.default_installments' => 30]);
+    $payload = app(RentalGuaranteeQuotePayloadBuilder::class)->build($analysis);
+    expect($payload['participants'])->toBe([['documentNumber' => '07234828702', 'role' => 'PolicyHolder']])
+        ->and($payload['riskObjects'][0]['planKey'])->toBe($expected)
+        ->and($payload['paymentConditions']['installments'])->toBe(30);
+    Http::assertNothingSent();
+})->with([['basic', 'Basic'], ['Complete', 'Complete'], ['traditional', 'Traditional']]);
