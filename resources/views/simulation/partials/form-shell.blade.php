@@ -89,9 +89,9 @@
                 <h2 class="simulation-section-title">{{ $isTenant ? 'Seus dados' : \App\Support\BrandingText::choose('Pretendente à locação', 'Beneficiário') }}</h2>
                 @if ($isRegistered)<p class="simulation-section-description">{{ \App\Support\BrandingText::choose('Preencha abaixo os dados do pretendente à locação. O e-mail e telefone do locatário fazem parte da análise do risco.', 'Preencha os dados do beneficiário, incluindo seu e-mail e telefone para contato.') }}</p>@endif
                 <div class="simulation-fields grid grid-cols-1 gap-x-6 gap-y-5 md:grid-cols-2">
-                    @include('simulation.partials.input', ['field' => ['name' => 'nome', 'label' => 'Nome completo', 'placeholder' => $isTenant ? 'Seu nome completo' : 'Nome do pretendente', 'required' => true, 'minlength' => 3, 'maxlength' => 255, 'autocomplete' => 'name']])
-                    @include('simulation.partials.input', ['field' => ['name' => 'email', 'label' => 'E-mail', 'placeholder' => 'email@exemplo.com', 'type' => 'email', 'required' => true, 'maxlength' => 255, 'autocomplete' => 'email']])
                     @include('simulation.partials.document')
+                    @include('simulation.partials.input', ['field' => ['name' => 'email', 'label' => 'E-mail', 'placeholder' => 'email@exemplo.com', 'type' => 'email', 'required' => true, 'maxlength' => 255, 'autocomplete' => 'email']])
+                    @include('simulation.partials.input', ['field' => ['name' => 'nome', 'label' => 'Nome completo', 'placeholder' => $isTenant ? 'Seu nome completo' : 'Nome do pretendente', 'required' => true, 'minlength' => 3, 'maxlength' => 255, 'autocomplete' => 'name']])
                     @include('simulation.partials.input', ['field' => ['name' => 'tel', 'label' => 'Telefone', 'placeholder' => '(00) 00000-0000', 'type' => 'tel', 'required' => true, 'autocomplete' => 'tel']])
                     @include('simulation.partials.conditional-fields', [
                         'condition' => 'company',
