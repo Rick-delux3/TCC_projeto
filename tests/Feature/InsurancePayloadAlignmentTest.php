@@ -26,6 +26,9 @@ beforeEach(function () {
         'services.too.default_employment' => 'Autonomo',
         'services.too.default_profession' => 'Consultor',
         'services.too.default_reside_property' => true,
+        'services.too.default_commission_percentage' => 15.0,
+        'services.too.default_rent_adjustment_index' => 'IGP_M',
+        'services.too.default_indemnity_period' => 30,
         'services.pottencial.broker_document' => '11222333000181',
     ]);
     $this->mock(CpfLookupService::class)->shouldNotReceive('birthdateForToo');
@@ -255,3 +258,54 @@ it('builds the Pottencial minimal participant without optional contact data and 
         ->and($payload['paymentConditions']['installments'])->toBe(30);
     Http::assertNothingSent();
 })->with([['basic', 'Basic'], ['Complete', 'Complete'], ['traditional', 'Traditional']]);
+
+it('builds Too coverages and PDF conditions by origin with the frozen lease dates', function (string $origin) {
+    $analysis = alignedInsuranceAnalysis();
+    $analysis->lead->forceFill(['tipo_solicitante' => $origin, 'company_id' => 1]);
+    $analysis->lead->despesas->forceFill(['valor_agua' => null, 'valor_luz' => null, 'valor_condominio' => 300]);
+    $analysis->forceFill(['lease_start_date' => '2026-08-31', 'lease_end_date' => '2029-02-28']);
+    $builder = app(TooRentalGuaranteePayloadBuilder::class);
+    $quote = $builder->buildQuotePayload($analysis, '123');
+    expect($quote)->toMatchArray(['numeroFicha' => 123, 'percentualComissao' => 15.0, 'indiceDeReajusteAluguel' => 'IGP_M', 'periodoIndenitario' => 30, 'inicioVigenciaContratoLocacao' => '2026-08-31', 'finalVigenciaContratoLocacao' => '2029-02-28']);
+    foreach ([$quote, $builder->buildFichaPayload($analysis), $builder->buildBasicDataPayload($analysis)] as $payload) {
+        if ($origin === 'locatario') {
+            expect($payload['coberturas'])->toBe(['valorAluguel' => 1500.0]);
+        } else {
+            expect($payload['coberturas'])->toMatchArray(['valorDanosAoImovel' => 1500.0, 'valorMultasContratuais' => 1500.0, 'valorPinturaExterna' => 1500.0, 'valorPinturaInterna' => 1500.0, 'valorAgua' => 150.0, 'valorLuz' => 150.0]);
+        }
+    }
+    expect($builder->buildQuotePdfPayload($analysis, '123'))->toBe([
+        'numeroFicha' => 123,
+        'formaPagamento' => ['tipoPagamento' => $origin === 'imobiliaria_cadastrada' ? 2 : 1, 'tipoEntrada' => 2, 'opcaoParcelamento' => [['tipoOpcaoParcelamento' => 2, 'quantidadeParcelas' => 30]]],
+    ]);
+    Http::assertNothingSent();
+})->with(['imobiliaria_cadastrada', 'imobiliaria_nao_cadastrada', 'locador', 'locatario']);
+
+it('rejects invalid Too commission settings before sending a quote', function (mixed $commission) {
+    config(['services.too.default_commission_percentage' => $commission]);
+    expect(fn () => app(TooRentalGuaranteePayloadBuilder::class)->buildQuotePayload(alignedInsuranceAnalysis(), 123))->toThrow(\App\Exceptions\InvalidInsuranceAnalysisPayload::class);
+    Http::assertNothingSent();
+})->with([0.15, 9.99, 40.01, 'invalid']);
+
+it('does not count excluded tenant expenses toward the Too limit', function () {
+    $analysis = alignedInsuranceAnalysis();
+    $analysis->lead->tipo_solicitante = 'locatario';
+    $analysis->lead->despesas->forceFill(['valor_aluguel' => 24000, 'valor_condominio' => 10000, 'valor_agua' => 10, 'valor_luz' => null]);
+    expect(app(TooRentalGuaranteePayloadBuilder::class)->buildFichaPayload($analysis)['coberturas'])->toBe(['valorAluguel' => 24000.0]);
+});
+
+it('posts the Too PDF payment payload and validates the base64 document', function (?string $encoded, bool $valid) {
+    config(['services.too.base_url' => 'https://too.example.test', 'services.too.client_id' => 'test', 'services.too.client_secret' => 'test']);
+    \Illuminate\Support\Facades\Cache::put('too_access_token', 'test-token', 60);
+    Http::fake(['https://too.example.test/fianca/proposta/cotacao/456/pdf' => Http::response(['result' => ['pdfCotacao' => $encoded]])]);
+    $payload = app(TooRentalGuaranteePayloadBuilder::class)->buildQuotePdfPayload(alignedInsuranceAnalysis(), 123);
+    $result = app(TooService::class)->getQuotePdf(456, $payload);
+    expect($result['success'])->toBe($valid);
+    if ($valid) {
+        expect($result['pdf_content'])->toBe("%PDF-1.7\n%%EOF");
+    } else {
+        expect($result)->not->toHaveKey('pdf_content');
+    }
+    Http::assertSent(fn ($request) => $request->method() === 'POST' && $request->data() === $payload && $request->hasHeader('Authorization', 'Bearer test-token'));
+    Http::assertSentCount(1);
+})->with([[base64_encode("%PDF-1.7\n%%EOF"), true], [null, false], ['!!!', false], [base64_encode('not a PDF'), false]]);

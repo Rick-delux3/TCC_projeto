@@ -259,16 +259,25 @@ class TooService
     }
 
     /**
-     * Futuro: consultar PDF da cotação.
-     *
-     * Endpoint:
-     * GET /fianca/proposta/cotacao/{numeroCotacao}/pdf
+     * Consulta o PDF com a condição de pagamento selecionada, sem emitir a proposta.
      */
-    public function getQuotePdf(string|int $numeroCotacao): array
+    public function getQuotePdf(string|int $numeroCotacao, array $payload): array
     {
-        return $this->getJson(
-            "/fianca/proposta/cotacao/{$numeroCotacao}/pdf"
+        $result = $this->postJson(
+            '/fianca/proposta/cotacao/'.rawurlencode((string) $numeroCotacao).'/pdf',
+            $payload,
         );
+        if (! ($result['success'] ?? false)) {
+            return $result;
+        }
+
+        $encoded = data_get($result, 'response.result.pdfCotacao');
+        $pdf = is_string($encoded) ? base64_decode($encoded, true) : false;
+        if ($pdf === false || ! str_starts_with($pdf, '%PDF-')) {
+            return array_replace($result, ['success' => false, 'error' => 'A Too retornou um PDF de cotação ausente ou inválido.']);
+        }
+
+        return $result + ['pdf_content' => $pdf];
     }
 
     private function postJson(string $endpoint, array $payload): array
@@ -472,8 +481,6 @@ class TooService
             'url' => $url,
             'http_status' => $normalized['http_status'],
             'success' => $normalized['success'],
-            'response' => $normalized['response'],
-            'raw_body' => $normalized['raw_body'],
         ]);
 
         return $normalized;

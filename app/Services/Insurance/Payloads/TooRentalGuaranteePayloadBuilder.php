@@ -57,9 +57,7 @@ class TooRentalGuaranteePayloadBuilder
 
         return [
 
-            'pretendentes' => [
-                $this->pretendentePayload($lead),
-            ],
+            'pretendentes' => $this->quoteApplicants($analysis),
 
             'locacao' => $this->locacaoPayload($lead),
 
@@ -89,6 +87,9 @@ class TooRentalGuaranteePayloadBuilder
         $startDate = $this->leaseStartDate($analysis);
         $endDate = $this->leaseEndDate($analysis, $startDate);
 
+        $this->validateQuoteSettings();
+        $numeroFicha = $this->proposalNumber($numeroFicha);
+
         return [
             'cnpjCorretor' => $this->brokerCnpj(),
             'razaoSocialCorretor' => $this->brokerName(),
@@ -106,14 +107,56 @@ class TooRentalGuaranteePayloadBuilder
             'indiceDeReajusteAluguel' => config('services.too.default_rent_adjustment_index', 'IGP_M'),
             'periodoIndenitario' => (int) config('services.too.default_indemnity_period', 30),
 
-            /*
-             * Mantemos configurável porque algumas APIs interpretam comissão
-             * como 0.10 e outras como 10. Se a Too recusar, basta ajustar no .env.
-             */
-            'percentualComissao' => (float) config('services.too.default_commission_percentage', 0.25),
+            'percentualComissao' => $this->commissionPercentage(),
 
             'coberturas' => $this->coverages($lead),
         ];
+    }
+
+    public function buildQuotePdfPayload(InsuranceExecution $analysis, string|int $numeroFicha): array
+    {
+        $analysis->loadMissing('lead');
+        $lead = $analysis->lead;
+        if (! $lead || ($lead->tipo_solicitante === 'imobiliaria_cadastrada' && ! $lead->company_id)) {
+            throw new \App\Exceptions\InvalidInsuranceAnalysisPayload('Lead ou vínculo da imobiliária ausente para o PDF da Too.');
+        }
+
+        return [
+            'numeroFicha' => $this->proposalNumber($numeroFicha),
+            'formaPagamento' => [
+                'tipoPagamento' => $lead->tipo_solicitante === 'imobiliaria_cadastrada' ? 2 : 1,
+                'tipoEntrada' => 2,
+                'opcaoParcelamento' => [['tipoOpcaoParcelamento' => 2, 'quantidadeParcelas' => 30]],
+            ],
+        ];
+    }
+
+    private function proposalNumber(string|int $number): int
+    {
+        $number = filter_var($number, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+        if ($number === false) {
+            throw new \App\Exceptions\InvalidInsuranceAnalysisPayload('Número da ficha inválido para envio à Too.');
+        }
+
+        return $number;
+    }
+
+    private function validateQuoteSettings(): void
+    {
+        if (config('services.too.default_rent_adjustment_index', 'IGP_M') !== 'IGP_M'
+            || (string) config('services.too.default_indemnity_period', 30) !== '30') {
+            throw new \App\Exceptions\InvalidInsuranceAnalysisPayload('A cotação Too deve usar IGP_M e período indenitário de 30 meses.');
+        }
+    }
+
+    private function commissionPercentage(): float
+    {
+        $commission = config('services.too.default_commission_percentage', 15.0);
+        if (! is_numeric($commission) || ! is_finite((float) $commission) || $commission < 10 || $commission > 40) {
+            throw new \App\Exceptions\InvalidInsuranceAnalysisPayload('Comissão Too deve estar entre 10 e 40, em pontos percentuais (15.0 para 15%).');
+        }
+
+        return (float) $commission;
     }
 
     private function pretendentePayload(Lead $lead): array
@@ -202,6 +245,10 @@ class TooRentalGuaranteePayloadBuilder
     {
         $aluguel = $this->expenseValue($lead, 'valor_aluguel') ?? 0.0;
 
+        if ($lead->tipo_solicitante === 'locatario') {
+            return ['valorAluguel' => $this->money($aluguel)];
+        }
+
         $agua = $this->valorAgua($lead);
         $luz = $this->valorLuz($lead);
 
@@ -214,16 +261,11 @@ class TooRentalGuaranteePayloadBuilder
             'valorIptu' => $this->optionalCoverage($this->expenseValue($lead, 'valor_iptu')),
             'valorLuz' => $this->optionalCoverage($luz),
 
-            /*
-             * A Too permite valores iguais ao aluguel ou zero.
-             * Para sandbox, deixamos danos ao imóvel igual ao aluguel
-             * e os demais zerados.
-             */
             'valorDanosAoImovel' => $this->money($aluguel),
             'valorDanosAMoveis' => 0.0,
-            'valorMultasContratuais' => 0.0,
-            'valorPinturaExterna' => 0.0,
-            'valorPinturaInterna' => 0.0,
+            'valorMultasContratuais' => $this->money($aluguel),
+            'valorPinturaExterna' => $this->money($aluguel),
+            'valorPinturaInterna' => $this->money($aluguel),
         ];
 
         /*
@@ -283,6 +325,10 @@ class TooRentalGuaranteePayloadBuilder
             return null;
         }
 
+        if (! is_numeric($value) || ! is_finite((float) $value) || (float) $value < 0) {
+            throw new \App\Exceptions\InvalidInsuranceAnalysisPayload('Valor de despesa inválido para envio à Too.');
+        }
+
         return (float) $value;
     }
 
@@ -340,12 +386,9 @@ class TooRentalGuaranteePayloadBuilder
             throw new \App\Exceptions\InvalidInsuranceAnalysisPayload('Renda fixa mensal inválida para envio à Too.');
         }
 
-        $total = $aluguel
-            + ($this->expenseValue($lead, 'valor_condominio') ?? 0)
-            + ($this->expenseValue($lead, 'valor_iptu') ?? 0)
-            + ($this->expenseValue($lead, 'valor_gas') ?? 0)
-            + $this->valorAgua($lead)
-            + $this->valorLuz($lead);
+        $total = array_sum(\Illuminate\Support\Arr::only($this->coverages($lead), [
+            'valorAluguel', 'valorCondominio', 'valorIptu', 'valorGas', 'valorAgua', 'valorLuz',
+        ]));
 
         if ($total > 24999) {
             throw new \App\Exceptions\InvalidInsuranceAnalysisPayload('A soma de aluguel + encargos não pode ultrapassar 24999 para a Too.');
@@ -423,6 +466,14 @@ class TooRentalGuaranteePayloadBuilder
     private function birthdateForToo(Lead $lead): string
     {
         $birthdate = $lead->getAttributes()['data_nascimento'] ?? null;
+
+        if ($birthdate instanceof \DateTimeInterface) {
+            $birthdate = $birthdate->format('Y-m-d');
+        }
+
+        if (is_string($birthdate) && preg_match('/^\d{4}-\d{2}-\d{2} 00:00:00$/', $birthdate)) {
+            $birthdate = substr($birthdate, 0, 10);
+        }
 
         if (Validator::make(
             ['data_nascimento' => $birthdate],

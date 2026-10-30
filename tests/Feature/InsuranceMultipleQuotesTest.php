@@ -350,3 +350,29 @@ it('exposes quote scenarios through the authorized backend without raw payloads'
         ->assertDontSee('request-secret')->assertDontSee('response-secret');
     expect($run->fresh()->finished_at)->toBeNull();
 });
+
+it('uses each persisted birthdate in Too individual and joint snapshot payloads', function () {
+    config(['services.too.broker_cnpj' => '11222333000181', 'services.too.broker_name' => 'Corretora', 'services.too.default_employment' => 'Autonomo', 'services.too.default_profession' => 'Consultor']);
+    $analysis = multipleQuoteAnalysis(true, 'too');
+    $analysis->lead->conjuge()->update(['data_nascimento' => '1994-09-12']);
+    $analysis->lead->endereco()->create(['cep' => '01001000', 'logradouro' => 'Praça da Sé', 'numero' => '1', 'bairro' => 'Sé', 'cidade_imovel' => 'São Paulo', 'estado' => 'SP']);
+    $coordinator = app(InsuranceQuoteCoordinator::class);
+    $run = $coordinator->prepare($analysis, 'round-one', false);
+    $analysis->lead->conjuge()->update(['data_nascimento' => '1999-01-01']);
+    $builder = app(\App\Services\Insurance\Payloads\TooRentalGuaranteePayloadBuilder::class);
+    foreach (InsuranceQuote::all() as $quote) {
+        app(InsuranceLeadSnapshot::class)->attach($quote);
+        $expected = $quote->scenario->kind === 'spouse' ? '1994-09-12' : '1990-05-01';
+        expect($builder->buildFichaPayload($quote)['pretendentes'][0]['dataNascimento'])->toBe($expected);
+        finishMultipleQuote($quote, 'rejected');
+    }
+    $coordinator->consolidate($run->id);
+    $joint = $run->scenarios()->where('kind', 'joint')->first()->quotes()->first();
+    app(InsuranceLeadSnapshot::class)->attach($joint);
+    foreach ([$builder->buildFichaPayload($joint), $builder->buildBasicDataPayload($joint)] as $payload) {
+        expect(array_column($payload['pretendentes'], 'dataNascimento'))->toBe(['1990-05-01', '1994-09-12'])
+            ->and(array_column($payload['pretendentes'], 'cpf'))->toBe(['52998224725', '11144477735'])
+            ->and(array_column($payload['pretendentes'], 'principal'))->toBe([true, false]);
+    }
+    Http::assertNothingSent();
+});
