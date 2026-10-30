@@ -2,287 +2,106 @@
 
 namespace App\Services\Lookup;
 
-use Illuminate\Support\Carbon;
+use App\Rules\CpfOrCnpj;
+use App\Support\BirthDate;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\ValidationException;
 
 class CpfLookupService
 {
-    private ?int $cache_minutes;
-
-    private string $baseUrl;
-
-    private string $apiKey;
-
-    private string $provider;
-
-    private bool $enable;
-
-    public function __construct()
+    public function resolveBirthdates(array $data): array
     {
-        $this->cache_minutes = (int) config('services.cpf_lookup.cache_minutes', 10080);
-        $this->baseUrl = rtrim((string) config('services.cpf_lookup.cpfhub.base_url'), '/');
-        $this->apiKey = config('services.cpf_lookup.cpfhub.api_key');
-        $this->provider = config('services.cpf_lookup.provider', 'cpfhub');
-        $this->enable = config('services.cpf_lookup.enabled');
+        if (! config('features.cpf_lookup.enabled')) {
+            return ['data_nascimento' => $data['data_nascimento'], 'conjuge_data_nascimento' => $data['conjuge_data_nascimento'] ?? null];
+        }
 
+        $field = strlen((string) ($data['cpf'] ?? '')) === 14 ? 'cpf_responsavel' : 'cpf';
+        $dates = ['data_nascimento' => $this->lookupBirthdate($data[$field] ?? '', $field), 'conjuge_data_nascimento' => null];
+        if (filled($data['conjuge_cpf'] ?? null)) {
+            $dates['conjuge_data_nascimento'] = $this->lookupBirthdate($data['conjuge_cpf'], 'conjuge_cpf');
+        }
+
+        return $dates;
     }
 
-    /**
-     * Retorna a data de nascimento no formato exigido pela Too:
-     *
-     * Y/m/d
-     *
-     * Exemplo:
-     * 1990/06/15
-     */
-    public function birthdateForToo(?string $cpf): ?string
+    public function lookupBirthdate(string $cpf, string $field = 'cpf'): string
     {
-        if (! config('features.insurance_analysis.enabled', false)) {
-            return $this->fallbackBirthdate();
+        if (! config('features.cpf_lookup.enabled')) {
+            throw ValidationException::withMessages([$field => 'A consulta automática de CPF está desativada.']);
         }
-
-        $cpf = $this->onlyNumbers($cpf);
-
-        if (strlen($cpf) !== 11) {
-            return $this->fallbackBirthdate();
+        $cpf = CpfOrCnpj::normalize($cpf);
+        if (Validator::make(['cpf' => $cpf], ['cpf' => ['required', 'string', 'size:11', new CpfOrCnpj]])->fails()) {
+            throw ValidationException::withMessages([$field => 'Confira o CPF informado.']);
         }
-
-        /*
-        |--------------------------------------------------------------------------
-        | Cache por CPF
-        |--------------------------------------------------------------------------
-        | Importante para:
-        | - economizar consultas;
-        | - evitar rate limit;
-        | - evitar cobrar novamente em reanálises.
-        */
-        $cacheKey = 'cpfhub_birthdate_'.sha1($cpf);
-
-        return Cache::remember(
-            $cacheKey,
-            now()->addMinutes($this->cache_minutes),
-            function () use ($cpf) {
-                $birthdate = $this->fetchBirthdate($cpf);
-
-                return $birthdate ?: $this->fallbackBirthdate();
-            }
-        );
-    }
-
-    /**
-     * Decide qual provider será usado.
-     */
-    private function fetchBirthdate(string $cpf): ?string
-    {
-        if (! $this->enable) {
-            return null;
-        }
-
-        $provider = $this->provider;
-
-        return match ($provider) {
-            'cpfhub' => $this->fetchFromCpfHub($cpf),
-            default => null,
-        };
-    }
-
-    /**
-     * Consulta a CPFHub.
-     *
-     * Endpoint:
-     * GET https://api.cpfhub.io/v1/cpf/{cpf}
-     *
-     * Header:
-     * x-api-key: SUA_API_KEY
-     */
-    private function fetchFromCpfHub(string $cpf): ?string
-    {
-        $baseUrl = $this->baseUrl;
-        $apiKey = $this->apiKey;
-
-        if (! $baseUrl || ! $apiKey) {
-            Log::warning('CPFHub não configurado corretamente.');
-
-            return null;
-        }
-
-        $url = "{$baseUrl}/v1/cpf/{$cpf}";
-
+        $secret = (string) config('app.key');
+        $key = 'cpf-brasil:'.hash_hmac('sha256', $cpf, $secret);
         try {
-            $response = Http::acceptJson()
-                ->withHeaders([
-                    'x-api-key' => $apiKey,
-                ])
-                ->timeout(30)
-                ->get($url);
+            return Cache::lock($key.':lock', 20)->block(3, function () use ($key, $cpf, $field): string {
+                $cached = Cache::get($key);
+                if (is_string($cached)) {
+                    $date = Crypt::decryptString($cached);
+                    $this->validateDate($date, $field);
 
-            $data = $this->safeJson($response);
-
-            /*
-            |--------------------------------------------------------------------------
-            | Logs somente em desenvolvimento
-            |--------------------------------------------------------------------------
-            | Em produção, não é recomendado salvar CPF, nome e nascimento em log.
-            */
-            if (config('app.debug')) {
-                Log::info('Resposta CPFHub', [
-                    'http_status' => $response->status(),
-                    'success' => $response->successful(),
-                    'response' => $data,
-                ]);
-            }
-
-            /*
-            |--------------------------------------------------------------------------
-            | 404 não é erro fatal
-            |--------------------------------------------------------------------------
-            | A documentação informa que 404 significa CPF não encontrado
-            | e não consome crédito.
-            */
-            if ($response->status() === 404) {
-                Log::info('CPF não encontrado na CPFHub', [
-                    'cpf' => config('app.debug') ? $cpf : null,
-                ]);
-
-                return null;
-            }
-
-            /*
-            |--------------------------------------------------------------------------
-            | 429 - Rate limit
-            |--------------------------------------------------------------------------
-            | No plano grátis, há limite de 1 requisição a cada 2 segundos.
-            */
-            if ($response->status() === 429) {
-                Log::warning('Rate limit excedido na CPFHub', [
-                    'retry_after' => $response->header('Retry-After'),
-                ]);
-
-                return null;
-            }
-
-            /*
-            |--------------------------------------------------------------------------
-            | 401 e 403 normalmente indicam problema de configuração/créditos.
-            |--------------------------------------------------------------------------
-            */
-            if (in_array($response->status(), [401, 403], true)) {
-                Log::warning('Erro de autenticação ou créditos na CPFHub', [
-                    'http_status' => $response->status(),
-                ]);
-
-                return null;
-            }
-
-            /*
-            |--------------------------------------------------------------------------
-            | 400 e 422 indicam CPF inválido.
-            |--------------------------------------------------------------------------
-            */
-            if (in_array($response->status(), [400, 422], true)) {
-                Log::warning('CPF inválido enviado para CPFHub', [
-                    'http_status' => $response->status(),
-                    'cpf' => config('app.debug') ? $cpf : null,
-                ]);
-
-                return null;
-            }
-
-            if (! $response->successful()) {
-                Log::warning('Falha inesperada ao consultar CPFHub', [
-                    'http_status' => $response->status(),
-                    'body' => config('app.debug') ? $response->body() : null,
-                ]);
-
-                return null;
-            }
-
-            if (data_get($data, 'success') !== true) {
-                Log::warning('CPFHub retornou success diferente de true.');
-
-                return null;
-            }
-
-            /*
-            |--------------------------------------------------------------------------
-            | Campo correto da CPFHub
-            |--------------------------------------------------------------------------
-            | Exemplo:
-            | data.birthDate = "15/06/1990"
-            */
-            $birthdate = data_get($data, 'data.birthDate');
-
-            return $this->formatBirthdateForToo($birthdate);
-        } catch (\Throwable $e) {
-            Log::warning('Erro inesperado ao consultar CPFHub', [
-                'message' => $e->getMessage(),
-            ]);
-
-            return null;
-        }
-    }
-
-    /**
-     * Converte a data para o formato exigido pela Too.
-     *
-     * CPFHub retorna:
-     * d/m/Y
-     *
-     * Too espera:
-     * Y/m/d
-     */
-    private function formatBirthdateForToo(?string $birthdate): ?string
-    {
-        if (! $birthdate) {
-            return null;
-        }
-
-        $birthdate = trim($birthdate);
-
-        $formats = [
-            'd/m/Y',
-            'd-m-Y',
-            'Y-m-d',
-            'Y/m/d',
-        ];
-
-        foreach ($formats as $format) {
-            try {
-                $date = Carbon::createFromFormat($format, $birthdate);
-
-                if ($date) {
-                    return $date->format('Y/m/d');
+                    return $date;
                 }
-            } catch (\Throwable) {
-                // Tenta o próximo formato.
-            }
-        }
+                $url = (string) config('services.cpf_lookup.cpf_brasil.api_url', 'https://api.cpf-brasil.org/cpf/');
+                $token = (string) config('services.cpf_lookup.cpf_brasil.api_key');
+                if ($token === '') {
+                    $this->fail('MISSING_API_KEY', $field);
+                }
+                $response = Http::acceptJson()->withHeaders(['X-API-Key' => $token])
+                    ->withoutRedirecting()
+                    ->connectTimeout((int) config('services.cpf_lookup.cpf_brasil.connect_timeout', 3))
+                    ->timeout((int) config('services.cpf_lookup.cpf_brasil.timeout', 10))
+                    ->get($url.$cpf);
+                $body = $response->json();
+                if (! is_array($body) || ! $response->successful() || isset($body['error']) || ($body['success'] ?? null) !== true) {
+                    $code = is_array($body) && is_string($body['code'] ?? null) ? $body['code'] : 'INVALID_RESPONSE';
+                    $this->fail($code, $field, $response->status());
+                }
+                if (! is_string(data_get($body, 'data.CPF')) || CpfOrCnpj::normalize($body['data']['CPF']) !== $cpf) {
+                    $this->fail('IDENTITY_MISMATCH', $field);
+                }
+                $raw = data_get($body, 'data.NASC');
+                $date = is_string($raw) ? \DateTimeImmutable::createFromFormat('!d/m/Y', $raw) : false;
+                if (! $date || $date->format('d/m/Y') !== $raw) {
+                    $this->fail('INVALID_BIRTHDATE', $field);
+                }
+                $normalized = $date->format('Y-m-d');
+                $this->validateDate($normalized, $field);
+                Cache::put($key, Crypt::encryptString($normalized), now()->addMinutes((int) config('services.cpf_lookup.cache_minutes', 1440)));
 
-        try {
-            return Carbon::parse($birthdate)->format('Y/m/d');
+                return $normalized;
+            });
+        } catch (ValidationException $exception) {
+            throw $exception;
         } catch (\Throwable) {
-            return null;
+            $this->fail('LOOKUP_UNAVAILABLE', $field);
         }
     }
 
-    private function safeJson($response): array
+    private function validateDate(string $date, string $field): void
     {
-        try {
-            return $response->json() ?? [];
-        } catch (\Throwable) {
-            return [];
+        $validator = Validator::make(['data_nascimento' => $date], ['data_nascimento' => BirthDate::rules()], BirthDate::messages());
+        if ($validator->fails()) {
+            throw ValidationException::withMessages([$field => $validator->errors()->first('data_nascimento')]);
         }
     }
 
-    private function fallbackBirthdate(): ?string
+    private function fail(string $code, string $field, ?int $status = null): never
     {
-        return config('services.cpf_lookup.fallback_birthdate', '1985/12/10');
-    }
-
-    private function onlyNumbers(?string $value): string
-    {
-        return preg_replace('/\D+/', '', (string) $value);
+        $known = ['MISSING_API_KEY', 'INVALID_API_KEY', 'TOKEN_EXPIRED', 'PLAN_EXPIRED', 'PLAN_SUSPENDED', 'QUOTA_EXCEEDED', 'MISSING_CPF_PARAMETER', 'INVALID_CPF_FORMAT', 'CPF_NOT_FOUND', 'DATABASE_NOT_FOUND', 'DATABASE_QUERY_ERROR', 'DATABASE_ERROR', 'INVALID_RESPONSE', 'IDENTITY_MISMATCH', 'INVALID_BIRTHDATE', 'LOOKUP_UNAVAILABLE'];
+        Log::warning('Consulta CPF Brasil não concluída.', ['code' => in_array($code, $known, true) ? $code : 'UNKNOWN_ERROR', 'http_status' => $status]);
+        $message = match ($code) {
+            'CPF_NOT_FOUND' => 'Não foi possível localizar os dados desse CPF. Confira o documento informado.',
+            'INVALID_CPF_FORMAT' => 'Confira o CPF informado.',
+            'INVALID_BIRTHDATE', 'IDENTITY_MISMATCH' => 'A consulta retornou dados inconsistentes. Não foi possível confirmar o nascimento.',
+            default => 'Não foi possível consultar a data de nascimento no momento. Tente novamente mais tarde.',
+        };
+        throw ValidationException::withMessages([$field => $message]);
     }
 }

@@ -11,6 +11,7 @@ use App\Models\Imobiliaria;
 use App\Models\InsuranceAnalysisBatch;
 use App\Models\Lead;
 use App\Services\Leads\CompanyApplicantService;
+use App\Services\Lookup\CpfLookupService;
 use App\Support\CompanyConstitution;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -23,7 +24,7 @@ use Illuminate\View\View;
 
 class SimulationController extends Controller
 {
-    public function __construct(private CompanyApplicantService $companyApplicants) {}
+    public function __construct(private CompanyApplicantService $companyApplicants, private CpfLookupService $cpfLookup) {}
 
     private const REGISTERED_COMPANY_SESSION_KEY = 'simulation.registered_company_access';
 
@@ -188,6 +189,8 @@ class SimulationController extends Controller
                 );
         }
 
+        $request->attributes->set('resolved_birthdates', $this->cpfLookup->resolveBirthdates($request->validated()));
+
         $lead = DB::transaction(function () use ($request, $company) {
             return $this->saveLead(
                 $request,
@@ -276,6 +279,8 @@ class SimulationController extends Controller
                 );
         }
 
+        $request->attributes->set('resolved_birthdates', $this->cpfLookup->resolveBirthdates($request->validated()));
+
         $lead = DB::transaction(function () use ($request, $tipo) {
             return $this->saveLead(
                 $request,
@@ -311,6 +316,8 @@ class SimulationController extends Controller
         ) {
             return $this->redirectToRegisteredCompanyAccess();
         }
+
+        $request->attributes->set('resolved_birthdates', $this->cpfLookup->resolveBirthdates($request->validated()));
 
         $lead = DB::transaction(function () use ($request, $company) {
             return $this->saveLead($request, [
@@ -359,6 +366,8 @@ class SimulationController extends Controller
             ]);
         }
 
+        $request->attributes->set('resolved_birthdates', $this->cpfLookup->resolveBirthdates($request->validated()));
+
         $lead = DB::transaction(function () use ($request, $responsavelTipo) {
             return $this->saveLead($request, [
                 'tipo_solicitante' => $responsavelTipo,
@@ -383,6 +392,8 @@ class SimulationController extends Controller
 
     public function storeTenantLead(StoreSimulationLeadRequest $request)
     {
+        $request->attributes->set('resolved_birthdates', $this->cpfLookup->resolveBirthdates($request->validated()));
+
         $lead = DB::transaction(function () use ($request) {
             return $this->saveLead($request, [
                 'tipo_solicitante' => 'locatario',
@@ -534,7 +545,7 @@ class SimulationController extends Controller
         array $context,
         bool $allowExistingUpdate = false
     ): Lead {
-        $data = $request->validated();
+        $data = array_merge($request->validated(), $request->attributes->get('resolved_birthdates', []));
 
         $company = $context['company'] ?? null;
 
@@ -681,6 +692,7 @@ class SimulationController extends Controller
                 [
                     'nome' => $data['conjuge_nome'] ?? null,
                     'cpf' => $data['conjuge_cpf'] ?? null,
+                    'data_nascimento' => $data['conjuge_data_nascimento'] ?? null,
                 ]
             );
         } else {

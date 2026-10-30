@@ -96,11 +96,14 @@ class StoreSimulationLeadRequest extends FormRequest
             'aceite_termos' => ['accepted'],
 
             'nome' => ['required', 'string', 'min:3', 'max:255'],
-            'data_nascimento' => BirthDate::rules(),
+            'data_nascimento' => config('features.cpf_lookup.enabled') ? ['exclude'] : BirthDate::rules(),
+            'conjuge_data_nascimento' => config('features.cpf_lookup.enabled') || ! $this->allowsSpouse()
+                ? ['exclude']
+                : array_merge(['nullable'], array_values(array_diff(BirthDate::rules(), ['required']))),
             'email' => ['required', 'string', 'email:rfc', 'max:255'],
             'tel' => ['required', 'string', 'min:10', 'max:11'],
 
-            'cpf' => ['bail', 'required', 'string', new CpfOrCnpj],
+            'cpf' => ['bail', 'required', 'string', $this->documentRule($this->input('cpf'))],
             'tipo_locacao' => ['required', Rule::enum(TipoLocacao::class)],
             'empresa_constituida' => [
                 Rule::excludeIf(! $this->hasCompanyDocument() || $this->input('tipo_locacao') !== 'comercial'),
@@ -129,7 +132,7 @@ class StoreSimulationLeadRequest extends FormRequest
                 'required',
                 'string',
                 'size:11',
-                new CpfOrCnpj,
+                $this->documentRule($this->input('cpf_responsavel')),
             ],
             'nome_responsavel' => [
                 Rule::excludeIf(! $this->hasCompanyDocument()),
@@ -157,7 +160,7 @@ class StoreSimulationLeadRequest extends FormRequest
                 'required_if:estado_civil,casado,uniao_estavel',
                 'string',
                 'size:11',
-                new CpfOrCnpj,
+                $this->documentRule($this->input('conjuge_cpf')),
             ],
 
             'responsavel_tipo' => [
@@ -507,5 +510,14 @@ class StoreSimulationLeadRequest extends FormRequest
         }
 
         return is_numeric($normalizedValue) ? $normalizedValue : $valor;
+    }
+
+    private function documentRule(mixed $document): CpfOrCnpj|string
+    {
+        if (! config('features.cpf_lookup.enabled') && is_string($document) && strlen($document) === 11) {
+            return 'regex:/^[0-9]{11}$/';
+        }
+
+        return new CpfOrCnpj;
     }
 }

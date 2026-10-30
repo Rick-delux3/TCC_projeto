@@ -36,17 +36,13 @@ return [
     ],
 
     'cpf_lookup' => [
-        'enabled' => env('CPF_LOOKUP_ENABLED', false),
-        'provider' => env('CPF_LOOKUP_PROVIDER', 'cpfhub'),
-
-        'cpfhub' => [
-            'base_url' => env('CPFHUB_BASE_URL', 'https://api.cpfhub.io'),
-            'api_key' => env('CPFHUB_API_KEY'),
+        'cpf_brasil' => [
+            'api_key' => env('CPF_BRASIL_TOKEN'),
+            'api_url' => env('CPF_BRASIL_URL', 'https://api.cpf-brasil.org/cpf/'),
+            'timeout' => 10,
+            'connect_timeout' => 3,
         ],
-
         'cache_minutes' => env('CPF_LOOKUP_CACHE_MINUTES', 10080),
-        'fallback_birthdate' => env('CPF_LOOKUP_FALLBACK_BIRTHDATE', '1985/12/10'),
-        'fail_analysis_if_missing_birthdate' => env('CPF_LOOKUP_FAILS_ANALYSIS', false),
     ],
 
     'leadlovers' => [
