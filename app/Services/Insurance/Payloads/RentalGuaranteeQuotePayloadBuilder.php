@@ -139,8 +139,8 @@ class RentalGuaranteeQuotePayloadBuilder
         }
 
         $commission = config('services.pottencial.default_commission', 0.15);
-        if (! is_numeric($commission) || ! is_finite((float) $commission) || $commission < 0 || $commission > 1) {
-            throw new \App\Exceptions\InvalidInsuranceAnalysisPayload('Comissão da Pottencial deve ser uma fração entre 0 e 1.');
+        if (Validator::make(['commission' => $commission], ['commission' => ['required', 'numeric', 'between:0,1', 'decimal:0,3']])->fails()) {
+            throw new \App\Exceptions\InvalidInsuranceAnalysisPayload('Comissão da Pottencial deve ser uma fração entre 0 e 1, com no máximo três casas decimais.');
         }
 
         $agents = [

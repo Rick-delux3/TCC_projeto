@@ -207,6 +207,9 @@ it('rejects invalid Pottencial agent and contract settings before any request', 
         case 'commission':
             config(['services.pottencial.default_commission' => 15]);
             break;
+        case 'commission precision':
+            config(['services.pottencial.default_commission' => 0.1501]);
+            break;
         case 'plan':
             $analysis->plan_key = 'unknown';
             break;
@@ -217,7 +220,29 @@ it('rejects invalid Pottencial agent and contract settings before any request', 
     expect(fn () => app(RentalGuaranteeQuotePayloadBuilder::class)->build($analysis))
         ->toThrow(\App\Exceptions\InvalidInsuranceAnalysisPayload::class);
     Http::assertNothingSent();
-})->with(['broker', 'company', 'missing company', 'commission', 'plan', 'policy']);
+})->with(['broker', 'company', 'missing company', 'commission', 'commission precision', 'plan', 'policy']);
+
+it('preserves Pottencial payment rules when creating a legacy execution without configured defaults', function (string $origin) {
+    $source = alignedInsuranceAnalysis();
+    $source->lead->update(['tipo_solicitante' => $origin]);
+    config(['services.pottencial' => \Illuminate\Support\Arr::except(config('services.pottencial'), ['default_installments', 'default_plan_key'])]);
+    config(['services.pottencial.default_payment_type' => 'AutomaticDebit']);
+
+    $analysis = app(\App\Services\Insurance\InsuranceAnalysisService::class)->createPendingAnalysis($source->lead);
+
+    expect($analysis->installments)->toBe(30)
+        ->and($analysis->plan_key)->toBe('Traditional')
+        ->and($analysis->payment_type)->toBe($origin === 'imobiliaria_cadastrada' ? 'Invoice' : 'Boleto')
+        ->and($analysis->lease_end_date->toDateString())->toBe($analysis->lease_start_date->copy()->addMonthsNoOverflow(30)->toDateString());
+    Http::assertNothingSent();
+})->with(['imobiliaria_cadastrada', 'imobiliaria_nao_cadastrada', 'locador', 'locatario']);
+
+it('accepts the documented Pottencial commission precision', function () {
+    config(['services.pottencial.default_commission' => 0.155]);
+    $payload = app(RentalGuaranteeQuotePayloadBuilder::class)->build(alignedInsuranceAnalysis());
+    expect($payload['commissionedAgents'][0]['commissionPercentage'])->toBe(0.155);
+    Http::assertNothingSent();
+});
 
 it('builds the Pottencial minimal participant without optional contact data and canonicalizes plans', function (string $plan, string $expected) {
     $analysis = alignedInsuranceAnalysis();

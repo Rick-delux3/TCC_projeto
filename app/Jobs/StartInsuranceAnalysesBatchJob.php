@@ -188,7 +188,7 @@ class StartInsuranceAnalysesBatchJob implements ShouldQueue
                         'total_monthly_amount' => $totalMonthlyAmount,
 
                         'payment_type' => config('services.pottencial.default_payment_type', 'Boleto'),
-                        'installments' => (int) config('services.pottencial.default_installments', 12),
+                        'installments' => (int) config('services.pottencial.default_installments', 30),
                     ]);
 
                     $analysis->events()->create([
@@ -322,7 +322,7 @@ class StartInsuranceAnalysesBatchJob implements ShouldQueue
                         'charges_amount' => $chargesAmount,
                         'total_monthly_amount' => $totalMonthlyAmount,
                         'payment_type' => config('services.pottencial.default_payment_type', 'Boleto'),
-                        'installments' => (int) config('services.pottencial.default_installments', 12),
+                        'installments' => (int) config('services.pottencial.default_installments', 30),
                         'requested_at' => null,
                         'finished_at' => null,
                     ])->save();
