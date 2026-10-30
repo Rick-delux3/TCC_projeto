@@ -20,15 +20,22 @@ class CpfLookupService
         }
 
         $field = strlen((string) ($data['cpf'] ?? '')) === 14 ? 'cpf_responsavel' : 'cpf';
-        $dates = ['data_nascimento' => $this->lookupBirthdate($data[$field] ?? '', $field), 'conjuge_data_nascimento' => null];
+        $person = $this->lookupPerson($data[$field] ?? '', $field);
+        if ($field === 'cpf_responsavel' && mb_strlen($person['name']) > 55) {
+            throw ValidationException::withMessages([$field => 'O nome retornado excede o limite do cadastro do responsável. Entre em contato com o corretor.']);
+        }
+        $dates = ['data_nascimento' => $person['birthdate'], ($field === 'cpf' ? 'nome' : 'nome_responsavel') => $person['name'], 'conjuge_data_nascimento' => null];
         if (filled($data['conjuge_cpf'] ?? null)) {
-            $dates['conjuge_data_nascimento'] = $this->lookupBirthdate($data['conjuge_cpf'], 'conjuge_cpf');
+            $spouse = $this->lookupPerson($data['conjuge_cpf'], 'conjuge_cpf');
+            $dates['conjuge_data_nascimento'] = $spouse['birthdate'];
+            $dates['conjuge_nome'] = $spouse['name'];
         }
 
         return $dates;
     }
 
-    public function lookupBirthdate(string $cpf, string $field = 'cpf'): string
+    /** @return array{name: string, birthdate: string} */
+    public function lookupPerson(string $cpf, string $field = 'cpf'): array
     {
         if (! config('features.cpf_lookup.enabled')) {
             throw ValidationException::withMessages([$field => 'A consulta automática de CPF está desativada.']);
@@ -38,15 +45,15 @@ class CpfLookupService
             throw ValidationException::withMessages([$field => 'Confira o CPF informado.']);
         }
         $secret = (string) config('app.key');
-        $key = 'cpf-brasil:'.hash_hmac('sha256', $cpf, $secret);
+        $key = 'cpf-brasil:person:v1:'.hash_hmac('sha256', $cpf, $secret);
         try {
-            return Cache::lock($key.':lock', 20)->block(3, function () use ($key, $cpf, $field): string {
+            return Cache::lock($key.':lock', 20)->block(3, function () use ($key, $cpf, $field): array {
                 $cached = Cache::get($key);
                 if (is_string($cached)) {
-                    $date = Crypt::decryptString($cached);
-                    $this->validateDate($date, $field);
+                    $person = json_decode(Crypt::decryptString($cached), true, 512, JSON_THROW_ON_ERROR);
+                    $this->validateDate($person['birthdate'], $field);
 
-                    return $date;
+                    return $person;
                 }
                 $url = (string) config('services.cpf_lookup.cpf_brasil.api_url', 'https://api.cpf-brasil.org/cpf/');
                 $token = (string) config('services.cpf_lookup.cpf_brasil.api_key');
@@ -73,15 +80,25 @@ class CpfLookupService
                 }
                 $normalized = $date->format('Y-m-d');
                 $this->validateDate($normalized, $field);
-                Cache::put($key, Crypt::encryptString($normalized), now()->addMinutes((int) config('services.cpf_lookup.cache_minutes', 1440)));
+                $name = data_get($body, 'data.NOME');
+                if (! is_string($name) || mb_strlen(trim($name)) < 3 || mb_strlen(trim($name)) > 255) {
+                    $this->fail('INVALID_RESPONSE', $field);
+                }
+                $person = ['name' => trim($name), 'birthdate' => $normalized];
+                Cache::put($key, Crypt::encryptString(json_encode($person, JSON_THROW_ON_ERROR)), now()->addMinutes((int) config('services.cpf_lookup.cache_minutes', 1440)));
 
-                return $normalized;
+                return $person;
             });
         } catch (ValidationException $exception) {
             throw $exception;
         } catch (\Throwable) {
             $this->fail('LOOKUP_UNAVAILABLE', $field);
         }
+    }
+
+    public function lookupBirthdate(string $cpf, string $field = 'cpf'): string
+    {
+        return $this->lookupPerson($cpf, $field)['birthdate'];
     }
 
     private function validateDate(string $date, string $field): void

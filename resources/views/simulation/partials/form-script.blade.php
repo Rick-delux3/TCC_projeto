@@ -32,7 +32,27 @@ document.addEventListener('DOMContentLoaded', () => {
         invalid.focus();
         return false;
     };
-    const next = () => { if (validateStep(1)) showStep(2); };
+    let checking = false;
+    const next = async () => {
+        if (checking) return;
+        checking = true;
+        const button = wizard.querySelector('[data-step-next]');
+        button.disabled = true;
+        button.setAttribute('aria-busy', 'true');
+        try {
+            if (form.confirmCpfData && !await form.confirmCpfData()) return;
+            if (validateStep(1)) showStep(2);
+        } finally {
+            checking = false;
+            button.disabled = false;
+            button.removeAttribute('aria-busy');
+        }
+    };
+    form.addEventListener('simulation-focus-field', event => {
+        const input = form.elements.namedItem(event.detail);
+        const panel = input?.closest('[data-form-step]');
+        if (panel) { showStep(Number(panel.dataset.formStep), false); input.focus(); }
+    });
     wizard.querySelector('[data-step-next]').addEventListener('click', next);
     wizard.querySelector('[data-step-back]').addEventListener('click', () => showStep(1));
     wizard.querySelectorAll('[data-step-link]').forEach(button => {

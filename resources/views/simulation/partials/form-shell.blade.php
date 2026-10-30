@@ -99,7 +99,9 @@
                         'fields' => 'simulation.partials.company-representative',
                     ])
                     @include('simulation.partials.marital-status')
+                    @unless(config('features.cpf_lookup.enabled'))
                     @include('simulation.partials.input', ['field' => ['name' => 'data_nascimento', 'label' => 'Data de nascimento', 'type' => 'date', 'required' => true, 'min' => \App\Support\BirthDate::earliest()->toDateString(), 'max' => \App\Support\BirthDate::latest()->toDateString(), 'autocomplete' => 'bday', 'hint' => 'Para CNPJ, informe a data de nascimento do responsável que representa a empresa.']])
+                    @endunless
                 </div>
 
                 @if ($isRegistered)
@@ -134,6 +136,7 @@
             </section>
         </form>
         @include('simulation.partials.company-constitution-modal')
+        @include('simulation.partials.cpf-lookup')
     </section>
 </div>
 @include('simulation.partials.form-script')

@@ -293,6 +293,8 @@ Route::middleware(['auth:admin', 'corretor.active'])->group(function () {
 Route::prefix('simulacao')
     ->name('simulation.')
     ->group(function () {
+        Route::post('/consultar-cpf', [SimulationController::class, 'lookupCpf'])
+            ->middleware('throttle:6,1')->name('cpf.lookup');
         // Página inicial do questionário.
         Route::get('/', [SimulationController::class, 'start'])
             ->middleware('throttle:simulation-page')

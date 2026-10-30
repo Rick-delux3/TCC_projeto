@@ -24,6 +24,13 @@ use Illuminate\View\View;
 
 class SimulationController extends Controller
 {
+    public function lookupCpf(\App\Http\Requests\LookupSimulationCpfRequest $request): \Illuminate\Http\JsonResponse
+    {
+        $person = $this->cpfLookup->lookupPerson($request->validated('cpf'));
+
+        return response()->json(['name' => $person['name']])->header('Cache-Control', 'no-store, private');
+    }
+
     public function __construct(private CompanyApplicantService $companyApplicants, private CpfLookupService $cpfLookup) {}
 
     private const REGISTERED_COMPANY_SESSION_KEY = 'simulation.registered_company_access';

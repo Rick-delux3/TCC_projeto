@@ -95,7 +95,8 @@ class StoreSimulationLeadRequest extends FormRequest
 
             'aceite_termos' => ['accepted'],
 
-            'nome' => ['required', 'string', 'min:3', 'max:255'],
+            'nome' => config('features.cpf_lookup.enabled') && ! $this->hasCompanyDocument()
+                ? ['exclude'] : ['required', 'string', 'min:3', 'max:255'],
             'data_nascimento' => config('features.cpf_lookup.enabled') ? ['exclude'] : BirthDate::rules(),
             'conjuge_data_nascimento' => config('features.cpf_lookup.enabled') || ! $this->allowsSpouse()
                 ? ['exclude']
@@ -135,6 +136,7 @@ class StoreSimulationLeadRequest extends FormRequest
                 $this->documentRule($this->input('cpf_responsavel')),
             ],
             'nome_responsavel' => [
+                Rule::excludeIf((bool) config('features.cpf_lookup.enabled')),
                 Rule::excludeIf(! $this->hasCompanyDocument()),
                 'required',
                 'string',
@@ -145,6 +147,7 @@ class StoreSimulationLeadRequest extends FormRequest
             'estado_civil' => ['nullable', 'string', 'in:solteiro,separado,casado,uniao_estavel,divorciado,viuvo'],
 
             'conjuge_nome' => [
+                Rule::excludeIf((bool) config('features.cpf_lookup.enabled')),
                 Rule::excludeIf(! $this->allowsSpouse()),
                 'nullable',
                 'required_if:estado_civil,casado,uniao_estavel',
