@@ -145,6 +145,7 @@ return [
     ],
 
     'porto' => [
+        'token_url' => env('PORTO_TOKEN_URL', 'https://portoapi-hml.portoseguro.com.br/oauth/v2/access-token'),
         'enabled' => env('PORTO_ENABLED', false),
         'base_url' => env('PORTO_BASE_URL'),
         'client_id' => env('PORTO_CLIENT_ID'),

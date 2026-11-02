@@ -1,5 +1,533 @@
 # Estudo das APIs de Fiança Locatícia
 
+## Regra geral — pessoa jurídica sem cônjuge — 02/11/2026
+
+**Decisão expressa do usuário, válida para todas as seguradoras e origens de formulário:** quando o documento do pretendente for **CNPJ**, analisar **somente a empresa**. Não existe cenário PJ com cônjuge. Esta regra prevalece sobre qualquer dúvida ou orientação histórica sobre análise individual/conjunta de empresa, responsável e cônjuge.
+
+- Manter CNPJ e razão social como identidade empresarial; não substituir pelo CPF/nome do responsável para realizar análise PF.
+- Desconsiderar estado civil para PJ. Na futura implementação dos formulários, ocultar e deixar de exigir estado civil e campos de cônjuge quando houver CNPJ. No backend, não usar esses dados nos payloads ou na criação de cenários PJ, mesmo que enviados manualmente ou presentes em registros antigos.
+- Não analisar o responsável separadamente nem seu cônjuge; não criar cenários spouse/joint para PJ nem tentativa conjunta após recusa da empresa. Usar somente o cenário empresarial primary.
+- Dados do responsável eventualmente exigidos no cadastro/payload, incluindo nome e nascimento obtidos pela API CPF conforme regras já definidas, continuam complementares. Consulta cadastral CPF não equivale a análise de seguro do responsável e não autoriza outro pretendente/cenário ou substituição do CNPJ.
+- Duas individuais e conjunta condicional permanecem **exclusivamente para PF com cônjuge**. Ao mudar CPF para CNPJ, desconsiderar estado civil/cônjuge anteriores; mudanças posteriores no cadastro não devem alterar o snapshot de rodadas já iniciadas.
+- Um cenário empresarial não significa um único plano: Pottencial mantém Basic/Complete/Traditional para a mesma empresa (até três cotações, sem multiplicação por cônjuge); Porto mantém uma criação empresarial e as ofertas retornadas; Too mantém sua análise empresarial conforme elegibilidade. Tokio continua sem análise automática PJ e com o tratamento manual já definido; não analisar o responsável como PF para contornar a restrição.
+- Painel, e-mail e comparação devem refletir as tentativas da empresa e seus planos/ofertas, sem análises de responsável/cônjuge ou conjunta PJ.
+
+**Composição PJ esclarecida; implementação e validação pendentes:** aplicar essa condição na validação, snapshot, coordenador, builders e formulários, preservando os pacotes de análise. Somente o estudo foi alterado nesta revisão, sem mudanças em código, cadastros ou histórico.
+
+## Porto — revisão dos três contratos Markdown — 02/11/2026
+
+**Estado:** estudo documental concluído; integração ainda não implementada ou homologada. Esta consolidação prevalece sobre as listas históricas de pendências Porto abaixo. **Correção mais recente de 02/11/2026: descartar o recálculo de várias ofertas em um único PUT; enviar uma oferta por atualização, seguro da raiz igual ao seguro do item de ofertas, comissão 15 e todos os campos obrigatórios aplicáveis.** Foram lidos integralmente os contratos de [criação](Porto_endpoitsMarkdown/Calcula-um-novo-orcamento-para-o-produto-fianca-essencial.md), [ofertas](Porto_endpoitsMarkdown/Exibe-ofertas-disponiveis.md) e [atualização](Porto_endpoitsMarkdown/atualiza-os-dados-de-um-orcamento.md), confrontados com as decisões do usuário, a [arquitetura vigente](ARQUITETURA_ANALISES_SEGURO.md) e os pontos de integração existentes. Nenhum exemplo foi tratado como cotação real ou configuração do cliente.
+
+### 1. Responsabilidade de cada operação
+
+**Fluxo definitivo confirmado pelo usuário em 02/11/2026:** **calcula um novo orçamento (POST) → atualiza os dados do orçamento com comissão de 15% (PUT por oferta, simultâneos) → exibe ofertas (GET após a conclusão das atualizações)**. Esta decisão substitui a proposta anterior de consultar ofertas antes do PUT. Usar as ofertas, formas e condições retornadas na criação para preparar as atualizações; seus preços iniciais são apenas internos e não serão apresentados como resultado final. O GET de ofertas continua sendo a fonte preferencial dos preços recalculados; a consulta do orçamento atualizado é a alternativa a validar nos testes.
+
+Base de negócio: `https://portoapicloud-hml.portoseguro.com.br/fianca-locaticia/emissao/aluguel-essencial/v1`. Manter a autenticação já decidida: mesmo token nos headers Authorization Bearer e access_token. Os novos Markdown continuam mostrando somente Authorization e exemplo de erro citando access_token; isso não reabre a decisão.
+
+| Operação | Função no sistema | Evidência e limite |
+| --- | --- | --- |
+| `POST /orcamentos` | Criar/analisar uma cotação por cenário de pretendentes | Responses declara 201 para sucesso e 409 para recusa, conforme regra confirmada. O texto introdutório que diz 200 continua inconsistente. Persistir `orcamento` retornado antes das próximas etapas |
+| `GET /orcamentos/{origem}/{orcamento}/{susep}/ofertas` | Consultar produtos, condições e parcelas disponíveis desse orçamento | 200 confirma a consulta, não uma nova análise cadastral. É a fonte escolhida para preços/exibição, inclusive após eventual ajuste de comissão |
+| `PUT /orcamentos/{orcamento}/{susep}` | Atualizar o orçamento existente para uma oferta selecionada e ajustar sua comissão | 200 confirma atualização. Enviar os required e requisitos condicionais aplicáveis, conforme confirmação do usuário; não enviar somente ofertas. Não confundir com reanálise, emissão ou confirmação de pagamento |
+
+`origem = "22"` corresponde à nova contratação, inclusive nossas reanálises por novo POST; "40" é renovação. Preservar orçamento com 15 dígitos e SUSEP interno com seis caracteres, terminando em F/J. O GET não possui body, filtro de comissão ou parâmetro para criar parcelamento. Os caminhos não autorizam deduzir URLs de produção.
+
+### 2. POST: payload mínimo e regras já fechadas
+
+O Markdown de criação declara como obrigatórios `cep`, `coberturas`, `contrato`, `cpfCotador`, `locacaoComercial` (condicional pela descrição), `locatarios`, `susep` e `tipoLocacao`. **Não lista `locador`, `cobranca`, `seguro` ou `ofertas` no body.** Para nosso builder de criação, não transportar requisitos do PUT. A antiga dúvida de locador na criação fica encerrada documentalmente por esta especificação mínima; eventual rejeição real será divergência a validar, não motivo para inventar proprietário.
+
+| Dados | Aplicação definida |
+| --- | --- |
+| PF residencial | `tipoLocacao = "1"`; omitir locacaoComercial; renda `4 × aluguel` |
+| PF comercial | `tipoLocacao = "2"`; capital de abertura `100 × aluguel`; motivo escolhido no futuro seletor comercial; renda `10 × aluguel` |
+| CNPJ comercial | `tipoLocacao = "2"`; razão social, nascimento do responsável, capital social 450000, capital de abertura `100 × aluguel`, motivo comercial escolhido, renda `10 × aluguel` |
+| CNPJ residencial | Mesmo enquadramento técnico PFCOM, capitais e renda de PJ; motivo "A" fixo no servidor, sem mostrar o seletor comercial |
+| Locatários | Documento real, nome/razão social, nascimento DD/MM/AAAA, exatamente um titular S, e-mail/celular e dadosProfissionais somente com totalRendimentos. Contatos do cônjuge compartilhados; identidade e nascimento próprios. Consulta CPF já persistida, sem nova chamada por cotação |
+| Contrato | Inícios na data da rodada; términos 30 meses depois; reajuste "002" IGP-M. Adotar como proposta técnica `tipoVigenciaContrato = "1"` (em vigor) para início no próprio dia e validar em homologação; não usar futura/indeterminada apenas porque aparecem no catálogo |
+| Imobiliária | Origem cadastrada envia código Porto de seis dígitos vinculado ao corretor e usa FAT; demais origens usam CC. Lista dos códigos ainda aguardada; nenhum fallback novo definido |
+| Coberturas | Tenant somente 001 aluguel; demais origens incluem 007–010 com IS igual ao aluguel e encargos 002–006 quando aplicáveis, positivos e até o aluguel. Aluguel 200–10000; não enviar cobertura zero |
+
+Mantêm-se as confirmações do suporte sobre CPF de 11/CNPJ de 14 dígitos mesmo que o novo Markdown ainda mostre maxLength 11. Capital social fixo é regra definida para PJ, não motivo para preencher PF com dados empresariais fictícios. Não usar exemplos com capitais 500000, reajuste 001, renda null ou datas antigas como defaults. `diaVencimentoAluguel`, `orcamentoExterno`, nome social, CNPJ complementar e atividade econômica são opcionais conforme cenário; omitir quando não houver dado/regra aplicável. O retorno localRisco enriquece o endereço por CEP, mas não confirma número/complemento do imóvel. `regraFixa` é expressamente interno à Porto e pode ser ignorado.
+
+### 3. GET: produto, condição e preço são um conjunto
+
+O contrato confirma `ofertas[]` e `formasPagamento[]` como listas; **`formasPagamento[].condicoesPagamento` é objeto no GET**, enquanto o POST descreve lista de condições. A dúvida sobre a forma documentada está resolvida. Implementar normalização específica do GET; respostas reais divergentes precisam de evidência, sem aplicar silenciosamente o parser do POST.
+
+Preservar, para cada alternativa, orçamento/cenário, `seguro`, `nomeSeguro`, `formaPagamento`, `nomeFormaPagamento`, `condicaoPagamento`, `quantidadeParcela`, `valorParcela`, primeiro vencimento e detalhes monetários. `condicaoPagamento` é identificador de três dígitos com zeros à esquerda; não usar "000" do exemplo como condição universal. Não deduplicar alternativas somente por forma de pagamento.
+
+**Preço:** usar `valorParcela`, descrito como já incluindo IOF e descontos. Não dividir prêmio total, não somar IOF novamente, não confundir prêmio, IS, LMI ou LMG com parcela. Juros/adicional zero no exemplo ou no produto Essencial não autoriza apagar um valor real retornado. Quantidade e preço precisam ser utilizáveis; listas vazias ou comissão null no exemplo não significam recusa, parcela zero ou comissão zero.
+
+**Prazo e entrada:** preservar a confirmação do usuário de 30 meses gerando 30 parcelas para CC/FAT. O GET descreve quantidade, valor, vencimento e código da condição, mas nenhum campo explícito `comEntrada`/`tipoEntrada`. Portanto, a opção desejada Sem entrada está decidida, porém sua identificação/seleção continua pendente. Não reduzir a 29 por analogia com Too e não selecionar quantidade diferente só por ter parcela menor.
+
+**Produtos — atualização de 02/11/2026:** o usuário passou a adotar explicitamente o domínio documentado no PUT: **0001 Essencial 12; 0005 Essencial 30; 0007 Essencial 20; 0008 Fiança**. Isso supera a orientação histórica de descartar a associação 0008/Fiança. O GET continua sendo a fonte das ofertas realmente disponíveis e de seus preços: o catálogo não autoriza fabricar um produto ausente. Preservar nomes/códigos recebidos; a divergência do exemplo GET (0008 com nome ESSENCIAL 12) deve ser verificada no retorno real, sem reclassificação silenciosa. Fiança é o produto escolhido para comparação entre seguradoras; os Essenciais permanecem alternativas no card. Não presumir um quinto produto ou novo código para a denominação anterior “Tradicional”.
+
+Coberturas, benefícios, agravos, descontos, cláusulas, acordo e cálculo permanecem ligados à oferta. Múltiplos LMI 12/20/30 não definem parcelas nem tornam os produtos equivalentes. Os limites mínimo/máximo de comissão e acordo não informam a comissão aplicada. O exemplo do GET mostra objetos null e listas vazias; o parser deve tratá-los sem produzir oferta comparável artificialmente.
+
+### 4. PUT: comissão e limites desta etapa
+
+**Comissão documentada:** `ofertas[].comissao.codComissao` usa pontos percentuais inteiros; enviar **15**, não 0.15. O padrão descrito pela Porto é 10%. Não calcular localmente a diferença de prêmio para simular 15% nem considerar limites retornados como prova da aplicação. Consultar novamente as ofertas depois do ajuste confirmado para usar o preço vigente. A existência de `calculo` no retorno do PUT indica dados calculados, mas não explica o recálculo de todas as ofertas.
+
+O PUT declara `seguro`, `cobranca`, `locador`, `localRisco`, `locatarios` e `locacaoComercial` como obrigatórios (este último condicional na descrição). **O usuário confirmou que os campos required devem ser enviados; a hipótese de enviar somente `{ofertas: [...]}` está descartada.** A marcação required dos filhos deve ser lida junto das condições do objeto: cartão é exigido para emissão em CP/CC; locacaoComercial se aplica a PJ/PFCOM. Exemplos com null não dispensam campos obrigatórios.
+
+**Atualização do usuário em 02/11/2026:** o objeto `locador` deve receber os mesmos dados de `locatarios`. Essa regra substitui a orientação anterior de buscar exclusivamente um proprietário separado em LeadLocadores para este payload Porto. Mapear explicitamente os campos compatíveis de identidade, nome, nascimento e contato do locatário do cenário; não copiar o array inteiro para o objeto locador, nem enviar campos exclusivos do locatário como titular/dadosProfissionais dentro dele. Registrar como decisão de preenchimento do sistema, ainda não como aceitação homologada da Porto ou comprovação de propriedade do imóvel. Não alterar a identidade dos cadastros locais de locador/locatário por causa desse mapeamento de integração.
+
+Na individual, usar os dados do único locatário daquele cenário, inclusive quando for a individual do cônjuge. Na conjunta, locador é singular e locatarios contém duas pessoas: **falta confirmar qual delas será a fonte; sugestão técnica é a marcada titular S, sem considerar isso aprovado pelo usuário**. A regra de reaproveitamento não cria dados ausentes: enderecoPrincipal precisa de endereço correspondente do locatário; não equiparar silenciosamente localRisco ao endereço atual. Telefone comercial exigido para PJ também precisa de fonte compatível, sem truncar celular. O preenchimento desses campos e a escolha na conjunta continuam pendentes; não ampliar formulários nesta etapa de estudo.
+
+**Regra corrigida pelo usuário em 02/11/2026:** `seguro` na raiz é singular e obrigatório. Para alterar a comissão, enviar `ofertas` como array com **um único objeto**, contendo o mesmo `seguro` da raiz e `comissao.codComissao = 15`. O atributo correto é `seguro`, não `seguros`. A forma array, sozinha, não comprova que produtos diferentes possam ser recalculados juntos. A afirmação anterior de recálculo múltiplo foi expressamente retirada e não deve orientar a implementação. `ofertas` é opcional no contrato genérico, mas necessário nesta operação de ajuste de comissão do sistema.
+
+Trecho ilustrativo **incompleto**, mostrando apenas a igualdade dos códigos e a comissão; não é um payload executável sem os demais campos obrigatórios. O código 0008 só será usado se essa oferta estiver disponível no orçamento:
+
+```json
+{
+  "seguro": "0008",
+  "ofertas": [
+    {
+      "seguro": "0008",
+      "comissao": { "codComissao": 15 }
+    }
+  ]
+}
+```
+
+### 4.1. Matriz dos required e das condições do PUT
+
+| Objeto/campo | Preenchimento obrigatório e fonte |
+| --- | --- |
+| Path `orcamento`, `susep` | Orçamento já criado (15 dígitos) e corretor interno (seis caracteres), preservando zeros |
+| Raiz `seguro` | Código da oferta retornada na criação (POST), conforme fluxo definitivo; deve coincidir com `ofertas[0].seguro`. GET posterior confirma a oferta recalculada |
+| `cobranca` | `formaPagamento` e `condicaoPagamento` da mesma oferta retornada no POST; FAT para origem cadastrada e CC para demais, preservando a condição de três dígitos. Não usar "000" apenas por aparecer no exemplo |
+| `locador` | `cpfCnpj`, `nome`, `email`, `enderecoPrincipal`; adicionalmente dataNascimento e telefoneCelular para PF, ou telefoneComercial para PJ conforme descrições. Por decisão do usuário, reutilizar os dados do locatário do cenário nos campos correspondentes; fonte na conjunta ainda a confirmar |
+| `locador.enderecoPrincipal` | `bairro`, `cep`, `estado`, `logradouro`, `municipio`, `numero`, `tipoLogradouro`; complemento opcional. Pela regra mais recente, mapear o endereço correspondente do locatário; origem ainda a definir quando ausente. Não assumir automaticamente o imóvel segurado como residência atual |
+| `localRisco` | `bairro`, `estado`, `logradouro`, `municipio`, `numero`, `tipoLogradouro`; complemento opcional. Usar o imóvel objeto da locação; número SN somente se realmente não houver número |
+| Cada `locatarios[]` | `cpfCnpj`, `nome`, `dataNascimento`, `titular`, `email`, `telefoneCelular`, `dadosProfissionais.totalRendimentos`; preservar os documentos analisados no POST, sem incluir/excluir locatários. E-mail/celular permanecem enviados pela marcação required e pelas regras já definidas, apesar da descrição chamar de opcionais |
+| `locatarios[].enderecoAtual` | Exigido pela descrição para PFCOM: `bairro`, `cep`, `condicaoImovel`, `estado`, `logradouro`, `municipio`, `numero`, `tipoLogradouro`. Endereço atual do pretendente, distinto do localRisco; exige dados próprios, inclusive no enquadramento PFCOM de CNPJ residencial |
+| `locacaoComercial` | Aplicável a PJ/PFCOM. Capital de abertura 100× aluguel em PF comercial/PJ; capital social 450000 para PJ; motivo comercial selecionado ou A para residencial CNPJ. A marcação genérica dos três filhos diverge das condições textuais PF/PJ: manter a matriz de negócio já definida e validar a omissão dos campos não aplicáveis, sem criar capital social PF fictício |
+| `ofertas[0]` | Para ajustar comissão: `seguro` igual à raiz e `comissao.codComissao = 15`. Descontos são opcionais; não adicionar desconto para representar comissão |
+
+`enderecoAtual.condicaoImovel` usa 1 alugado em nome do pretendente, 2 alugado em nome de terceiros, 3 financiado pelo pretendente, 4 financiado em nome de terceiros, 5 próprio; não escolher um valor padrão sem informação. `aluguelAtual` é pertinente quando o imóvel atual é alugado. CEP, identidade, nascimento e endereço não podem ser inventados a partir de exemplos.
+
+`cartaoCredito` contém filhos required, mas o objeto é descrito como obrigatório para **emissão** em CC/CP; não coletar cartão no escopo atual de análise/cotação. Objetos opcionais como PEP e endereço de cobrança não devem ser enviados vazios; se usados futuramente, respeitar suas próprias condições. `diaVencimento` permanece controlado pelo cadastro para FAT com/sem entrada. Essas condições não são autorização para omitir locador, localRisco ou locatarios.
+
+### 4.2. Aplicação por oferta e efeitos a validar
+
+Criar orçamento → preparar um PUT completo por oferta retornada na criação, com sua forma/condição e comissão 15 → executar os PUTs simultaneamente → aguardar suas conclusões → consultar ofertas atualizadas para comparação. **Confirmação do usuário: realizar uma chamada de atualização para cada oferta disponível no orçamento, com execução concorrente, sem esperar uma terminar para iniciar outra.** Uma oferta resulta em um PUT; duas em dois; três em três; quatro em quatro. A quantidade vem das ofertas efetivamente retornadas pelo POST, não de uma lista fixa nem da quantidade de condições de pagamento. Não reunir produtos diferentes no mesmo PUT nem criar novo orçamento/análise por oferta apenas para ajustar comissão. Essa regra vale separadamente para cada orçamento/cenário aprovado; atualizar os Essenciais não os inclui automaticamente na comparação entre seguradoras. A orientação anterior de execução sequencial foi substituída por esta decisão.
+
+**Isolamento local obrigatório:** preparar payload independente e imutável para cada oferta, com seguro igual na raiz e no item, sem variável compartilhada que possa trocar o produto entre chamadas. Correlacionar cada resultado por rodada/attempt_id, cotação/orçamento e código da oferta, independentemente da ordem de conclusão. Persistir resultados por oferta sem sobrescrever o resultado de outra; proteger repetições da mesma operação por oferta, sem lock global que serialize todos os PUTs do orçamento. A futura implementação deve evitar que gravações concorrentes de um JSON agregado percam resultados. Concorrência não exige que as respostas cheguem no mesmo instante.
+
+**Justificativa da concorrência — confirmada pelo usuário em 02/11/2026:** as atualizações de comissão são uma etapa interna do fluxo Porto. Esperar uma atualização terminar para iniciar a seguinte acumularia latência e atrasaria a entrega sem benefício de apresentação, pois o usuário não acompanhará cada recálculo de oferta. Executar as chamadas simultaneamente para reduzir o tempo total e apresentar apenas o orçamento final com comissão de 15% recalculada. Não exibir preços intermediários calculados com 10%, nem publicar atualização visual por PUT. A expressão “não rodar em fila” significa não serializar as atualizações de ofertas; **não significa remover os jobs, a fila de processamento ou o pacote de análises da arquitetura existente**. A coordenação continua interna e deve aguardar a conclusão das operações antes de disponibilizar os preços finais.
+
+**Conclusão do grupo:** aguardar todas as atualizações disparadas antes do GET final e da comparação, evitando consolidar um catálogo parcialmente recalculado. Preservar sucesso/erro individual; uma falha não pode apagar os sucessos nem transformar aprovação em recusa. Não publicar oferta cujo ajuste de comissão não foi confirmado como se estivesse em 15%; efeitos desconhecidos exigem reconciliação com o orçamento existente.
+
+**Concorrência remota ainda precisa de homologação:** todos os PUTs usam o mesmo recurso `/orcamentos/{orcamento}/{susep}` e incluem campos de seleção na raiz (`seguro`, `cobranca`) além de `ofertas`. A documentação não garante isolamento por produto, ausência de sobrescrita entre PUTs concorrentes ou preservação dos PDFs. O requisito de simultaneidade está definido, mas não constitui garantia do comportamento da Porto. Validar que as comissões/condições de todas as ofertas permanecem corretas após execução concorrente e que o GET/PDF corresponde ao produto selecionado. Se a API substituir o estado de uma oferta pela outra, registrar a incompatibilidade e definir a solução com o usuário/suporte; não mudar silenciosamente para execução sequencial ou novas cotações.
+
+O exemplo anterior com `codComissao = 10` não muda a regra de 15%. O desconto apresentado usa id 2, tipoAplicacao 1, minimo 0, maximo 1 e valorInformado 0; não representa desconto de 1% e não autoriza aplicar desconto adicional. Mantém-se o tratamento de descontos opcionais descrito abaixo.
+
+Descontos opcionais têm IDs 2 negociação, 3 técnico promocional, 5 acordo; tipoAplicacao 1 percentual/2 valor; o documento sugere minimo 0, maximo 1 e valorInformado 0. A regra do projeto é adicionais/descontos configuráveis futuramente, atualmente zero; isso não obriga enviar todos os objetos opcionais. Omitir descontos não solicitados e preservar os descontos que a própria API retornar.
+
+**Entrada não é dia de vencimento:** `diaVencimento` de FAT com/sem entrada é preenchido pelo cadastro da imobiliária e não pode ser alterado. Para Aluguel Garantido o campo é editável nas opções 5/10/15/20/25/30, produto/forma que não foi escolhido para substituir FAT/CC. `diaVencimentoAluguel` é outro dado; `diaCorte` é limite de processamento. Nenhum deles define sozinho Com/Sem entrada.
+
+`cartaoCredito` é descrito como obrigatório **para emissão** em CP/CC. Esta etapa não deve coletar cartão nem chamar criptografia, autorização de pagamento ou emissão. As regras de cartão de teste e prêmio par do ambiente CP dizem respeito a essa modalidade, não à consulta de preço CC. O exemplo de PUT retornar status "4" (emitida) não comprova que todo PUT emita, mas também não comprova que uma atualização mínima de comissão seja livre de transição/efeito de cobrança: confirmar a operação no estado de orçamento.
+
+### 4.3. Consulta do orçamento atualizado como alternativa — 02/11/2026
+
+Fonte lida integralmente: [retorna-os-dados-atualizados.md](Porto_endpoitsMarkdown/retorna-os-dados-atualizados.md). Operação **`GET /orcamentos/{orcamento}/{susep}`**, mesma base de negócio, sem body e sem `origem` no caminho. Parâmetros: orçamento de 15 dígitos e SUSEP de seis caracteres; preservar zeros. Manter os dois headers de token já definidos pelo usuário. HTTP 200 retorna `CanonicoOrcamento`; isso confirma consulta, não novo orçamento, emissão ou aplicação da comissão por si só.
+
+**Estratégia definida pelo usuário:** nos testes, verificar primeiro se o GET `/orcamentos/{origem}/{orcamento}/{susep}/ofertas` reflete os preços recalculados com 15%. Se não refletir, utilizar este GET do orçamento atualizado como fonte alternativa. Essa escolha deve ser fundamentada na homologação; não trocar de fonte arbitrariamente porque outra mostra preço menor ou porque houve falha de autenticação/transporte. Se nenhuma fornecer preço comprovadamente atualizado, não apresentar preço antigo como recalculado.
+
+| Estrutura do novo retorno | Aplicação |
+| --- | --- |
+| `ofertas[]` | Produtos com seguro/nomeSeguro, coberturas, benefícios, cálculo e formasPagamento; procurar o produto pelo código, nunca pela posição |
+| `ofertas[].formasPagamento[]` | Lista de formas por oferta; cada uma contém **condicoesPagamento como array** |
+| `ofertas[].formasPagamento[].condicoesPagamento[]` | Fonte por produto de valorParcela, quantidadeParcela, condicaoPagamento, primeiroVencimento, IOF, descontos, prêmios e adicionais; selecionar FAT/CC, prazo e entrada conforme regras |
+| Raiz `seguro`, `nomeSeguro`, `cobranca` | Produto e forma/condição selecionados no estado corrente do orçamento; não atribuir esse preço automaticamente a todos os produtos |
+| Raiz `formasPagamento` | **Objeto**, com condicoesPagamento em array; diferente da lista de formas dentro de ofertas. Usar somente associado ao seguro da raiz quando aplicável, sem replicar para outras ofertas |
+| `contrato`, `localRisco`, `locatarios`, `parceiro`, `corretor` | Dados para conferir vigências, identidades, corretor e vínculo; não sobrescrever o snapshot da rodada com o retorno nem expor dados pessoais desnecessários nas views |
+| `orcamento`, `proposta`, `origem`, `susep`, `status`, `tipoRecusa` | Preservar identidades distintas e estado remoto. tipoRecusa 1 genérica/2 especial não equivale a aprovação/recusa isoladamente |
+
+**Normalização própria:** o GET de ofertas usa condição como objeto; esta consulta usa array de condições e oferece tanto uma forma na raiz quanto listas por oferta. Não reutilizar o parser sem distinguir essas estruturas. Valor de parcela vem diretamente da condição correspondente, sem dividir prêmio total; tratar dinheiro com precisão e preservar o bruto recebido para diagnóstico. Calculo da raiz não substitui valorParcela de cada produto.
+
+**Limite da evidência:** o schema não declara `comissao.codComissao` aplicado, nem dentro de ofertas, nem na raiz. `cocorretagens.percentual` refere-se à cocorretagem e não deve ser interpretado como a comissão configurada pelo PUT. A palavra “atualizados” não comprova sozinha o percentual. Nos testes, correlacionar PUT com codComissao 15, sua resposta e a consulta posterior do mesmo orçamento/seguro/forma/condição; confirmar o efeito do ajuste com evidência do ambiente ou suporte, sem exigir uma variação arbitrária de preço nem calcular localmente a parcela.
+
+**Concorrência preservada:** aguardar todos os PUTs por oferta terminarem antes das leituras finais. Comparar ambas as consultas com todas as ofertas atualizadas, verificar se cada produto conserva sua alteração e registrar qual endpoint originou cada preço. O novo GET não recebe filtro `seguro`; se retornar apenas o último produto selecionado ou ofertas não recalculadas, não consegue comprovar sozinho todos os preços após atualizações concorrentes. Nesse caso, registrar a incompatibilidade para resolver com o usuário/suporte, sem serializar silenciosamente os PUTs ou criar novas cotações.
+
+**Respostas e inconsistências:** 400 usa `status`/`message` (incluindo orçamento não pertencente ao corretor), enquanto 500 usa errorCode/errorMessage; 401/502 podem ser strings. Falha de consulta não é recusa. O status de negócio 0/1/2/3/4/5/7/9/C/D/E/F/G/M é distinto do HTTP; campos apolice/renovacao/status 4 no exemplo não autorizam emissão. O exemplo contém ofertas vazias e formasPagamento null, logo não prova o fallback. Schema ainda possui integer para dinheiro, quantidadeParcela mínimo 100 incompatível com 30, CEP máximo 7, nomes/limites conflitantes e seguro 0008 com nome FIanca Essencial 12: manter regras confirmadas e validar respostas reais, sem copiar esses limites cegamente. `locatarios.cpfCnpj` com máximo 14 e tipoPessoa F/J reforçam o suporte já confirmado a CNPJ.
+
+A consulta exige um orçamento conhecido, portanto **não resolve a obtenção do ID ausente no POST recusado**. Pode consultar recusa com ID já conhecido, preservando a pendência específica da carta. O contrato também não apresenta o objeto locador na resposta; não contar com ele para recuperar os dados obrigatórios que faltam no PUT.
+
+### 5. Fluxo proposto dentro da arquitetura existente
+
+1. Coordenador prepara pacote/rodada/cenários; Porto terá uma criação por cenário, não quatro criações por produto. PF sem cônjuge: uma; PF com cônjuge: duas individuais e terceira conjunta somente se ambas forem recusadas. PJ: somente cenário empresarial primary, sem estado civil, cônjuge ou análise individual do responsável, conforme regra geral de 02/11/2026.
+2. Builder consome snapshot e datas da rodada e monta POST mínimo. Service autentica/transmite; provider interpreta 201/409 e grava o ID remoto na cotação correta. Falha após criação não autoriza recriar orçamento.
+3. Para aprovado, usar `ofertas[]` e suas formas/condições presentes na resposta do POST, sem GET preliminar no fluxo definido. Para cada oferta retornada, montar um PUT independente com todos os dados obrigatórios aplicáveis, `seguro` da raiz igual a `ofertas[0].seguro`, apenas um item em ofertas e comissão 15. Disparar as atualizações simultaneamente no mesmo orçamento, conforme decisão do usuário, com resultados isolados por oferta e proteção contra sobrescrita local. Se a resposta real do POST não fornecer códigos/condições suficientes, registrar a lacuna para homologação e revisar a integração com evidência; não inventar valores nem inserir silenciosamente outra etapa. Dados obrigatórios ausentes impedem a atualização, sem transformar aprovação em recusa. Não publicar preços calculados com padrão 10% como se fossem 15%.
+4. Após todas as atualizações disparadas concluírem, consultar preços finais: preferir o GET de ofertas; se a homologação mostrar que não reflete o recálculo, usar GET do orçamento atualizado conforme seção 4.3. Selecionar forma por origem, 30 parcelas e Sem entrada quando identificável, considerando o sucesso do ajuste de cada oferta. Persistir resposta completa, endpoint de origem e seleção (produto + forma + condição + parcela) associadas à cotação, com o estado da aplicação da comissão. O catálogo inicial não deve sobrescrever preços finais.
+5. `InsuranceQuotePayment` receberá tratamento Porto próprio. Hoje seu match só cobre Too/Pottencial, e o coordenador inicializa Invoice/Boleto: adaptar o pagamento para FAT/CC sem mudar as outras companhias. Manter uma cotação remota por cenário, preservando múltiplas ofertas nos dados da cotação; não alterar o `plan_key` de coordenação para cada produto retornado. A representação normalizada das ofertas será definida na implementação, sem prometer que a simples inclusão do provider já basta.
+6. Coordenador consolida somente parcela elegível. Aprovação sem ofertas utilizáveis continua aprovação com pagamento indisponível/falho; não autoriza conjunta. Painel/e-mail/PDF devem apontar a mesma oferta/condição final. Downloads preservam os IDs de cada alternativa e são autorizados localmente.
+7. Reanálise inicia outra rodada e novos POSTs; PUT não altera os pretendentes. O contrato proíbe incluir/excluir locatários no PUT e exige novo orçamento para isso. Consultas e retomadas usam IDs conhecidos; executar PUTs concorrentes por oferta e coordenar a leitura final após suas conclusões, respeitando attempt_id para evitar resultados antigos.
+
+No service, diferenciar sucesso HTTP de resultado de negócio: GET/PUT 200 não significam aprovação cadastral. POST/PUT documentam 409 de recusa; 400, 401, 500 e 502 são falhas próprias da operação, não recusas genéricas. O PUT enumera status 0/1/2/3/4/5/7/9/C/D/E/F/G/M; preservar o status bruto, não tratar todos como aprovados e não aplicar a regra Tokio “diferente de CAL é recusa”. Esses estados não demonstram que o POST retorne encaminhamento. Não repetir POST/PUT cegamente após timeout: efeitos remotos precisam ser verificados. Segredos/cartão não devem integrar logs; payloads/resultados seguem a proteção e as permissões existentes.
+
+### 6. Pendências consolidadas e verificações de homologação
+
+| Ponto | O que ainda precisa ser esclarecido |
+| --- | --- |
+| **Dados do PUT — regra esclarecida, mapeamento pendente** | Locador recebe dados do locatário conforme decisão do usuário. Confirmar qual locatário usar na conjunta, origem do endereçoPrincipal/enderecoAtual e telefone comercial PJ quando ausentes. Enviar todos os required aplicáveis; não insistir em payload parcial |
+| **Fonte dos preços recalculados — validação** | Testar GET de ofertas após os PUTs com 15%; se não refletir, usar GET do orçamento atualizado. Confirmar atualização e isolamento por produto, pois o novo schema não expõe comissão aplicada e a consulta não filtra por seguro |
+| **Atualizações simultâneas — homologação** | Simultaneidade definida pelo usuário, uma requisição por oferta, resultados locais isolados. Verificar se a Porto preserva comissão/condições de todas as ofertas nos PUTs concorrentes sobre o mesmo orçamento e mantém seus PDFs coerentes; não presumir isolamento remoto. Vários produtos na mesma requisição continuam descartados |
+| **Sem entrada — prioridade** | Qual campo/código da condição identifica Sem entrada para CC e FAT, e basta selecionar a condição do GET ou é preciso gravá-la no PUT? O usuário já informou que aguarda essa confirmação |
+| **Carta de recusa** | POST 409 continua documentado somente com errorCode/errorMessage; como recuperar o número de orçamento necessário ao PDF? Nos 409 de PUT já existe ID conhecido. Disponibilidade do PDF sem emissão permanece validação separada |
+| **CNPJ e cônjuge — resolvido** | Regra geral de 02/11/2026: analisar somente a empresa pelo CNPJ; desconsiderar estado civil e cônjuge; não analisar o responsável nem criar spouse/joint. Aplicação no código ainda pendente |
+| **Imobiliárias** | Lista de códigos internos ainda aguardada e validação do vínculo corretor/parceiro. A decisão FAT/CC está fechada |
+
+**Verificações técnicas, sem reabrir decisões de negócio:** homologar 30 parcelas reais em CC/FAT; aceitar início no dia com vigência "1"; conferir omissão condicional de locacaoComercial/capitalSocial em PF; tipos monetários decimais apesar de integer; CPF/CNPJ conforme suporte; dados de endereço/DOB e formatos reais de documentos. O exemplo GET sem condições não basta para validar preço. O domínio 0008/Fiança foi reafirmado na correção mais recente; confrontar com a oferta real disponível e registrar divergências, sem trocar nomes silenciosamente nem gerar ofertas ausentes.
+
+**Contradições documentais preservadas para diagnóstico:** POST introdução 200 versus responses 201; documento CPF/CNPJ ainda limitado a 11; reajuste máximo 1 versus códigos de três dígitos; e-mail máximo 1/30 versus descrição 64; dinheiro integer com exemplo decimal e mínimos genéricos incompatíveis com encargos; enum de cobrança CP/CC/FAT/ADC versus descrição adicional BFT/BCA/BOL; endereço obrigatório com exemplo null; dadosProfissionais obrigatório com exemplo null; limites de cartão inconsistentes; códigos/nomes de produto divergentes. Não truncar dados reais ou copiar placeholders para cumprir esses defeitos. As confirmações do usuário e os campos efetivos por operação permanecem separados de exemplos.
+
+**Validação desta revisão:** leitura integral dos três arquivos, confronto de campos/operações e inspeção pontual do snapshot, coordenador, pagamento e model de locador. Somente este estudo foi editado; nenhuma chamada remota, teste de integração, migration, formulário ou código de execução foi alterado.
+
+## Porto Seguro — autenticação — 30/10/2026
+
+Fontes fornecidas pelo usuário: `C:\Users\Usuario\Downloads\request-obter-token-porto.txt` e `C:\Users\Usuario\Downloads\resposta-request-obter-token-porto.txt`. Esta seção registra o contrato apresentado; nenhuma chamada remota foi realizada. As referências anteriores à Porto neste estudo tratavam das regras gerais e da integração futura, sem detalhar sua autenticação.
+
+### Obtenção do token
+
+| Item | Contrato recebido |
+| --- | --- |
+| Ambiente | Homologação, conforme hostname `portoapi-hml.portoseguro.com.br` |
+| Método e URL | `POST https://portoapi-hml.portoseguro.com.br/oauth/v2/access-token` |
+| Content-Type | `application/x-www-form-urlencoded` |
+| Authorization | `Basic <Base64(client_id:client_secret)>` |
+| Corpo | `grant_type=client_credentials`, enviado como formulário, não JSON |
+
+O cURL documental contém entidades HTML `&#039;` no lugar de aspas: decodificá-las ao preparar uma requisição executável. O trecho entre colchetes no Authorization é uma instrução de composição das credenciais, não um valor literal. Preferir o mecanismo de Basic Auth do cliente HTTP para montar esse header. Não colocar as credenciais na URL nem registrar o header em logs. O exemplo usa `--location`; isso não exige habilitar redirecionamentos no cliente da aplicação.
+
+### Resposta apresentada
+
+| Campo | Tipo observado | Interpretação |
+| --- | --- | --- |
+| `access_token` | string | Credencial retornada para as operações autenticadas; não reproduzir seu valor no estudo |
+| `token_type` | string, `Bearer` | Usar `Authorization: Bearer <access_token>` nas operações que adotarem essa autenticação |
+| `expires_in` | número, `3600` | Prazo informado de 3.600 segundos, equivalente a uma hora |
+
+A resposta fornecida contém apenas o corpo JSON: não comprova status HTTP, headers ou erros. Não contém `refresh_token`, `scope` ou campos de identificação da cotação. Não inventar esses atributos nem assumir outros headers das operações de negócio antes de receber seus contratos.
+
+### Diretrizes para a implementação futura
+
+- Centralizar autenticação no service da Porto, reutilizado pelo provider; não consultar token no builder nem alterar a coordenação de rodadas/cenários.
+- Configurar URL e credenciais por ambiente em `config/services.php`, com segredos no ambiente. Não presumir a URL de produção a partir da URL de homologação.
+- Validar sucesso HTTP e presença de token não vazio, tipo Bearer e validade positiva antes de disponibilizar a autenticação ao consumidor.
+- Reutilizar o token até próximo da expiração, calculando o cache pelo `expires_in` retornado, com margem de segurança. Isolar o cache por ambiente/credencial e proteger a renovação concorrente, pois vários jobs poderão usar a Porto simultaneamente.
+- Na expiração, obter outro token pelo mesmo fluxo `client_credentials`; o material não documenta renovação por refresh token.
+- Falha de autenticação é falha técnica, não recusa de crédito. Não repetir automaticamente uma criação de cotação após timeout ou efeito remoto desconhecido apenas porque um token foi renovado.
+- Manter tokens e credenciais fora de logs, payloads de cotação, eventos e respostas destinadas às views. A autenticação não implica emissão ou contratação.
+
+### Pendências documentais
+
+Os contratos de orçamento, ofertas e PDFs foram recebidos na revisão abaixo. Permanecem pendentes respostas de erro específicas da obtenção de token, política de limites e dados do ambiente de produção. O valor `3600` é o retorno apresentado, não uma garantia de validade fixa para todos os tokens. O fluxo está estudado, mas ainda não implementado nem homologado no sistema.
+
+**Confirmação posterior do usuário:** nas operações de negócio, enviar o mesmo token nos dois headers: `Authorization: Bearer <token>` e `access_token: <token>`. O Swagger declara somente Authorization; o erro 401 avulso menciona access_token. A confirmação resolve a decisão de implementação sem apagar essa divergência documental. A obtenção de token continua usando Basic Auth conforme o contrato próprio.
+
+## Porto Seguro — orçamento, ofertas e documentos — revisão de 30/10/2026
+
+### Fontes e alcance da análise
+
+Confrontados os oito arquivos enviados em Downloads: `request_calculo_orcamento.txt`, `resposta200-calculo-orcamento.txt`, `resposta200-calculo-orcamento-Schema.txt`, `especificacoes-de-campos-porto-request-calculo-orcamento.txt`, `request-calculo-orcamento-url.txt`, `error-400-porto.txt`, `error-code-401-porto.txt` e `error-code-500.txt`; a imagem do 409; as confirmações do usuário; e, posteriormente, `C:\Users\Usuario\Downloads\especificacoes-api-porto.txt`.
+
+O último arquivo é um documento JSON Swagger **2.0**, título **Riscos Financeiros - Aluguel Essencial**, versão **1.0.0**, contendo **31 caminhos, 33 operações e 69 definições**. A leitura estrutural validou o JSON e resolveu as **232 referências locais**, sem referências ausentes. Isso não comprova conformidade semântica do Swagger nem funcionamento remoto: há contradições de tipos, obrigatoriedade e limites. As definições `beneficios` e `Beneficios` são distintas por caixa; ferramentas que ignoram essa distinção não conseguem importar o documento corretamente. Não modificar a fonte para contornar essa limitação.
+
+Host de negócio: `https://portoapicloud-hml.portoseguro.com.br`. Prefixo: `/fianca-locaticia/emissao/aluguel-essencial/v1`. É diferente do host de autenticação recebido anteriormente; não substituir um pelo outro por inferência. Todos os caminhos abaixo são relativos a esse prefixo. O termo `emissao` no prefixo não significa que criar orçamento emita uma apólice.
+
+### Endpoints relevantes ao escopo de análise
+
+| Operação | Contrato e uso |
+| --- | --- |
+| `POST /orcamentos` | Criar orçamento/analisar; JSON; resposta de sucesso declarada 201, recusa 409 |
+| `GET /orcamentos/{origem}/{orcamento}/{susep}/ofertas` | Consultar ofertas e condições; 200; será a fonte de preço escolhida pelo usuário |
+| `GET /orcamentos/{orcamento}/{susep}` | Consultar dados atuais; operação disponível para diagnóstico/recuperação com identificador conhecido, sem impor polling ao fluxo síncrono |
+| `PUT /orcamentos/{orcamento}/{susep}` | Atualizar orçamento; documenta ajuste de comissão por oferta; exige esclarecimentos antes de incluir no fluxo |
+| `GET /orcamentos/{proposta}/{corretor}/pdf/carta-recusa` | Carta exclusivamente para orçamento recusado; 200; proposta significa número do orçamento, corretor significa código interno SUSEP |
+| `GET /orcamentos/{orcamento}/{susep}/pdf/cotacao` | PDF geral do orçamento; 200; descrito como disponível para propostas em digitação |
+| `GET /orcamentos/{orcamento}/{susep}/pdf/cotacao/{seguro}/{formaPagamento}/{condicaoPagamento}` | PDF da oferta e condição específicas; 200; permite manter coerência com a parcela selecionada |
+| `GET /orcamentos/{orcamento}/{susep}/pdf/carta-aprovacao` e variante `/{seguro}` | Cartas de aprovação; não confundir com PDF de cotação |
+| `POST /orcamentos/{origem}/{proposta}/{corretor}/pdf/carta-orcamento` | PDF filtrado por listas de ofertas e formas de pagamento; resposta declarada 201 |
+| `POST /orcamentos/{origem}/{orcamento}/{susep}/pdf/simulacao` | PDF de simulação por ofertas, formas, quantidades e descontos; resposta declarada 201; não confundir com consulta de ofertas/preço |
+
+`origem` é domínio da Porto: **22 = emissão/nova contratação; 40 = renovação**, e não a origem do formulário local. Para o fluxo de nova cotação, 22 é o valor documental correspondente; não usar 40 nas reanálises, que continuam sendo novas solicitações. `orcamento` tem 15 dígitos, `susep` tem seis caracteres e termina em F ou J. Preservar todos os identificadores como texto e zeros à esquerda.
+
+O inventário também contém atualização/recalculo, edição, complementares, reenvio de biometria, emissão PUT/PATCH de propostas (incluindo uma rota depreciada), consulta de apólices/endossos, boletos, aditivo, criptografia de cartão, busca de documentos, cancelamento e cadastro de webhook. Essas operações não são necessárias apenas por constarem no arquivo; emissão, cobrança, biometria, cancelamento e webhook ficam fora desta etapa. Não usar recalculo como substituto da regra geral de reanálise por novo POST.
+
+### Aprovação, recusa e falhas
+
+Prevalece a confirmação do usuário, respaldada por `responses` do POST: **HTTP 201 = aprovação; HTTP 409 = recusa de aceitação**. A descrição introdutória menciona 200 e os arquivos de exemplo têm 200 no nome, mas isso não altera a regra. `errorCode` do corpo não substitui o status HTTP e não identifica um orçamento.
+
+400 indica validação/inconsistência de dados ou regra de negócio; 401 indica autenticação; 500/502 indicam falha técnica/indisponibilidade. Não converter esses casos em recusa nem autorizar a tentativa conjunta por falha técnica. O erro 401 avulso é texto, portanto o cliente não pode presumir JSON em todas as falhas.
+
+O schema 409 `ProtheusRecusaAceitacao` contém somente `errorCode` e `errorMessage`: **a origem do número necessário à carta de recusa continua sem solução documental**. Não extrair um ID inventado da mensagem nem usar o código 409 como proposta. A ausência de documento não deve apagar uma recusa conhecida.
+
+Outras operações descrevem estados internos como orçamento criado/aprovado, pré-aprovado, proposta em digitação, recusada e análise de crédito/emissão. Esses estados pertencem a outras etapas; sua presença não comprova um retorno pendente no POST de criação nem revoga 201/409. Se uma resposta real divergir, preservar evidência antes de ampliar o mapeamento.
+
+### Payload de criação: diferenças em relação aos exemplos iniciais
+
+| Campo | Evidência e aplicação |
+| --- | --- |
+| `susep` | Obrigatório, código interno do corretor, seis letras/dígitos terminando em F/J; não é o CPF do corretor |
+| `cpfCotador` | Obrigatório; operador definido pelo usuário como o corretor. Fonte local identificada: `CPF_COTADOR` no .env; não usar CPF do locatário |
+| `orcamentoExterno` | Opcional; limite 15 no POST versus 32 na descrição e no PUT. Não equivale a uma chave de idempotência documentada |
+| `imobiliaria` | Código Porto de seis dígitos, opcional no contrato; disponibiliza FAT quando o parceiro possui vínculo com o corretor |
+| `cep` | Obrigatório, oito dígitos; endereço retornado é enriquecido pela base de CEP; não tratar o número/complemento ilustrativo como dado verificado do imóvel |
+| `diaVencimentoAluguel` | Texto de dois dígitos, fora do required do POST; não confundir com dia de faturamento ou `diaCorte` retornado |
+| `tipoLocacao` | Obrigatório: **"1" = PFRES; "2" = PFCOM**. Resolve documentalmente a ausência de finalidade no recorte anterior |
+| `locatarios[]` | Agora exige CPF, **nome, dataNascimento, titular, email, telefoneCelular e dadosProfissionais** |
+| `contrato` | Exige vigências e **codigoReajuste**, ausente no exemplo inicial |
+| `locacaoComercial` | Descrição indica obrigatoriedade apenas em PJ/PFCOM, reiterada no detalhamento posterior. Para PFRES, o desenho segue a omissão do objeto; o required incondicional permanece como divergência a validar na integração |
+| `locador` | Está em required da raiz do POST, mas não há propriedade/schema correspondente nessa operação. Existir uma definição Locador para outras operações não resolve automaticamente esse defeito |
+
+`OrcamentoLocatario` descreve CPF de 11 dígitos; exatamente um titular S e demais N. Nome: 5–60 caracteres, nome e sobrenome. Nascimento: `DD/MM/AAAA`; usar data própria persistida da API CPF Brasil ou da entrada manual autorizada pela feature flag, congelada na rodada. Não consultar CPF de novo em cada job. E-mail e celular são obrigatórios por locatário; ainda falta definir a origem do contato do cônjuge, sem presumir que seja compartilhado.
+
+`dadosProfissionais` é obrigatório para PFRES e PFCOM; internamente somente **totalRendimentos** consta como obrigatório. Empresa, vínculo empregatício, expatriado e admissão não devem ganhar valores fictícios. `totalRendimentos` é declarado integer, mas seu exemplo contém centavos; registrar conflito. A regra geral de renda de quatro aluguéis é candidata ao mapeamento, mas confirmar que este campo representa renda mensal antes de equipará-los.
+
+**Elegibilidade — atualizada pelo suporte em 31/10/2026:** CPF e CNPJ estão confirmados pelo usuário após resposta da Porto. A limitação a 11 dígitos do Swagger recebido está superada por essa confirmação; aplicar a matriz PF/PJ da seção de 31/10 abaixo. Isso resolve a regra contratual, sem equivaler a homologação remota do payload final.
+
+**Comercial PF:** LocacaoComercial descreve `capitalAberturaNegocio` como obrigatório para PFCOM; `cnpj` e `atividadeEconomica` são opcionais nesse cenário. Atividade usa "1" Serviço, "2" Indústria, "3" Comércio. `capitalSocial` e `motivoLocacao` são descritos como obrigatórios para PJ, embora o required do objeto exija os três campos para todos. Não inventar capital, CNPJ ou motivo. Os códigos de atividade são específicos Porto, não CNAE nem domínio Tokio.
+
+**Contrato:** preservar início na data da análise e término 30 meses depois, conforme rodada, em `DD/MM/AAAA`. Tipo de vigência é "0" futura, "1" em vigor, "2" indeterminada; início no mesmo dia sugere "1", mas sua aceitação exata deve ser confirmada. `codigoReajuste` tem domínio 001 Maior índice; **002 IGP-M**; 003 IGP-DI; 004 IPC/FIPE; 005 IPCA; 006 INPC; 007 ICV; 008 INCC; 009 IPC/FGV; 010 IVAR. O schema limita o campo a um caractere apesar de descrever três. A decisão IGP_M da Too não autoriza automaticamente escolher 002 na Porto; falta confirmar o índice desta companhia.
+
+### Coberturas e vínculo com imobiliárias
+
+Tenant envia somente `001` Aluguel. Nas demais origens, adicionar `007` danos, `008` pintura interna, `009` externa e `010` multa, cada uma com `valorIS` igual ao aluguel, além dos encargos aplicáveis: `002` IPTU, `003` condomínio, `004` água, `005` luz e `006` gás. Pelo texto: aluguel entre 200 e 10000; encargos opcionais entre 0,01 e o aluguel. Omitir coberturas não desejadas, nunca enviar zero. Não confundir importância segurada, LMI, LMG e preço; não multiplicar o valor mensal por 30 sem regra contratual para esse campo.
+
+O usuário confirmou que **todas as imobiliárias atuais do cliente possuem código interno Porto** e enviará a lista. Associar ao cadastro local por um processo futuro; não usar CNPJ, ID local ou código Tokio como código Porto. Para a origem cadastrada, planejar envio do código e seleção FAT, respeitando o vínculo corretor/parceiro. Não foi definido fallback para cadastro futuro sem código. Para demais formulários, manter a regra geral de crédito, usando a condição retornada compatível (`CC` para demais cartões, sem presumir cartão Porto `CP`). A existência de BOL no catálogo não autoriza transportar a exceção boleto de Too/Pottencial para Porto.
+
+### Ofertas, comissão e comparação
+
+O GET de ofertas resolve `Ofertas`, diferente de `Oferta` retornada na criação. **Correção do usuário em 31/10/2026:** não usar o exemplo de criação como catálogo fixo de produtos; a associação `0008 = Fiança` foi descartada. Para identificar e exibir ofertas, usar os pares `seguro`/`nomeSeguro` efetivamente retornados pelo GET de ofertas. O nome Essencial 30 não comprova quantidade de parcelas nem equivalência de coberturas. As regras de comparação e prazo estão nas confirmações posteriores.
+
+Cada oferta possui comissão mínima/máxima, formas de pagamento, coberturas, benefícios, agravos, descontos, cláusulas, acordo e cálculo. Preservar os códigos de oferta, forma e condição da mesma alternativa. O GET referencia `formasPagamento[].condicoesPagamento` como **objeto**, enquanto a resposta do POST usa **array** de condições. Confirmar formato real; não reutilizar o parser do POST às cegas.
+
+`valorParcela` é explicitamente a parcela com IOF e descontos. Usar diretamente esse valor na condição de 30 parcelas definida pelo sistema, sem dividir prêmio total e sem somar IOF novamente. O schema contém limites diferentes entre operações e exemplos de quantidades menores; não conclui disponibilidade de 30x para todas as ofertas/formas. O parâmetro de simulação de PDF aceita até 60, o que também não garante oferta de pagamento. Ausência de preço elegível não desfaz aprovação.
+
+**Comissão de 15%: campo localizado.** O PUT de atualização documenta `ofertas[].comissao.codComissao`, inteiro em pontos percentuais: o valor de negócio corresponde a **15**, não 0.15. A descrição informa default da Porto em **10%**; não assumir que o POST já calcule com 15%. O GET informa `comissao.percentualMinimo` e `percentualMaximo` por oferta. O texto do PUT menciona aceitar ofertas no POST, mas esse objeto não aparece no schema de criação; também avisa que filtra as ofertas exibidas.
+
+Para fechar o fluxo de 15%, confirmar se o POST aceita esse objeto ou se será necessário POST → PUT de comissão → GET de ofertas, se a alteração recalcula os valores e quais campos mínimos o PUT realmente exige. O required do PUT inclui cobrança, locador, imóvel, locatários e locacaoComercial; não enviar PUT incompleto nem chamar emissão/recalculo por suposição. O campo foi encontrado, mas a aplicação da comissão à parcela comparada **não está validada**. Não usar preço do PDF de simulação com descontos como substituto silencioso do preço do orçamento.
+
+A condição Sem entrada permanece como regra do sistema. O PUT descreve FAT com e sem entrada e vencimento controlado pelo cadastro da imobiliária, mas os schemas de condições não trazem um discriminador claro para selecionar Sem entrada. Receber retorno real/catálogo para identificar a condição; não transportar `tipoEntrada = 2` da Too ou interpretar todo primeiro vencimento como entrada.
+
+### PDFs e cartas: formato esclarecido
+
+As rotas de cotação e recusa retornam JSON `SucessoGeracaoPDF`: `status`, `message` e **data.file**, contendo o PDF em **Base64**. Esse envelope é diferente de `result.pdfCotacao` da Too. Validar HTTP, envelope e Base64, verificar conteúdo PDF e servir bytes com autorização local. O maxLength 500 do schema não é um limite plausível a impor ao arquivo; não truncar documentos.
+
+O GET de PDF específico permite escolher `seguro`, `formaPagamento` e `condicaoPagamento`, preservando a mesma oferta/preço apresentado no painel. O POST carta-orcamento aceita listas de ofertas e formas; o POST simulacao recebe descontos e ofertas com forma/quantidade, sem equivaler a emitir apólice. Ambos declaram 201 em responses e 200 no texto introdutório: confirmar em homologação por operação. A condição "proposta em digitação" nos GETs de cotação exige verificar disponibilidade após criar orçamento, sem emitir para obter PDF.
+
+### Arquitetura e pendências para fechar o estudo
+
+Reutilizar o pacote, rodada, snapshot, cenários primary/spouse/joint, IDs e eventos por cotação. Uma criação Porto retorna ofertas; isso não demanda uma criação por oferta como os planos Pottencial. Em cada cenário individual, seu único pretendente é titular S; na conjunta, um S e outro N. A conjunta continua condicionada às duas recusas, não a erro HTTP, ausência de parcela ou falha de PDF. A comissão, ofertas e PDFs devem permanecer associados ao orçamento/cenário correto. Não repetir POST depois de timeout com efeito remoto desconhecido; orcamentoExterno não tem garantia documentada de deduplicação.
+
+Pendências prioritárias, sem repetir perguntas já resolvidas:
+
+1. Confirmar com a Porto a exigência de locador sem schema no POST e validar as condições de locacaoComercial contra o required incondicional. A obrigatoriedade documental de cpfCotador está confirmada; falta definir o CPF do operador por configuração, sem confundi-lo com o pretendente. Seguir a matriz condicional do detalhamento abaixo, sem fabricar campos PJ para PF.
+2. Confirmar periodicidade de totalRendimentos e tipo de vigência para início no dia. Capital de abertura, índice e contatos do cônjuge foram definidos na atualização abaixo. Não acrescentar campos ao formulário nesta fase de estudo.
+3. Confirmar aplicação dos 15% antes da consulta de preços, body mínimo da operação necessária, ofertas elegíveis, condição de 30 parcelas Sem entrada e formato objeto/array no GET.
+4. Obter de uma recusa real o identificador exigido na carta (ou orientação oficial de recuperação); obter PDFs reais para confirmar disponibilidade após o orçamento.
+5. Receber a lista de códigos das imobiliárias. O suporte confirmou PF/PJ e o uso de PFCOM para CNPJ em 31/10/2026; permanecem os detalhes de preenchimento PJ descritos na atualização dessa data.
+
+**Verificação desta revisão:** leitura do contrato completo por parsing e inspeção direcionada das operações/definições, comparação com os exemplos anteriores e com decisões do usuário. Somente este estudo foi atualizado; sem chamadas externas, alteração de código, testes de integração ou homologação. A aparente simplicidade do fluxo não elimina os campos adicionais e as contradições identificadas.
+
+### Complemento — especificações detalhadas do request — 30/10/2026
+
+Fonte lida integralmente: `C:\Users\Usuario\Downloads\especificacoes-satisfatorias-porto.txt`. Trata-se de texto extraído da documentação dos campos do request, não uma resposta real nem um novo endpoint. Confrontado com o Swagger completo e com o primeiro recorte de campos. Este complemento refina as pendências anteriores sem apagar as inconsistências das fontes.
+
+**Confirmações documentais:**
+
+- `cpfCotador` aparece obrigatório tanto na marcação quanto na descrição. Encerra a dúvida documental de opcionalidade do primeiro recorte; continua pendente apenas a fonte do CPF do operador no sistema.
+- `tipoLocacao` é obrigatório: "1" PFRES e "2" PFCOM. A enumeração mantém o escopo CPF; referências PJ em objetos compartilhados não acrescentam um código PJ ao endpoint.
+- Para cada locatário: CPF de 11 dígitos, nome de 5–60 caracteres com espaço entre nome e sobrenome, nascimento `DD/MM/AAAA`, titular S/N, e-mail, celular de 11 dígitos e dadosProfissionais obrigatórios. Nome social é opcional. Exatamente um titular por orçamento; individuais terão seu único locatário como S, conjunta terá um S e um N.
+- `dadosProfissionais` é obrigatório em PFRES e PFCOM, mas o novo recorte não expande suas cinco propriedades: mostra somente o resumo `{ empresa, vinculoEmpregaticio, expatriado, +2 }`. Portanto, permanece como fonte dos campos internos o Swagger, que exige apenas totalRendimentos. O recorte não define a periodicidade da renda nem autoriza copiar quatro aluguéis para capital de abertura.
+- `contrato.codigoReajuste` é obrigatório; seus códigos são strings de três caracteres, inclusive "002" para IGP-M. A escolha de IGP-M para Porto ainda é uma decisão pendente, não resolvida pela simples existência desse código.
+- `imobiliaria`, `orcamentoExterno`, `diaVencimentoAluguel` e nomeSocial não aparecem obrigatórios. A regra de enviar imobiliaria para a origem cadastrada decorre da elegibilidade de FAT e das decisões do sistema, não de obrigatoriedade universal da API.
+
+**Matriz condicional segundo as descrições, reforçada pelo novo material:**
+
+| Cenário | locacaoComercial | Campos comerciais |
+| --- | --- | --- |
+| PF residencial | Não aplicável; planejar omissão | Não preencher capital ou motivo apenas para satisfazer required genérico |
+| PF comercial | Obrigatório | capitalAberturaNegocio obrigatório; cnpj e atividadeEconomica opcionais |
+| PJ, confirmado posteriormente em 31/10 | Obrigatório no enquadramento PFCOM | capitalSocial e motivoLocacao descritos como obrigatórios; residencial PJ usa motivo A, conforme confirmação posterior |
+
+O rótulo de obrigatório em todos os campos conflita com as condições textuais. A regra de negócio descrita está mais clara: **não tratar capitalSocial e motivoLocacao como obrigatórios do PFCOM**, nem locacaoComercial como informação real de residencial. A aceitação da omissão deve ser verificada em homologação; eventual rejeição deve ser levada ao suporte, não contornada enviando dados fictícios. Capital social e capital de abertura possuem faixa declarada 0–99999999, mas zero permitido não significa valor padrão aprovado para quem não informou capital.
+
+`motivoLocacao` é específico da descrição PJ: 1 Abertura de Matriz; 2 Cedido; 3 Redução de Custos; 4 Venda do imóvel atual; 5 Troca de local de sede; 6 Locação adicional; 7 Abertura de filial; 8 Troca de garantia; 9 Abertura de nova empresa; A Locação para moradia. Não escolher automaticamente uma opção. `atividadeEconomica` mantém 1 Serviço, 2 Indústria, 3 Comércio, opcional em PFCOM; eventual mapeamento deve partir do ramo real selecionado, não do código de atividade Tokio.
+
+**Coberturas:** o texto reitera aluguel 001 obrigatório, mínimo 200 e máximo 10000; encargos 002–006 opcionais, de 0,01 até o aluguel; adicionais 007–010 iguais ao aluguel. Cobertura não escolhida é omitida e não aceita valor menor ou igual a zero. Isso sustenta a regra tenant somente aluguel e os quatro adicionais nas demais origens, preservando centavos. O tipo integer/int32 e mínimo genérico 100 de valorIS contradizem a descrição e não justificam truncar centavos ou rejeitar um encargo documentado de 0,01.
+
+**O que não foi solucionado:**
+
+- `locador` continua ausente da listagem, embora conste no required do Swagger. A omissão no novo recorte reforça a inconsistência, mas não prova dispensa no servidor.
+- Persistem os limites incompatíveis: e-mail máximo 1 versus descrição de 64, codigoReajuste máximo 1 versus códigos de três dígitos, orcamentoExterno máximo 15 versus descrição de 32, além do formato inteiro de valores monetários decimais. O texto de e-mail também exige um ponto após @ e ao mesmo tempo restringe os caracteres especiais; não implementar literalmente uma validação impossível.
+- O material não contém ajuste de comissão, consulta de ofertas, condições Sem entrada, resposta 409 com identificador ou PDF: não encerra essas pendências já registradas.
+- Ainda faltam definições do sistema sobre capital de abertura, índice Porto, contatos do cônjuge, CPF do operador e tratamento de ofertas elegíveis. O novo arquivo não altera a vigência de 30 meses nem fornece um valor padrão para dia de vencimento ou capital.
+
+**Verificação:** todos os objetos e parâmetros presentes no recorte foram confrontados com os trechos pertinentes do Swagger. Apenas a documentação foi alterada; sem implementação, alteração de formulários, testes contra a Porto ou chamada de orçamento.
+
+### Porto — situação consolidada das dúvidas após o confronto
+
+Esta classificação separa regra documental, decisão de produto e validação remota; prevalece sobre listas anteriores que ainda chamem um item confirmado de dúvida aberta.
+
+| Tema | Situação atual |
+| --- | --- |
+| Headers de token | Resolvido pelo usuário: Authorization Bearer e access_token simultâneos |
+| Aprovação/recusa | Resolvido: HTTP 201/409 no POST; 400/401/500/502 não são recusas cadastrais |
+| Finalidade PF | Resolvido no contrato: "1" residencial e "2" comercial. Habilitação comercial ainda aguarda suporte |
+| CPF do cotador obrigatório | Resolvido no contrato; falta identificar o operador que fornecerá o valor |
+| Nome/nascimento e dados profissionais | Obrigatoriedade resolvida; somente totalRendimentos obrigatório dentro de dadosProfissionais segundo Swagger |
+| Comercial PF versus residencial | Condições textuais esclarecidas: capitalAberturaNegocio para PFCOM, omitir locacaoComercial em PFRES; divergência do required genérico reservada à homologação |
+| Titularidade do casal | Resolvido: um titular S por requisição, outro N somente na conjunta; cada individual tem seu próprio S |
+| Coberturas | Códigos e valores documentados; tenant somente 001, adicionais 007–010 nas demais origens |
+| Vigência | Regra do sistema já encerrada: 30 meses da rodada; formato Porto DD/MM/AAAA. Confirmar apenas o código aplicável ao início no dia |
+| Código de imobiliária | Natureza e formato resolvidos; lista do cliente ainda será fornecida; não é CNPJ ou ID local |
+| Valor de parcela e PDF | Caminhos identificados: valorParcela na condição e data.file Base64 no documento. Formato real e disponibilidade permanecem verificações técnicas |
+| Comissão | Campo e escala localizados, 15 em codComissao; operação mínima e efeito sobre o preço ainda não esclarecidos |
+
+**Atualização das decisões do projeto:** operador, índice, capital de abertura e compartilhamento dos contatos foram definidos pelo usuário na seção seguinte, que prevalece sobre as dúvidas históricas acima. A lista de códigos das imobiliárias continua aguardando envio pela Porto. A seleção de pagamento por origem foi confirmada; o catálogo possui também códigos de produto distintos, cuja seleção não deve ser confundida com a forma de pagamento.
+
+**Esclarecimentos que exigem suporte ou resposta real da Porto:** body mínimo para aplicar 15% e momento em que preços são recalculados; locador no POST; condições de obrigatoriedade comercial; identificação de 30x Sem entrada por forma/oferta; objeto versus array em condicoesPagamento; origem do número de orçamento recusado; disponibilidade do PDF após criar orçamento; periodicidade de totalRendimentos e aceitação de valores decimais. A regra de renda de quatro aluguéis já existe no projeto, portanto falta confirmar seu encaixe contratual em totalRendimentos, não decidir novamente o multiplicador. Limites contraditórios de e-mail, reajuste e valores devem ser validados sem truncar dados reais. Não é necessário decidir orcamentoExterno agora: é opcional e sua omissão evita depender do limite conflitante 15/32 nesta primeira integração.
+
+**Não reabrir como decisões de negócio:** duração de 30 meses, comissão de 15%, exceção de coberturas tenant, individuais paralelas e conjunta somente após duas recusas. Suporte/homologação devem esclarecer como representar essas regras no contrato Porto, sem mudá-las por inferência. Não solicitar CPF/credenciais sensíveis em texto público; a fonte do operador pode ser definida agora e o valor configurado depois no ambiente apropriado.
+
+### Porto — regras confirmadas pelo usuário em 30/10/2026
+
+Esta atualização encerra as pendências de decisão abaixo e prevalece sobre menções anteriores a fontes ainda indefinidas. É registro de regras para implementação futura, não alteração dos builders ou configuração em execução.
+
+| Parâmetro/regra | Definição confirmada |
+| --- | --- |
+| `cpfCotador` | O operador é o corretor. Utilizar a configuração `CPF_COTADOR` adicionada pelo usuário ao .env; nome da chave conferido sem divulgar seu conteúdo. Na implementação, expor pelo config da Porto e consumir via config(), sem ler env() no builder |
+| `contrato.codigoReajuste` | IGP-M: enviar **"002"**. `IGP_M` expressa a escolha de negócio, mas o valor wire da Porto é o código de três dígitos |
+| `locacaoComercial.capitalAberturaNegocio` | **100 × valor do aluguel**, no cenário comercial PF em que o campo se aplica; não confundir com renda de quatro aluguéis ou capitalSocial |
+| Contatos do cônjuge | Reutilizar **e-mail e telefone do pretendente principal**, tanto na análise individual do cônjuge quanto na conjunta. Nome, CPF e nascimento continuam próprios de cada pessoa |
+| Imobiliária cadastrada | Comparar condições de **fatura FAT**, usando seu código Porto; não incluir cartão como fallback automático |
+| Demais origens | Comparar condições de **cartão de crédito**, preservando o critério já registrado de CC para cartões gerais, sem presumir que o solicitante possua cartão Porto CP |
+| Códigos de imobiliárias | Lista aguardando envio pela Porto; a afirmação de que todas as atuais têm código não permite inventar ou antecipar a associação |
+
+Exemplo da regra de capital: aluguel de R$ 1.500,00 resulta em capitalAberturaNegocio de 150000. O valor é uma regra derivada autorizada pelo usuário, não capital declarado pelo solicitante. Preservar essa origem no desenho da integração e usar o aluguel congelado no snapshot. Não aplicar o cálculo a PF residencial. O contrato declara inteiro; para aluguel com centavos, calcular 100 vezes o valor monetário com precisão decimal, evitando erros de ponto flutuante e sem truncar o aluguel.
+
+O compartilhamento dos contatos está agora explicitamente autorizado; não exige criar campos de contato do cônjuge. Utilizar os contatos do principal congelados na mesma rodada, inclusive quando o cenário individual substitui nome/CPF/nascimento. As validações contratuais de e-mail e telefone permanecem aplicáveis aos valores compartilhados.
+
+**Comparação — decisão posterior do usuário:** somente o produto **Fiança** foi escolhido para representar a Porto na comparação com as outras seguradoras. **A associação anteriormente feita com `seguro = "0008"` foi descartada pelo usuário em 31/10/2026; não implementar esse filtro fixo.** A identidade das ofertas deve vir do GET de ofertas, conforme esclarecimento abaixo. Manter o filtro de pagamento por origem (FAT para imobiliária cadastrada; cartão para demais origens), vigência de 30 meses, comissão de 15% e condição Sem entrada, usando a parcela real elegível. Essa correção da fonte dos produtos não autoriza ampliar a comparação para todos os Essenciais.
+
+**Produtos no card da Porto:** preservar e exibir também **Essencial 12 ("0001"), Essencial 20 ("0007") e Essencial 30 ("0005")**, somente quando retornados pela API. Pode aparecer um, alguns ou todos, conforme disponibilidade. Esses produtos são alternativas apresentadas no card e **não participam da escolha do melhor negócio entre seguradoras**, mesmo se possuírem parcela menor. Seus nomes não indicam automaticamente a quantidade de parcelas; apresentar as condições efetivamente retornadas, sem fabricar ofertas ausentes.
+
+A seleção para ranking não deve descartar as demais ofertas persistidas nem seus identificadores. Painel, e-mail e resumo compartilhado precisam usar Fiança quando apresentarem o preço Porto na comparação; dados de Essencial exibidos separadamente não podem substituir esse preço. Se Fiança não retornar ou não possuir preço elegível, a Porto fica sem oferta comparável, preservando a exibição dos Essenciais disponíveis e a decisão de crédito recebida. Não usar Essencial como fallback nem transformar indisponibilidade de produto/preço em recusa. A pendência de escolha dos produtos está encerrada.
+
+**Pendências restantes:** lista das imobiliárias; aplicação efetiva dos 15% antes de obter preço; identificação de 30x Sem entrada; periodicidade de totalRendimentos; locador no POST e divergências do required condicional; código de vigência para início no dia; identificador da carta após 409 e validações técnicas de ofertas/PDF. Não voltar a pedir definição de operador, índice, capital, contatos do cônjuge ou produtos para comparação/exibição.
+
+### Porto — confirmação do suporte para CNPJ e finalidade — 31/10/2026
+
+Fonte: relato do usuário sobre o e-mail do suporte e imagem atualizada de `PropostaLocatario.cpfCnpj`, com maxLength 14 e descrição de CPF/CNPJ. O e-mail não foi consultado diretamente. A imagem pertence ao schema de proposta; a extensão da regra ao orçamento se apoia na confirmação expressa do suporte retransmitida pelo usuário, não apenas na imagem. Esta definição prevalece sobre as restrições históricas a CPF e a pendência de disponibilidade PJ.
+
+**Documento:** enviar string com exatamente **11 dígitos para CPF ou 14 para CNPJ**, sem máscara, espaços ou caracteres especiais, preservando zeros à esquerda. Não trocar o CNPJ da empresa pelo CPF do responsável só para satisfazer o schema antigo. A imagem menciona completar zeros quando houver menos caracteres; não usar isso para converter documento incompleto em identidade presumida sem identificar seu tipo e validar o documento.
+
+| Documento e finalidade real | `tipoLocacao` enviado | Complemento confirmado |
+| --- | --- | --- |
+| CPF residencial | "1" — PFRES | Sem complemento comercial pela regra textual já estudada |
+| CPF comercial | "2" — PFCOM | locacaoComercial conforme regras PFCOM |
+| CNPJ comercial | "2" — PFCOM | Dados PJ em locacaoComercial; motivo selecionado no futuro campo Motivo da Contratação, códigos "1" a "9" |
+| CNPJ residencial | "2" — PFCOM | `locacaoComercial.motivoLocacao = "A"` — Locação para Moradia |
+
+PFRES/PFCOM são descrições; os códigos de transporte continuam as strings "1"/"2" documentadas. O enquadramento PFCOM do CNPJ residencial é específico do adapter Porto: **não alterar a finalidade residencial do lead**, a origem do formulário, as coberturas ou o payload das outras companhias. O código A fica restrito à finalidade residencial PJ; não aplicar A a toda pessoa jurídica. Não criar um terceiro código tipoLocacao para PJ.
+
+A imagem também informa que os locatários da proposta devem corresponder aos previamente analisados no orçamento. Acrescentar ou remover pretendentes exige novo orçamento/análise; isso é compatível com individuais e conjunta em cotações distintas e com a regra geral de reanálise por nova solicitação. Não implementar endpoints de emissão para cumprir essa regra.
+
+**Pendências abertas pela definição PJ:**
+
+1. Nome, nascimento e rendimentos PJ foram definidos pelo usuário na atualização abaixo: razão social, nascimento do responsável e renda de 10 aluguéis. Resta identificar campo específico para CPF/nome do responsável na Porto, caso ela os exija adicionalmente; não substituir o CNPJ por esse CPF nem criar um atributo sem contrato.
+2. **Regras esclarecidas em 31/10/2026:** `capitalSocial` fixo em 450000 para PJ; `capitalAberturaNegocio = 100 × aluguel` também para CNPJ; motivo comercial escolhido no futuro seletor Motivo da Contratação. Para residencial com CNPJ, motivo "A" fixo internamente e ausente do seletor. Detalhes na confirmação de capitais e motivo abaixo; implementação ainda pendente.
+3. **Encerrado em 02/11/2026:** não existe PJ com cônjuge no sistema. Analisar somente a empresa pelo CNPJ; responsável não recebe análise individual e não há conjunta PJ. A regra de cônjuges aplica-se somente a PF.
+
+**Demais pendências preservadas:** como aplicar a comissão de 15% antes da consulta de ofertas (body mínimo e recalculo de valores); identificação da condição 30x Sem entrada; locador obrigatório no POST; código de vigência para início no dia; identificador de orçamento após 409 para a carta; lista dos códigos de imobiliárias e verificações reais de ofertas/PDF. O cálculo de totalRendimentos foi definido na confirmação abaixo. Autenticação dupla, operador corretor, reajuste 002, contatos compartilhados, capital de abertura 100×, produto Fiança no ranking e Essenciais somente para exibição já estão decididos e não precisam ser reconfirmados.
+
+Registro exclusivamente documental. Nenhum código, formulário ou configuração foi alterado, nem foram realizadas chamadas à Porto. A confirmação contratual de CNPJ não significa que todos os dados obrigatórios do payload PJ já estejam definidos.
+
+### Porto — razão social, responsável e rendimentos confirmados — 31/10/2026
+
+O usuário confirmou o preenchimento do item 1 das dúvidas PJ, com referência a `app/Models/LeadEmpresa.php`, à tela do responsável e à descrição de totalRendimentos. Esta definição prevalece sobre as pendências anteriores relativas à escolha do nome, à origem do nascimento e ao cálculo da renda para Porto.
+
+**Pessoa jurídica:** em `locatarios[]`, manter `cpfCnpj` com o CNPJ e preencher `nome` com a **razão social** do locatário empresarial. Preencher `dataNascimento` com o **nascimento do responsável pela empresa**, consultado por seu `cpf_responsavel` na API CPF Brasil e serializado no formato Porto `DD/MM/AAAA`. A data não representa fundação da empresa. O nome retornado na consulta pertence a `nome_responsavel`, não à razão social; não sobrescrever o nome empresarial com o nome da pessoa física.
+
+**API CPF já aplicada ao responsável:** a inspeção do código confirma que `CpfLookupService::resolveBirthdates()` escolhe `cpf_responsavel` quando o documento do solicitante é CNPJ, resolve nome e nascimento e retorna `nome_responsavel` e `data_nascimento`. `SimulationController` persiste CPF/nome do responsável em `lead_empresa` e o nascimento em `Lead.data_nascimento`; `LeadEmpresa` não possui campo próprio de nascimento. A view compartilhada `cpf-lookup.blade.php` mapeia `cpf_responsavel` para `nome_responsavel`. Portanto, reutilizar esse fluxo, sem consulta por nome, sem consulta do CNPJ na API CPF e sem nova chamada a cada cotação. A feature flag desativada continua permitindo entrada manual conforme regras já implementadas. Esta inspeção estática não constitui nova consulta remota ou homologação do formulário.
+
+**Dados profissionais Porto:** enviar somente `dadosProfissionais.totalRendimentos`, único campo obrigatório interno documentado, com a seguinte regra definida pelo usuário:
+
+| Cenário | totalRendimentos |
+| --- | --- |
+| CPF residencial, PFRES ("1") | **4 × valor do aluguel** |
+| CPF comercial, PFCOM ("2") | **10 × valor do aluguel** |
+| PJ comercial ou residencial, enquadrado como PFCOM ("2") | **10 × valor do aluguel** |
+
+Não preencher empresa, vinculoEmpregaticio, expatriado ou dataAdmissao por padrão. Calcular com o aluguel congelado na rodada, preservar precisão monetária e não somar encargos à base. Para aluguel de R$ 1.500,00, totalRendimentos será 6000 em PFRES ou 15000 em PFCOM/PJ. A renda calculada é uma regra do sistema autorizada pelo usuário, não renda efetivamente consultada na API CPF. É uma regra específica Porto e **não altera os multiplicadores das outras seguradoras**. A data de nascimento consultada não fornece renda.
+
+Encerra-se a pendência de decidir o valor de totalRendimentos; a definição operacional é o multiplicador acima. Permanece somente a divergência técnica do tipo integer/int32 com exemplos decimais: não truncar centavos silenciosamente. Essa renda é distinta de `capitalAberturaNegocio = 100 × aluguel` e não define `capitalSocial`.
+
+**Composição PJ encerrada em 02/11/2026:** somente empresa, sem análise de responsável/cônjuge ou conjunta. Eventuais dados complementares do responsável seguem o contrato, sem criar pretendente adicional ou substituir a identidade empresarial. Capital social, motivo comercial e aplicação do capital de abertura ao CNPJ foram esclarecidos. As demais pendências técnicas devem ser consultadas na consolidação mais recente no início do estudo. Nenhuma implementação da Porto ou alteração de formulário foi feita nesta revisão.
+
+### Porto — capitais e Motivo da Contratação confirmados — 31/10/2026
+
+Esta confirmação do usuário encerra as dúvidas sobre os capitais e a origem do motivo da locação, prevalecendo sobre as pendências históricas acima. Trata-se de definição para implementação futura, sem criação do campo nesta revisão documental.
+
+- `locacaoComercial.capitalSocial`: valor fixo **450000 (R$ 450.000,00)** para PJ, sem cálculo sobre o aluguel. É um padrão de negócio definido pelo usuário, não informação consultada ou declarada pelo solicitante.
+- `locacaoComercial.capitalAberturaNegocio`: **100 × valor do aluguel**, tanto para CPF comercial quanto para CNPJ, inclusive CNPJ residencial enquadrado como PFCOM na Porto. Manter a precisão monetária e usar o aluguel congelado na rodada. Não se aplica a CPF residencial.
+- Futuro campo **Motivo da Contratação**: seletor exibido quando a finalidade real da locação for **comercial**, para CPF ou CNPJ. A Porto recebe a chave documentada em `locacaoComercial.motivoLocacao`, não o texto da opção. O dado poderá ser reutilizado por outras seguradoras conforme seus próprios contratos; não propagar códigos Porto automaticamente para elas.
+
+| Chave Porto | Opção do seletor comercial |
+| --- | --- |
+| "1" | Abertura de Matriz |
+| "2" | Cedido |
+| "3" | Redução de Custos |
+| "4" | Venda do imóvel atual |
+| "5" | Troca de local de sede |
+| "6" | Locação adicional |
+| "7" | Abertura de filial |
+| "8" | Troca de garantia |
+| "9" | Abertura de nova empresa |
+
+**Locação para moradia ("A") não deve aparecer no seletor.** Quando o documento for CNPJ e a finalidade real for residencial, o sistema define internamente `tipoLocacao = "2"` (PFCOM) e `locacaoComercial.motivoLocacao = "A"`, de forma fixa e imutável pelo solicitante. O enquadramento técnico PFCOM não deve fazer o campo comercial aparecer nesse cenário. CPF residencial permanece PFRES, sem esse seletor e sem motivo comercial.
+
+Na implementação, validar no backend a coerência entre documento, finalidade e motivo: comercial aceita somente as opções "1" a "9"; residencial com CNPJ deriva "A" no servidor, sem depender de campo oculto; mudanças de finalidade não podem reaproveitar um motivo anterior incompatível. Persistir a escolha comercial e preservá-la no snapshot da rodada, respeitando a arquitetura existente.
+
+### Porto — consulta de ofertas e prazo das parcelas — confirmação de 31/10/2026
+
+Fontes lidas integralmente: `endpoint-exibicao-de-ofertas-url.txt`, `200-endpoint-exibicao-de-ofertas.txt` e `espeficicacoes-para-requisicao-exibicao-de-ofertas.txt`, fornecidos em Downloads, e esclarecimento do usuário nesta data. Os arquivos são documentação/exemplo, não uma consulta executada pelo sistema. Esta revisão atualiza o estudo; não implementa nem chama a API.
+
+**Operação confirmada:** `GET https://portoapicloud-hml.portoseguro.com.br/fianca-locaticia/emissao/aluguel-essencial/v1/orcamentos/{origem}/{orcamento}/{susep}/ofertas`, após orçamento criado e aprovado. Preservar os dois headers de autenticação anteriormente confirmados. Os parâmetros estão no caminho; os arquivos não apresentam body de requisição.
+
+| Parâmetro | Contrato e aplicação |
+| --- | --- |
+| `origem` | "22" para emissão/nova cotação e "40" para renovação; não é a origem do formulário. Nossa nova análise usa "22", sem emitir apólice por isso. A descrição exige dois caracteres, embora os limites genéricos sejam 1–15 |
+| `orcamento` | Número interno Porto com 15 dígitos, como string, preservando zeros à esquerda; vinculado ao orçamento/cenário aprovado |
+| `susep` | Código interno do corretor na Porto, seis caracteres alfanuméricos terminados em F ou J; não confundir com código da imobiliária |
+
+**Ofertas disponíveis:** o usuário enumerou **quatro produtos possíveis** — Essencial 12, Essencial 20, Essencial 30 e Tradicional — apesar de mencionar “3 planos”. Tratar `ofertas[]` como coleção variável: apresentar apenas os produtos efetivamente retornados, sem exigir três ou quatro, sem fabricar ausentes e sem criar um POST por produto. Uma única criação pode oferecer vários produtos; manter orçamento, cenário, produto e condições relacionados.
+
+**Fonte definitiva das ofertas — esclarecimento posterior do usuário em 31/10/2026:** desconsiderar a associação de Fiança ao código 0008 inferida do exemplo de criação. O sistema utilizará **este GET de ofertas** para visualizar os produtos disponíveis, com seus códigos, nomes, formas de pagamento e condições efetivamente retornados. Não manter catálogo fixo derivado do exemplo do POST, não renomear 0008 para Fiança e não substituir o nome retornado por uma interpretação anterior. O exemplo do GET também não fixa um catálogo universal: seus valores ilustram a estrutura; cada orçamento deve preservar as ofertas recebidas. A regra anterior de não comparar todos os Essenciais permanece separada da identificação técnica do produto; não assumir equivalência Tradicional/Fiança apenas por código ou nome de exemplo.
+
+**30 parcelas esclarecidas pelo usuário:** para **cartão de crédito e fatura**, a Porto retorna automaticamente **30 parcelas quando início e fim do contrato delimitam 30 meses**. Manter as datas da rodada, do dia da análise até 30 meses depois, e selecionar a forma definida por origem: fatura para imobiliária cadastrada e cartão para os demais. Não há nova dúvida de regra sobre a quantidade desejada; verificar tecnicamente a resposta real ao homologar. Não enviar um parâmetro de quantidade inventado neste GET.
+
+**Entrada ainda pendente:** o usuário está confirmando como alterar entre Com entrada e Sem entrada. O padrão desejado do sistema continua Sem entrada, mas o mecanismo e o identificador Porto dessa condição ainda não estão confirmados. A confirmação de 30 parcelas não resolve a entrada. Não reduzir para 29 por analogia com Too, não inventar `tipoEntrada` e não inferir entrada apenas de `primeiroVencimento`.
+
+**Estrutura do exemplo HTTP 200:**
+
+- Raiz com `susep`, `orcamento`, `ofertas[]` e `origem` (22 numérico no exemplo de resposta; parâmetro de caminho documentado como string).
+- Cada oferta contém `seguro`, `nomeSeguro`, limites de `comissao`, `formasPagamento[]`, `coberturas[]`, `beneficios[]`, `agravos[]`, `descontos[]`, `clausulas[]`, `acordo` e `calculo`.
+- Cada forma possui `formaPagamento`, `nomeFormaPagamento` e **`condicoesPagamento` como objeto**, neste material. Isso confirma o formato do exemplo e do schema GET anteriormente recebido, sem provar que outros retornos reais nunca usem uma lista. Não tratar esse objeto como se fosse a lista de condições do POST sem normalização explícita e validada.
+- A condição contém `condicaoPagamento` (identificador), `quantidadeParcela`, `valorParcela`, `primeiroVencimento`, `nomeCondicaoPagamento`, prêmios líquido/bruto/total, IOF, desconto, percentual de desconto, adicional de fracionamento, código externo e meio de recebimento. Para comparação, usar **`valorParcela`** da forma e condição elegíveis; não dividir prêmio total nem somar IOF novamente. Guardar o identificador da condição para o PDF correspondente.
+- `comissao.percentualMinimo/Maximo` e `acordo.percentualMinimo/Maximo` são limites retornados; o exemplo 0–30 não confirma comissão aplicada de 15% nem fixa esses limites para todos os produtos. `calculo` contém adicionais, juros, custo de apólice, IS, LMG e taxa de reativação; esses valores não substituem a parcela selecionada.
+- `coberturas[]` traz código, nome, obrigatoriedade, múltiplos/limites LMI, IS, LMI calculado e prêmio. Preservar as coberturas por oferta, sem pressupor equivalência dos produtos ou interpretar Essencial 12/20/30 como quantidade de parcelas.
+
+**Divergências do exemplo e efeitos na implementação futura:**
+
+1. O exemplo do GET associa `seguro = "0008"` a `nomeSeguro = "ESSENCIAL 12"`. **Dúvida sobre a fonte resolvida pelo usuário:** o exemplo de criação não deve prevalecer nem impor a associação 0008/Fiança. Na integração, respeitar código e nome retornados pelo GET para o orçamento; não tratar esse rótulo como erro por divergir do antigo exemplo do POST.
+2. `nomeCondicaoPagamento = "10X ADC"`, `quantidadeParcela = 0`, `valorParcela = 172.8` e `premioTotal = 1728` são inconsistentes entre si quanto à quantidade. Não interpretar zero como parcela única ou trinta, nem calcular a quantidade dividindo o total pelo valor. Esse exemplo de débito em conta não invalida a confirmação do usuário sobre 30 parcelas para cartão/fatura e não deve ser reutilizado como prova dessa condição.
+3. O exemplo contém apenas ADC, não as condições de cartão/fatura que o sistema utilizará; falta validar seus identificadores, a condição de entrada e os dados coerentes em retorno real. Falha na consulta ou condição inutilizável impede comparar aquela oferta, mas não transforma aprovação cadastral em recusa nem justifica nova criação automática de orçamento.
+
+**Pendências deste ponto:** como configurar/identificar Sem entrada e validar condições reais de cartão e fatura em 30 meses. A fonte para identificar/exibir ofertas é o GET enviado; a associação fixa 0008/Fiança está descartada, sem necessidade de reconfirmá-la. Ao implementar a seleção para ranking, verificar o produto elegível nas ofertas reais respeitando a decisão de não comparar todos os Essenciais, sem inventar equivalências. A regra de prazo e a disponibilidade variável dos produtos estão esclarecidas. Continuam separadas as pendências já registradas de comissão efetiva de 15%, documentos, dados obrigatórios e códigos das imobiliárias.
+
 ## Estado da implementação e próximos payloads — revisão de 29/10/2026
 
 Esta seção prevalece sobre as referências históricas a trabalho ainda não implementado nas revisões anteriores. Distinguir **implementado no backend**, **validado localmente** e **homologado na seguradora**. A revisão atual altera somente este estudo; os passos 2 (Too) e 3 (Pottencial) aguardam comando do usuário.
