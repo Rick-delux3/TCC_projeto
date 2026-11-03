@@ -10,6 +10,12 @@ class InsuranceProviderResultWriter
 
     public function apply(InsuranceExecution $analysis, array $result): void
     {
+        $this->applyResult($analysis, $result);
+        app(InsuranceAnalysisLogger::class)->record($analysis, $this->attemptId, $result);
+    }
+
+    private function applyResult(InsuranceExecution $analysis, array $result): void
+    {
         if ($analysis->provider === 'tokio') {
             app(TokioQuoteResponse::class)->apply($analysis, $result);
 

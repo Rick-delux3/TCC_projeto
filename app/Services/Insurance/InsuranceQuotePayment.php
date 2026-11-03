@@ -19,10 +19,12 @@ final class InsuranceQuotePayment
             default => throw new \LogicException('Consulta de pagamento não implementada para esta seguradora.'),
         };
         if (! ($result['success'] ?? false)) {
+            app(InsuranceAnalysisLogger::class)->record($quote, $quote->executionAttemptId ?? '', $result, payment: true);
             throw new \RuntimeException('Não foi possível consultar as parcelas da cotação.');
         }
         $response = $result['response'] ?? [];
         if (! is_array($response)) {
+            app(InsuranceAnalysisLogger::class)->record($quote, $quote->executionAttemptId ?? '', $result, payment: true);
             throw new \RuntimeException('Resposta de pagamento inválida.');
         }
         $selection = $quote->provider === 'pottencial'

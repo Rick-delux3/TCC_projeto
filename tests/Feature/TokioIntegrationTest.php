@@ -4,6 +4,7 @@ use App\Models\InsuranceQuote;
 use App\Services\Insurance\TokioQuoteResponse;
 use App\Services\Insurance\TokioService;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 
 it('completes Tokio through the quote job and keeps manual handling separate from refusal', function (string $remote, string $expected) {
     \Illuminate\Support\Facades\Queue::fake();
@@ -135,3 +136,61 @@ it('authenticates and creates a new quote without recalculation headers', functi
         && $request->hasHeader('codigoParceiro', '00123') && $request->hasHeader('tipoParceiro', '5')
         && ! $request->hasHeader('sqCdCotac') && ! $request->hasHeader('token'));
 });
+
+it('logs Tokio HTTP outcomes without exposing the response body or credentials', function (int $httpStatus, mixed $body, ?string $providerStatus, bool $success) {
+    config(['services.tokio.enabled' => true,
+        'services.tokio.base_url' => 'https://apim-act.tokiomarine.com.br/api',
+        'services.tokio.codigo_corretor' => '1', 'services.tokio.cpf_usuario' => 'private-cpf',
+        'services.tokio.senha_operadora' => 'private-password']);
+    $this->mock(\App\Services\Insurance\TokioAuthentication::class)
+        ->shouldReceive('requestToken')->once()->andReturn(['success' => true, 'access_token' => 'private-token']);
+    Http::preventStrayRequests();
+    Http::fake(['apim-act.tokiomarine.com.br/*' => Http::response($body, $httpStatus)]);
+    Log::spy();
+
+    $result = app(TokioService::class)->quote(['nome' => 'Private Name'], null);
+
+    expect($result['success'])->toBe($success);
+    Log::shouldHaveReceived('log')->with('info', 'Resposta HTTP da Tokio', [
+        'http_status' => $httpStatus, 'success' => $httpStatus === 200, 'provider_status' => $providerStatus,
+    ])->once();
+    if ($success) {
+        expect($result['response'])->toBe($body);
+        Log::shouldNotHaveReceived('log', ['warning', 'Falha no fluxo da Tokio', Mockery::any()]);
+    } else {
+        if ($httpStatus >= 400) {
+            expect($result['response'])->toBe(is_array($body) ? $body : ['message' => $body]);
+        }
+        Log::shouldHaveReceived('log')->with('warning', 'Falha no fluxo da Tokio', [
+            'http_status' => $httpStatus, 'error' => $result['error'],
+        ])->once();
+    }
+})->with([
+    'refusal is a successful HTTP response' => [200, ['cotacaoInfo' => ['cdSitucCotac' => 'REC', 'sqCdCotac' => 123, 'token' => 'private-token'], 'mensagens' => ['danger' => ['Private Name']]], 'REC', true],
+    'approved' => [200, ['cotacaoInfo' => ['cdSitucCotac' => 'CAL', 'sqCdCotac' => 123]], 'CAL', true],
+    'unknown status is not logged as free text' => [200, ['cotacaoInfo' => ['cdSitucCotac' => 'private-data']], null, true],
+    'bad request' => [400, ['error' => 'private-data'], null, false],
+    'server failure' => [500, 'private-data', null, false],
+    'invalid JSON' => [200, '<html>private-data</html>', null, false],
+]);
+
+it('logs Tokio connection failures and preserves results when logging is unavailable', function (bool $connectionFailure) {
+    config(['services.tokio.enabled' => true,
+        'services.tokio.base_url' => 'https://apim-act.tokiomarine.com.br/api',
+        'services.tokio.codigo_corretor' => '1', 'services.tokio.cpf_usuario' => 'private-cpf',
+        'services.tokio.senha_operadora' => 'private-password']);
+    $this->mock(\App\Services\Insurance\TokioAuthentication::class)
+        ->shouldReceive('requestToken')->once()->andReturn(['success' => true, 'access_token' => 'private-token']);
+    Http::preventStrayRequests();
+    Http::fake(['*' => $connectionFailure ? Http::failedConnection('private-data') : Http::response(['cotacaoInfo' => ['cdSitucCotac' => 'REC']])]);
+    Log::shouldReceive('log')->once()->with(
+        $connectionFailure ? 'warning' : 'info',
+        $connectionFailure ? 'Falha no fluxo da Tokio' : 'Resposta HTTP da Tokio',
+        Mockery::on(fn (array $context): bool => ! str_contains(json_encode($context), 'private-data')),
+    )->andThrow(new RuntimeException('Disk full'));
+
+    $result = app(TokioService::class)->quote([], null);
+
+    expect($result['success'])->toBe(! $connectionFailure);
+    Http::assertSentCount(1);
+})->with([true, false]);

@@ -86,6 +86,9 @@ class SyncTooAnalysisStatusJob implements ShouldQueue
 
         InsuranceAnalysisAttempt::assertCurrent($analysis, $this->attemptId);
         $analysis->executionAttemptId = $this->attemptId;
+        if ($this->schedulePolling && data_get($analysis->providerResponsePayload(), 'too_status_check_stop_reason') === 'pending_limit_reached') {
+            return;
+        }
 
         if (in_array(
             $analysis->status,
@@ -357,6 +360,9 @@ class SyncTooAnalysisStatusJob implements ShouldQueue
         int $consecutiveFailures = 0,
     ): void {
         if (! $this->schedulePolling) {
+            return;
+        }
+        if ($consecutiveFailures === 0 && \App\Services\Insurance\InsuranceStatusPolling::stopTooAtLimit($analysis, $this->attemptId, $this->attemptNumber)) {
             return;
         }
 

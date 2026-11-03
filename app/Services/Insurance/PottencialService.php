@@ -58,8 +58,6 @@ class PottencialService
                 Log::warning('Erro ao gerar access_token da Pottencial', [
                     'status' => $response->status(),
                     'http_status' => $response->status(),
-                    'raw_body' => $response->body(),
-                    'body' => $response->body(),
                 ]);
 
                 return null;
@@ -181,9 +179,6 @@ class PottencialService
                 return $this->authenticationFailure;
             }
             Log::error('Falha inesperada ao chamar API da Pottencial', [
-                'endpoint' => $endpoint,
-                'url' => $url,
-                'message' => $e->getMessage(),
             ]);
 
             return [
@@ -236,9 +231,6 @@ class PottencialService
                 return $this->authenticationFailure;
             }
             Log::error('Falha inesperada ao consultar API da Pottencial', [
-                'endpoint' => $endpoint,
-                'url' => $url,
-                'message' => $e->getMessage(),
             ]);
 
             return [
@@ -286,12 +278,8 @@ class PottencialService
         }
 
         Log::info('Resposta HTTP da Pottencial', [
-            'endpoint' => $endpoint,
-            'url' => $url,
             'http_status' => $normalized['http_status'],
             'success' => $normalized['success'],
-            'response' => $normalized['response'],
-            'raw_body' => $normalized['raw_body'],
         ]);
 
         return $normalized;

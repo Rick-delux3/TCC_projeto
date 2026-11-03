@@ -132,6 +132,9 @@ final class InsuranceQuoteCoordinator
             }
             $analysis->forceFill($attributes)->save();
             if ($finished) {
+                app(InsuranceAnalysisLogger::class)->record($analysis, $run->round->attempt_id, [
+                    'selection' => ['amount' => $winner?->installment_amount, 'count' => $winner?->installments, 'payment_type' => $winner?->payment_type],
+                ]);
                 $analysis->events()->create([
                     'event_type' => 'analysis_completed', 'status' => $status,
                     'message' => 'Resultado consolidado das cotações da seguradora.',

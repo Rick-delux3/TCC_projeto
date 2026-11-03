@@ -51,6 +51,14 @@ return [
     */
 
     'channels' => [
+        'insurance_analyses' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/insurance-analyses.log'),
+            'level' => 'info',
+            'days' => 14,
+            'permission' => 0600,
+            'locking' => true,
+        ],
 
         'stack' => [
             'driver' => 'stack',

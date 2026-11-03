@@ -103,7 +103,7 @@ it('polls until the last provider decides and only then finishes the batch', fun
     );
     Queue::fake();
     if ($providerName === 'too') {
-        (new SyncTooAnalysisStatusJob($analysis->id, 'polling-attempt', false, 16))->handle($pollProvider);
+        (new SyncTooAnalysisStatusJob($analysis->id, 'polling-attempt', false, 1))->handle($pollProvider);
     } else {
         (new SyncProviderAnalysisStatusJob($analysis->id, 'polling-attempt', automatic: true))->handle($resolver);
     }
@@ -112,7 +112,7 @@ it('polls until the last provider decides and only then finishes the batch', fun
 
     Queue::fake();
     if ($providerName === 'too') {
-        (new SyncTooAnalysisStatusJob($analysis->id, 'polling-attempt', false, 17))->handle($pollProvider);
+        (new SyncTooAnalysisStatusJob($analysis->id, 'polling-attempt', false, 2))->handle($pollProvider);
     } else {
         (new SyncProviderAnalysisStatusJob($analysis->id, 'polling-attempt', automatic: true))->handle($resolver);
     }
@@ -212,6 +212,7 @@ it('records an ineligible Too submission as a failure instead of leaving it proc
 });
 
 it('resets consecutive communication failures when the company responds with a pending decision', function (string $providerName) {
+    config(['services.too.status_check_max_pending_checks' => 30]);
     $analysis = waitingProviderAnalysis($providerName, 'processing');
     $result = ['success' => true, 'response' => ['status' => 'UnderAnalysis']];
     if ($providerName === 'too') {
@@ -230,3 +231,16 @@ it('resets consecutive communication failures when the company responds with a p
     expect($analysis->fresh()->status)->toBe('processing')->and($analysis->fresh()->finished_at)->toBeNull();
     Queue::assertPushed($nextJob, fn ($job): bool => $job->consecutiveFailures === 0);
 })->with(['too', 'pottencial']);
+
+it('stops legacy Too polling at the configured pending limit', function () {
+    config(['services.too.status_check_max_pending_checks' => 2]);
+    $analysis = waitingProviderAnalysis('too', 'processing');
+    $provider = $this->mock(TooInsuranceProvider::class);
+    $provider->shouldReceive('getStatus')->once()->andReturn(['success' => true, 'response' => ['status' => 'UnderAnalysis']]);
+    $job = new SyncTooAnalysisStatusJob($analysis->id, 'polling-attempt', false, 2);
+    $job->handle($provider);
+    $job->handle($provider);
+    expect($analysis->fresh()->status)->toBe('processing')
+        ->and($analysis->fresh()->response_payload['too_status_check_stop_reason'])->toBe('pending_limit_reached');
+    Queue::assertNotPushed(SyncTooAnalysisStatusJob::class);
+});

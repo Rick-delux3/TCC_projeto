@@ -844,9 +844,6 @@ class TooInsuranceProvider implements CreatesInsuranceQuotes, InsuranceProviderI
     ): array {
         Log::warning('Falha no fluxo da Too', [
             'step' => $step,
-            'message' => $message,
-            'extra' => $extra,
-            'responses' => $responses,
         ]);
 
         return [

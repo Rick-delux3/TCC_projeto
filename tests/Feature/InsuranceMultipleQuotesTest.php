@@ -302,6 +302,43 @@ it('creates a fresh round for Too reanalysis without requiring or reusing its pr
     Http::assertNothingSent();
 });
 
+it('bounds Too pending consultations without converting them to refusals or repeating requests', function (string $lastStatus) {
+    config(['services.too.status_check_max_pending_checks' => 2]);
+    $analysis = multipleQuoteAnalysis(false, 'too');
+    $run = app(InsuranceQuoteCoordinator::class)->prepare($analysis, 'round-one', false);
+    $quote = InsuranceQuote::first();
+    $quote->update(['proposal_id' => 'pending-proposal']);
+    $provider = $this->mock(\App\Services\Insurance\Providers\TooInsuranceProvider::class);
+    $provider->shouldReceive('requestAnalysis')->once()->andReturn([
+        'success' => true, 'response' => ['quoteId' => 'pending-quote', 'status' => 'UnderAnalysis'],
+    ]);
+    $provider->shouldReceive('getStatus')->twice()->andReturn(
+        ['success' => true, 'response' => ['quoteId' => 'pending-quote', 'status' => 'UnderAnalysis']],
+        ['success' => true, 'response' => ['quoteId' => 'pending-quote', 'status' => $lastStatus]],
+    );
+    if ($lastStatus === 'Approved') {
+        $this->mock(TooService::class)->shouldReceive('getPaymentOptions')->once()->andReturn([
+            'success' => true, 'response' => [
+                'tipoPagamento' => [['tipo' => 1]],
+                'opcoesParcelamento' => [['tipo' => 2, 'comEntrada' => false, 'parcelas' => [['numeroParcela' => 29, 'valor' => 40]]]],
+            ],
+        ]);
+    }
+    foreach ([0, 1, 2, 2] as $generation) {
+        app()->call([new RunInsuranceQuoteJob($quote->id, 'round-one', $generation), 'handle']);
+    }
+    expect(Queue::pushed(RunInsuranceQuoteJob::class)->filter(fn ($job) => $job->quoteId === $quote->id)->count())->toBe(2);
+    expect($run->scenarios()->where('kind', 'joint')->exists())->toBeFalse();
+    if ($lastStatus === 'UnderAnalysis') {
+        expect($quote->fresh()->status)->toBe('processing')
+            ->and($quote->fresh()->response_payload['too_status_check_stop_reason'])->toBe('pending_limit_reached')
+            ->and($quote->fresh()->events()->where('event_type', 'too_polling_limit_reached')->count())->toBe(1)
+            ->and($analysis->fresh()->status)->toBe('processing');
+    } else {
+        expect($quote->fresh()->status)->toBe('approved')->and($quote->fresh()->installment_amount)->toBe('40.00');
+    }
+})->with(['UnderAnalysis', 'Approved']);
+
 it('compares confirmed installments rather than reversing the winner using premium totals', function (): void {
     $comparison = app(\App\Services\Insurance\AnalysisQuoteComparison::class);
     $quotes = collect([

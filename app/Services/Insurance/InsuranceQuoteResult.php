@@ -15,7 +15,7 @@ final class InsuranceQuoteResult
 
     public function payment(InsuranceQuote $quote, string $attemptId, array $payment): void
     {
-        InsuranceAnalysisAttempt::run($quote, $attemptId, function () use ($quote, $payment): void {
+        InsuranceAnalysisAttempt::run($quote, $attemptId, function () use ($quote, $attemptId, $payment): void {
             $selection = $payment['selection'];
             $quote->forceFill([
                 'payment_status' => $selection ? 'ready' : 'unavailable',
@@ -27,6 +27,7 @@ final class InsuranceQuoteResult
                 'event_type' => 'payment_consulted', 'status' => $quote->payment_status,
                 'response' => $payment,
             ]);
+            app(InsuranceAnalysisLogger::class)->record($quote, $attemptId, $payment, payment: true);
         });
     }
 }

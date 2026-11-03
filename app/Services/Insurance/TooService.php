@@ -70,9 +70,7 @@ class TooService
                 $this->authenticationFailure = $this->normalizeResponse($response, '/authentication', $url)
                     + ['operation' => 'authentication'];
                 Log::warning('Erro ao gerar access_token da Too', [
-                    'url' => $url,
                     'status' => $response->status(),
-                    'body' => $response->body(),
                 ]);
 
                 return null;
@@ -318,9 +316,6 @@ class TooService
                 return $this->authenticationFailure;
             }
             Log::error('Falha inesperada ao chamar API da Too', [
-                'endpoint' => $endpoint,
-                'url' => $url,
-                'message' => $e->getMessage(),
             ]);
 
             return [
@@ -373,9 +368,6 @@ class TooService
                 return $this->authenticationFailure;
             }
             Log::error('Falha inesperada ao consultar API da Too', [
-                'endpoint' => $endpoint,
-                'url' => $url,
-                'message' => $e->getMessage(),
             ]);
 
             return [
@@ -426,9 +418,6 @@ class TooService
             );
         } catch (\Throwable $e) {
             Log::error('Falha inesperada ao chamar API da Too com PUT', [
-                'endpoint' => $endpoint,
-                'url' => $url,
-                'message' => $e->getMessage(),
             ]);
 
             return [
@@ -477,8 +466,6 @@ class TooService
         }
 
         Log::info('Resposta HTTP da Too', [
-            'endpoint' => $endpoint,
-            'url' => $url,
             'http_status' => $normalized['http_status'],
             'success' => $normalized['success'],
         ]);

@@ -2,6 +2,8 @@
 
 namespace App\Services\Insurance;
 
+use Illuminate\Support\Facades\Log;
+
 class TokioService
 {
     public function __construct(private TokioAuthentication $authentication) {}
@@ -35,16 +37,22 @@ class TokioService
         }
         $token = $this->authentication->requestToken();
         if (! $token['success']) {
-            return $this->failure('Não foi possível autenticar na Tokio.', $token['http_status']);
+            return $this->failure('Não foi possível autenticar na Tokio.', $token['http_status'], ['errors' => $token['diagnostics'] ?? []]);
         }
         try {
             $response = \Illuminate\Support\Facades\Http::acceptJson()->asJson()
                 ->withToken($token['access_token'])->withHeaders($headers)
                 ->connectTimeout(10)->timeout(60)->withoutRedirecting()->post($base.'/cotar', $payload);
-            if (! $response->successful()) {
-                return $this->failure('A Tokio não concluiu a solicitação. Verifique a integração antes de repetir a cotação.', $response->status());
-            }
             $body = $response->json();
+            $code = data_get($body, 'cotacaoInfo.cdSitucCotac');
+            $this->log('info', 'Resposta HTTP da Tokio', [
+                'http_status' => $response->status(),
+                'success' => $response->successful(),
+                'provider_status' => in_array($code, ['CAL', 'REC'], true) ? $code : null,
+            ]);
+            if (! $response->successful()) {
+                return $this->failure('A Tokio não concluiu a solicitação. Verifique a integração antes de repetir a cotação.', $response->status(), is_array($body) ? $body : ['message' => $response->body()]);
+            }
             if (! is_array($body)) {
                 return $this->failure('A Tokio retornou uma resposta inválida.', $response->status());
             }
@@ -55,8 +63,19 @@ class TokioService
         }
     }
 
-    private function failure(string $message, ?int $status = null): array
+    private function failure(string $message, ?int $status = null, array $response = []): array
     {
-        return ['success' => false, 'error' => $message, 'http_status' => $status, 'response' => []];
+        $this->log('warning', 'Falha no fluxo da Tokio', ['http_status' => $status, 'error' => $message]);
+
+        return ['success' => false, 'error' => $message, 'http_status' => $status, 'response' => $response];
+    }
+
+    private function log(string $level, string $message, array $context): void
+    {
+        try {
+            Log::log($level, $message, $context);
+        } catch (\Throwable) {
+            /** A logging failure must not cause an already submitted quote to be retried. */
+        }
     }
 }

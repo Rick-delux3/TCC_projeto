@@ -10,6 +10,7 @@ use App\Services\Insurance\InsuranceLeadSnapshot;
 use App\Services\Insurance\InsuranceQuoteCoordinator;
 use App\Services\Insurance\InsuranceQuotePayment;
 use App\Services\Insurance\InsuranceQuoteResult;
+use App\Services\Insurance\InsuranceStatusPolling;
 use App\Services\Insurance\ProviderAnalysisStatus;
 use App\Services\Insurance\Providers\InsuranceProviderResolver;
 use Illuminate\Bus\Queueable;
@@ -61,6 +62,9 @@ class RunInsuranceQuoteJob implements ShouldQueue
             if ((int) $quote->poll_count !== $this->generation) {
                 return;
             }
+            if (data_get($quote->providerResponsePayload(), 'too_status_check_stop_reason') === 'pending_limit_reached') {
+                return;
+            }
             if (ProviderAnalysisStatus::isTerminal($quote->status)
                 && ($quote->status !== 'approved' || $quote->payment_status !== 'pending')) {
                 $coordinator->consolidate($quote->scenario->insurance_provider_run_id);
@@ -87,9 +91,11 @@ class RunInsuranceQuoteJob implements ShouldQueue
                     : $provider->getStatus($quote);
                 if (! ($result['success'] ?? false) && ! $first && filled($quote->quote_id)
                     && (($result['http_status'] ?? 0) >= 500 || in_array($result['http_status'] ?? null, [null, 408, 429], true))) {
+                    app(\App\Services\Insurance\InsuranceAnalysisLogger::class)->record($quote, $this->attemptId, $result);
                     throw new \RuntimeException('Falha temporária ao consultar a cotação existente.');
                 }
                 $writer->apply($quote, $this->attemptId, $result);
+                InsuranceAnalysisAttempt::run($quote, $this->attemptId, fn () => InsuranceStatusPolling::stopTooAtLimit($quote, $this->attemptId, (int) $quote->poll_count));
             }
             if ($quote->status === 'approved' && $quote->payment_status === 'pending') {
                 if (blank($quote->quote_id)) {
@@ -138,6 +144,7 @@ class RunInsuranceQuoteJob implements ShouldQueue
                     'message' => $exception instanceof InvalidInsuranceAnalysisPayload ? $exception->getMessage() : 'Falha técnica ao executar a cotação.',
                     'payload' => ['attempt_id' => $this->attemptId, 'exception' => $exception ? $exception::class : null],
                 ]);
+                app(\App\Services\Insurance\InsuranceAnalysisLogger::class)->record($quote, $this->attemptId, ['error' => $exception?->getMessage()], payment: $quote->status === 'approved');
             });
             app(InsuranceQuoteCoordinator::class)->consolidate($quote->scenario->insurance_provider_run_id);
         } catch (ObsoleteInsuranceAnalysisAttempt) {
