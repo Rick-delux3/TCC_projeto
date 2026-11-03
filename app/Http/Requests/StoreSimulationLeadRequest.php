@@ -116,7 +116,7 @@ class StoreSimulationLeadRequest extends FormRequest
             'ramo_atividade' => [
                 'exclude_unless:tipo_locacao,comercial',
                 'bail',
-                'nullable',
+                'required',
                 'integer',
                 Rule::enum(RamoAtividade::class),
             ],
@@ -264,6 +264,7 @@ class StoreSimulationLeadRequest extends FormRequest
                 ? CompanyConstitution::REJECTION_MESSAGE
                 : 'Selecione Sim ou Não para a constituição da empresa.',
             'ramo_atividade.integer' => 'Selecione um ramo de atividade válido: Comércio, Indústria ou Serviços.',
+            'ramo_atividade.required' => 'Selecione o ramo de atividade para a locação comercial.',
             'ramo_atividade.enum' => 'Selecione um ramo de atividade válido: Comércio, Indústria ou Serviços.',
             'atividade_economica_id.required' => 'Pesquise e selecione uma atividade da lista.',
             'atividade_economica_id.integer' => 'Selecione uma atividade válida da lista.',

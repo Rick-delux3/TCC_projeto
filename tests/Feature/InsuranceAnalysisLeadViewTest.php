@@ -289,15 +289,35 @@ it('renders four company cards and keeps unvalidated providers blocked', functio
     $xpath = new DOMXPath($document);
 
     expect($xpath->query('//article[@data-provider]')->length)->toBe(4);
-    foreach (['porto', 'tokio'] as $provider) {
+    foreach (['porto'] as $provider) {
         $card = $xpath->query('//article[@data-provider="'.$provider.'"]')->item(0);
         expect($card->textContent)->toContain('Bloqueada')->toContain('Aguardando testes e validação');
         expect($xpath->query('.//button[@disabled]', $card)->length)->toBe(1)
             ->and($xpath->query('.//a | .//form', $card)->length)->toBe(0);
     }
+    $tokio = $xpath->query('//article[@data-provider="tokio"]')->item(0);
+    expect($tokio->textContent)->not->toContain('Bloqueada')->toContain('Aguardando análise desta companhia.');
     expect($xpath->query('//form')->length)->toBe(0)
         ->and($xpath->query('//button[not(@disabled)]')->length)->toBe(0);
 });
+
+it('renders Tokio installments and manual guidance for each viewer', function (string $viewer, string $status) {
+    $batch = $this->lead->insuranceAnalysesBatches()->create(['status' => 'completed', 'total_providers' => 1, 'finished_at' => now()]);
+    $batch->analyses()->create([
+        'lead_id' => $this->lead->id, 'provider' => 'tokio', 'product' => 'fianca_locaticia', 'status' => $status,
+        'lease_start_date' => '2026-11-03', 'lease_end_date' => '2029-05-03',
+        'response_payload' => ['quote_selection' => ['installment_amount' => '45.50', 'installments' => 30, 'payment_type' => 'credito']],
+    ]);
+    $admin = $viewer === 'admin';
+    $response = $this->actingAs($admin ? $this->corretor : $this->user, $admin ? 'admin' : 'web')
+        ->withSession(['2fa_passed' => true])
+        ->get(route($admin ? 'admin.insurance-analyses.lead' : 'insurance-analyses.lead', $this->lead))->assertOk();
+    if ($status === 'approved') {
+        $response->assertSee('30 parcelas de R$ 45,50')->assertSee('Cartão de crédito')->assertSee('Melhor preço');
+    } else {
+        $response->assertSee($admin ? 'realizar cotação manualmente' : 'entrar em contato com corretor');
+    }
+})->with([['admin', 'approved'], ['company', 'approved'], ['admin', 'manual_required'], ['company', 'manual_required']]);
 
 it('renders saved coverages and highlights the confirmed best total only after consolidation', function () {
     $batch = $this->lead->insuranceAnalysesBatches()->create(['status' => 'processing', 'total_providers' => 2]);

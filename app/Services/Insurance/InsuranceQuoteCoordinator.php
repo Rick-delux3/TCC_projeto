@@ -19,20 +19,21 @@ final class InsuranceQuoteCoordinator
             $analysis = InsuranceAnalysis::query()->lockForUpdate()->findOrFail($analysis->id);
             InsuranceAnalysisAttempt::assertCurrent($analysis, $attemptId);
             $round = InsuranceAnalysisRound::query()->where('attempt_id', $attemptId)->first();
+            $startDate = today('America/Sao_Paulo');
             $round ??= InsuranceAnalysisRound::query()->create([
                 'attempt_id' => $attemptId,
                 'insurance_analysis_batch_id' => $analysis->insurance_analysis_batch_id,
                 'is_reanalysis' => $isReanalysis,
                 'lead_snapshot' => $this->snapshots->capture($analysis->lead),
-                'lease_start_date' => today()->toDateString(),
-                'lease_end_date' => today()->addMonthsNoOverflow(30)->toDateString(),
+                'lease_start_date' => $startDate->toDateString(),
+                'lease_end_date' => $startDate->copy()->addMonthsNoOverflow(30)->toDateString(),
             ]);
             $run = $analysis->providerRuns()->firstOrCreate(['insurance_analysis_round_id' => $round->id]);
             $run->load('round', 'analysis');
             if (! $run->scenarios()->exists()) {
                 $this->createScenario($run, 'primary');
                 $spouse = data_get($round->lead_snapshot, 'relations.conjuge');
-                if (filled($spouse['cpf'] ?? null) && filled($spouse['nome'] ?? null)) {
+                if (! data_get($round->lead_snapshot, 'is_company', false) && filled($spouse['cpf'] ?? null) && filled($spouse['nome'] ?? null)) {
                     $this->createScenario($run, 'spouse');
                 }
             }
@@ -124,6 +125,10 @@ final class InsuranceQuoteCoordinator
                         'payment_type' => $winner?->payment_type,
                     ],
                 ]);
+                if ($analysis->provider === 'tokio') {
+                    $attributes['request_payload'] = null;
+                    $attributes['response_payload'] = \Illuminate\Support\Arr::only($attributes['response_payload'], ['payment', 'messages', 'manual_required', 'quote_selection']);
+                }
             }
             $analysis->forceFill($attributes)->save();
             if ($finished) {
@@ -152,6 +157,9 @@ final class InsuranceQuoteCoordinator
         if ($quotes->contains('status', 'approved')) {
             return 'approved';
         }
+        if ($quotes->every(fn ($quote) => $quote->status === 'manual_required')) {
+            return 'manual_required';
+        }
 
         return $quotes->every(fn ($quote) => $quote->status === 'rejected') ? 'rejected' : 'failed';
     }
@@ -169,7 +177,9 @@ final class InsuranceQuoteCoordinator
                 'rent_amount', 'charges_amount', 'total_monthly_amount', 'inhabited',
             ]), [
                 'status' => 'pending', 'plan_key' => $plan, 'multiple' => 30, 'installments' => 30,
-                'payment_type' => $registered ? 'Invoice' : 'Boleto',
+                'payment_type' => $analysis->provider === 'tokio'
+                    ? (filled(data_get($run->round->lead_snapshot, 'tokio.partner_code')) ? 'faturado' : 'credito')
+                    : ($registered ? 'Invoice' : 'Boleto'),
                 'lease_start_date' => $run->round->lease_start_date,
                 'lease_end_date' => $run->round->lease_end_date,
             ]));

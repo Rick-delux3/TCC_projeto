@@ -5,12 +5,15 @@
         'awaiting_consolidation' => 'Aguardando a consolidação do resultado do pacote.',
         'no_approved_quotes' => 'Não há propostas aprovadas neste pacote.',
         'missing_confirmed_total' => 'Há proposta aprovada sem valor total confirmado. A comparação ainda está indisponível.',
+        'missing_confirmed_installment' => 'Há proposta aprovada sem parcela confirmada. A comparação ainda está indisponível.',
         'incomparable_currencies' => 'As propostas não possuem moedas compatíveis para comparação.',
         'incomparable_periods' => 'As propostas não possuem vigências compatíveis para comparação.',
     ];
     $offers = collect($pageData['analyses'])->filter(fn ($analysis) => in_array($analysis['provider'], $activeProviders, true)
-        && $analysis['status'] === 'approved' && $analysis['quote']['price']['basis'] === 'gross_total'
-        && (float) $analysis['quote']['price']['total'] > 0);
+        && $analysis['status'] === 'approved'
+        && (($analysis['quote']['price']['comparison_basis'] ?? null) === 'installment'
+            ? (float) ($analysis['quote']['price']['installment_amount'] ?? 0) > 0
+            : ($analysis['quote']['price']['basis'] === 'gross_total' && (float) $analysis['quote']['price']['total'] > 0)));
 @endphp
 <section class="mb-4" aria-labelledby="comparison-title">
     <h2 id="comparison-title" class="h5">Melhores ofertas</h2>
@@ -30,8 +33,13 @@
                     @endif
                     <div class="card-body">
                         <h3 class="h6">{{ $providerNames[$offer['provider']] }}</h3>
-                        <p class="fs-4 fw-semibold mb-1">{{ $formatMoney($price['total'], $price['currency']) }}</p>
-                        <p class="small text-body-secondary mb-1">Prêmio bruto total da vigência</p>
+                        @if (($price['comparison_basis'] ?? null) === 'installment')
+                            <p class="fs-4 fw-semibold mb-1">{{ $formatMoney($price['installment_amount'], $price['currency']) }}</p>
+                            <p class="small text-body-secondary mb-1">Por parcela · {{ $price['installments'] }} parcelas</p>
+                        @else
+                            <p class="fs-4 fw-semibold mb-1">{{ $formatMoney($price['total'], $price['currency']) }}</p>
+                            <p class="small text-body-secondary mb-1">Prêmio bruto total da vigência</p>
+                        @endif
                         <p class="small mb-0">{{ $formatDate($price['period_start']) }} até {{ $formatDate($price['period_end']) }}</p>
                     </div>
                 </article>

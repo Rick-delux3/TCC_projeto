@@ -9,6 +9,7 @@ class InsuranceProviderResolver
     public function __construct(
         private PottencialInsuranceProvider $pottencialProvider,
         private TooInsuranceProvider $tooProvider,
+        private TokioInsuranceProvider $tokioProvider,
     ) {}
 
     public function availableProviders(): array
@@ -18,6 +19,7 @@ class InsuranceProviderResolver
         return array_values(array_filter([
             'pottencial',
             'too',
+            'tokio',
         ], fn (string $provider) => config("services.{$provider}.enabled", false)));
     }
 
@@ -32,6 +34,7 @@ class InsuranceProviderResolver
         return match ($provider) {
             'pottencial' => $this->pottencialProvider,
             'too' => $this->tooProvider,
+            'tokio' => $this->tokioProvider,
 
             default => throw new InvalidArgumentException("Provider inválido: {$provider}"),
         };

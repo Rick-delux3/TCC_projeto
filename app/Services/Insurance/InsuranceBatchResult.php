@@ -20,6 +20,9 @@ class InsuranceBatchResult
         if ($statuses->contains('approved')) {
             return 'approved';
         }
+        if ($statuses->contains('manual_required') && ! $statuses->contains('failed')) {
+            return 'manual_required';
+        }
 
         return $statuses->every(fn (string $status): bool => in_array($status, ['rejected', 'denied', 'refused'], true))
             ? 'rejected' : 'failed';

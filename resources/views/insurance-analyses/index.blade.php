@@ -1,11 +1,12 @@
 @php
     $providerNames = ['pottencial' => 'Pottencial', 'too' => 'Too Seguros', 'porto' => 'Porto Seguro', 'tokio' => 'Tokio Marine'];
-    $activeProviders = ['pottencial', 'too'];
+    $activeProviders = ['pottencial', 'too', 'tokio'];
     $statusLabels = [
         'pending' => 'Aguardando análise', 'queued' => 'Na fila', 'processing' => 'Em análise',
         'running' => 'Em análise', 'manual_review' => 'Análise manual', 'approved' => 'Aprovada',
         'rejected' => 'Recusada', 'failed' => 'Falha', 'completed' => 'Concluído',
         'completed_with_errors' => 'Concluído com falhas',
+        'manual_required' => 'Cotação manual necessária',
     ];
     $formatMoney = static fn ($value, string $currency = 'BRL'): string => $value === null
         ? 'Não informado'

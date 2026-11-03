@@ -72,7 +72,7 @@ class CompleteInsuranceAnalysesBatchJob implements ShouldQueue
             | cada análise representa a rodada atual.
             */
             $completed = $analyses
-                ->whereIn('status', ['approved', 'rejected'])
+                ->whereIn('status', ['approved', 'rejected', 'manual_required'])
                 ->count();
 
             $failed = $analyses

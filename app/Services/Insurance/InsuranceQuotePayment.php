@@ -10,6 +10,9 @@ final class InsuranceQuotePayment
 
     public function fetch(InsuranceQuote $quote): array
     {
+        if ($quote->provider === 'tokio') {
+            return app(TokioQuoteResponse::class)->payment($quote);
+        }
         $result = match ($quote->provider) {
             'pottencial' => $this->pottencial->getPaymentSimulations($quote->quote_id),
             'too' => $this->too->getPaymentOptions($quote->quote_id),

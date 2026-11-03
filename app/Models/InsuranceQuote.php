@@ -11,13 +11,14 @@ class InsuranceQuote extends InsuranceExecution
 
     public function __construct(array $attributes = [])
     {
-        parent::__construct($attributes);
+        parent::__construct();
         $this->mergeFillable(['insurance_applicant_scenario_id', 'installment_amount', 'payment_status', 'dispatched_at', 'poll_count']);
         $this->mergeCasts([
             'request_payload' => 'encrypted:array', 'response_payload' => 'encrypted:array',
             'available_plans' => 'encrypted:array', 'available_assistances' => 'encrypted:array',
             'installment_amount' => 'decimal:2', 'dispatched_at' => 'datetime',
         ]);
+        $this->fill($attributes);
     }
 
     public function scenario(): BelongsTo

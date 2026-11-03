@@ -10,6 +10,11 @@ class InsuranceProviderResultWriter
 
     public function apply(InsuranceExecution $analysis, array $result): void
     {
+        if ($analysis->provider === 'tokio') {
+            app(TokioQuoteResponse::class)->apply($analysis, $result);
+
+            return;
+        }
         $isToo = strtolower((string) $analysis->provider) === 'too';
         $response = $result['response'] ?? [];
         $httpStatus = $result['http_status'] ?? null;

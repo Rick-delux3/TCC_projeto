@@ -128,6 +128,13 @@ return [
     ],
 
     'tokio' => [
+        'enabled' => env('TOKIO_ENABLED', false),
+        'base_url' => env('TOKIO_BASE_URL', 'https://apim-act.tokiomarine.com.br/massificados/cotador-fianca-service-w/api'),
+        'commission' => 15,
+        'remuneration' => 0,
+        'discount' => 0,
+        'surcharge' => 0,
+        'assistance' => '26203',
         'base_url_w' => env('TOKIO_BASE_URL_W', 'https://apim-act.tokiomarine.com.br/massificados/cotador-fianca-service-w/api'),
         'codigo_corretor' => env('TOKIO_CODIGO_CORRETOR', env('COD_CORRETOR')),
         'cpf_usuario' => env('TOKIO_CPF_USUÁRIO', env('TOKIO_CPF_USUARIO')),

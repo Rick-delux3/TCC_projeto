@@ -154,10 +154,11 @@ it('rejects a Pottencial applicant without a valid document or rental purpose', 
 })->with(['document', 'purpose']);
 
 it('selects the rental product for all providers when starting the batch', function (string $rentalType) {
+    config(['services.tokio.enabled' => true]);
     $analysis = alignedInsuranceAnalysis(true, $rentalType);
     (new StartInsuranceAnalysesBatchJob($analysis->lead_id))->handle(app(InsuranceProviderResolver::class));
     $analyses = InsuranceAnalysis::query()->whereNotNull('insurance_analysis_batch_id')->get();
-    expect($analyses)->toHaveCount(2);
+    expect($analyses)->toHaveCount(3);
     foreach ($analyses as $created) {
         expect($created->product)->toBe('fianca_locaticia_'.$rentalType);
     }

@@ -25,6 +25,9 @@
                             <button type="button" class="btn btn-outline-secondary w-100" disabled>Indisponível</button>
                         @elseif (! $analysis)
                             <p class="mb-0" role="status">Aguardando análise desta companhia.</p>
+                        @elseif ($analysis['manual_required'] ?? false)
+                            <p><span class="badge text-bg-secondary">{{ $statusLabels['manual_required'] }}</span></p>
+                            <p class="mb-0" role="status">{{ $analysis['manual_message'] }}</p>
                         @else
                             @php($price = $analysis['quote']['price'])
                             <p><span @class(['badge', 'text-bg-success' => $analysis['status'] === 'approved', 'text-bg-danger' => in_array($analysis['status'], ['rejected', 'failed'], true), 'text-bg-secondary' => ! in_array($analysis['status'], ['approved', 'rejected', 'failed'], true)])>{{ $statusLabels[$analysis['status']] ?? $analysis['status'] }}</span></p>
@@ -34,7 +37,10 @@
                                 <dt>Orçamento / proposta</dt><dd class="text-break">{{ $analysis['quote']['quote_number'] ?? $analysis['quote']['quote_id'] ?? $analysis['quote']['proposal_id'] ?? 'Não informado' }}</dd>
                                 <dt>Rodada</dt><dd class="text-break">{{ $analysis['attempt']['attempt_id'] ?? 'Não informada' }}{{ ($analysis['attempt']['is_reanalysis'] ?? false) ? ' (reanálise)' : '' }}</dd>
                             </dl>
-                            @if ($analysis['status'] === 'approved' && $price['total'] !== null)
+                            @if ($analysis['status'] === 'approved' && ($price['comparison_basis'] ?? null) === 'installment' && ($price['installment_amount'] ?? null) !== null)
+                                <p class="fw-semibold mb-1">{{ $price['installments'] }} parcelas de {{ $formatMoney($price['installment_amount'], $price['currency']) }}</p>
+                                <p class="small text-body-secondary">{{ ['faturado' => 'Fatura', 'credito' => 'Cartão de crédito', 'Invoice' => 'Fatura', 'Boleto' => 'Boleto'][$price['payment_type']] ?? $price['payment_type'] }}</p>
+                            @elseif ($analysis['status'] === 'approved' && $price['total'] !== null)
                                 <p class="fw-semibold mb-1">{{ $formatMoney($price['total'], $price['currency']) }}</p>
                                 <p class="small text-body-secondary">{{ $price['basis'] === 'gross_total' ? 'Prêmio bruto total da vigência' : 'Valor informado; total ainda não confirmado para comparação' }}</p>
                             @else

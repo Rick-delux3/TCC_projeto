@@ -56,6 +56,7 @@ class InsuranceAnalysisPageService
             'approved' => $analyses->where('status', 'approved')->count(),
             'rejected' => $analyses->where('status', 'rejected')->count(),
             'failed' => $analyses->where('status', 'failed')->count(),
+            'manual_required' => $analyses->where('status', 'manual_required')->count(),
             'percent' => $total > 0 ? (int) floor($completed * 100 / $total) : 0,
         ];
         $page = [
@@ -79,7 +80,7 @@ class InsuranceAnalysisPageService
                 'id' => $batch->id,
                 'status' => $batch->status,
                 'total_providers' => $total,
-                'completed_providers' => $progress['approved'] + $progress['rejected'],
+                'completed_providers' => $progress['approved'] + $progress['rejected'] + $progress['manual_required'],
                 'failed_providers' => $progress['failed'],
                 'started_at' => $batch->started_at?->toIso8601String(),
                 'finished_at' => $batch->finished_at?->toIso8601String(),
@@ -87,7 +88,7 @@ class InsuranceAnalysisPageService
             ],
             'progress' => $progress,
             'result' => ['is_final' => $final, 'status' => $final ? InsuranceBatchResult::status($batch) : null],
-            'analyses' => $analyses->map(function (InsuranceAnalysis $analysis) use ($data, $quotes, $enabled, $permissions, $canReanalyzeWithChanges, $prefix): array {
+            'analyses' => $analyses->map(function (InsuranceAnalysis $analysis) use ($data, $quotes, $enabled, $permissions, $canReanalyzeWithChanges, $prefix, $admin): array {
                 $attempt = $data['analysisAttempts'][$analysis->id];
                 $allowed = $enabled;
 
@@ -98,12 +99,16 @@ class InsuranceAnalysisPageService
                     'status' => $analysis->status,
                     'provider_status' => $analysis->provider_status,
                     'is_terminal' => ProviderAnalysisStatus::isTerminal($analysis->status),
+                    'manual_required' => $analysis->status === 'manual_required',
+                    'manual_message' => $analysis->status === 'manual_required'
+                        ? ($admin ? 'realizar cotação manualmente' : 'entrar em contato com corretor') : null,
+                    'messages' => $analysis->provider === 'tokio' ? data_get($analysis->providerResponsePayload(), 'messages', []) : [],
                     'attempt' => $attempt,
                     'premium_amount' => $analysis->premium_amount,
                     'gross_premium' => $analysis->gross_premium,
                     'total_monthly_amount' => $analysis->total_monthly_amount,
                     'quote' => $quotes[$analysis->id],
-                    'quote_attempts' => $analysis->currentProviderRun?->scenarios->flatMap(function ($scenario) use ($analysis): array {
+                    'quote_attempts' => $analysis->currentProviderRun?->scenarios->flatMap(function ($scenario) use ($analysis, $admin): array {
                         $snapshot = $analysis->currentProviderRun->round->lead_snapshot;
                         $names = $scenario->kind === 'spouse'
                             ? [data_get($snapshot, 'relations.conjuge.nome')]
@@ -115,11 +120,12 @@ class InsuranceAnalysisPageService
                         return $scenario->quotes->map(fn ($quote): array => [
                             'id' => $quote->id, 'scenario' => $scenario->kind, 'applicants' => $names,
                             'plan_key' => $quote->plan_key, 'status' => $quote->status,
-                            'message' => $quote->status === 'failed'
+                            'message' => $quote->status === 'manual_required' ? ($admin ? 'realizar cotação manualmente' : 'entrar em contato com corretor') : ($quote->status === 'failed'
                                 ? 'Não foi possível concluir esta cotação.'
-                                : ($quote->rejection_reason ?? $quote->provider_status),
+                                : ($quote->rejection_reason ?? $quote->provider_status)),
                             'installment_amount' => $quote->installment_amount, 'installments' => $quote->installments,
                             'payment_status' => $quote->payment_status,
+                            'payment_type' => $quote->payment_type,
                             'selected' => $analysis->currentProviderRun->selected_quote_id === $quote->id,
                         ])->all();
                     })->values()->all() ?? [],
@@ -189,6 +195,9 @@ class InsuranceAnalysisPageService
 
     private function canSync(InsuranceAnalysis $analysis): bool
     {
+        if ($analysis->provider === 'tokio') {
+            return false;
+        }
         if ($analysis->currentProviderRun) {
             return ! ProviderAnalysisStatus::isTerminal($analysis->status);
         }

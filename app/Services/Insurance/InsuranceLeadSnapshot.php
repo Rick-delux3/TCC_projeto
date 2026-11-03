@@ -21,8 +21,28 @@ final class InsuranceLeadSnapshot
         foreach (self::RELATIONS as $name) {
             $model = $lead->getRelation($name);
             $snapshot['relations'][$name] = $model ? (in_array($name, ['company', 'imobiliariaVinculada'], true)
-                ? Arr::only($model->getAttributes(), ['id', 'name', 'cnpj', 'email', 'phone', 'cep', 'city', 'state'])
+                ? Arr::only($model->getAttributes(), ['id', 'name', 'cnpj', 'email', 'phone', 'cep', 'city', 'state', 'tokio_partner_code'])
                 : $model->getAttributes()) : null;
+        }
+
+        $document = $lead->rentalApplicantDocument();
+        $isCompany = strlen($document) === 14 || $lead->tipo_pessoa === 'J';
+        $snapshot['is_company'] = $isCompany;
+        if ($isCompany) {
+            $snapshot['relations']['conjuge'] = null;
+            $snapshot['attributes']['estado_civil'] = null;
+        }
+        $snapshot['tokio'] = [
+            'has_spouse' => ! $isCompany && filled(data_get($snapshot, 'relations.conjuge.cpf')) && filled(data_get($snapshot, 'relations.conjuge.nome')),
+            'partner_code' => $lead->tipo_solicitante === 'imobiliaria_cadastrada' ? $lead->imobiliariaVinculada?->getAttribute('tokio_partner_code') : null,
+            'cnae' => null,
+            'parameters' => Arr::only(config('services.tokio', []), ['commission', 'remuneration', 'discount', 'surcharge', 'assistance']),
+        ];
+        if (config('services.tokio.enabled', false) && ! $isCompany && $lead->atividade_economica_id) {
+            $snapshot['tokio']['cnae'] = \App\Models\AtividadeEconomicaCodigo::query()
+                ->where('atividade_economica_id', $lead->atividade_economica_id)->where('seguradora', 'tokio')->where('ativo', true)
+                ->whereHas('atividadeEconomica', fn ($query) => $query->where('ativo', true))
+                ->pluck('codigo')->filter(fn ($code) => ctype_digit((string) $code))->sortBy(fn ($code) => (int) $code)->first();
         }
 
         return $snapshot;

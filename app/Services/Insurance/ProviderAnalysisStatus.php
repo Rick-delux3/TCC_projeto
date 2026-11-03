@@ -24,7 +24,7 @@ final class ProviderAnalysisStatus
 
     public static function isTerminal(?string $status): bool
     {
-        return in_array($status, ['approved', 'rejected', 'failed'], true);
+        return in_array($status, ['approved', 'rejected', 'failed', 'manual_required'], true);
     }
 
     public static function errorMessage(string $status): ?string
