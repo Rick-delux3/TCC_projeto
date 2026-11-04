@@ -63,6 +63,12 @@ class AppServiceProvider extends ServiceProvider
                 return Limit::none();
             }
 
+            $scope = $request->isMethodSafe() ? 'pages:' : 'credentials:';
+
+            return Limit::perMinute(5)->by($scope.$request->ip());
+        });
+
+        RateLimiter::for('company-login-access', function (Request $request): Limit {
             return Limit::perMinute(5)->by($request->ip());
         });
 

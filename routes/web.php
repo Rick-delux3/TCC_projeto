@@ -364,7 +364,7 @@ Route::prefix('/empresa')->middleware([RedirectAuthenticatedCompany::using('web'
         ->name('empresa.register.post');
     Route::get('/login', [ImobiliariaAuthController::class, 'showLoginForm'])->name('empresa.login');
     Route::post('/login/post', [ImobiliariaAuthController::class, 'login'])
-        ->middleware('throttle:10,1')
+        ->middleware('throttle:company-login-access')
         ->name('empresa.login.post');
 
     Route::get('/forgot-password', [CompanyPasswordResetLinkController::class, 'create'])

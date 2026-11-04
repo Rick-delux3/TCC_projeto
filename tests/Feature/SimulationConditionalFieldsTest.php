@@ -328,6 +328,33 @@ it('audits valid public simulation boundaries and formatted values', function (s
         'nullable optional fields' => [['estado_civil' => null, 'numero' => null, 'complemento' => null, 'observacoes' => null]],
     ]);
 
+it('preserves removed and edited utility expenses in every simulation form', function (string $route, array $expenses, float $water, float $electricity) {
+    $this->post(route($route), auditedSimulationPayload($route, array_merge(['valor_aluguel' => '300'], $expenses)))
+        ->assertRedirect(route('simulation.success'))->assertSessionHasNoErrors();
+
+    $saved = Lead::query()->sole()->despesas;
+    expect((float) $saved->valor_agua)->toBe($water)
+        ->and((float) $saved->valor_luz)->toBe($electricity)
+        ->and((float) $saved->valor_total_encargos)->toBe(300.0 + $water + $electricity);
+    Http::assertNothingSent();
+})->with(['simulation.tenant.store', 'simulation.unregistered-company.store', 'simulation.registered-company.store'])
+    ->with([
+        'removed fields' => [[], 0.0, 0.0],
+        'blank fields' => [['valor_agua' => '', 'valor_luz' => ''], 0.0, 0.0],
+        'null fields' => [['valor_agua' => null, 'valor_luz' => null], 0.0, 0.0],
+        'edited fields' => [['valor_agua' => '12,50', 'valor_luz' => '20,00'], 12.5, 20.0],
+        'only water removed' => [['valor_luz' => '30'], 0.0, 30.0],
+    ]);
+
+it('keeps removed utility fields hidden after validation errors', function () {
+    $this->withSession(['_old_input' => conditionalSimulationPayload(['valor_agua' => null, 'valor_luz' => null])]);
+    $dom = conditionalSimulationDom($this->get(route('simulation.tenant.form'))->assertOk()->getContent());
+
+    foreach (['valor_agua', 'valor_luz'] as $field) {
+        expect($dom->query('//*[@data-expense-field="'.$field.'"][contains(@class, "d-none")]')->length)->toBe(1);
+    }
+});
+
 it('audits numeric defaults and normalized persistence without real integrations', function () {
     $this->post(route('simulation.tenant.store'), conditionalSimulationPayload([
         'valor_aluguel' => 'R$ 1.234,50', 'valor_agua' => '0', 'valor_luz' => null,
@@ -337,9 +364,9 @@ it('audits numeric defaults and normalized persistence without real integrations
     $lead = Lead::query()->sole();
     expect((float) $lead->despesas->valor_aluguel)->toBe(1234.5)
         ->and((float) $lead->despesas->valor_agua)->toBe(0.0)
-        ->and((float) $lead->despesas->valor_luz)->toBe(123.45)
+        ->and((float) $lead->despesas->valor_luz)->toBe(0.0)
         ->and((float) $lead->despesas->valor_gas)->toBe(12.5)
-        ->and((float) $lead->despesas->valor_total_encargos)->toBe(1370.45)
+        ->and((float) $lead->despesas->valor_total_encargos)->toBe(1247.0)
         ->and($lead->endereco->estado)->toBe('SP')
         ->and($lead->email)->toBe('conditional@example.test');
     Http::assertNothingSent();
@@ -854,6 +881,11 @@ it('updates editable water and electricity defaults with the rent in simulation 
         const initial = setup({ valor_aluguel: '1300.55' });
         assert.equal(initial.inputs.valor_agua.value, '130,06');
         assert.equal(initial.inputs.valor_luz.value, '130,06');
+        initial.change('valor_agua', '');
+        initial.change('valor_luz', '');
+        initial.change('valor_aluguel', '3000');
+        assert.equal(initial.inputs.valor_agua.value, '');
+        assert.equal(initial.inputs.valor_luz.value, '');
         console.log('utility defaults verified');
         JS]);
     $process->setInput($script);

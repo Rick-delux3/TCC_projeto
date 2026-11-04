@@ -314,7 +314,7 @@ class UpdateLeadOnLeadLoversJob implements ShouldQueue
         ?int $expectedRemoteId,
         array $requestedFields,
     ): ?int {
-        $email = $resolver->normalizedEmail($lead->email);
+        $email = $resolver->normalizedEmail($lead->leadLoversContact('email'));
 
         if ($email === null) {
             $this->markFailed(
@@ -591,7 +591,7 @@ class UpdateLeadOnLeadLoversJob implements ShouldQueue
         $unsupportedFields = [];
         $staticValues = [
             'name' => $this->nullableString($lead->nome),
-            'phone' => $this->nullablePhone($lead->tel),
+            'phone' => $this->nullablePhone($lead->leadLoversContact('tel')),
             'city' => $this->nullableString($lead->endereco?->cidade_imovel),
             'state' => $this->nullableString($lead->endereco?->estado),
             'company' => $this->nullableString(

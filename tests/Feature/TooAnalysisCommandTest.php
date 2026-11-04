@@ -129,9 +129,9 @@ it('does not request a quote for a refusal and uses the representative CPF for a
         && $request['locacao']['finalidadeLocacao'] === 'Comercial');
 });
 
-it('polls pending credit and quotes once after approval', function () {
+it('polls pending credit and quotes once after approval', function (int $status) {
     Http::fakeSequence()->push(['numeroFicha' => 123])->push([], 204)
-        ->push(['proposta' => ['status' => 5]])->push(['proposta' => ['status' => 8]])
+        ->push(['proposta' => ['status' => 5]])->push(['proposta' => ['status' => $status]])
         ->push(['numeroCotacao' => 789, 'premio' => 250.5]);
 
     expect(Artisan::call('too:test-analysis', ['--lead' => $this->lead->id, '--intervalo' => 2]))->toBe(0);
@@ -139,9 +139,9 @@ it('polls pending credit and quotes once after approval', function () {
     expect(array_column($report['steps'], 'operation'))->toBe(['ficha', 'credit', 'status', 'status', 'quote']);
     Http::assertSentCount(5);
     Sleep::assertSleptTimes(1);
-});
+})->with([8, 16]);
 
-it('keeps pending or preapproved credit incomplete at the consultation limit', function (int $status) {
+it('keeps pending credit incomplete at the consultation limit', function (int $status) {
     Http::fakeSequence()->push(['numeroFicha' => 123])->push([], 204)
         ->push(['proposta' => ['status' => $status]])->push(['proposta' => ['status' => $status]]);
 
@@ -151,7 +151,7 @@ it('keeps pending or preapproved credit incomplete at the consultation limit', f
         ->and($report['analysis']['quote_id'])->toBeNull();
     Http::assertSentCount(4);
     Sleep::assertSleptTimes(1);
-})->with([5, 16]);
+})->with([5]);
 
 it('reports each HTTP failure and stops without replaying mutations', function (int $position, int $status) {
     $bodies = [['numeroFicha' => 123], [], ['proposta' => ['status' => 8]], ['numeroCotacao' => 789, 'premio' => 150.25]];

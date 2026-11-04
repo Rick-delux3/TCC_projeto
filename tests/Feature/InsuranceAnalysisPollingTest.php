@@ -175,9 +175,10 @@ it('retries Pottencial communication failures before recording a terminal techni
     expect($analysis->fresh()->status)->toBe('failed')->and($analysis->fresh()->finished_at)->not->toBeNull();
 });
 
-it('keeps Too preapproval open and schedules its next consultation after creation', function () {
+it('quotes Too preapproval and completes the analysis after creation', function () {
     $analysis = waitingProviderAnalysis('too');
     $this->mock(TooRentalGuaranteePayloadBuilder::class)->shouldReceive('buildFichaPayload')->once()->andReturn([]);
+    app(TooRentalGuaranteePayloadBuilder::class)->shouldReceive('buildQuotePayload')->once()->andReturn([]);
     $service = $this->mock(TooService::class);
     $service->shouldReceive('registerProposalFicha')->once()->andReturn([
         'success' => true, 'response' => ['numeroProposta' => 'proposal-test', 'numeroFicha' => 'ficha-test'],
@@ -186,16 +187,19 @@ it('keeps Too preapproval open and schedules its next consultation after creatio
     $service->shouldReceive('getProposalStatus')->once()->andReturn([
         'success' => true, 'response' => ['proposta' => ['status' => 16, 'descricaoStatus' => 'Pré-aprovada']],
     ]);
-    $service->shouldNotReceive('requestQuote');
+    $service->shouldReceive('requestQuote')->once()->andReturn([
+        'success' => true, 'response' => ['numeroCotacao' => '123', 'premio' => 150],
+    ]);
 
     (new RunProviderAnalysisJob($analysis->id, 'polling-attempt'))->handle(app(InsuranceProviderResolver::class));
     (new CompleteInsuranceAnalysesBatchJob($analysis->insurance_analysis_batch_id, 'polling-attempt'))->handle();
 
-    expect($analysis->fresh()->status)->toBe('manual_review')
-        ->and($analysis->fresh()->finished_at)->toBeNull()
-        ->and($analysis->batch->fresh()->finished_at)->toBeNull();
-    Queue::assertPushed(SyncTooAnalysisStatusJob::class, 1);
-    Queue::assertNotPushed(SendAnalysisResultsEmailJob::class);
+    expect($analysis->fresh()->status)->toBe('approved')
+        ->and($analysis->fresh()->provider_status)->toBe('Pré-aprovada')
+        ->and($analysis->fresh()->quote_id)->toBe('123')
+        ->and($analysis->fresh()->finished_at)->not->toBeNull()
+        ->and($analysis->batch->fresh()->finished_at)->not->toBeNull();
+    Queue::assertNotPushed(SyncTooAnalysisStatusJob::class);
     Http::assertNothingSent();
 });
 

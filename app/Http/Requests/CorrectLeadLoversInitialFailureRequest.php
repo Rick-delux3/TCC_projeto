@@ -98,7 +98,7 @@ class CorrectLeadLoversInitialFailureRequest extends FormRequest
                         $currentPhone = preg_replace(
                             '/\D/',
                             '',
-                            (string) $lead->tel
+                            (string) $lead->leadLoversContact('tel')
                         );
 
                         if ((string) $value === $currentPhone) {
@@ -125,7 +125,7 @@ class CorrectLeadLoversInitialFailureRequest extends FormRequest
                     ) use ($lead): void {
                         if (
                             mb_strtolower(trim((string) $value))
-                            === mb_strtolower(trim((string) $lead->email))
+                            === mb_strtolower(trim((string) $lead->leadLoversContact('email')))
                         ) {
                             $fail(
                                 'Informe um e-mail diferente daquele que foi recusado.'

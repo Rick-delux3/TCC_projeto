@@ -202,7 +202,6 @@ class InsuranceProviderResultWriter
         $resultPayloadKey = $this->isReanalysis ? 'too_reanalysis_result' : 'too_initial_result';
 
         $providerStatus = data_get($response, 'status');
-        $tooInternalDecision = data_get($response, 'too_internal_decision');
         $providerOriginalStatus = data_get($response, 'provider_original_status');
         $providerOriginalDescription = data_get($response, 'provider_original_description');
 
@@ -217,10 +216,7 @@ class InsuranceProviderResultWriter
         *
         * O SyncTooAnalysisStatusJob continuará verificando automaticamente.
         */
-        if (
-            in_array($providerStatus, ['UnderAnalysis', 'Pending'], true)
-            && $tooInternalDecision !== 'PreApproved'
-        ) {
+        if (in_array($providerStatus, ['UnderAnalysis', 'Pending'], true)) {
             $analysis->update([
                 'status' => 'processing',
                 'result' => null,
@@ -241,39 +237,6 @@ class InsuranceProviderResultWriter
                 'event_type' => 'too_waiting_credit_analysis',
                 'status' => 'processing',
                 'message' => 'A Too recebeu a análise e ainda está processando o crédito. A verificação automática continuará em segundo plano.',
-                'payload' => $this->analysisSnapshot($analysis),
-                'response' => $debugPayload,
-            ]);
-
-            return;
-        }
-
-        /*
-        * Status 16: pré-aprovado.
-        *
-        * A pré-aprovação não encerra a análise; as consultas continuam.
-        */
-        if ($tooInternalDecision === 'PreApproved') {
-            $analysis->update([
-                'status' => 'manual_review',
-                'result' => 'manual_review',
-                'provider_status' => $providerOriginalDescription
-                    ?? $providerOriginalStatus
-                    ?? 'Análise pré-aprovada',
-                'response_payload' => array_merge($currentPayload, [
-                    $resultPayloadKey => $debugPayload,
-                    'too_status_check_stopped' => false,
-                    'too_manual_sync_available' => false,
-                    'too_status_check_stopped_at' => null,
-                ]),
-                'error_message' => null,
-                'finished_at' => null,
-            ]);
-
-            $analysis->events()->create([
-                'event_type' => 'analysis_waiting_provider',
-                'status' => 'manual_review',
-                'message' => 'A Too retornou pré-aprovação. Aguardando decisão final nas próximas consultas.',
                 'payload' => $this->analysisSnapshot($analysis),
                 'response' => $debugPayload,
             ]);

@@ -562,13 +562,8 @@ class SimulationController extends Controller
         $valorGas = (float) ($data['valor_gas'] ?? 0);
         $outrasDespesas = (float) ($data['outras_despesas'] ?? 0);
 
-        $valorAgua = isset($data['valor_agua']) && $data['valor_agua'] !== null && $data['valor_agua'] !== ''
-            ? (float) $data['valor_agua']
-            : $valorAluguel * 0.10;
-
-        $valorLuz = isset($data['valor_luz']) && $data['valor_luz'] !== null && $data['valor_luz'] !== ''
-            ? (float) $data['valor_luz']
-            : $valorAluguel * 0.10;
+        $valorAgua = (float) ($data['valor_agua'] ?? 0);
+        $valorLuz = (float) ($data['valor_luz'] ?? 0);
 
         $valorTotalEncargos = $valorAluguel
             + $valorCondominio

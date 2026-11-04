@@ -111,7 +111,9 @@ final class LeadLoversInitialFailureRecoveryService
             $previousErrorCode = $failure['error_code'];
             $correctedFields = array_keys($corrections);
 
-            $lockedLead->forceFill($corrections);
+            $lockedLead->forceFill([
+                'leadlovers_contact_overrides' => array_merge($lockedLead->leadlovers_contact_overrides ?? [], $corrections),
+            ]);
 
             /*
              * Invalida qualquer job antigo de atualização que ainda
@@ -154,7 +156,6 @@ final class LeadLoversInitialFailureRecoveryService
                 'leadlovers_update_requested_at' => null,
                 'leadlovers_update_at' => null,
 
-                'data_edited_at' => now(),
                 'updated_by_corretor_id' => $corretor?->id
                     ?? $lockedLead->updated_by_corretor_id,
             ])->save();
@@ -271,7 +272,7 @@ final class LeadLoversInitialFailureRecoveryService
                 );
             }
 
-            $currentPhone = preg_replace('/\D/', '', (string) $lead->tel);
+            $currentPhone = preg_replace('/\D/', '', (string) $lead->leadLoversContact('tel'));
 
             if ($phone === $currentPhone) {
                 throw new DomainException(
@@ -297,7 +298,7 @@ final class LeadLoversInitialFailureRecoveryService
             }
 
             if (
-                $email === mb_strtolower(trim((string) $lead->email))
+                $email === mb_strtolower(trim((string) $lead->leadLoversContact('email')))
             ) {
                 throw new DomainException(
                     'Informe um e-mail diferente daquele que foi recusado.'

@@ -232,7 +232,7 @@ it('publishes the private channel contract and preserves server-side dirty input
     ]);
 });
 
-it('keeps realtime reload event-driven and guarded by dirty correction forms', function () {
+it('keeps realtime reload guarded by dirty correction and company forms', function () {
     $script = file_get_contents(
         resource_path('js/dashboard-user.js'),
     );
@@ -244,10 +244,10 @@ it('keeps realtime reload event-driven and guarded by dirty correction forms', f
         )
         ->toContain('function dashboardHasUnsavedChanges()')
         ->toContain('serverHasUnsavedInput')
-        ->toContain("document.querySelector('.leadlovers-correction-modal.show')")
+        ->toContain("document.querySelector('.leadlovers-correction-modal.show, .lead-company-modal.show')")
         ->toMatch(
             '/function dashboardHasUnsavedChanges\(\)[\s\S]*?'
-            .'document\.querySelector\(\s*[\'"]\.leadlovers-correction-modal\.show[\'"]\s*\)'
+            .'document\.querySelector\(\s*[\'"]\.leadlovers-correction-modal\.show, \.lead-company-modal\.show[\'"]\s*\)'
             .'[\s\S]*?return true;/',
         )
         ->toContain('form[data-submitting="true"]')
@@ -256,11 +256,51 @@ it('keeps realtime reload event-driven and guarded by dirty correction forms', f
         ->toContain('window.Echo')
         ->toContain('.private(realtimeConfig.channel)')
         ->toContain('.listen(realtimeConfig.event')
+        ->toContain('watchPendingLeadLovers({')
         ->toMatch(
             '/function reloadDashboard\(\)[\s\S]*?dashboardHasUnsavedChanges\(\)'
             .'[\s\S]*?return;[\s\S]*?window\.location\.reload\(\);/',
         )
         ->not->toContain('setInterval(');
+});
+
+it('refreshes pending LeadLovers without Echo and preserves editing until it is safe to reload', function () {
+    $process = new \Symfony\Component\Process\Process(['node', '--input-type=module', '-e', <<<'JS'
+        import assert from 'node:assert/strict';
+        import { watchPendingLeadLovers } from './resources/js/leadlovers-dashboard-refresh.js';
+        let pending = true;
+        let editing = true;
+        let reloads = 0;
+        const timers = [];
+        const options = {
+            hasPending: () => pending,
+            canReload: () => !editing,
+            reload: () => reloads++,
+            schedule: (callback, delay) => { assert.equal(delay, 30000); timers.push(callback); },
+        };
+        watchPendingLeadLovers(options);
+        assert.equal(timers.length, 1);
+        timers.shift()();
+        assert.equal(reloads, 0);
+        assert.equal(timers.length, 1);
+        editing = false;
+        timers.shift()();
+        assert.equal(reloads, 1);
+        assert.equal(timers.length, 0);
+        pending = false;
+        watchPendingLeadLovers(options);
+        assert.equal(timers.length, 0);
+        pending = true;
+        watchPendingLeadLovers(options);
+        pending = false;
+        timers.shift()();
+        assert.equal(reloads, 1);
+        assert.equal(timers.length, 0);
+        console.log('LeadLovers refresh passed');
+        JS,
+    ], base_path());
+    $process->setTimeout(20)->mustRun();
+    expect($process->getOutput())->toContain('LeadLovers refresh passed');
 });
 
 it('manages correction busy state and focuses the invalid or first field only after the modal is shown', function () {

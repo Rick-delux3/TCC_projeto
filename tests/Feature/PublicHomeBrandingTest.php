@@ -442,6 +442,28 @@ it('uses active brand tokens in the shared loader without legacy palette leakage
         ->toMatch('/\[data-brand="tcc"\]\s*\{.*?--brand-primary-rgb:\s*3,\s*1,\s*51;/s');
 });
 
+it('uses the company access layout for admin verification only on tcc', function (string $profile) {
+    config(['branding.active' => $profile]);
+    $this->withSession(['info' => 'Código reenviado para seu e-mail.']);
+    $html = view('auth.admin-2fa', ['errors' => new Illuminate\Support\ViewErrorBag])->render();
+    $document = new DOMDocument;
+    $previous = libxml_use_internal_errors(true);
+    $document->loadHTML('<?xml encoding="UTF-8">'.$html);
+    libxml_clear_errors();
+    libxml_use_internal_errors($previous);
+    $xpath = new DOMXPath($document);
+
+    expect($xpath->query('//body[contains(@class,"tcc-company-auth-body")]')->length)->toBe($profile === 'tcc' ? 1 : 0)
+        ->and($xpath->query('//main[contains(@class,"tcc-company-auth-main--standalone")]')->length)->toBe($profile === 'tcc' ? 1 : 0)
+        ->and($xpath->query('//body/header')->length)->toBe($profile === 'tcc' ? 0 : 1)
+        ->and($xpath->query('//section[contains(@class,"client-auth-shell")]')->length)->toBe($profile === 'tcc' ? 1 : 0)
+        ->and($xpath->query('//input[@id="code"][@maxlength="6"][@inputmode="numeric"][@autocomplete="one-time-code"]')->length)->toBe(1);
+    foreach (['admin.2fa.verify', 'admin.2fa.resend', 'admin.logout'] as $route) {
+        expect($xpath->query('//form[@method="POST"][@action="'.route($route).'"]//input[@name="_token"]')->length)->toBe(1);
+    }
+    expect($html)->toContain('Código reenviado para seu e-mail.');
+})->with(['tcc', 'client']);
+
 it('hides the NVS-only two-factor illustration from the client profile', function () {
     $css = file_get_contents(resource_path('css/branding.css'));
 
@@ -496,7 +518,7 @@ it('keeps both web two-factor views isolated to the active brand', function (
 })->with([
     'tcc / NVS' => [
         'tcc',
-        'NVS Seguros',
+        'NVS',
         'imgs/Logo_NVS.png',
         'imgs/Logo_NVS.png',
         'imgs/logo-header.jpg',

@@ -205,6 +205,55 @@ it('does not repeat a creation whose external outcome is unknown', function (): 
     Http::assertNothingSent();
 });
 
+it('quotes Too approved and preapproved credit through payment and consolidation without duplicate submission', function (int $status, bool $quoteSuccess): void {
+    $analysis = multipleQuoteAnalysis(false, 'too');
+    app(InsuranceQuoteCoordinator::class)->prepare($analysis, 'round-one', false);
+    $quote = InsuranceQuote::first();
+    $builder = $this->mock(\App\Services\Insurance\Payloads\TooRentalGuaranteePayloadBuilder::class);
+    $builder->shouldReceive('buildFichaPayload')->once()->andReturn([]);
+    $builder->shouldReceive('buildQuotePayload')->once()->andReturn(['numeroFicha' => 123]);
+    $service = $this->mock(TooService::class);
+    $service->shouldReceive('registerProposalFicha')->once()->andReturn(['success' => true, 'response' => ['numeroFicha' => 123]]);
+    $service->shouldReceive('submitCreditAnalysis')->once()->andReturn(['success' => true]);
+    $description = $status === 16 ? 'Crédito Pré-aprovado' : 'Crédito Aprovado';
+    $service->shouldReceive('getProposalStatus')->once()->andReturn([
+        'success' => true, 'response' => ['proposta' => ['status' => $status, 'descricaoStatus' => $description]],
+    ]);
+    $service->shouldReceive('requestQuote')->once()->with(['numeroFicha' => 123])->andReturn([
+        'success' => $quoteSuccess, 'http_status' => $quoteSuccess ? 200 : 400,
+        'response' => $quoteSuccess ? ['numeroCotacao' => 789, 'premio' => 2175] : [],
+    ]);
+    if ($quoteSuccess) {
+        $service->shouldReceive('getPaymentOptions')->once()->with('789')->andReturn([
+            'success' => true, 'response' => [
+                'tipoPagamento' => [['tipo' => 1]],
+                'opcoesParcelamento' => [['tipo' => 2, 'comEntrada' => false, 'parcelas' => [['numeroParcela' => 29, 'valor' => 75]]]],
+            ],
+        ]);
+    } else {
+        $service->shouldNotReceive('getPaymentOptions');
+    }
+
+    $job = new RunInsuranceQuoteJob($quote->id, 'round-one');
+    app()->call([$job, 'handle']);
+    app()->call([$job, 'handle']);
+
+    expect($quote->fresh()->status)->toBe($quoteSuccess ? 'approved' : 'failed')
+        ->and($analysis->fresh()->status)->toBe($quoteSuccess ? 'approved' : 'failed');
+    if ($quoteSuccess) {
+        expect($quote->fresh()->provider_status)->toBe($description)
+            ->and($quote->fresh()->response_payload['too_status_info'])->toMatchArray(['status_code' => $status, 'can_quote' => true])
+            ->and($quote->fresh()->quote_id)->toBe('789')
+            ->and($quote->fresh()->installment_amount)->toBe('75.00')
+            ->and($quote->fresh()->installments)->toBe(29)
+            ->and($quote->fresh()->payment_status)->toBe('ready')
+            ->and($analysis->fresh()->provider_status)->toBe($description);
+    } else {
+        expect($quote->fresh()->quote_id)->toBeNull();
+    }
+    Http::assertNothingSent();
+})->with([[8, true], [16, true], [16, false]]);
+
 it('selects the Too monthly option without entry using its returned 29 installments', function (): void {
     $analysis = multipleQuoteAnalysis(false, 'too');
     app(InsuranceQuoteCoordinator::class)->prepare($analysis, 'round-one', false);

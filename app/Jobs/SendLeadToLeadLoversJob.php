@@ -217,7 +217,7 @@ class SendLeadToLeadLoversJob implements ShouldQueue
             );
         }
 
-        $email = trim((string) $lead->email);
+        $email = trim((string) $lead->leadLoversContact('email'));
 
         if ($email === '' || filter_var($email, FILTER_VALIDATE_EMAIL) === false) {
             $this->failInitialSend(
@@ -398,7 +398,7 @@ class SendLeadToLeadLoversJob implements ShouldQueue
                 && ($result['pagination']['current'] ?? null) === 1
                 && in_array($result['pagination']['pages'] ?? null, [0, 1], true)
                 && ($result['pagination']['next'] ?? null) === null
-                && trim((string) $lead->email) === $email
+                && trim((string) $lead->leadLoversContact('email')) === $email
             ) {
                 if ($this->storeProgress(self::PHASE_READY_TO_CREATE)) {
                     return $this->resolveRemoteLead($leadLovers, $this->loadLead(), $this->mainTagIdForLead($lead));
@@ -853,9 +853,9 @@ class SendLeadToLeadLoversJob implements ShouldQueue
 
         return [
             'staticFields' => [
-                'email' => $this->nullableString($lead->email),
+                'email' => $this->nullableString($lead->leadLoversContact('email')),
                 'name' => $this->nullableString($lead->nome),
-                'phone' => $this->nullableString($lead->tel),
+                'phone' => $this->nullableString($lead->leadLoversContact('tel')),
                 'city' => $this->nullableString($lead->endereco?->cidade_imovel),
                 'state' => $this->nullableString($lead->endereco?->estado),
                 'company' => $this->nullableString(

@@ -29,6 +29,8 @@ class Lead extends Model
 
     protected $table = 'leads';
 
+    protected $hidden = ['leadlovers_contact_overrides'];
+
     public function atividadeEconomica(): BelongsTo
     {
         return $this->belongsTo(AtividadeEconomica::class);
@@ -103,6 +105,7 @@ class Lead extends Model
         'ramo_atividade' => RamoAtividade::class,
         'leadlovers_lead_id' => 'integer',
         'leadlovers_response' => 'array',
+        'leadlovers_contact_overrides' => 'encrypted:array',
         'leadlovers_recovery' => 'array',
         'sent_to_leadlovers_at' => 'datetime',
         'aceite_termos' => 'boolean',
@@ -116,6 +119,15 @@ class Lead extends Model
         'leadlovers_confirmed_tag_version' => 'integer',
         'rejected_deletion_due_at' => 'datetime',
     ];
+
+    public function leadLoversContact(string $field): ?string
+    {
+        if (! in_array($field, ['tel', 'email'], true)) {
+            throw new \InvalidArgumentException('Campo de contato inválido.');
+        }
+
+        return ($this->leadlovers_contact_overrides ?? [])[$field] ?? $this->getAttribute($field);
+    }
 
     public function scopeCreatedThroughSystem(Builder $query): Builder
     {

@@ -158,7 +158,7 @@ it('counts only explicit approvals in company and broker dashboards', function (
         ->and($filteredStats['approvedAnalyses'])->toBe(2);
 });
 
-it('keeps Too preapproval distinct from approval', function (array $response, string $status) {
+it('persists Too decisions after the provider quote flow', function (array $response, string $status) {
     $analysis = insuranceStatusAnalysis();
     $analysis->update(['provider' => 'too', 'status' => 'pending']);
     $analysis->events()->create(['event_type' => 'created', 'payload' => ['attempt_id' => 'too-decision']]);
@@ -180,5 +180,5 @@ it('keeps Too preapproval distinct from approval', function (array $response, st
     'approved credit' => [['status' => 'Approved', 'quoteId' => 'too-quote'], 'approved'],
     'denied credit' => [['status' => 'Denied'], 'rejected'],
     'credit in progress' => [['status' => 'UnderAnalysis'], 'processing'],
-    'preapproved credit' => [['status' => 'UnderAnalysis', 'too_internal_decision' => 'PreApproved'], 'manual_review'],
+    'preapproved credit with quote' => [['status' => 'Approved', 'too_internal_decision' => 'Approved', 'provider_original_status' => 16, 'quoteId' => 'too-quote'], 'approved'],
 ]);

@@ -38,8 +38,8 @@ class TooInsuranceProvider implements CreatesInsuranceQuotes, InsuranceProviderI
      * 1. Registra ficha/proposta.
      * 2. Envia para análise de crédito.
      * 3. Consulta status.
-     * 4. Se status 8, solicita cotação.
-     * 5. Se status 5 ou 16, mantém em análise/manual_review.
+     * 4. Se status 8 ou 16, solicita cotação.
+     * 5. Se status 5, mantém em análise.
      */
     public function requestAnalysis(InsuranceExecution $analysis, string $attemptId): array
     {
@@ -569,7 +569,6 @@ class TooInsuranceProvider implements CreatesInsuranceQuotes, InsuranceProviderI
          * Se ainda não pode cotar, apenas retorna o resultado da análise.
          *
          * Status 5  = Em análise de crédito
-         * Status 16 = Pré-aprovado, mas sem cotação por enquanto
          * Status 6/11/12/14/15 = recusado/cancelado/expirado
          */
         if (! $statusInfo['can_quote']) {
@@ -591,7 +590,7 @@ class TooInsuranceProvider implements CreatesInsuranceQuotes, InsuranceProviderI
         }
 
         /*
-         * Status 8 = Análise aprovada.
+         * Status 8 e 16 permitem solicitar cotação.
          * Agora sim solicitamos cotação.
          */
         return $this->requestQuoteAfterApprovedStatus(
@@ -613,7 +612,7 @@ class TooInsuranceProvider implements CreatesInsuranceQuotes, InsuranceProviderI
     }
 
     /**
-     * Solicita cotação depois que a Too retornar status 8.
+     * Solicita cotação depois que a Too retornar status 8 ou 16.
      */
     private function requestQuoteAfterApprovedStatus(
         InsuranceExecution $analysis,
@@ -722,27 +721,14 @@ class TooInsuranceProvider implements CreatesInsuranceQuotes, InsuranceProviderI
 
         $statusCode = $statusCode !== null ? (int) $statusCode : null;
 
-        /*
-         * 8 = Análise Aprovada.
-         * Este é o único status em que vamos solicitar cotação agora.
+        /**
+         * 8 = Aprovada; 16 = Pré-aprovada, com biometria pendente.
+         * Ambos permitem cotar; biometria e emissão estão fora deste fluxo.
          */
-        if ($statusCode === 8) {
+        if (in_array($statusCode, [8, 16], true)) {
             return [
                 'canonical' => 'Approved',
                 'can_quote' => true,
-                'status_code' => $statusCode,
-                'status_description' => $statusDescription,
-            ];
-        }
-
-        /*
-         * 16 = Análise pré-aprovada.
-         * Como biometria não será implementada agora, não vamos cotar no 16.
-         */
-        if ($statusCode === 16) {
-            return [
-                'canonical' => 'PreApproved',
-                'can_quote' => false,
                 'status_code' => $statusCode,
                 'status_description' => $statusDescription,
             ];
@@ -779,17 +765,13 @@ class TooInsuranceProvider implements CreatesInsuranceQuotes, InsuranceProviderI
     }
 
     /**
-     * Mantém compatibilidade com o RunProviderAnalysisJob.
-     *
-     * Se o Job ainda não entende "PreApproved", mandamos como UnderAnalysis,
-     * mas preservamos o detalhe em too_internal_decision.
+     * Normaliza a decisão de crédito para os jobs de análise.
      */
     private function statusForJob(array $statusInfo): string
     {
         return match ($statusInfo['canonical']) {
             'Approved' => 'Approved',
             'Denied' => 'Denied',
-            'PreApproved' => 'UnderAnalysis',
             default => 'UnderAnalysis',
         };
     }

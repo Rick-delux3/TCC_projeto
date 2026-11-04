@@ -1245,6 +1245,8 @@
                                     @include('partials.leadlovers-sync-status', [
                                         'lead' => $lead,
                                         'failure' => $leadLoversFailure,
+                                        'showLeadLoversFailureMessage' => true,
+                                        'leadLoversFailureMessageMode' => 'compact',
                                     ])
 
                                     @if ($visibleTags->isNotEmpty())

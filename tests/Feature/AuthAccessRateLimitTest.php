@@ -62,3 +62,39 @@ it('does not add a company page limit for client', function () {
         $this->get(route('empresa.login'))->assertOk();
     }
 });
+
+it('allows five credential attempts independently of page views and unrelated throttles', function (string $profile, string $form, string $post, array $credentials, string $field) {
+    config(['branding.active' => $profile]);
+
+    for ($attempt = 0; $attempt < 4; $attempt++) {
+        $this->postJson(route('company.password.email'), [])->assertUnprocessable();
+    }
+
+    for ($attempt = 0; $attempt < 5; $attempt++) {
+        $this->get(route($form))->assertOk();
+        $this->from(route($form))->post($post, $credentials)
+            ->assertRedirect(route($form))
+            ->assertSessionHasErrors([$field => $field === 'cpf' ? 'CPF ou senha incorretos.' : 'E-mail ou senha incorretos.']);
+        $this->assertGuest('admin');
+        $this->assertGuest('web');
+    }
+
+    $this->post($post, $credentials)->assertTooManyRequests()->assertHeader('Retry-After');
+    $this->travel(301)->seconds();
+    $this->from(route($form))->post($post, $credentials)->assertRedirect(route($form))
+        ->assertSessionHasErrors([$field => $field === 'cpf' ? 'CPF ou senha incorretos.' : 'E-mail ou senha incorretos.']);
+})->with(['tcc', 'client'])->with([
+    'company' => ['empresa.login', '/empresa/login/post', ['email' => 'missing@example.test', 'password' => 'wrong-password'], 'email'],
+    'legacy company' => ['empresa.login', '/login', ['email' => 'missing@example.test', 'password' => 'wrong-password'], 'email'],
+    'broker member' => ['admin.login', '/member/admin/login', ['email' => 'missing@example.test', 'password' => 'wrong-password'], 'email'],
+    'broker CEO' => ['admin.ceo.login', '/ceo/admin/login', ['cpf' => '52998224725', 'password' => 'wrong-password'], 'cpf'],
+]);
+
+it('shares the five company attempts across both login addresses', function () {
+    for ($attempt = 0; $attempt < 5; $attempt++) {
+        $this->postJson($attempt % 2 === 0 ? '/login' : '/empresa/login/post', [])->assertUnprocessable();
+    }
+
+    $this->postJson('/login', [])->assertTooManyRequests();
+    $this->postJson('/empresa/login/post', [])->assertTooManyRequests();
+});
