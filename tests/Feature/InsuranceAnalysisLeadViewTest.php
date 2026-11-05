@@ -478,3 +478,101 @@ it('keeps read-only broker actions separate from editing and analysis permission
         ->assertJsonPath('data.actions.update_lead.method', 'POST')
         ->assertJsonPath('data.analyses.0.actions.retry.url', route('admin.insurance-analyses.retry', $analysis));
 });
+
+it('keeps every plan coverage inside details and shows only confirmed installments on cards', function () {
+    $batch = $this->lead->insuranceAnalysesBatches()->create(['status' => 'completed', 'total_providers' => 1, 'finished_at' => now()]);
+    $analysis = $batch->analyses()->create([
+        'lead_id' => $this->lead->id, 'provider' => 'pottencial', 'product' => 'fianca_locaticia', 'status' => 'approved',
+    ]);
+    $analysis->events()->create(['event_type' => 'analysis_started', 'payload' => ['attempt_id' => 'plans-display']]);
+    $run = app(\App\Services\Insurance\InsuranceQuoteCoordinator::class)->prepare($analysis, 'plans-display', false);
+    $quotes = $run->scenarios()->first()->quotes()->orderBy('id')->get();
+    expect($quotes)->toHaveCount(3);
+    foreach ($quotes as $index => $quote) {
+        $quote->update([
+            'status' => $index === 2 ? 'rejected' : 'approved',
+            'installment_amount' => 100 + $index * 20, 'installments' => 30,
+            'payment_status' => $index === 2 ? 'unavailable' : 'ready',
+            'response_payload' => ['private' => 'secret-response', 'coverages' => [[
+                'name' => 'Pintura interna plano '.$index, 'insuredAmount' => 4000 + $index, 'premiumAmount' => 50,
+            ]]],
+        ]);
+    }
+    $response = $this->actingAs($this->user)->withSession(['2fa_passed' => true])
+        ->get(route('insurance-analyses.lead', $this->lead))->assertOk()->assertDontSee('secret-response');
+    $document = new DOMDocument;
+    @$document->loadHTML('<?xml encoding="UTF-8">'.$response->getContent());
+    $xpath = new DOMXPath($document);
+    $card = $xpath->query('//article[@data-provider="pottencial"]')->item(0);
+    expect($card->textContent)->toContain('Visualizar', 'Básico', 'Completo', 'Tradicional', 'R$ 100,00', 'R$ 120,00', 'Cotação recusada')
+        ->not->toContain('Pintura interna', 'R$ 140,00', 'Rodada', 'Retorno da companhia');
+    expect($xpath->query('.//button[@data-analysis-dialog and not(@disabled)]', $card)->length)->toBe(1);
+    $details = $xpath->query('//dialog[@id="details-pottencial"]')->item(0);
+    expect($details->hasAttribute('open'))->toBeFalse()
+        ->and($details->textContent)->toContain('Pintura interna plano 0', 'Pintura interna plano 1', 'R$ 4.001,00')
+        ->not->toContain('Pintura interna plano 2');
+});
+
+it('places the cheapest confirmed offer between the next two prices', function () {
+    $batch = $this->lead->insuranceAnalysesBatches()->create(['status' => 'completed', 'total_providers' => 3, 'finished_at' => now()]);
+    foreach (['pottencial' => 150, 'too' => 120, 'tokio' => 100] as $provider => $amount) {
+        $batch->analyses()->create([
+            'lead_id' => $this->lead->id, 'provider' => $provider, 'product' => 'fianca_locaticia', 'status' => 'approved',
+            'lease_start_date' => '2026-11-01', 'lease_end_date' => '2029-05-01',
+            'response_payload' => ['quote_selection' => ['installment_amount' => $amount, 'installments' => 30, 'payment_type' => 'credito']],
+        ]);
+    }
+    $response = $this->actingAs($this->user)->withSession(['2fa_passed' => true])
+        ->get(route('insurance-analyses.lead', $this->lead))->assertOk();
+    $document = new DOMDocument;
+    @$document->loadHTML('<?xml encoding="UTF-8">'.$response->getContent());
+    $cards = (new DOMXPath($document))->query('//section[@aria-labelledby="comparison-title"]//article');
+    expect($cards)->toHaveCount(3)
+        ->and($cards->item(0)->textContent)->toContain('Too Seguros', 'R$ 120,00')
+        ->and($cards->item(1)->textContent)->toContain('Tokio Marine', 'R$ 100,00', 'Melhor preço')
+        ->and($cards->item(2)->textContent)->toContain('Pottencial', 'R$ 150,00');
+});
+
+it('opens quote details and defers live refresh until they are closed', function () {
+    $source = file_get_contents(resource_path('js/insurance-analyses.js'));
+    $source = preg_replace('/^import .*;\R/', '', $source);
+    $script = <<<'JS'
+const assert = require('node:assert/strict');
+let click, onState, onClose, reloads = 0, open = false;
+const dialog = {
+    showModal() { open = true; },
+    close() { open = false; onClose(); },
+    addEventListener(event, callback) { if (event === 'close') onClose = callback; }
+};
+const initial = { realtime: { broadcasting: { enabled: false } }, analyses: [] };
+global.window = {
+    insuranceAnalysisInitialState: initial,
+    location: { reload() { reloads++; } },
+    dispatchEvent() {}, addEventListener() {}
+};
+global.document = {
+    addEventListener(event, callback) { if (event === 'click') click = callback; },
+    getElementById() { return dialog; },
+    querySelectorAll(selector) { return selector === 'dialog' ? [dialog] : []; },
+    querySelector(selector) { return selector === 'dialog[open]' && open ? dialog : null; }
+};
+global.CustomEvent = class {};
+function createAnalysisRealtime(state, options) {
+    onState = options.onState;
+    return { start() { onState(state); }, destroy() {} };
+}
+JS;
+    $script .= "\n".$source.<<<'JS'
+assert.equal(reloads, 0);
+click({ target: { closest(selector) { return selector === '[data-analysis-dialog]' ? { dataset: { analysisDialog: 'details-too' } } : null; } } });
+assert.equal(open, true);
+onState({ ...initial, analyses: [{ status: 'approved' }] });
+assert.equal(reloads, 0);
+click({ target: { closest(selector) { return selector === 'dialog' ? dialog : selector === '[data-close-analysis-dialog]' ? {} : null; } } });
+assert.equal(open, false);
+assert.equal(reloads, 1);
+JS;
+    $process = new \Symfony\Component\Process\Process(['node', '-e', $script], base_path());
+    $process->run();
+    expect($process->isSuccessful())->toBeTrue($process->getErrorOutput());
+});

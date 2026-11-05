@@ -1,5 +1,28 @@
 import { createAnalysisRealtime } from './insurance-analysis-realtime';
 
+document.addEventListener('click', (event) => {
+    const opener = event.target.closest('[data-analysis-dialog]');
+    if (opener) document.getElementById(opener.dataset.analysisDialog)?.showModal();
+    if (event.target.closest('[data-close-analysis-dialog]')) event.target.closest('dialog')?.close();
+});
+
+document.querySelectorAll('[data-expense-reanalysis]').forEach(form => {
+    const updateTotal = () => {
+        const cents = Array.from(form.querySelectorAll('[data-expense-value]'))
+            .reduce((sum, input) => sum + Math.round((Number(input.value) || 0) * 100), 0);
+        form.querySelector('[data-expense-total]').textContent = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(cents / 100);
+    };
+    form.addEventListener('input', updateTotal);
+    form.addEventListener('submit', (event) => {
+        if (form.dataset.submitting === 'true') { event.preventDefault(); return; }
+        form.dataset.submitting = 'true';
+        form.querySelector('[type="submit"]').disabled = true;
+        form.querySelector('[type="submit"]').textContent = 'Solicitando cotações…';
+    });
+    updateTotal();
+});
+document.querySelector('dialog[data-open-on-load]')?.showModal();
+
 async function startInsuranceAnalyses() {
     const initialState = window.insuranceAnalysisInitialState;
     if (!initialState) return;
@@ -10,9 +33,22 @@ async function startInsuranceAnalyses() {
             // Periodic reads remain available if the WebSocket client cannot initialize.
         }
     }
+    const renderedState = JSON.stringify(initialState);
+    let refreshPending = false;
+    const refreshWhenClosed = () => {
+        if (refreshPending && !document.querySelector('dialog[open]')) window.location.reload();
+    };
+    document.querySelectorAll('dialog').forEach(dialog => dialog.addEventListener('close', refreshWhenClosed));
     const controller = createAnalysisRealtime(initialState, {
         echo: window.Echo,
-        onState: (state) => window.dispatchEvent(new CustomEvent('insurance-analyses:updated', { detail: state })),
+        onState: (state) => {
+            window.dispatchEvent(new CustomEvent('insurance-analyses:updated', { detail: state }));
+            if (!state) { window.location.reload(); return; }
+            if (JSON.stringify(state) !== renderedState) {
+                refreshPending = true;
+                refreshWhenClosed();
+            }
+        },
         onError: (reason) => window.dispatchEvent(new CustomEvent('insurance-analyses:error', { detail: { reason } })),
     });
     window.insuranceAnalysis = controller;

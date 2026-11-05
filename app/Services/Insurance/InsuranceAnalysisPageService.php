@@ -120,6 +120,7 @@ class InsuranceAnalysisPageService
                         return $scenario->quotes->map(fn ($quote): array => [
                             'id' => $quote->id, 'scenario' => $scenario->kind, 'applicants' => $names,
                             'plan_key' => $quote->plan_key, 'status' => $quote->status,
+                            'quote' => $this->quotes->summarize($quote),
                             'message' => $quote->status === 'manual_required' ? ($admin ? 'realizar cotação manualmente' : 'entrar em contato com corretor') : ($quote->status === 'failed'
                                 ? 'Não foi possível concluir esta cotação.'
                                 : ($quote->rejection_reason ?? $quote->provider_status)),
@@ -146,6 +147,7 @@ class InsuranceAnalysisPageService
             ],
             'permissions' => $permissions,
             'actions' => [
+                'expense_reanalysis' => $this->action($canReanalyzeWithChanges && $analyses->contains(fn (InsuranceAnalysis $analysis): bool => ! in_array($analysis->status, ['failed', 'error'], true)), $prefix.'expense-reanalysis', $lead->id, 'PUT') + ['revision' => $batch ? app(LeadReanalysisService::class)->expenseRevision($lead, $batch) : null],
                 'update_lead' => $this->action($permissions['edit_lead'], $admin ? 'admin.leads.update' : 'dashboard.leads.update', $lead->id, $admin ? 'POST' : 'PUT'),
                 'reanalysis' => $this->action($enabled && $permissions['create_analysis'] && $final
                     && (int) $lead->last_analysis_batch_id === $batch->id && $lead->canRequestGeneralReanalysis()

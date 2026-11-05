@@ -1,5 +1,6 @@
 @php
     $analysesByProvider = collect($companies)->keyBy('provider');
+    $planNames = ['Basic' => 'Básico', 'Complete' => 'Completo', 'Traditional' => 'Tradicional', 'Tradicional' => 'Tradicional', 'default' => 'Fiança locatícia'];
 @endphp
 <section class="border-top pt-4 mb-4" aria-labelledby="companies-title">
     <h2 id="companies-title" class="h5 mb-3">Todas as companhias</h2>
@@ -8,6 +9,14 @@
             @php
                 $blocked = ! in_array($provider, $activeProviders, true);
                 $analysis = $blocked ? null : $analysesByProvider->get($provider);
+                $attempts = collect($analysis['quote_attempts'] ?? []);
+                $plans = $attempts->groupBy('plan_key')->map(function ($attempts) {
+                    return $attempts->filter(fn ($item) => $item['status'] === 'approved' && $item['payment_status'] === 'ready' && (float) $item['installment_amount'] > 0)
+                        ->sortBy('installment_amount')->first() ?? $attempts->sortBy(fn ($item) => match ($item['status']) {
+                            'approved' => 0, 'pending', 'queued', 'processing', 'running', 'manual_review' => 1,
+                            'manual_required' => 2, 'failed' => 3, default => 4,
+                        })->first();
+                });
             @endphp
             <div class="col-12 col-md-6 col-xl-3">
                 <article @class(['card h-100', 'bg-body-tertiary' => $blocked]) aria-labelledby="provider-{{ $provider }}" data-provider="{{ $provider }}">
@@ -16,70 +25,34 @@
                         @if ($blocked)
                             <span class="badge text-bg-secondary">Bloqueada</span>
                         @else
-                            <button type="button" class="btn btn-sm btn-outline-secondary" disabled title="Edição disponível em uma próxima etapa">Editar</button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" data-analysis-dialog="details-{{ $provider }}" aria-haspopup="dialog" aria-controls="details-{{ $provider }}" @disabled(! $analysis)>Visualizar</button>
                         @endif
                     </div>
-                    <div class="card-body">
+                    <div class="card-body d-flex flex-column justify-content-center text-center">
                         @if ($blocked)
                             <p class="text-body-secondary">Aguardando testes e validação da integração.</p>
                             <button type="button" class="btn btn-outline-secondary w-100" disabled>Indisponível</button>
                         @elseif (! $analysis)
                             <p class="mb-0" role="status">Aguardando análise desta companhia.</p>
-                        @elseif ($analysis['manual_required'] ?? false)
-                            <p><span class="badge text-bg-secondary">{{ $statusLabels['manual_required'] }}</span></p>
-                            <p class="mb-0" role="status">{{ $analysis['manual_message'] }}</p>
+                        @elseif ($plans->isNotEmpty())
+                            <ul class="list-group list-group-flush">
+                                @foreach ($plans as $plan)
+                                    <li class="list-group-item px-0">
+                                        <h4 class="h6">{{ $planNames[$plan['plan_key']] ?? $plan['plan_key'] ?: 'Fiança locatícia' }}</h4>
+                                        @include('insurance-analyses.partials.offer-price', ['offerStatus' => $plan['status'], 'amount' => $plan['payment_status'] === 'ready' ? $plan['installment_amount'] : null, 'count' => $plan['installments'], 'manualMessage' => $analysis['manual_message']])
+                                    </li>
+                                @endforeach
+                            </ul>
                         @else
                             @php($price = $analysis['quote']['price'])
-                            <p><span @class(['badge', 'text-bg-success' => $analysis['status'] === 'approved', 'text-bg-danger' => in_array($analysis['status'], ['rejected', 'failed'], true), 'text-bg-secondary' => ! in_array($analysis['status'], ['approved', 'rejected', 'failed'], true)])>{{ $statusLabels[$analysis['status']] ?? $analysis['status'] }}</span></p>
-                            <dl class="mb-3">
-                                <dt>Retorno da companhia</dt><dd class="text-break">{{ $analysis['provider_status'] ?: 'Aguardando retorno' }}</dd>
-                                <dt>Produto</dt><dd>{{ $analysis['product'] === 'fianca_locaticia' ? 'Fiança locatícia' : $analysis['product'] }}</dd>
-                                <dt>Orçamento / proposta</dt><dd class="text-break">{{ $analysis['quote']['quote_number'] ?? $analysis['quote']['quote_id'] ?? $analysis['quote']['proposal_id'] ?? 'Não informado' }}</dd>
-                                <dt>Rodada</dt><dd class="text-break">{{ $analysis['attempt']['attempt_id'] ?? 'Não informada' }}{{ ($analysis['attempt']['is_reanalysis'] ?? false) ? ' (reanálise)' : '' }}</dd>
-                            </dl>
-                            @if ($analysis['status'] === 'approved' && ($price['comparison_basis'] ?? null) === 'installment' && ($price['installment_amount'] ?? null) !== null)
-                                <p class="fw-semibold mb-1">{{ $price['installments'] }} parcelas de {{ $formatMoney($price['installment_amount'], $price['currency']) }}</p>
-                                <p class="small text-body-secondary">{{ ['faturado' => 'Fatura', 'credito' => 'Cartão de crédito', 'Invoice' => 'Fatura', 'Boleto' => 'Boleto'][$price['payment_type']] ?? $price['payment_type'] }}</p>
-                            @elseif ($analysis['status'] === 'approved' && $price['total'] !== null)
-                                <p class="fw-semibold mb-1">{{ $formatMoney($price['total'], $price['currency']) }}</p>
-                                <p class="small text-body-secondary">{{ $price['basis'] === 'gross_total' ? 'Prêmio bruto total da vigência' : 'Valor informado; total ainda não confirmado para comparação' }}</p>
-                            @else
-                                <p class="text-body-secondary">Sem preço aprovado disponível.</p>
-                            @endif
-                            <p class="small">Vigência: {{ $formatDate($price['period_start']) }} até {{ $formatDate($price['period_end']) }}</p>
-                            <h4 class="h6">Coberturas retornadas</h4>
-                            <ul class="list-group list-group-flush">
-                                @forelse ($analysis['quote']['coverages'] as $coverage)
-                                    <li class="list-group-item px-0">
-                                        <strong class="d-block">{{ $coverage['name'] ?? 'Cobertura sem identificação' }}</strong>
-                                        @if ($coverage['contracted'] !== null)
-                                            <span class="small d-block">{{ $coverage['contracted'] ? 'Contratada' : 'Não contratada' }}</span>
-                                        @endif
-                                        @if ($coverage['insured_amount'] !== null)
-                                            <span class="small d-block">Limite segurado: {{ $formatMoney($coverage['insured_amount'], $price['currency']) }}</span>
-                                        @endif
-                                        @if ($coverage['declared_amount'] !== null)
-                                            <span class="small d-block">Verba: {{ $formatMoney($coverage['declared_amount'], $price['currency']) }}</span>
-                                        @endif
-                                        <span class="small d-block">{{ $coverage['premium_basis'] === 'net' ? 'Prêmio líquido' : 'Prêmio informado' }}: {{ $formatMoney($coverage['premium'], $price['currency']) }}</span>
-                                        @if ($coverage['indemnity_period'] !== null)
-                                            <span class="small d-block">Período indenitário: {{ $coverage['indemnity_period'] }}</span>
-                                        @endif
-                                    </li>
-                                @empty
-                                    <li class="list-group-item px-0 text-body-secondary">Sem coberturas disponíveis neste retorno.</li>
-                                @endforelse
-                            </ul>
+                            @include('insurance-analyses.partials.offer-price', ['offerStatus' => $analysis['status'], 'amount' => $price['installment_amount'] ?? null, 'count' => $price['installments'] ?? null, 'manualMessage' => $analysis['manual_message']])
                         @endif
                     </div>
-                    @if ($analysis)
-                        <div class="card-footer small text-body-secondary">
-                            Solicitação: {{ $formatDate($analysis['requested_at']) }}<br>
-                            Finalização: {{ $analysis['finished_at'] ? $formatDate($analysis['finished_at']) : 'Aguardando' }}
-                        </div>
-                    @endif
                 </article>
             </div>
+            @if ($analysis)
+                @include('insurance-analyses.partials.company-details')
+            @endif
         @endforeach
     </div>
 </section>

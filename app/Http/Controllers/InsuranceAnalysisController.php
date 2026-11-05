@@ -25,6 +25,31 @@ class InsuranceAnalysisController extends Controller
         private InsuranceAnalysisPageService $analysisPageService,
     ) {}
 
+    public function reanalyzeExpenses(\App\Http\Requests\ReanalyzeLeadExpensesRequest $request, Lead $lead): RedirectResponse
+    {
+        return $this->saveExpensesAndReanalyze($request, $lead, false);
+    }
+
+    public function adminReanalyzeExpenses(\App\Http\Requests\ReanalyzeLeadExpensesRequest $request, Lead $lead): RedirectResponse
+    {
+        return $this->saveExpensesAndReanalyze($request, $lead, true);
+    }
+
+    private function saveExpensesAndReanalyze(\App\Http\Requests\ReanalyzeLeadExpensesRequest $request, Lead $lead, bool $admin): RedirectResponse
+    {
+        $route = $admin ? 'admin.insurance-analyses.lead' : 'insurance-analyses.lead';
+        try {
+            $total = $this->leadReanalysisService->reanalyzeExpenses(
+                $lead, $request->validated(), $admin ? 'admin' : 'imobiliaria',
+                $admin ? Auth::guard('admin')->user() : null,
+            );
+
+            return redirect()->route($route, $lead)->with('success', "Novas cotações solicitadas para {$total} companhia(s).");
+        } catch (DomainException $exception) {
+            return redirect()->route($route, $lead)->withErrors(['expenses' => $exception->getMessage()], 'expenseReanalysis')->withInput($request->validated());
+        }
+    }
+
     public function index(): RedirectResponse
     {
         abort_if(! $this->currentCompanyId(), 403);

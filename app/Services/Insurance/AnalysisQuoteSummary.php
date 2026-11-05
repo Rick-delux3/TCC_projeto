@@ -2,13 +2,13 @@
 
 namespace App\Services\Insurance;
 
-use App\Models\InsuranceAnalysis;
+use App\Models\InsuranceExecution;
 use Illuminate\Support\Arr;
 
 class AnalysisQuoteSummary
 {
     /** @return array<string, mixed> */
-    public function summarize(InsuranceAnalysis $analysis): array
+    public function summarize(InsuranceExecution $analysis): array
     {
         if ($analysis->provider === 'tokio') {
             return $this->tokio($analysis);
@@ -80,7 +80,7 @@ class AnalysisQuoteSummary
         ];
     }
 
-    private function tokio(InsuranceAnalysis $analysis): array
+    private function tokio(InsuranceExecution $analysis): array
     {
         $payload = $analysis->providerResponsePayload();
         $selection = data_get($payload, 'payment.selection', []);
