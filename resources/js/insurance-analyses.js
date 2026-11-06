@@ -1,4 +1,5 @@
 import { createAnalysisRealtime } from './insurance-analysis-realtime';
+import { createAnalysisComponents } from './insurance-analysis-components';
 
 document.addEventListener('click', (event) => {
     const opener = event.target.closest('[data-analysis-dialog]');
@@ -6,21 +7,26 @@ document.addEventListener('click', (event) => {
     if (event.target.closest('[data-close-analysis-dialog]')) event.target.closest('dialog')?.close();
 });
 
-document.querySelectorAll('[data-expense-reanalysis]').forEach(form => {
-    const updateTotal = () => {
-        const cents = Array.from(form.querySelectorAll('[data-expense-value]'))
-            .reduce((sum, input) => sum + Math.round((Number(input.value) || 0) * 100), 0);
-        form.querySelector('[data-expense-total]').textContent = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(cents / 100);
-    };
-    form.addEventListener('input', updateTotal);
-    form.addEventListener('submit', (event) => {
-        if (form.dataset.submitting === 'true') { event.preventDefault(); return; }
-        form.dataset.submitting = 'true';
-        form.querySelector('[type="submit"]').disabled = true;
-        form.querySelector('[type="submit"]').textContent = 'Solicitando cotações…';
+function initializeExpenseForms() {
+    document.querySelectorAll('[data-expense-reanalysis]').forEach(form => {
+        if (form.dataset.initialized === 'true') return;
+        form.dataset.initialized = 'true';
+        const updateTotal = () => {
+            const cents = Array.from(form.querySelectorAll('[data-expense-value]'))
+                .reduce((sum, input) => sum + Math.round((Number(input.value) || 0) * 100), 0);
+            form.querySelector('[data-expense-total]').textContent = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(cents / 100);
+        };
+        form.addEventListener('input', updateTotal);
+        form.addEventListener('submit', (event) => {
+            if (form.dataset.submitting === 'true') { event.preventDefault(); return; }
+            form.dataset.submitting = 'true';
+            form.querySelector('[type="submit"]').disabled = true;
+            form.querySelector('[type="submit"]').textContent = 'Solicitando cotações…';
+        });
+        updateTotal();
     });
-    updateTotal();
-});
+}
+initializeExpenseForms();
 document.querySelector('dialog[data-open-on-load]')?.showModal();
 
 async function startInsuranceAnalyses() {
@@ -33,21 +39,14 @@ async function startInsuranceAnalyses() {
             // Periodic reads remain available if the WebSocket client cannot initialize.
         }
     }
-    const renderedState = JSON.stringify(initialState);
-    let refreshPending = false;
-    const refreshWhenClosed = () => {
-        if (refreshPending && !document.querySelector('dialog[open]')) window.location.reload();
-    };
-    document.querySelectorAll('dialog').forEach(dialog => dialog.addEventListener('close', refreshWhenClosed));
+    const components = createAnalysisComponents({ onUpdated: initializeExpenseForms });
+    document.addEventListener('close', () => components.flush(), true);
     const controller = createAnalysisRealtime(initialState, {
         echo: window.Echo,
         onState: (state) => {
             window.dispatchEvent(new CustomEvent('insurance-analyses:updated', { detail: state }));
             if (!state) { window.location.reload(); return; }
-            if (JSON.stringify(state) !== renderedState) {
-                refreshPending = true;
-                refreshWhenClosed();
-            }
+            components.update(state.components);
         },
         onError: (reason) => window.dispatchEvent(new CustomEvent('insurance-analyses:error', { detail: { reason } })),
     });

@@ -21,7 +21,7 @@
                         @if (array_filter($detail['applicants']))
                             <p class="text-body-secondary">{{ implode(' e ', array_filter($detail['applicants'])) }}</p>
                         @endif
-                        @include('insurance-analyses.partials.offer-price', ['offerStatus' => $detail['status'], 'amount' => $detail['payment_status'] === 'ready' ? $detail['installment_amount'] : null, 'count' => $detail['installments'], 'manualMessage' => $analysis['manual_message']])
+                        @include('insurance-analyses.partials.offer-price', ['offerStatus' => $detail['status'], 'amount' => $detail['payment_status'] === 'ready' ? $detail['installment_amount'] : null, 'count' => $detail['installments'], 'manualMessage' => $analysis['manual_message'], 'displayState' => $detail['display_state'] ?? $analysis['display_state']])
                         @if ($detail['status'] === 'approved')
                             @php($detailPrice = $detail['quote']['price'])
                             @if ((float) $detail['installment_amount'] > 0 && $detail['payment_status'] === 'ready')

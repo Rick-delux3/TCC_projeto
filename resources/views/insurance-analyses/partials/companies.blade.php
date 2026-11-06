@@ -18,8 +18,8 @@
                         })->first();
                 });
             @endphp
-            <div class="col-12 col-md-6 col-xl-3">
-                <article @class(['card h-100', 'bg-body-tertiary' => $blocked]) aria-labelledby="provider-{{ $provider }}" data-provider="{{ $provider }}">
+            <div class="col-12 col-md-6 col-xl-3" data-analysis-component="provider-{{ $provider }}">
+                <article @class(['card h-100', 'bg-body-tertiary' => $blocked]) aria-labelledby="provider-{{ $provider }}" data-provider="{{ $provider }}" data-analysis-state="{{ $blocked ? 'blocked' : ($analysis['display_state']['state'] ?? 'processing') }}" aria-busy="{{ ! $blocked && ($analysis['display_state']['processing'] ?? true) ? 'true' : 'false' }}">
                     <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
                         <h3 id="provider-{{ $provider }}" class="h6 mb-0">{{ $providerName }}</h3>
                         @if ($blocked)
@@ -39,20 +39,22 @@
                                 @foreach ($plans as $plan)
                                     <li class="list-group-item px-0">
                                         <h4 class="h6">{{ $planNames[$plan['plan_key']] ?? $plan['plan_key'] ?: 'Fiança locatícia' }}</h4>
-                                        @include('insurance-analyses.partials.offer-price', ['offerStatus' => $plan['status'], 'amount' => $plan['payment_status'] === 'ready' ? $plan['installment_amount'] : null, 'count' => $plan['installments'], 'manualMessage' => $analysis['manual_message']])
+                                        @include('insurance-analyses.partials.offer-price', ['offerStatus' => $plan['status'], 'amount' => $plan['payment_status'] === 'ready' ? $plan['installment_amount'] : null, 'count' => $plan['installments'], 'manualMessage' => $analysis['manual_message'], 'displayState' => $plan['display_state']])
                                     </li>
                                 @endforeach
                             </ul>
                         @else
                             @php($price = $analysis['quote']['price'])
-                            @include('insurance-analyses.partials.offer-price', ['offerStatus' => $analysis['status'], 'amount' => $price['installment_amount'] ?? null, 'count' => $price['installments'] ?? null, 'manualMessage' => $analysis['manual_message']])
+                            @include('insurance-analyses.partials.offer-price', ['offerStatus' => $analysis['status'], 'amount' => $price['installment_amount'] ?? null, 'count' => $price['installments'] ?? null, 'manualMessage' => $analysis['manual_message'], 'displayState' => $analysis['display_state']])
                         @endif
                     </div>
                 </article>
             </div>
-            @if ($analysis)
-                @include('insurance-analyses.partials.company-details')
-            @endif
+            <div data-analysis-component="details-{{ $provider }}" style="display: contents">
+                @if ($analysis)
+                    @include('insurance-analyses.partials.company-details')
+                @endif
+            </div>
         @endforeach
     </div>
 </section>

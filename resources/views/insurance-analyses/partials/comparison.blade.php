@@ -23,7 +23,7 @@
         }
     }
 @endphp
-<section class="mb-4" aria-labelledby="comparison-title">
+<section class="mb-4" aria-labelledby="comparison-title" data-analysis-component="comparison">
     <h2 id="comparison-title" class="h5">Melhores ofertas</h2>
     @if (! $comparison['available'])
         <p class="text-body-secondary" role="status">{{ $comparisonMessages[$comparison['reason']] ?? 'Comparação indisponível.' }}</p>

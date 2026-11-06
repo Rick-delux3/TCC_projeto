@@ -76,6 +76,13 @@ it('coalesces invalidations recovers after reconnect and refuses stale or unauth
         assert.equal(errors.at(-1), 'temporarily_unavailable'); assert.equal(client.state.revision, 5);
         assert.equal([...timers.values()][0].delay, 60000);
         const recovered = fire(); pending.shift()(response(6)); await recovered;
+        const newerRound = client.refresh();
+        pending.shift()({ ok: true, status: 200, json: async () => ({ data: { ...initial, revision: 7, batch: { id: 2 }, realtime: { ...initial.realtime, round_id: 20 } } }) });
+        await newerRound;
+        const obsoleteRound = client.refresh();
+        pending.shift()({ ok: true, status: 200, json: async () => ({ data: { ...initial, revision: 8, batch: { id: 2 }, realtime: { ...initial.realtime, round_id: 19 } } }) });
+        await obsoleteRound;
+        assert.equal(client.state.revision, 7);
         document.hidden = true; document.dispatchEvent(new Event('visibilitychange'));
         assert.equal(timers.size, 0);
         document.hidden = false; document.dispatchEvent(new Event('visibilitychange'));
@@ -97,4 +104,54 @@ it('coalesces invalidations recovers after reconnect and refuses stale or unauth
     ], base_path());
     $process->setTimeout(20)->mustRun();
     expect($process->getOutput())->toContain('Realtime client checks passed');
+});
+
+it('updates independent components and preserves edited open dialogs until closing', function () {
+    $process = new \Symfony\Component\Process\Process(['node', '--input-type=module', '-e', <<<'JS'
+        import assert from 'node:assert/strict';
+        import { createAnalysisComponents } from './resources/js/insurance-analysis-components.js';
+        const nodes = new Map();
+        const replacements = [];
+        let components = [];
+        const node = (key, html, open = false) => ({
+            dataset: { analysisComponent: key }, outerHTML: html, open, value: 'edited expense',
+            querySelector() { return this.open ? {} : null; },
+            replaceWith(next) { replacements.push(key); nodes.set(key, next); }
+        });
+        const card = node('provider-too', 'processing');
+        const form = node('expense-form', 'old form', true);
+        const details = node('details-too', 'old details', true);
+        for (const item of [card, form, details]) nodes.set(item.dataset.analysisComponent, item);
+        const root = {
+            querySelector(selector) { return nodes.get(selector.match(/="([^"]+)"/)[1]); },
+            createElement() { return { content: { querySelectorAll() { return components; } } }; }
+        };
+        const renderer = createAnalysisComponents({ root });
+        components = [node('provider-too', 'processing')];
+        renderer.update('unchanged initial HTML');
+        assert.equal(replacements.length, 0);
+        components = [node('provider-too', 'approved'), node('expense-form', 'new form'), node('details-too', 'new details')];
+        renderer.update('server-rendered HTML');
+        assert.equal(nodes.get('provider-too').outerHTML, 'approved');
+        assert.equal(nodes.get('expense-form'), form);
+        assert.equal(form.value, 'edited expense');
+        assert.equal(nodes.get('details-too'), details);
+        components = [node('expense-form', 'latest form')];
+        renderer.update('new round');
+        form.open = false;
+        renderer.flush();
+        assert.equal(nodes.get('expense-form').outerHTML, 'latest form');
+        assert.equal(nodes.get('details-too'), details);
+        details.open = false;
+        renderer.flush();
+        assert.equal(nodes.get('details-too').outerHTML, 'new details');
+        const previousCount = replacements.length;
+        components = [node('provider-too', 'approved')];
+        renderer.update('unchanged state');
+        assert.equal(replacements.length, previousCount);
+        console.log('Component updates passed');
+        JS,
+    ], base_path());
+    $process->setTimeout(20)->mustRun();
+    expect($process->getOutput())->toContain('Component updates passed');
 });

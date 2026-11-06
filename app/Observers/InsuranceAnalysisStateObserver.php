@@ -5,26 +5,29 @@ namespace App\Observers;
 use App\Events\InsuranceAnalysisChanged;
 use App\Models\InsuranceAnalysis;
 use App\Models\InsuranceAnalysisBatch;
+use App\Models\InsuranceQuote;
 
 class InsuranceAnalysisStateObserver
 {
-    public function created(InsuranceAnalysis|InsuranceAnalysisBatch $model): void
+    public function created(InsuranceAnalysis|InsuranceAnalysisBatch|InsuranceQuote $model): void
     {
         $this->notify($model);
     }
 
-    public function updated(InsuranceAnalysis|InsuranceAnalysisBatch $model): void
+    public function updated(InsuranceAnalysis|InsuranceAnalysisBatch|InsuranceQuote $model): void
     {
         $fields = $model instanceof InsuranceAnalysisBatch
             ? ['status', 'total_providers', 'completed_providers', 'failed_providers', 'started_at', 'finished_at']
-            : array_diff($model->getFillable(), ['request_payload', 'quote_pdf_path', 'pdf_generated_at', 'email_sent_at']);
+            : ($model instanceof InsuranceQuote
+                ? ['status', 'payment_status', 'installment_amount', 'installments', 'response_payload', 'rejection_reason', 'finished_at']
+                : array_diff($model->getFillable(), ['request_payload', 'quote_pdf_path', 'pdf_generated_at', 'email_sent_at']));
 
         if ($model->wasChanged($fields)) {
             $this->notify($model);
         }
     }
 
-    private function notify(InsuranceAnalysis|InsuranceAnalysisBatch $model): void
+    private function notify(InsuranceAnalysis|InsuranceAnalysisBatch|InsuranceQuote $model): void
     {
         if (config('broadcasting.default') !== 'reverb') {
             return;

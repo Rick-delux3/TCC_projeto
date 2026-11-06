@@ -42,7 +42,7 @@ export function createAnalysisRealtime(initialState, { echo, fetchState = window
         try {
             const response = await fetchState(config.refresh_url, {
                 method: 'GET', credentials: 'same-origin', cache: 'no-store', redirect: 'manual',
-                headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest', 'X-Analysis-Components': '1' },
                 signal: request.signal,
             });
             if (response.type === 'opaqueredirect' || [401, 403, 404, 419].includes(response.status)) {
@@ -55,6 +55,11 @@ export function createAnalysisRealtime(initialState, { echo, fetchState = window
             if (!response.ok) throw new Error('Refresh failed');
             const payload = await response.json();
             if (Number(payload.data?.lead?.id) !== Number(leadId)) throw new Error('Unexpected lead');
+            if (Number(payload.data?.batch?.id ?? 0) < Number(state?.batch?.id ?? 0)
+                || (Number(payload.data?.batch?.id ?? 0) === Number(state?.batch?.id ?? 0)
+                    && Number(payload.data?.realtime?.round_id ?? 0) < Number(state?.realtime?.round_id ?? 0))) {
+                throw new Error('Obsolete analysis round');
+            }
             failures = 0;
             if (!stopped && !dirty) {
                 state = payload.data;

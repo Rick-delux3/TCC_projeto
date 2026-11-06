@@ -533,15 +533,16 @@ it('places the cheapest confirmed offer between the next two prices', function (
         ->and($cards->item(2)->textContent)->toContain('Pottencial', 'R$ 150,00');
 });
 
-it('opens quote details and defers live refresh until they are closed', function () {
+it('opens quote details while updating components without reloading the page', function () {
     $source = file_get_contents(resource_path('js/insurance-analyses.js'));
-    $source = preg_replace('/^import .*;\R/', '', $source);
+    $source = preg_replace('/^import .*;\R/m', '', $source);
     $script = <<<'JS'
 const assert = require('node:assert/strict');
 let click, onState, onClose, reloads = 0, open = false;
+const updates = [];
 const dialog = {
     showModal() { open = true; },
-    close() { open = false; onClose(); },
+    close() { open = false; },
     addEventListener(event, callback) { if (event === 'close') onClose = callback; }
 };
 const initial = { realtime: { broadcasting: { enabled: false } }, analyses: [] };
@@ -557,6 +558,7 @@ global.document = {
     querySelector(selector) { return selector === 'dialog[open]' && open ? dialog : null; }
 };
 global.CustomEvent = class {};
+function createAnalysisComponents() { return { update(html) { updates.push(html); }, flush() {} }; }
 function createAnalysisRealtime(state, options) {
     onState = options.onState;
     return { start() { onState(state); }, destroy() {} };
@@ -566,13 +568,46 @@ JS;
 assert.equal(reloads, 0);
 click({ target: { closest(selector) { return selector === '[data-analysis-dialog]' ? { dataset: { analysisDialog: 'details-too' } } : null; } } });
 assert.equal(open, true);
-onState({ ...initial, analyses: [{ status: 'approved' }] });
+onState({ ...initial, analyses: [{ status: 'approved' }], components: 'updated-cards' });
+assert.equal(updates.at(-1), 'updated-cards');
 assert.equal(reloads, 0);
 click({ target: { closest(selector) { return selector === 'dialog' ? dialog : selector === '[data-close-analysis-dialog]' ? {} : null; } } });
 assert.equal(open, false);
-assert.equal(reloads, 1);
+assert.equal(reloads, 0);
 JS;
     $process = new \Symfony\Component\Process\Process(['node', '-e', $script], base_path());
     $process->run();
     expect($process->isSuccessful())->toBeTrue($process->getErrorOutput());
 });
+
+it('returns authorized Blade components and individual processing states without exposing raw provider data', function (string $viewer) {
+    $batch = $this->lead->insuranceAnalysesBatches()->create(['status' => 'processing', 'total_providers' => 1]);
+    $analysis = $batch->analyses()->create(['lead_id' => $this->lead->id, 'provider' => 'too', 'product' => 'fianca_locaticia', 'status' => 'processing']);
+    $analysis->events()->create(['event_type' => 'analysis_started', 'payload' => ['attempt_id' => 'fragment-test']]);
+    $run = app(\App\Services\Insurance\InsuranceQuoteCoordinator::class)->prepare($analysis, 'fragment-test', false);
+    $quote = $run->scenarios()->first()->quotes()->first();
+    $admin = $viewer === 'admin';
+    $this->actingAs($admin ? $this->corretor : $this->user, $admin ? 'admin' : 'web')->withSession(['2fa_passed' => true]);
+    $url = route($admin ? 'admin.insurance-analyses.data' : 'insurance-analyses.data', $this->lead);
+    foreach ([
+        ['processing', 'pending', false, 'processing', true],
+        ['approved', 'pending', false, 'pricing', true],
+        ['approved', 'ready', false, 'approved', false],
+        ['rejected', 'pending', false, 'rejected', false],
+        ['failed', 'pending', false, 'failed', false],
+        ['manual_required', 'pending', false, 'manual_required', false],
+        ['manual_review', 'pending', true, 'awaiting_provider', false],
+    ] as [$status, $payment, $stopped, $state, $processing]) {
+        $quote->update(['status' => $status, 'payment_status' => $payment,
+            'installment_amount' => $payment === 'ready' ? 100 : null,
+            'response_payload' => ['too_status_check_stopped' => $stopped, 'access_token' => 'secret-provider-token', 'cpf' => '00011122233']]);
+        $response = $this->getJson($url, ['X-Analysis-Components' => '1'])->assertOk()
+            ->assertJsonPath('data.analyses.0.quote_attempts.0.display_state.state', $state)
+            ->assertJsonPath('data.analyses.0.quote_attempts.0.display_state.processing', $processing)
+            ->assertJsonPath('data.realtime.round_id', $run->insurance_analysis_round_id)
+            ->assertHeader('Cache-Control', 'no-store, private');
+        expect($response->json('data.components'))->toContain('data-analysis-component="provider-too"', 'data-analysis-component="comparison"', 'data-analysis-state="'.$state.'"')
+            ->not->toContain('Atualizar visualização', 'secret-provider-token', '00011122233', '<script');
+    }
+    $this->get(route($admin ? 'admin.insurance-analyses.lead' : 'insurance-analyses.lead', $this->lead))->assertOk()->assertDontSee('Atualizar visualização');
+})->with(['company', 'admin']);

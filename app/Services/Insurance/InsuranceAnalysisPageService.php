@@ -91,12 +91,17 @@ class InsuranceAnalysisPageService
             'analyses' => $analyses->map(function (InsuranceAnalysis $analysis) use ($data, $quotes, $enabled, $permissions, $canReanalyzeWithChanges, $prefix, $admin): array {
                 $attempt = $data['analysisAttempts'][$analysis->id];
                 $allowed = $enabled;
+                $activeQuotes = ($analysis->currentProviderRun?->scenarios->flatMap(fn ($scenario) => $scenario->quotes) ?? collect())
+                    ->filter(fn ($quote) => ! ProviderAnalysisStatus::isTerminal($quote->status)
+                        || ($quote->status === 'approved' && $quote->payment_status === 'pending'));
 
                 return [
                     'id' => $analysis->id,
                     'provider' => $analysis->provider,
                     'product' => $analysis->product,
                     'status' => $analysis->status,
+                    'display_state' => $this->displayState($analysis->status, null, $activeQuotes->isNotEmpty()
+                        && $activeQuotes->every(fn ($quote) => (bool) data_get($quote->providerResponsePayload(), 'too_status_check_stopped', false))),
                     'provider_status' => $analysis->provider_status,
                     'is_terminal' => ProviderAnalysisStatus::isTerminal($analysis->status),
                     'manual_required' => $analysis->status === 'manual_required',
@@ -120,6 +125,8 @@ class InsuranceAnalysisPageService
                         return $scenario->quotes->map(fn ($quote): array => [
                             'id' => $quote->id, 'scenario' => $scenario->kind, 'applicants' => $names,
                             'plan_key' => $quote->plan_key, 'status' => $quote->status,
+                            'display_state' => $this->displayState($quote->status, $quote->payment_status,
+                                (bool) data_get($quote->providerResponsePayload(), 'too_status_check_stopped', false)),
                             'quote' => $this->quotes->summarize($quote),
                             'message' => $quote->status === 'manual_required' ? ($admin ? 'realizar cotação manualmente' : 'entrar em contato com corretor') : ($quote->status === 'failed'
                                 ? 'Não foi possível concluir esta cotação.'
@@ -157,6 +164,7 @@ class InsuranceAnalysisPageService
                     $admin ? 'admin.leads.reanalyze' : 'dashboard.leads.reanalyze', $lead->id),
             ],
             'realtime' => [
+                'round_id' => (int) ($analyses->max(fn ($analysis) => $analysis->currentProviderRun?->insurance_analysis_round_id) ?? 0),
                 'transport' => config('broadcasting.default') === 'reverb' ? 'reverb' : 'polling',
                 'refresh_url' => $refreshUrl,
                 'method' => 'GET',
@@ -173,6 +181,29 @@ class InsuranceAnalysisPageService
         ];
 
         return $data + ['pageData' => $page, 'viewerType' => $viewerType, 'returnUrl' => $returnUrl, 'refreshUrl' => $refreshUrl];
+    }
+
+    /** @return array{state: string, processing: bool, label: string} */
+    private function displayState(string $status, ?string $paymentStatus, bool $pollingStopped): array
+    {
+        $state = match (true) {
+            $status === 'approved' && $paymentStatus === 'pending' => 'pricing',
+            $status === 'approved' && in_array($paymentStatus, ['failed', 'unavailable'], true) => 'price_unavailable',
+            $status === 'approved' => 'approved',
+            $status === 'rejected' => 'rejected',
+            in_array($status, ['failed', 'error'], true) => 'failed',
+            $status === 'manual_required' => 'manual_required',
+            $pollingStopped => 'awaiting_provider',
+            default => 'processing',
+        };
+
+        return ['state' => $state, 'processing' => in_array($state, ['processing', 'pricing'], true), 'label' => match ($state) {
+            'pricing' => 'Consultando preço', 'approved' => 'Aprovada', 'rejected' => 'Cotação recusada',
+            'failed' => 'Não foi possível concluir a cotação.', 'manual_required' => 'Cotação manual necessária',
+            'price_unavailable' => 'Aprovada. Preço indisponível.',
+            'awaiting_provider' => 'Aguardando decisão da companhia. Consultas automáticas encerradas.',
+            default => 'Processando análise',
+        }];
     }
 
     /** @return array{available: bool, url: string|null, method: string} */
