@@ -33,6 +33,69 @@ Esta regra **substitui** a restrição anterior de aplicar 30/29 apenas à Too e
 
 **Composição PJ esclarecida; implementação e validação pendentes:** aplicar essa condição na validação, snapshot, coordenador, builders e formulários, preservando os pacotes de análise. Somente o estudo foi alterado nesta revisão, sem mudanças em código, cadastros ou histórico.
 
+## Porto — identificador do orçamento na recusa do POST — 06/11/2026
+
+**Confirmação do suporte Porto, repassada pelo usuário:** a resposta de uma cotação recusada no `POST /orcamentos` **traz o número do orçamento**. Exemplo recebido do suporte:
+
+```json
+{
+  "errorCode": 409,
+  "errorMessage": "Devido aos critérios de aceitação da companhia, infelizmente não será possível prosseguir com a contratação para o cadastro informado",
+  "detailedMessage": "000000011912429"
+}
+```
+
+| Campo | Interpretação vigente |
+| --- | --- |
+| HTTP 409 | Continua sendo o critério da recusa de aceitação, conforme regra já confirmada. O `errorCode` do corpo repete o status e não o substitui |
+| `errorCode` | Código da recusa (409). Não é número de orçamento nem de proposta |
+| `errorMessage` | Motivo textual da companhia. Preservar como mensagem da recusa; não extrair identificador desse texto |
+| `detailedMessage` | **Número do orçamento recusado**, string de 15 dígitos, mesmo formato do `orcamento` retornado no 201 (`minLength`/`maxLength` 15, somente dígitos). Preservar como string, com zeros à esquerda |
+
+**Consequências para a implementação futura:**
+
+- Persistir `detailedMessage` como identificador remoto da cotação/cenário recusado antes de qualquer etapa seguinte, da mesma forma que o `orcamento` de uma aprovação.
+- Usar esse valor como `{proposta}` em `GET /orcamentos/{proposta}/{corretor}/pdf/carta-recusa`, com o código SUSEP do corretor em `{corretor}`.
+- O schema `ProtheusRecusaAceitacao` dos contratos Markdown não declara `detailedMessage`; prevalece a confirmação do suporte. Se um 409 real vier sem esse campo, ou com valor fora do formato de 15 dígitos, manter a recusa, não solicitar a carta, registrar diagnóstico sanitizado e não substituir o identificador por `errorCode`, ID local, `orcamentoExterno` ou trecho de `errorMessage`.
+- A recusa individual continua contando para a regra da conjunta PF (terceira tentativa somente após duas recusas). Obter ou não a carta não altera a decisão de crédito.
+- No 409 do PUT o orçamento já é conhecido. Se `detailedMessage` também vier, conferir se é igual ao ID persistido; divergência é diagnóstico, não troca silenciosa de identificador.
+
+**Pendência encerrada:** origem do número do orçamento necessário à carta de recusa após 409 no POST. O contrato da carta está consolidado na subseção abaixo.
+
+### Contrato da carta de recusa — 06/11/2026
+
+Fonte lida integralmente: [retorna-carta-de-recusa.md](Porto_endpoitsMarkdown/retorna-carta-de-recusa.md). **Confirmação do usuário:** `proposta` é o mesmo `orcamento` e `corretor` é o mesmo `susep` usados nas demais operações.
+
+| Item | Contrato e regra de uso |
+| --- | --- |
+| Operação | `GET /orcamentos/{proposta}/{corretor}/pdf/carta-recusa`, sem body. Disponível **somente para orçamentos recusados** |
+| Base | Mesma base de negócio: `https://portoapicloud-hml.portoseguro.com.br/fianca-locaticia/emissao/aluguel-essencial/v1` (homologação). Não deduzir a URL de produção |
+| Autenticação | O Markdown declara só `Authorization: Bearer`; manter a decisão vigente de enviar o mesmo token em `Authorization: Bearer` e `access_token` |
+| `proposta` | = `orcamento`. String de 15 dígitos, zeros à esquerda, sem máscara. Origem: `detailedMessage` do 409 no POST ou o orçamento já conhecido no 409 do PUT |
+| `corretor` | = `susep`. Código interno de 6 caracteres (letras/dígitos) terminando em F ou J, o mesmo enviado no POST que gerou o orçamento. Não é CPF do corretor nem código de imobiliária |
+
+**Respostas:**
+
+| HTTP | Corpo | Interpretação |
+| --- | --- | --- |
+| 200 | `SucessoGeracaoPDF`: `status`, `message`, `data.file` (PDF em Base64) | Carta obtida somente se `data.file` existir, for Base64 válido e decodificar para um PDF. O exemplo traz `data: null`: 200 sem arquivo = documento indisponível, não sucesso. Não impor o `maxLength 500` do schema ao arquivo |
+| 400 | `CriticaGeracaoPDF`: `status`, `message` (ex.: "A proposta não pertence a esse corretor") | Inconsistência de dados ou vínculo orçamento/SUSEP. Falha documental a diagnosticar |
+| 401 | String | Token ausente ou expirado. Falha de autenticação, tratada pelo fluxo de token |
+| 500 | `ProtheusError`: `errorCode`, `errorMessage` | Erro sistêmico da Porto |
+| 502 | String | Indisponibilidade da Porto |
+
+O cliente não pode presumir JSON em 401/502, como nas demais operações Porto.
+
+**Regras de fluxo:**
+
+- Chamar apenas para cenário cujo POST (ou PUT) retornou 409 com orçamento válido. Nunca chamar para 201 aprovado, falha técnica (400/401/500/502 da criação) ou orçamento ausente.
+- Cada cenário recusado tem seu próprio orçamento e, portanto, sua própria carta: individuais do principal e do cônjuge e, quando houver, a conjunta. PJ: somente a carta do cenário empresarial.
+- **Nenhum resultado da carta altera a decisão de crédito.** 400, 401, 500, 502 ou 200 sem arquivo deixam a cotação recusada e sem documento disponível, com diagnóstico sanitizado. Não repetir o POST para tentar obter a carta.
+- Associar a carta à cotação/cenário e ao orçamento de origem; servir os bytes somente com a autorização local já aplicada aos documentos de análise. Não gravar o Base64 bruto em logs ou diagnósticos.
+- No encaixe com a arquitetura atual, a Porto deve entrar no serviço de cartas de recusa que hoje agrega Pottencial e Too (`ProviderRefusalLetterService`), sem criar um fluxo paralelo.
+
+**Pendência da carta de recusa Porto encerrada:** identificador (`detailedMessage`), operação, parâmetros, formato do arquivo e tratamento de falhas definidos. Fica apenas a verificação técnica de homologação, sem reabrir decisão: gerar a carta com uma recusa real e conferir o PDF decodificado. Somente documentação atualizada; nenhum código, chamada remota ou teste foi executado.
+
 ## Porto — imobiliária sem código e associação futura — 05/11/2026
 
 **Decisão expressa do usuário:** imobiliária sem código Porto será cotada com **CC — Demais cartões de crédito**, inclusive quando existir cadastro local sem associação Porto. Não usar FAT apenas pela existência do cadastro local. Para origem de imobiliária cadastrada com código Porto associado, manter FAT conforme as regras de vínculo corretor/parceiro; demais origens continuam CC.
@@ -188,8 +251,8 @@ No service, diferenciar sucesso HTTP de resultado de negócio: GET/PUT 200 não 
 | **Fonte dos preços recalculados — validação** | Testar GET de ofertas após os PUTs com 15%; se não refletir, usar GET do orçamento atualizado. Confirmar atualização e isolamento por produto, pois o novo schema não expõe comissão aplicada e a consulta não filtra por seguro |
 | **Atualizações simultâneas — homologação** | Simultaneidade definida pelo usuário, uma requisição por oferta, resultados locais isolados. Verificar se a Porto preserva comissão/condições de todas as ofertas nos PUTs concorrentes sobre o mesmo orçamento e mantém seus PDFs coerentes; não presumir isolamento remoto. Vários produtos na mesma requisição continuam descartados |
 | **Com/Sem entrada — regra resolvida em 05/11/2026** | Base 30: Com entrada = 30 pagamentos; Sem entrada = 29. Para Porto, selecionar a condição pela quantidade retornada, junto de seguro, FAT/CC e código da condição. Não há parâmetro específico a exigir; resta validar resposta real e PDF coerentes com essa seleção |
-| **Carta de recusa** | POST 409 continua documentado somente com errorCode/errorMessage; como recuperar o número de orçamento necessário ao PDF? Nos 409 de PUT já existe ID conhecido. Disponibilidade do PDF sem emissão permanece validação separada |
-| **CNPJ e cônjuge — resolvido** | Regra geral de 02/11/2026: analisar somente a empresa pelo CNPJ; desconsiderar estado civil e cônjuge; não analisar o responsável nem criar spouse/joint. Aplicação no código ainda pendente |
+| **Carta de recusa — encerrada em 06/11/2026** | O 409 do POST traz o orçamento em `detailedMessage`; `GET /orcamentos/{proposta}/{corretor}/pdf/carta-recusa` com proposta = orçamento e corretor = SUSEP; PDF em Base64 em `data.file`. Falha da carta não altera a recusa. Ver seção de 06/11/2026 no topo; resta só gerar com recusa real em homologação |
+| **CNPJ e cônjuge — resolvido** | Regra geral de 02/11/2026: analisar somente a empresa pelo CNPJ; desconsiderar estado civil e cônjuge; não analisar o responsável nem criar spouse/joint. Em 06/11/2026 o usuário confirmou que a Porto não exige CPF/nome do responsável: payload PJ só com dados da empresa. Aplicação no código ainda pendente |
 | **Imobiliárias — regra fechada em 05/11/2026** | Sem código Porto: CC, inclusive cadastro local sem associação. Origem cadastrada com código associado: FAT conforme vínculo. Aguardar lista e implementar comando de associação no banco; validar códigos e vínculo corretor/parceiro |
 
 **Verificações técnicas, sem reabrir decisões de negócio:** homologar 29 parcelas Sem entrada e 30 pagamentos Com entrada, na vigência-base de 30 meses, em CC/FAT; aceitar início no dia com vigência "1"; conferir omissão condicional de locacaoComercial/capitalSocial em PF; tipos monetários decimais apesar de integer; CPF/CNPJ conforme suporte; dados de endereço/DOB e formatos reais de documentos. O exemplo GET sem condições não basta para validar preço. O domínio 0008/Fiança foi reafirmado na correção mais recente; confrontar com a oferta real disponível e registrar divergências, sem trocar nomes silenciosamente nem gerar ofertas ausentes.
@@ -258,7 +321,7 @@ Host de negócio: `https://portoapicloud-hml.portoseguro.com.br`. Prefixo: `/fia
 | `GET /orcamentos/{origem}/{orcamento}/{susep}/ofertas` | Consultar ofertas e condições; 200; será a fonte de preço escolhida pelo usuário |
 | `GET /orcamentos/{orcamento}/{susep}` | Consultar dados atuais; operação disponível para diagnóstico/recuperação com identificador conhecido, sem impor polling ao fluxo síncrono |
 | `PUT /orcamentos/{orcamento}/{susep}` | Atualizar orçamento; documenta ajuste de comissão por oferta; exige esclarecimentos antes de incluir no fluxo |
-| `GET /orcamentos/{proposta}/{corretor}/pdf/carta-recusa` | Carta exclusivamente para orçamento recusado; 200; proposta significa número do orçamento, corretor significa código interno SUSEP |
+| `GET /orcamentos/{proposta}/{corretor}/pdf/carta-recusa` | Carta exclusivamente para orçamento recusado; 200; proposta significa número do orçamento, corretor significa código interno SUSEP. Contrato completo na seção de 06/11/2026 no topo |
 | `GET /orcamentos/{orcamento}/{susep}/pdf/cotacao` | PDF geral do orçamento; 200; descrito como disponível para propostas em digitação |
 | `GET /orcamentos/{orcamento}/{susep}/pdf/cotacao/{seguro}/{formaPagamento}/{condicaoPagamento}` | PDF da oferta e condição específicas; 200; permite manter coerência com a parcela selecionada |
 | `GET /orcamentos/{orcamento}/{susep}/pdf/carta-aprovacao` e variante `/{seguro}` | Cartas de aprovação; não confundir com PDF de cotação |
@@ -275,7 +338,7 @@ Prevalece a confirmação do usuário, respaldada por `responses` do POST: **HTT
 
 400 indica validação/inconsistência de dados ou regra de negócio; 401 indica autenticação; 500/502 indicam falha técnica/indisponibilidade. Não converter esses casos em recusa nem autorizar a tentativa conjunta por falha técnica. O erro 401 avulso é texto, portanto o cliente não pode presumir JSON em todas as falhas.
 
-O schema 409 `ProtheusRecusaAceitacao` contém somente `errorCode` e `errorMessage`: **a origem do número necessário à carta de recusa continua sem solução documental**. Não extrair um ID inventado da mensagem nem usar o código 409 como proposta. A ausência de documento não deve apagar uma recusa conhecida.
+**Atualização de 06/11/2026: resolvido pelo suporte — o 409 traz o número do orçamento em `detailedMessage`; ver a seção dessa data no topo.** Texto histórico: o schema 409 `ProtheusRecusaAceitacao` contém somente `errorCode` e `errorMessage`: **a origem do número necessário à carta de recusa continua sem solução documental**. Não extrair um ID inventado da mensagem nem usar o código 409 como proposta. A ausência de documento não deve apagar uma recusa conhecida.
 
 Outras operações descrevem estados internos como orçamento criado/aprovado, pré-aprovado, proposta em digitação, recusada e análise de crédito/emissão. Esses estados pertencem a outras etapas; sua presença não comprova um retorno pendente no POST de criação nem revoga 201/409. Se uma resposta real divergir, preservar evidência antes de ampliar o mapeamento.
 
@@ -340,7 +403,7 @@ Pendências prioritárias, sem repetir perguntas já resolvidas:
 1. Confirmar com a Porto a exigência de locador sem schema no POST e validar as condições de locacaoComercial contra o required incondicional. A obrigatoriedade documental de cpfCotador está confirmada; falta definir o CPF do operador por configuração, sem confundi-lo com o pretendente. Seguir a matriz condicional do detalhamento abaixo, sem fabricar campos PJ para PF.
 2. Confirmar periodicidade de totalRendimentos e tipo de vigência para início no dia. Capital de abertura, índice e contatos do cônjuge foram definidos na atualização abaixo. Não acrescentar campos ao formulário nesta fase de estudo.
 3. Confirmar aplicação dos 15% antes da consulta de preços, body mínimo da operação necessária, ofertas elegíveis, condição de 30 parcelas Sem entrada e formato objeto/array no GET.
-4. Obter de uma recusa real o identificador exigido na carta (ou orientação oficial de recuperação); obter PDFs reais para confirmar disponibilidade após o orçamento.
+4. ~~Obter de uma recusa real o identificador exigido na carta (ou orientação oficial de recuperação)~~ — resolvido em 06/11/2026: `detailedMessage` do 409; obter PDFs reais para confirmar disponibilidade após o orçamento.
 5. Receber a lista de códigos das imobiliárias. O suporte confirmou PF/PJ e o uso de PFCOM para CNPJ em 31/10/2026; permanecem os detalhes de preenchimento PJ descritos na atualização dessa data.
 
 **Verificação desta revisão:** leitura do contrato completo por parsing e inspeção direcionada das operações/definições, comparação com os exemplos anteriores e com decisões do usuário. Somente este estudo foi atualizado; sem chamadas externas, alteração de código, testes de integração ou homologação. A aparente simplicidade do fluxo não elimina os campos adicionais e as contradições identificadas.
@@ -451,7 +514,7 @@ A imagem também informa que os locatários da proposta devem corresponder aos p
 
 **Pendências abertas pela definição PJ:**
 
-1. Nome, nascimento e rendimentos PJ foram definidos pelo usuário na atualização abaixo: razão social, nascimento do responsável e renda de 10 aluguéis. Resta identificar campo específico para CPF/nome do responsável na Porto, caso ela os exija adicionalmente; não substituir o CNPJ por esse CPF nem criar um atributo sem contrato.
+1. Nome, nascimento e rendimentos PJ foram definidos pelo usuário na atualização abaixo: razão social, nascimento do responsável e renda de 10 aluguéis. ~~Resta identificar campo específico para CPF/nome do responsável na Porto, caso ela os exija adicionalmente.~~ **Encerrado em 06/11/2026 por confirmação do usuário:** a Porto **não exige** CPF nem nome do responsável; a análise PJ é somente da empresa (CNPJ e razão social). Não enviar dados do responsável no payload Porto, não substituir o CNPJ por CPF nem criar atributo sem contrato.
 2. **Regras esclarecidas em 31/10/2026:** `capitalSocial` fixo em 450000 para PJ; `capitalAberturaNegocio = 100 × aluguel` também para CNPJ; motivo comercial escolhido no futuro seletor Motivo da Contratação. Para residencial com CNPJ, motivo "A" fixo internamente e ausente do seletor. Detalhes na confirmação de capitais e motivo abaixo; implementação ainda pendente.
 3. **Encerrado em 02/11/2026:** não existe PJ com cônjuge no sistema. Analisar somente a empresa pelo CNPJ; responsável não recebe análise individual e não há conjunta PJ. A regra de cônjuges aplica-se somente a PF.
 

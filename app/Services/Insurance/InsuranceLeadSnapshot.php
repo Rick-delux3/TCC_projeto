@@ -36,7 +36,7 @@ final class InsuranceLeadSnapshot
             'has_spouse' => ! $isCompany && filled(data_get($snapshot, 'relations.conjuge.cpf')) && filled(data_get($snapshot, 'relations.conjuge.nome')),
             'partner_code' => $lead->tipo_solicitante === 'imobiliaria_cadastrada' ? $lead->imobiliariaVinculada?->getAttribute('tokio_partner_code') : null,
             'cnae' => null,
-            'parameters' => Arr::only(config('services.tokio', []), ['commission', 'remuneration', 'discount', 'surcharge', 'assistance']),
+            'parameters' => Arr::only(config('services.tokio', []), ['commission', 'remuneration', 'discount', 'surcharge', 'assistance', 'tipo_imovel']),
         ];
         if (config('services.tokio.enabled', false) && ! $isCompany && $lead->atividade_economica_id) {
             $snapshot['tokio']['cnae'] = \App\Models\AtividadeEconomicaCodigo::query()

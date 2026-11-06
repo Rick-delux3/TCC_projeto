@@ -94,6 +94,37 @@ it('omits business fields for residential applicants and adds coverages outside 
     expect($payload['coberturas'])->toMatchArray(['icDanosImovel' => 'S', 'icPinturaInterna' => 'S', 'icPinturaExterna' => 'S', 'icMultaRescisao' => 'S']);
 });
 
+it('sends the frozen property type for every rental purpose and keeps the hiring reason', function (bool $commercial, int $hiringReason) {
+    config(['services.tokio.tipo_imovel' => '99999']);
+    $quote = tokioBuilderQuote('primary', $commercial, false);
+    $quote->scenario->providerRun->round->lead_snapshot = array_replace_recursive(
+        $quote->scenario->providerRun->round->lead_snapshot,
+        ['tokio' => ['parameters' => ['tipo_imovel' => '10000']]],
+    );
+    $payload = app(\App\Services\Insurance\Payloads\TokioQuotePayloadBuilder::class)->build($quote);
+    expect($payload['dadosItem'])->toBe(['tipoImovel' => 10000, 'motivoContratacao' => $hiringReason]);
+})->with(['residencial' => [false, 26470], 'comercial' => [true, 21114]]);
+
+it('falls back to the configured property type for rounds frozen before the parameter existed', function () {
+    config(['services.tokio.tipo_imovel' => '10000']);
+    $payload = app(\App\Services\Insurance\Payloads\TokioQuotePayloadBuilder::class)->build(tokioBuilderQuote('primary', false, false));
+    expect($payload['dadosItem']['tipoImovel'])->toBe(10000);
+});
+
+it('rejects an invalid configured property type', function (mixed $value) {
+    config(['services.tokio.tipo_imovel' => $value]);
+    app(\App\Services\Insurance\Payloads\TokioQuotePayloadBuilder::class)->build(tokioBuilderQuote('primary', false, false));
+})->throws(\App\Exceptions\InvalidInsuranceAnalysisPayload::class, 'Tipo de imóvel da Tokio inválido')
+    ->with(['vazio' => [''], 'nulo' => [null], 'texto' => ['casa'], 'zero' => ['0'], 'negativo' => ['-1']]);
+
+it('freezes the configured property type in the lead snapshot', function () {
+    config(['services.tokio.tipo_imovel' => '10000']);
+    $template = tokioBuilderQuote('primary', false, false)->lead;
+    $lead = \App\Models\Lead::query()->create(array_merge($template->getAttributes(), ['email' => 'snapshot@example.test']));
+    $snapshot = app(\App\Services\Insurance\InsuranceLeadSnapshot::class)->capture($lead);
+    expect(data_get($snapshot, 'tokio.parameters.tipo_imovel'))->toBe('10000');
+});
+
 it('selects the returned installment without adding taxes or dividing totals', function () {
     $quote = new InsuranceQuote(['payment_type' => 'credito', 'response_payload' => ['response' => [
         'calculos' => ['N' => ['opcaoAssistencia' => 'Sem assistência', 'opcoesPagamento' => ['credito' => ['prazo' => [

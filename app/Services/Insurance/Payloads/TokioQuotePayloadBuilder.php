@@ -73,9 +73,13 @@ class TokioQuotePayloadBuilder
                 }
             }
         }
+        $propertyType = (string) data_get($snapshot, 'tokio.parameters.tipo_imovel', config('services.tokio.tipo_imovel'));
+        if (! ctype_digit($propertyType) || (int) $propertyType <= 0) {
+            $this->invalid('Tipo de imóvel da Tokio inválido. Confira TIPO_IMOVEL_DEFAULT no .env.');
+        }
         $payload = [
             'tpPessoa' => 'F', 'icResidencial' => $commercial ? 'N' : 'S',
-            'dadosItem' => ['tipoImovel' => $commercial ? 21103 : 10001, 'motivoContratacao' => $commercial ? 21114 : 26470],
+            'dadosItem' => ['tipoImovel' => (int) $propertyType, 'motivoContratacao' => $commercial ? 21114 : 26470],
             'dadosLocacao' => $location, 'pretendentes' => $people, 'coberturas' => $coverages,
         ];
         foreach (['pcComissao' => 'commission', 'pcRemuneracao' => 'remuneration', 'pcDesconto' => 'discount', 'pcAgravo' => 'surcharge'] as $field => $setting) {
