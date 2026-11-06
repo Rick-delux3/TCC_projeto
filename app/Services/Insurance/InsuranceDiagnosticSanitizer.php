@@ -4,6 +4,19 @@ namespace App\Services\Insurance;
 
 final class InsuranceDiagnosticSanitizer
 {
+    public function connectionFailure(\Illuminate\Http\Client\ConnectionException $exception, string $operation, array $sources = []): array
+    {
+        $previous = $exception->getPrevious();
+        $context = $previous instanceof \GuzzleHttp\Exception\ConnectException ? $previous->getHandlerContext() : [];
+
+        return $this->extract(['errors' => [
+            'type' => 'transport_error',
+            'operation' => $operation,
+            'code' => is_int($context['errno'] ?? null) ? $context['errno'] : null,
+            'message' => $exception->getMessage(),
+        ]], $sources);
+    }
+
     private const DIAGNOSTICS = ['error', 'errors', 'errorCode', 'errorMessage', 'error_description', 'message', 'messages', 'mensagem', 'mensagens', 'detail', 'title', 'violations', 'validationErrors', 'invalidParams', 'provider_original_description', 'statusDescription', 'rejectionReason', 'reasons', 'step', 'operation'];
 
     private const WRAPPERS = ['response', 'result', 'data', 'too', 'authentication', 'ficha', 'proposal', 'proposta', 'submit', 'credit', 'analysis', 'status', 'quote', 'quote_latest', 'status_latest', 'payment'];

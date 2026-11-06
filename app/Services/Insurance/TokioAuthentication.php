@@ -78,8 +78,9 @@ class TokioAuthentication
                 'access_token' => $token,
                 'expires_in' => $expiresIn === false ? null : $expiresIn,
             ]);
-        } catch (ConnectionException) {
+        } catch (ConnectionException $exception) {
             $result['message'] = 'Falha de conexão, DNS, TLS ou tempo limite ao autenticar na Tokio.';
+            $result['diagnostics'] = app(InsuranceDiagnosticSanitizer::class)->connectionFailure($exception, 'authentication', [$settings]);
         } catch (Throwable) {
             $result['message'] = 'Não foi possível concluir a autenticação na Tokio.';
         }

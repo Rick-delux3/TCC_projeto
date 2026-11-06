@@ -24,7 +24,9 @@ class TokioQuoteResponse
             'provider_status' => $valid ? trim($code) : null,
             'quote_id' => $valid ? (string) $id : null,
             'rejection_reason' => $reason,
-            'response_payload' => ['response' => $response, 'messages' => $messages, 'http_status' => $result['http_status'] ?? null, 'manual_required' => $manual],
+            'response_payload' => ['response' => $response, 'messages' => $messages, 'http_status' => $result['http_status'] ?? null, 'manual_required' => $manual,
+                'errors' => $result['errors'] ?? [],
+            ],
             'error_message' => $status === 'failed' ? ($result['error'] ?? 'Resposta Tokio incompleta ou inválida.') : null,
             'finished_at' => now(),
         ])->save();

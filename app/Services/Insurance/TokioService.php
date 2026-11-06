@@ -37,7 +37,7 @@ class TokioService
         }
         $token = $this->authentication->requestToken();
         if (! $token['success']) {
-            return $this->failure('Não foi possível autenticar na Tokio.', $token['http_status'], ['errors' => $token['diagnostics'] ?? []]);
+            return $this->failure('Não foi possível autenticar na Tokio.', $token['http_status'], diagnostics: $token['diagnostics'] ?? []);
         }
         try {
             $response = \Illuminate\Support\Facades\Http::acceptJson()->asJson()
@@ -51,23 +51,28 @@ class TokioService
                 'provider_status' => in_array($code, ['CAL', 'REC'], true) ? $code : null,
             ]);
             if (! $response->successful()) {
-                return $this->failure('A Tokio não concluiu a solicitação. Verifique a integração antes de repetir a cotação.', $response->status(), is_array($body) ? $body : ['message' => $response->body()]);
+                $errorBody = is_array($body) ? $body : ['message' => $response->body()];
+                $diagnostics = app(InsuranceDiagnosticSanitizer::class)->extract(['http_status' => $response->status(), 'response' => $errorBody], [$payload, $headers, $token]);
+
+                return $this->failure('A Tokio não concluiu a solicitação. Verifique a integração antes de repetir a cotação.', $response->status(), $errorBody, $diagnostics);
             }
             if (! is_array($body)) {
                 return $this->failure('A Tokio retornou uma resposta inválida.', $response->status());
             }
 
             return ['success' => true, 'http_status' => $response->status(), 'response' => $body];
-        } catch (\Illuminate\Http\Client\ConnectionException) {
-            return $this->failure('Falha de conexão com a Tokio. O resultado remoto pode ser desconhecido; não repetir automaticamente.');
+        } catch (\Illuminate\Http\Client\ConnectionException $exception) {
+            $diagnostics = app(InsuranceDiagnosticSanitizer::class)->connectionFailure($exception, 'quote', [$payload, $headers, $token]);
+
+            return $this->failure('Falha de conexão com a Tokio. O resultado remoto pode ser desconhecido; não repetir automaticamente.', diagnostics: $diagnostics);
         }
     }
 
-    private function failure(string $message, ?int $status = null, array $response = []): array
+    private function failure(string $message, ?int $status = null, array $response = [], array $diagnostics = []): array
     {
-        $this->log('warning', 'Falha no fluxo da Tokio', ['http_status' => $status, 'error' => $message]);
+        $this->log('warning', 'Falha no fluxo da Tokio', ['http_status' => $status, 'error' => $message, 'diagnostics' => $diagnostics]);
 
-        return ['success' => false, 'error' => $message, 'http_status' => $status, 'response' => $response];
+        return ['success' => false, 'error' => $message, 'http_status' => $status, 'response' => $response, 'errors' => $diagnostics];
     }
 
     private function log(string $level, string $message, array $context): void

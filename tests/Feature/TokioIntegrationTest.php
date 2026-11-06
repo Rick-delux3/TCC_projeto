@@ -162,7 +162,7 @@ it('logs Tokio HTTP outcomes without exposing the response body or credentials',
             expect($result['response'])->toBe(is_array($body) ? $body : ['message' => $body]);
         }
         Log::shouldHaveReceived('log')->with('warning', 'Falha no fluxo da Tokio', [
-            'http_status' => $httpStatus, 'error' => $result['error'],
+            'http_status' => $httpStatus, 'error' => $result['error'], 'diagnostics' => $result['errors'],
         ])->once();
     }
 })->with([
@@ -182,7 +182,7 @@ it('logs Tokio connection failures and preserves results when logging is unavail
     $this->mock(\App\Services\Insurance\TokioAuthentication::class)
         ->shouldReceive('requestToken')->once()->andReturn(['success' => true, 'access_token' => 'private-token']);
     Http::preventStrayRequests();
-    Http::fake(['*' => $connectionFailure ? Http::failedConnection('private-data') : Http::response(['cotacaoInfo' => ['cdSitucCotac' => 'REC']])]);
+    Http::fake(['*' => $connectionFailure ? Http::failedConnection('Connection refused token=private-data') : Http::response(['cotacaoInfo' => ['cdSitucCotac' => 'REC']])]);
     Log::shouldReceive('log')->once()->with(
         $connectionFailure ? 'warning' : 'info',
         $connectionFailure ? 'Falha no fluxo da Tokio' : 'Resposta HTTP da Tokio',
@@ -193,4 +193,50 @@ it('logs Tokio connection failures and preserves results when logging is unavail
 
     expect($result['success'])->toBe(! $connectionFailure);
     Http::assertSentCount(1);
+})->with([true, false]);
+
+it('preserves sanitized Tokio transport and HTTP diagnostics without retrying', function (bool $transport) {
+    config(['services.tokio.enabled' => true,
+        'services.tokio.base_url' => 'https://apim-act.tokiomarine.com.br/api',
+        'services.tokio.codigo_corretor' => '12345', 'services.tokio.cpf_usuario' => '09238037698',
+        'services.tokio.senha_operadora' => 'secret-password']);
+    $this->mock(\App\Services\Insurance\TokioAuthentication::class)
+        ->shouldReceive('requestToken')->once()->andReturn(['success' => true, 'access_token' => 'secret-access-token']);
+    Log::spy();
+    Http::preventStrayRequests();
+    $message = 'SSL certificate problem; nome=Pessoa Teste; CPF 09238037698; Bearer secret-access-token';
+    $request = new \GuzzleHttp\Psr7\Request('POST', 'https://apim-act.tokiomarine.com.br/api/cotar');
+    $previous = new \GuzzleHttp\Exception\ConnectException($message, $request, null, ['errno' => 60]);
+    Http::fake(function () use ($transport, $message, $previous) {
+        if ($transport) {
+            throw new \Illuminate\Http\Client\ConnectionException($message, 0, $previous);
+        }
+
+        return Http::response(['errorCode' => 'INVALID_INPUT', 'message' => $message,
+            'cpf' => '09238037698', 'access_token' => 'secret-access-token'], 422);
+    });
+    $result = app(TokioService::class)->quote(['pretendentes' => [['cpf' => '09238037698', 'nome' => 'Pessoa Teste']]], null);
+    $safe = json_encode($result['errors']);
+    expect($result['success'])->toBeFalse()
+        ->and($result['http_status'])->toBe($transport ? null : 422)
+        ->and($safe)->toContain('SSL certificate problem', 'REDACTED')
+        ->not->toContain('09238037698', 'Pessoa Teste', 'secret-access-token');
+    if ($transport) {
+        expect($result['errors'][0]['data']['code'])->toBe('60');
+    } else {
+        expect($safe)->toContain('INVALID_INPUT', '422');
+    }
+    Log::shouldHaveReceived('log')->with('warning', 'Falha no fluxo da Tokio', Mockery::on(
+        fn (array $context): bool => $context['diagnostics'] === $result['errors']
+    ))->once();
+    $lead = \App\Models\Lead::query()->create(array_merge(tokioBuilderQuote('primary', false, false)->lead->getAttributes(), ['email' => 'test@example.test']));
+    $batch = \App\Models\InsuranceAnalysisBatch::query()->create(['lead_id' => $lead->id, 'status' => 'processing', 'total_providers' => 1]);
+    $analysis = \App\Models\InsuranceAnalysis::query()->create(['lead_id' => $lead->id, 'insurance_analysis_batch_id' => $batch->id,
+        'provider' => 'tokio', 'product' => 'fianca_locaticia_residencial', 'status' => 'pending', 'rent_amount' => 400]);
+    $analysis->events()->create(['event_type' => 'analysis_started', 'payload' => ['attempt_id' => 'diagnostic-test']]);
+    $run = app(\App\Services\Insurance\InsuranceQuoteCoordinator::class)->prepare($analysis, 'diagnostic-test', false);
+    $quote = $run->scenarios()->first()->quotes()->first();
+    app(TokioQuoteResponse::class)->apply($quote, $result);
+    expect($quote->fresh()->response_payload['errors'])->toBe($result['errors']);
+    Http::assertSentCount($transport ? 0 : 1);
 })->with([true, false]);
