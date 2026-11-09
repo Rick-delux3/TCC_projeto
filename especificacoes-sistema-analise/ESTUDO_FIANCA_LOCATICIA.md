@@ -1,5 +1,76 @@
 # Estudo das APIs de Fiança Locatícia
 
+## Pottencial — correção dos múltiplos após retorno real — 09/11/2026
+
+**Escopo exclusivo da Pottencial, confirmado pelo usuário:** os múltiplos 30, 6 e 3 por cobertura descritos nesta seção não são uma regra geral do seguro fiança. Não aplicar este mapeamento aos builders, payloads ou configurações da Too, Tokio ou Porto; cada companhia mantém suas próprias regras documentadas.
+
+Esta confirmação do usuário e do retorno HTTP 400 substitui a orientação anterior de múltiplo 30 para todas as coberturas. A API informou que a cobertura avaliada aceita somente múltiplo 6 e rejeitou 30 (42000 / 1400). O identificador censurado não permite identificá-la isoladamente; o mapeamento abaixo foi confirmado pelo usuário.
+
+| Cobertura | Base | Múltiplo |
+| --- | --- | --- |
+| `basica` | Aluguel | 30 |
+| `condominio` | Condomínio | 30 |
+| `iptu` | IPTU | 30 |
+| `gas` | Gás | 6 |
+| `agua` | Água | 6 |
+| `luz` | Luz | 6 |
+| `danos` | Aluguel | 6 |
+| `pintura` | Aluguel | 6 |
+| `multa-rescisao` | Aluguel | 3 |
+
+Aplicado no `RentalGuaranteeQuotePayloadBuilder`: sem pisos artificiais; encargos somente quando positivos. Basic/Complete continuam com `type = rentalProperty` e somente `basica`. Traditional continua com `type = FiancaLocaticia` e coberturas explícitas conforme esta tabela. A exceção de origem `locatario` continua enviando apenas aluguel/básica. Não alterar vigência ou parcelas por causa dos múltiplos de cobertura.
+
+A seleção de tipo e básica exclusiva dos mensalizados já foi implementada. As anotações anteriores de implementação pendente e de múltiplo 30 nas adicionais são históricas e foram superadas por esta atualização. A aceitação de cada plano ainda deve ser validada em homologação.
+
+
+## Pottencial — contrato por plano e múltiplos das coberturas — 09/11/2026
+
+**Fontes:** resposta do suporte no arquivo `C:\Users\Usuario\Downloads\resposta-suporte-duvidas.txt` e esclarecimentos posteriores do usuário. Esta seção prevalece sobre orientações históricas de enviar a mesma composição de coberturas e o mesmo `riskObjects.type` para todos os planos.
+
+### Regras confirmadas
+
+| Plano (`planKey`) | `riskObjects[].type` | `riskObjects[].coverages` |
+| --- | --- | --- |
+| `Basic` | `rentalProperty` | Enviar somente `basica`, com `insuredAmount = aluguel × 30` |
+| `Complete` | `rentalProperty` | Enviar somente `basica`, com `insuredAmount = aluguel × 30` |
+| `Traditional` | `FiancaLocaticia` | Enviar as coberturas explícitas aplicáveis, com múltiplo 30 por cobertura |
+
+O texto inicial do suporte dispensava `coverages` nos mensalizados, mas seu exemplo incluía `basica`. **O usuário resolveu a divergência: manter somente `basica` em Basic/Complete, não omitir o array inteiro.** As demais coberturas desses produtos são aplicadas pela seguradora; preservar as coberturas efetivamente retornadas, sem fabricar uma composição local.
+
+O usuário confirmou também `rentalProperty` exclusivamente para Basic/Complete e informou que os participantes adicionais do exemplo não são obrigatórios. Manter os `PolicyHolder` dos cenários existentes, com `contact.email` e `contact.cellPhoneNumber`; não acrescentar `Insured` ou `Beneficiary` apenas por constarem do exemplo. Permanecem as individuais PF e a conjunta condicional, e somente a empresa para PJ.
+
+### Traditional: base de cálculo e múltiplo adotado
+
+O usuário confirmou que os múltiplos/limites permitidos seguem os mensalizados e definiu **múltiplo 30 por cobertura**. A decisão operacional é utilizar 30; não inferir daqui um catálogo completo de outros múltiplos, limites monetários ou garantias de aceitação ainda não demonstrados por resposta real.
+
+| Cobertura | `insuredAmount` definido |
+| --- | --- |
+| `basica` | Valor do aluguel × 30 |
+| `condominio` | Valor do condomínio × 30, somente se positivo |
+| `iptu` | Valor do IPTU × 30, somente se positivo |
+| `gas` | Valor do gás × 30, somente se positivo |
+| `agua` | Valor da água × 30, somente se positivo |
+| `luz` | Valor da luz × 30, somente se positivo |
+| `danos` | Valor do aluguel × 30 |
+| `pintura` | Valor do aluguel × 30 |
+| `multa-rescisao` | Valor do aluguel × 30 |
+
+Esta definição substitui os multiplicadores anteriores de 6 para danos/pintura e 3 para multa, assim como pisos fixos que alterem a proporção entre despesa e cobertura. Não usar `max(aluguel × 30, 12000)`, nem pisos de 6000/3000 para as adicionais. Para aluguel de R$ 300, a básica será R$ 9.000, equivalente a 30 aluguéis, e não R$ 12.000, que produz múltiplo 40.
+
+**Exceção preservada:** origem `locatario` envia somente aluguel/básica, sem danos, pintura, multa ou encargos, inclusive no Traditional. Nas demais origens, manter danos/pintura/multa e incluir apenas encargos positivos efetivamente solicitados. Em todos os planos, `expenses` contém somente as despesas positivas aplicáveis; não enviar itens zerados/nulos, nem recriar água/luz removidas com 10% do aluguel. A composição automática dos mensalizados deve ser conferida no retorno, sem afirmar que omitir uma cobertura da requisição a remove do produto.
+
+Múltiplo de cobertura define o limite segurado, não o número de pagamentos: esta atualização não modifica vigências, regra de entrada, seleção de parcelas, comissão ou comparação. Os exemplos do suporte com um ano, 12 parcelas e comissão 0.2 não substituem os padrões do projeto. Seus dados pessoais são exemplos, não defaults; o arquivo também contém erros de sintaxe JSON que não devem ser copiados.
+
+### Relação com os erros e aplicação pendente
+
+- **Basic, HTTP 404 / código `25.163`:** a API informou coberturas ausentes na lista de precificação do plano. O envio indiscriminado de adicionais conflita com a composição mensalizada agora esclarecida; os IDs censurados não permitem identificar nominalmente cada cobertura rejeitada.
+- **Complete/Traditional, HTTP 400:** a API informou cobertura 12000 e despesa 300, resultando em múltiplo 40. O piso artificial era a causa dessa inconsistência. A lista de múltiplos exibida naquele erro pertence à cobertura avaliada, não comprova isoladamente as regras de todas as adicionais.
+- **Já corrigido no builder em etapas anteriores:** básica sem piso de 12000; água/luz sem fallback de 10%; filtro de valores positivos; contato do participante com e-mail e celular.
+- **Pendente de implementação:** selecionar `type` por plano, limitar `coverages` dos mensalizados a `basica` e aplicar múltiplo 30 sem pisos às adicionais do Traditional. Preservar a arquitetura de três planos por cenário, snapshots e resultados separados.
+- **Pendente de homologação:** conferir aceitação dos payloads de cada plano, limites/coberturas efetivamente retornados e valores de pagamento. Confirmação de regra e exemplo do suporte não equivalem a homologação executada.
+
+Esta atualização é exclusivamente documental; não altera builders, services, dados de leads ou cotações.
+
 ## Regra geral — quantidade de parcelas com e sem entrada — 05/11/2026
 
 **Confirmação expressa do usuário, válida para todas as companhias, inclusive Porto, Pottencial, Tokio e Too:** na base de 30 meses, **Com entrada corresponde a 30 parcelas/pagamentos; Sem entrada corresponde a 29 parcelas/pagamentos**, uma parcela a menos. De forma geral, para a quantidade-base N, Com entrada mantém N e Sem entrada usa N − 1. O prazo de contrato/seguro permanece em 30 meses; a redução é da quantidade de cobranças, não da vigência.

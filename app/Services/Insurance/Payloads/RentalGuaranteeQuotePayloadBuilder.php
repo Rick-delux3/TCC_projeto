@@ -56,6 +56,7 @@ class RentalGuaranteeQuotePayloadBuilder
          * contrato padrão de 30 meses.
          */
         $leaseMonths = (int) ($analysis->multiple ?: config('services.pottencial.default_lease_months', 30));
+        $planKey = $this->planKey($analysis);
 
         $startDate = $this->dateValue($analysis->lease_start_date ?? now());
 
@@ -105,8 +106,8 @@ class RentalGuaranteeQuotePayloadBuilder
 
             'riskObjects' => [
                 [
-                    'type' => 'FiancaLocaticia',
-                    'planKey' => $this->planKey($analysis),
+                    'type' => $planKey === 'Traditional' ? 'FiancaLocaticia' : 'rentalProperty',
+                    'planKey' => $planKey,
 
                     'multiple' => $leaseMonths,
                     'occupation' => $occupation,
@@ -121,7 +122,7 @@ class RentalGuaranteeQuotePayloadBuilder
                         'address' => $this->addressFromLead($lead),
                     ],
 
-                    'coverages' => $this->coverages($lead, $leaseMonths),
+                    'coverages' => $this->coverages($lead, $leaseMonths, $planKey),
                     'expenses' => $this->expenses($lead),
                 ],
             ],
@@ -235,10 +236,10 @@ class RentalGuaranteeQuotePayloadBuilder
         ];
     }
 
-    private function coverages(Lead $lead, int $months): array
+    private function coverages(Lead $lead, int $months, string $planKey): array
     {
         $aluguel = $this->expenseValue($lead, 'valor_aluguel') ?? 0.0;
-        if ($lead->tipo_solicitante === 'locatario') {
+        if ($lead->tipo_solicitante === 'locatario' || in_array($planKey, ['Basic', 'Complete'], true)) {
             return [['key' => 'basica', 'insuredAmount' => $aluguel * $months]];
         }
         $condominio = $this->expenseValue($lead, 'valor_condominio') ?? 0.0;
@@ -262,27 +263,27 @@ class RentalGuaranteeQuotePayloadBuilder
             ],
             [
                 'key' => 'gas',
-                'insuredAmount' => $gas * $months,
+                'insuredAmount' => $gas * 6,
             ],
             [
                 'key' => 'agua',
-                'insuredAmount' => $agua * $months,
+                'insuredAmount' => $agua * 6,
             ],
             [
                 'key' => 'luz',
-                'insuredAmount' => $luz * $months,
+                'insuredAmount' => $luz * 6,
             ],
             [
                 'key' => 'danos',
-                'insuredAmount' => max($aluguel * 6, 6000),
+                'insuredAmount' => $aluguel * 6,
             ],
             [
                 'key' => 'pintura',
-                'insuredAmount' => max($aluguel * 6, 6000),
+                'insuredAmount' => $aluguel * 6,
             ],
             [
                 'key' => 'multa-rescisao',
-                'insuredAmount' => max($aluguel * 3, 3000),
+                'insuredAmount' => $aluguel * 3,
             ],
         ], fn (array $coverage) => $coverage['insuredAmount'] > 0));
     }

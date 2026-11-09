@@ -106,6 +106,11 @@ class StoreSimulationLeadRequest extends FormRequest
 
             'cpf' => ['bail', 'required', 'string', $this->documentRule($this->input('cpf'))],
             'tipo_locacao' => ['required', Rule::enum(TipoLocacao::class)],
+            'motivo_contratacao' => [
+                'exclude_unless:tipo_locacao,comercial',
+                'bail', 'required', 'string',
+                Rule::in(['1', '2', '3', '4', '5', '6', '7', '8', '9']),
+            ],
             'empresa_constituida' => [
                 Rule::excludeIf(! $this->hasCompanyDocument() || $this->input('tipo_locacao') !== 'comercial'),
                 'bail',
@@ -222,6 +227,9 @@ class StoreSimulationLeadRequest extends FormRequest
     public function messages(): array
     {
         return [
+            'motivo_contratacao.required' => 'Selecione o motivo da contratação.',
+            'motivo_contratacao.string' => 'Selecione um motivo de contratação válido.',
+            'motivo_contratacao.in' => 'Selecione um dos motivos de contratação disponíveis para locação comercial.',
             /*
         |--------------------------------------------------------------------------
         | Proteção contra bots / termos

@@ -591,6 +591,9 @@ class SimulationController extends Controller
             'cpf' => $request->hasCompanyDocument() ? null : ($data['cpf'] ?? null),
             'data_nascimento' => $data['data_nascimento'],
             'tipo_locacao' => $data['tipo_locacao'],
+            'motivo_contratacao' => $data['tipo_locacao'] === 'comercial'
+                ? ($data['motivo_contratacao'] ?? null)
+                : ($request->hasCompanyDocument() ? 'A' : null),
             'ramo_atividade' => $data['ramo_atividade'] ?? null,
             'descrever_atividade' => isset($data['atividade_economica_id'])
                 ? \App\Models\AtividadeEconomica::query()->disponiveis()->findOrFail($data['atividade_economica_id'])->descricao
@@ -774,7 +777,7 @@ class SimulationController extends Controller
         $relationships = ['lead_empresa', 'endereco', 'despesas', 'conjuge', 'locador', 'imobiliariaInformada'];
         $lead->load($relationships);
         $data = $lead->only([
-            'nome', 'email', 'cpf', 'data_nascimento', 'tipo_locacao', 'ramo_atividade', 'descrever_atividade', 'atividade_economica_id', 'tel',
+            'nome', 'email', 'cpf', 'data_nascimento', 'tipo_locacao', 'motivo_contratacao', 'ramo_atividade', 'descrever_atividade', 'atividade_economica_id', 'tel',
             'estado_civil', 'tipo_vinculo', 'aceite_termos', 'observacoes',
             'tipo_pessoa', 'empresa_constituida', 'data_fundacao_calculada',
         ]);

@@ -67,6 +67,55 @@ function alignedInsuranceAnalysis(bool $company = false, ?string $rentalType = '
     return $analysis;
 }
 
+it('sends the confirmed Pottencial coverage contract for each plan', function (string $plan, string $origin) {
+    config([
+        'services.pottencial.base_url' => 'https://pottencial.example.test',
+        'services.pottencial.client_id' => 'test-client',
+        'services.pottencial.client_secret' => 'test-secret',
+        'services.pottencial.rental_endpoint' => '/insurance/v1/fianca-locaticia/quotes',
+    ]);
+    Illuminate\Support\Facades\Cache::forget('pottencial_access_token');
+    Http::fake([
+        'https://pottencial.example.test/oauth/v3/access-token' => Http::response(['access_token' => 'test-token']),
+        'https://pottencial.example.test/insurance/v1/fianca-locaticia/quotes' => Http::response(['quoteId' => 'test-quote'], 201),
+    ]);
+    $analysis = alignedInsuranceAnalysis();
+    $analysis->forceFill(['provider' => 'pottencial', 'plan_key' => $plan, 'multiple' => 30]);
+    $analysis->lead->update(['tipo_solicitante' => $origin]);
+    $analysis->lead->despesas()->update([
+        'valor_aluguel' => 300, 'valor_condominio' => 100, 'valor_iptu' => 20,
+        'valor_gas' => 10, 'valor_agua' => null, 'valor_luz' => 0,
+    ]);
+    $payload = app(RentalGuaranteeQuotePayloadBuilder::class)->build($analysis);
+    $result = app(App\Services\Insurance\PottencialService::class)->createRentalGuaranteeQuote($payload);
+
+    expect($result['success'])->toBeTrue()->and($result['response']['quoteId'])->toBe('test-quote');
+    Http::assertSent(function (Illuminate\Http\Client\Request $request) use ($plan, $origin): bool {
+        if (! str_ends_with($request->url(), '/quotes')) {
+            return false;
+        }
+        $risk = $request['riskObjects'][0];
+        $coverages = ['basica' => 9000];
+        if ($plan === 'Traditional' && $origin !== 'locatario') {
+            $coverages += ['condominio' => 3000, 'iptu' => 600, 'gas' => 60, 'danos' => 1800, 'pintura' => 1800, 'multa-rescisao' => 900];
+        }
+        expect($request->method())->toBe('POST')
+            ->and($request->hasHeader('access_token', 'test-token'))->toBeTrue()
+            ->and($risk['type'])->toBe($plan === 'Traditional' ? 'FiancaLocaticia' : 'rentalProperty')
+            ->and($risk['planKey'])->toBe($plan)
+            ->and(array_column($risk['coverages'], 'insuredAmount', 'key'))->toEqual($coverages)
+            ->and(array_column($risk['expenses'], 'value', 'description'))->toEqual($origin === 'locatario'
+                ? ['VALOR_ALUGUEL' => 300]
+                : ['VALOR_ALUGUEL' => 300, 'VALOR_CONDOMINIO' => 100, 'VALOR_IPTU' => 20, 'VALOR_GAS' => 10])
+            ->and($request['participants'])->toHaveCount(1)
+            ->and($request['participants'][0]['role'])->toBe('PolicyHolder')
+            ->and($request['participants'][0]['contact'])->toBe(['email' => 'payload@example.test', 'cellPhoneNumber' => '11999998888']);
+
+        return true;
+    });
+    Http::assertSentCount(2);
+})->with(['Basic', 'Complete', 'Traditional'])->with(['locador', 'locatario']);
+
 it('aligns both insurers with the document and rental purpose selected on the form', function (bool $company, string $rentalType) {
     $analysis = alignedInsuranceAnalysis($company, $rentalType);
     $too = app(TooRentalGuaranteePayloadBuilder::class);
@@ -231,7 +280,7 @@ it('includes only requested Pottencial expenses while preserving additional cove
         if ($value > 0) {
             $expectedCoverages[] = $key;
             $expectedExpenses[] = 'VALOR_'.strtoupper($key);
-            expect($coverages[$key])->toBe($value * 30)
+            expect($coverages[$key])->toBe($value * 6)
                 ->and($expenses['VALOR_'.strtoupper($key)])->toBe($value);
         }
     }
@@ -298,13 +347,13 @@ it('accepts the documented Pottencial commission precision', function () {
     Http::assertNothingSent();
 });
 
-it('builds the Pottencial minimal participant without optional contact data and canonicalizes plans', function (string $plan, string $expected) {
+it('builds the Pottencial participant with contact and canonicalizes plans', function (string $plan, string $expected) {
     $analysis = alignedInsuranceAnalysis();
-    $analysis->lead->forceFill(['nome' => null, 'email' => null]);
+    $analysis->lead->forceFill(['nome' => null]);
     $analysis->plan_key = $plan;
     config(['services.pottencial.default_installments' => 30]);
     $payload = app(RentalGuaranteeQuotePayloadBuilder::class)->build($analysis);
-    expect($payload['participants'])->toBe([['documentNumber' => '07234828702', 'role' => 'PolicyHolder']])
+    expect($payload['participants'])->toBe([['documentNumber' => '07234828702', 'role' => 'PolicyHolder', 'contact' => ['email' => 'payload@example.test', 'cellPhoneNumber' => '11999998888']]])
         ->and($payload['riskObjects'][0]['planKey'])->toBe($expected)
         ->and($payload['paymentConditions']['installments'])->toBe(30);
     Http::assertNothingSent();

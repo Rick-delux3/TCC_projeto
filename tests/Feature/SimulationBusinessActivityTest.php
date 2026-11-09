@@ -16,6 +16,45 @@ beforeEach(function (): void {
     \App\Models\AtividadeEconomicaCodigo::factory()->create();
 });
 
+it('persists the rental contracting reason and freezes it in the analysis snapshot', function (string $profile, string $document, string $purpose, ?string $expected): void {
+    config(['features.cpf_lookup.enabled' => false]);
+    [$url, $payload] = businessActivitySubmission($profile, [
+        'cpf' => $document, 'tipo_locacao' => $purpose, 'motivo_contratacao' => '3',
+        'ramo_atividade' => 21206, 'empresa_constituida' => 'S',
+        'cpf_responsavel' => '11144477735', 'nome_responsavel' => 'Responsável pela empresa',
+    ]);
+    $this->post($url, $payload)->assertSessionHasNoErrors()->assertRedirect();
+    $lead = Lead::query()->sole();
+    $this->assertDatabaseHas('leads', ['id' => $lead->id, 'motivo_contratacao' => $expected]);
+    $snapshots = app(\App\Services\Insurance\InsuranceLeadSnapshot::class);
+    $snapshot = $snapshots->capture($lead);
+    $lead->update(['motivo_contratacao' => null]);
+    expect($snapshots->restore($snapshot)->motivo_contratacao)->toBe($expected);
+    Http::assertNothingSent();
+})->with([
+    ['locatario', '52998224725', 'comercial', '3'],
+    ['locador', '11222333000181', 'comercial', '3'],
+    ['imobiliaria_cadastrada', '52998224725', 'comercial', '3'],
+    ['locatario', '11222333000181', 'residencial', 'A'],
+    ['locatario', '52998224725', 'residencial', null],
+]);
+
+it('rejects invalid commercial contracting reasons before persistence', function (mixed $reason): void {
+    config(['features.cpf_lookup.enabled' => false]);
+    $this->postJson(route('simulation.tenant.store'), businessActivityPayload([
+        'ramo_atividade' => 21206, 'motivo_contratacao' => $reason,
+    ]))->assertUnprocessable()->assertJsonValidationErrors('motivo_contratacao');
+    $this->assertDatabaseCount('leads', 0);
+    Http::assertNothingSent();
+})->with(['residential code' => ['A'], 'unknown' => ['10'], 'array' => [['1']]]);
+
+it('requires a contracting reason for commercial submissions', function (): void {
+    config(['features.cpf_lookup.enabled' => false]);
+    $this->post(route('simulation.tenant.store'), businessActivityPayload(['ramo_atividade' => 21206]))
+        ->assertSessionHasErrors('motivo_contratacao');
+    $this->assertDatabaseCount('leads', 0);
+});
+
 function businessActivityPayload(array $overrides = []): array
 {
     return array_replace([

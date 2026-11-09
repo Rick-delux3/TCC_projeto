@@ -15,6 +15,7 @@ final class InsuranceLeadSnapshot
         $lead->load(self::RELATIONS);
         $snapshot = ['attributes' => Arr::only($lead->getAttributes(), [
             'id', 'company_id', 'tipo_solicitante', 'cpf', 'data_nascimento', 'tipo_locacao',
+            'motivo_contratacao',
             'tipo_pessoa', 'empresa_constituida', 'data_fundacao_calculada', 'ramo_atividade',
             'descrever_atividade', 'atividade_economica_id', 'estado_civil', 'nome', 'email', 'tel', 'origem',
         ]), 'relations' => []];

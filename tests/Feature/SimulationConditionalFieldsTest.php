@@ -919,6 +919,29 @@ it('restores active fields and choices after a validation error', function () {
         ->and($dom->evaluate('string(//input[@name="tipo_locacao"][@checked]/@value)'))->toBe('comercial');
 });
 
+it('renders the contracting reason only in commercial fields across shared forms', function (string $view, string $document, string $rentalType): void {
+    $this->withSession(['_old_input' => ['tipo_locacao' => $rentalType, 'cpf' => $document, 'motivo_contratacao' => '3']]);
+    $this->app['request']->setLaravelSession($this->app['session.store']);
+    $errors = (new \Illuminate\Support\ViewErrorBag)->put('default', new \Illuminate\Support\MessageBag([
+        'motivo_contratacao' => 'Selecione um motivo válido.',
+    ]));
+    $dom = conditionalSimulationDom((string) $this->view('simulation.forms.'.$view, [
+        'company' => conditionalSimulationCompany(), 'errors' => $errors,
+    ]));
+    $select = '//*[@data-simulation-fields="commercial"]//select[@name="motivo_contratacao"]';
+    $template = '//template[@data-simulation-template="commercial"]//select[@name="motivo_contratacao"]';
+    expect($dom->query($select)->length)->toBe($rentalType === 'comercial' ? 1 : 0)
+        ->and($dom->query($template.'/option')->length)->toBe(10)
+        ->and($dom->query($template.'/option[@value="A"]')->length)->toBe(0);
+    if ($rentalType === 'comercial') {
+        expect($dom->query($select.'[@required]')->length)->toBe(1)
+            ->and($dom->evaluate('string('.$select.'/option[@selected]/@value)'))->toBe('3')
+            ->and($dom->evaluate('string('.$select.'/@aria-describedby)'))->toBe('motivo_contratacao-error')
+            ->and($dom->evaluate('string('.$select.'/parent::div/@class)'))->toContain('md:col-span-2');
+    }
+})->with(['tenant', 'registered-company', 'unregistered-company_landlord'])
+    ->with([['52998224725', 'comercial'], ['11222333000181', 'comercial'], ['11222333000181', 'residencial']]);
+
 it('renders the business activity select only for commercial rental in every simulation form', function (string $view, bool $isAdminSimulation, ?string $rentalType): void {
     $this->withSession(['_old_input' => ['tipo_locacao' => $rentalType]]);
     $this->app['request']->setLaravelSession($this->app['session.store']);

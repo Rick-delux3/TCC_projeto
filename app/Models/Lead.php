@@ -52,6 +52,7 @@ class Lead extends Model
         'cpf',
         'data_nascimento',
         'tipo_locacao',
+        'motivo_contratacao',
         'tipo_pessoa',
         'empresa_constituida',
         'data_fundacao_calculada',
