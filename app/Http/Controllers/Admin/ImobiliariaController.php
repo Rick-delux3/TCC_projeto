@@ -53,6 +53,8 @@ class ImobiliariaController extends Controller
                 'state',
                 'lead_access_code',
                 'lead_form_active',
+                'tokio_partner_code',
+                'porto_partner_code',
                 'created_at',
             ])
             ->when($search !== '', function (Builder $query) use ($search, $cnpjSearch): void {
@@ -260,6 +262,10 @@ class ImobiliariaController extends Controller
                 $oldStatus = (bool) $companyToUpdate->lead_form_active;
 
                 $companyToUpdate->fill(collect($data)->except('setores')->all());
+
+                if ($companyToUpdate->isDirty('tokio_partner_code')) {
+                    $companyToUpdate->tokio_partner_source = $companyToUpdate->tokio_partner_code !== null ? 'manual' : null;
+                }
 
                 $changedFields = array_keys(
                     $companyToUpdate->getDirty()

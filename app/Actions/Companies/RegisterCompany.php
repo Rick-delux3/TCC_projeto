@@ -47,7 +47,13 @@ class RegisterCompany
                 'lead_form_active' => $data['lead_form_active'] ?? true,
                 'leadlovers_tag_id' => $companyTag?->leadlovers_tag_id,
                 'leadlovers_tag_name' => $companyTag?->title,
+                'tokio_partner_code' => $registeredBy !== null ? ($data['tokio_partner_code'] ?? null) : null,
+                'porto_partner_code' => $registeredBy !== null ? ($data['porto_partner_code'] ?? null) : null,
             ]);
+
+            if ($company->tokio_partner_code !== null) {
+                $company->forceFill(['tokio_partner_source' => 'manual'])->save();
+            }
 
             $user = User::query()->create([
                 'name' => $companyName,

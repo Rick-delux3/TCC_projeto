@@ -12,6 +12,7 @@ use Illuminate\Validation\Rule;
 class UpdateCompanyRequest extends FormRequest
 {
     use ValidatesCompanyDepartments;
+    use ValidatesCompanyPartnerCodes;
 
     /**
      * Determine if the user is authorized to make this request.
@@ -32,6 +33,7 @@ class UpdateCompanyRequest extends FormRequest
         }
 
         $this->normalizeDepartments();
+        $this->normalizePartnerCodes();
 
         $this->merge([
             'name' => $this->normalizeText($this->input('name')),
@@ -76,6 +78,7 @@ class UpdateCompanyRequest extends FormRequest
 
         return [
             ...$this->departmentRules(),
+            ...$this->partnerCodeRules(),
             'name' => [
                 'bail',
                 'required',
@@ -153,6 +156,7 @@ class UpdateCompanyRequest extends FormRequest
     {
         return [
             ...$this->departmentMessages(),
+            ...$this->partnerCodeMessages(),
             'name.required' => \App\Support\BrandingText::choose('Informe o nome da imobiliária.', 'Informe o nome da empresa.'),
             'name.unique' => \App\Support\BrandingText::choose('Já existe uma imobiliária com esse nome.', 'Já existe uma empresa com esse nome.'),
 

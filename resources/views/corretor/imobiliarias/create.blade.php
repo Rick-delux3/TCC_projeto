@@ -183,6 +183,9 @@
                                 </div>
                             </div>
                         @endif
+                        <div class="mt-4">
+                            @include('corretor.imobiliarias.partials.partner-codes', ['codePrefix' => 'create-company', 'restoreCodes' => true])
+                        </div>
                     </div>
                 </section>
 

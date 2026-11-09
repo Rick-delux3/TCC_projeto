@@ -21,7 +21,7 @@ final class InsuranceLeadSnapshot
         foreach (self::RELATIONS as $name) {
             $model = $lead->getRelation($name);
             $snapshot['relations'][$name] = $model ? (in_array($name, ['company', 'imobiliariaVinculada'], true)
-                ? Arr::only($model->getAttributes(), ['id', 'name', 'cnpj', 'email', 'phone', 'cep', 'city', 'state', 'tokio_partner_code'])
+                ? Arr::only($model->getAttributes(), ['id', 'name', 'cnpj', 'email', 'phone', 'cep', 'city', 'state', 'tokio_partner_code', 'porto_partner_code'])
                 : $model->getAttributes()) : null;
         }
 

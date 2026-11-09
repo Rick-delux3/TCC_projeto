@@ -221,6 +221,8 @@
                                 @enderror
                             </div>
                         </div>
+                        @include('corretor.imobiliarias.partials.partner-codes', ['codePrefix' => 'edit-company', 'restoreCodes' => $hasEditErrors])
+
                         <section class="company-edit-departments" aria-labelledby="edit-departments-title" data-edit-departments>
                             <h3 class="h6 fw-bold" id="edit-departments-title">E-mails por setor</h3>
                             <p class="form-text">Informe os contatos de cada setor. Os e-mails são opcionais. Remover todos os setores exclui os contatos salvos.</p>

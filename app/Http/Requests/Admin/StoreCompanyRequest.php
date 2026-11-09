@@ -15,6 +15,7 @@ use Illuminate\Validation\Validator;
 class StoreCompanyRequest extends FormRequest
 {
     use ValidatesCompanyDepartments;
+    use ValidatesCompanyPartnerCodes;
 
     private ?array $resolvedCep = null;
 
@@ -32,6 +33,7 @@ class StoreCompanyRequest extends FormRequest
     protected function prepareForValidation(): void
     {
         $this->normalizeDepartments();
+        $this->normalizePartnerCodes();
 
         $companyTags = app(CompanyTagService::class);
 
@@ -170,7 +172,7 @@ class StoreCompanyRequest extends FormRequest
             ];
         }
 
-        return array_merge($rules, $this->departmentRules());
+        return array_merge($rules, $this->departmentRules(), $this->partnerCodeRules());
     }
 
     public function after(): array
@@ -198,6 +200,7 @@ class StoreCompanyRequest extends FormRequest
     {
         return [
             ...$this->departmentMessages(),
+            ...$this->partnerCodeMessages(),
             'website.size' => 'Requisição inválida.',
 
             'leadlovers_tag_id.required' => \App\Support\BrandingText::choose('Informe o nome da imobiliária.', 'Informe o nome da empresa.'),

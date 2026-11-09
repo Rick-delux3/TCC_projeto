@@ -832,6 +832,116 @@ it('registers the management routes with the expected HTTP methods', function ()
         ->toBe(['DELETE']);
 });
 
+describe('company insurer partner codes', function () {
+    beforeEach(function () {
+        Http::preventStrayRequests();
+        Notification::fake();
+        $this->actingAs(createImobiliariaAdmin([
+            'permissions' => ['imobiliarias.visualizar', 'imobiliarias.cadastrar', 'imobiliarias.editar'],
+        ]), 'admin');
+    });
+
+    it('renders optional accessible partner fields and edit data for both brands and screen layouts', function (string $brand) {
+        config(['branding.active' => $brand]);
+        $company = createManagedImobiliaria(['cnpj' => '11222333000181', 'porto_partner_code' => '000123', 'tokio_partner_code' => '00123']);
+        foreach (['create' => 'create-company', 'index' => 'edit-company'] as $page => $prefix) {
+            $response = $this->get(route('admin.imobiliarias.'.$page))->assertOk();
+            $document = new DOMDocument;
+            @$document->loadHTML('<?xml encoding="UTF-8">'.$response->getContent());
+            $xpath = new DOMXPath($document);
+            foreach (['tokio_partner_code' => 50, 'porto_partner_code' => 6] as $field => $length) {
+                $inputs = $xpath->query('//input[@name="'.$field.'"]');
+                expect($inputs->length)->toBe(1);
+                $input = $inputs->item(0);
+                expect($input->getAttribute('type'))->toBe('text')
+                    ->and($input->getAttribute('inputmode'))->toBe('numeric')
+                    ->and($input->getAttribute('maxlength'))->toBe((string) $length)
+                    ->and($input->hasAttribute('required'))->toBeFalse()
+                    ->and($xpath->query('//label[@for="'.$prefix.'-'.$field.'"]')->length)->toBe(1)
+                    ->and($input->getAttribute('aria-describedby'))->toContain($prefix.'-'.$field.'-help');
+            }
+            if ($page === 'index') {
+                $buttons = $xpath->query('//button[@data-company-edit and @data-company-id="'.$company->id.'"]');
+                expect($buttons->length)->toBe(2);
+                foreach ($buttons as $button) {
+                    expect($button->getAttribute('data-company-porto-code'))->toBe('000123')
+                        ->and($button->getAttribute('data-company-tokio-code'))->toBe('00123');
+                }
+            }
+        }
+    })->with(['tcc', 'client']);
+
+    it('preserves partner code input and displays inline validation errors', function (string $operation) {
+        $company = createManagedImobiliaria(['cnpj' => '52998224725', 'porto_partner_code' => '000123']);
+        $values = ['porto_partner_code' => '12X', 'tokio_partner_code' => '00789'];
+        if ($operation === 'create') {
+            $this->mock(CepService::class, function (MockInterface $mock) {
+                $mock->shouldReceive('find')->andReturn(['cidade' => 'São Paulo', 'estado' => 'SP']);
+            });
+            $payload = validAdminCompanyPayload(9801, $values + ['company_name' => 'Nova Parceira']);
+            unset($payload['leadlovers_tag_id']);
+            $page = route('admin.imobiliarias.create');
+            $this->from($page)->post(route('admin.imobiliarias.store'), $payload)->assertSessionHasErrors('porto_partner_code');
+            $prefix = 'create-company';
+        } else {
+            $page = route('admin.imobiliarias.index');
+            $this->from($page)->patch(route('admin.imobiliarias.update', $company), validCompanyUpdatePayload($company, $values))->assertSessionHasErrors('porto_partner_code');
+            $prefix = 'edit-company';
+        }
+        $response = $this->get($page)->assertOk()->assertSee('value="12X"', false)->assertSee('value="00789"', false)
+            ->assertSee('id="'.$prefix.'-porto_partner_code-error"', false)->assertSee('aria-invalid="true"', false);
+        if ($operation === 'edit') {
+            $response->assertSee('data-preserve-input="true"', false)->assertSee('data-reopen-company-id="'.$company->id.'"', false);
+        }
+        expect($company->fresh()->porto_partner_code)->toBe('000123');
+    })->with(['create', 'edit']);
+
+    it('registers normalized partner codes and makes them available to the listing and quote snapshot', function () {
+        LeadLoversTag::query()->create(['leadlovers_tag_id' => 9801, 'title' => 'Imobiliária Parceira Seguradoras', 'key' => 'imobiliaria_parceira_seguradoras', 'active' => true]);
+        $this->mock(CepService::class, function (MockInterface $mock) {
+            $mock->shouldReceive('find')->with('01001000')->andReturn(['cidade' => 'São Paulo', 'estado' => 'SP']);
+        });
+        $this->post(route('admin.imobiliarias.store'), validAdminCompanyPayload(9801, [
+            'porto_partner_code' => ' 123 ', 'tokio_partner_code' => '00123', 'tokio_partner_source' => 'forged',
+        ]))->assertSessionHasNoErrors()->assertRedirect();
+
+        $company = Imobiliaria::query()->where('leadlovers_tag_id', 9801)->firstOrFail();
+        expect($company->porto_partner_code)->toBe('000123')
+            ->and($company->tokio_partner_code)->toBe('00123')
+            ->and($company->tokio_partner_source)->toBe('manual');
+        $this->get(route('admin.imobiliarias.index'))->assertOk()->assertViewHas('companies', fn ($companies) => $companies->first()->porto_partner_code === '000123');
+        $lead = Lead::query()->create(['nome' => 'Pretendente', 'email' => 'pretendente@example.test', 'company_id' => $company->id, 'tipo_solicitante' => 'imobiliaria_cadastrada']);
+        $snapshot = app(\App\Services\Insurance\InsuranceLeadSnapshot::class)->capture($lead);
+        expect(data_get($snapshot, 'relations.imobiliariaVinculada.porto_partner_code'))->toBe('000123');
+    });
+
+    it('preserves omitted codes and imported sources, allows replacement and explicit removal', function () {
+        $company = createManagedImobiliaria(['cnpj' => '11222333000181', 'porto_partner_code' => '000123', 'tokio_partner_code' => '123']);
+        $company->forceFill(['tokio_partner_source' => 'spreadsheet.xlsx'])->save();
+        $url = route('admin.imobiliarias.update', $company);
+        $this->patch($url, validCompanyUpdatePayload($company))->assertSessionHasNoErrors();
+        expect($company->fresh()->porto_partner_code)->toBe('000123')
+            ->and($company->fresh()->tokio_partner_source)->toBe('spreadsheet.xlsx');
+        $this->patch($url, validCompanyUpdatePayload($company, ['porto_partner_code' => '123', 'tokio_partner_code' => '123']))->assertSessionHasNoErrors();
+        expect($company->fresh()->tokio_partner_source)->toBe('spreadsheet.xlsx');
+        $this->patch($url, validCompanyUpdatePayload($company, ['porto_partner_code' => '456', 'tokio_partner_code' => '456']))->assertSessionHasNoErrors();
+        expect($company->fresh()->porto_partner_code)->toBe('000456')->and($company->fresh()->tokio_partner_source)->toBe('manual');
+        $this->patch($url, validCompanyUpdatePayload($company, ['porto_partner_code' => '', 'tokio_partner_code' => '']))->assertSessionHasNoErrors();
+        expect($company->fresh()->porto_partner_code)->toBeNull()->and($company->fresh()->tokio_partner_code)->toBeNull()->and($company->fresh()->tokio_partner_source)->toBeNull();
+    });
+
+    it('rejects invalid or already associated partner codes', function (array $codes, array $errors) {
+        createManagedImobiliaria(['porto_partner_code' => '000123', 'tokio_partner_code' => '123']);
+        $company = createManagedImobiliaria(['cnpj' => '52998224725']);
+        $this->patch(route('admin.imobiliarias.update', $company), validCompanyUpdatePayload($company, $codes))->assertSessionHasErrors($errors);
+        expect($company->fresh()->porto_partner_code)->toBeNull()->and($company->fresh()->tokio_partner_code)->toBeNull();
+    })->with([
+        'duplicate normalized codes' => [['porto_partner_code' => '123', 'tokio_partner_code' => '123'], ['porto_partner_code', 'tokio_partner_code']],
+        'invalid types and characters' => [['porto_partner_code' => ['123'], 'tokio_partner_code' => '12-3'], ['porto_partner_code', 'tokio_partner_code']],
+        'too long' => [['porto_partner_code' => '1234567', 'tokio_partner_code' => str_repeat('1', 51)], ['porto_partner_code', 'tokio_partner_code']],
+    ]);
+});
+
 describe('company departments', function () {
     beforeEach(function () {
         Http::preventStrayRequests();
