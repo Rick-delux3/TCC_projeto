@@ -737,6 +737,30 @@ class LeadReanalysisService
         ], JSON_THROW_ON_ERROR));
     }
 
+    public function saveExpenses(Lead $lead, array $data, ?Corretor $corretor = null): array
+    {
+        $this->ensureAnalysisEnabled();
+
+        return $lead->getConnection()->transaction(function () use ($lead, $data, $corretor): array {
+            $lead = Lead::query()->lockForUpdate()->findOrFail($lead->id);
+            $batch = $lead->insuranceAnalysesBatches()->latest('id')->lockForUpdate()->first();
+            if (! $batch) {
+                throw new DomainException('Não há cotações para editar as despesas.');
+            }
+            $batch->load(['analyses' => fn ($query) => $query->orderBy('id')->lockForUpdate(), 'analyses.latestAttemptEvent']);
+            $lead->load('despesas');
+            if (! hash_equals($this->expenseRevision($lead, $batch), (string) ($data['revision'] ?? ''))) {
+                throw new DomainException('As despesas ou cotações foram alteradas. Atualize a página antes de salvar.');
+            }
+            $values = $this->normalizedExpenseValues($data);
+            if ($this->expensesDiffer($values, $lead->despesas?->only(self::EXPENSE_FIELDS) ?? [])) {
+                $this->saveLeadExpenses($lead, $values, $corretor, false);
+            }
+
+            return ['expenses' => $values, 'revision' => $this->expenseRevision($lead, $batch)];
+        });
+    }
+
     public function reanalyzeExpenses(Lead $lead, array $data, string $requestedBy, ?Corretor $corretor = null): int
     {
         $this->ensureAnalysisEnabled();
@@ -752,47 +776,122 @@ class LeadReanalysisService
             if (! hash_equals($this->expenseRevision($lead, $batch), (string) ($data['revision'] ?? ''))) {
                 throw new DomainException('As despesas ou cotações foram alteradas. Atualize a página antes de reanalisar.');
             }
-            $eligible = $batch->analyses->reject(fn (InsuranceAnalysis $analysis): bool => in_array($analysis->status, ['failed', 'error'], true));
+            $eligible = $batch->analyses->filter(fn (InsuranceAnalysis $analysis): bool => ProviderAnalysisStatus::isTerminal($analysis->status));
             if ($eligible->isEmpty()) {
-                throw new DomainException('Todas as companhias apresentaram falha. Não há cotações disponíveis para reanálise.');
+                throw new DomainException('Nenhuma companhia concluiu a análise atual. Aguarde o término para reanalisar.');
             }
-            $expenses = $lead->despesas ?? $lead->despesas()->make();
-            $values = collect(self::EXPENSE_FIELDS)->mapWithKeys(fn (string $field): array => [$field => number_format((float) $data[$field], 2, '.', '')])->all();
-            $changed = collect($values)->contains(fn (string $value, string $field): bool => $value !== number_format((float) $expenses->getAttribute($field), 2, '.', ''));
-            if (! $changed) {
+            $values = $this->normalizedExpenseValues($data);
+            if (! $this->expensesDiffer($values, $lead->despesas?->only(self::EXPENSE_FIELDS) ?? [])) {
                 throw new DomainException('Altere pelo menos uma despesa para solicitar uma nova cotação.');
             }
-            $totalCents = collect($values)->sum(fn (string $value): int => (int) round((float) $value * 100));
-            $expenses->fill($values + ['valor_total_encargos' => $totalCents / 100])->save();
-            $lead->forceFill([
-                'status' => 'em-andamento', 'data_edited_at' => now(),
-                'reanalysis_unlocked_at' => null,
-            ]);
-            if ($corretor) {
-                $lead->updated_by_corretor_id = $corretor->id;
-            }
-            $lead->save();
-            $attemptId = (string) Str::uuid();
-            $jobs = [];
-            foreach ($eligible as $analysis) {
-                $this->restartAnalysisAsReanalysis(
-                    analysis: $analysis, message: 'Nova cotação solicitada após alteração das despesas.',
-                    attemptId: $attemptId, requestedBy: $requestedBy, replaceCurrentAttempt: true,
-                );
-                $jobs[] = new RunProviderAnalysisJob($analysis->id, $attemptId, true);
-            }
-            $batchId = (int) $batch->id;
-            $leadId = (int) $lead->id;
-            $lead->getConnection()->afterCommit(function () use ($jobs, $batchId, $leadId, $attemptId): void {
-                Bus::batch($jobs)->onQueue('insurance-analyses')->name("Reanálise das despesas do lead {$leadId}")->allowFailures()
-                    ->finally(static function (Batch $batch) use ($batchId, $attemptId): void {
-                        CompleteInsuranceAnalysesBatchJob::dispatch($batchId, $attemptId, true);
-                    })->dispatch();
-                $this->notifyDashboard($leadId, 'lead.reanalysis.requested');
-            });
+            $this->saveLeadExpenses($lead, $values, $corretor);
 
-            return count($jobs);
+            return $this->dispatchExpenseReanalysis($lead, $batch, $eligible->values()->all(), $requestedBy, "Reanálise das despesas do lead {$lead->id}");
         });
+    }
+
+    /**
+     * Reanalisa somente uma companhia com as despesas informadas, mantendo as demais intactas.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    public function reanalyzeProviderExpenses(InsuranceAnalysis $analysis, array $data, string $requestedBy, ?Corretor $corretor = null): void
+    {
+        $this->ensureAnalysisEnabled();
+
+        $analysis->getConnection()->transaction(function () use ($analysis, $data, $requestedBy, $corretor): void {
+            $lead = Lead::query()->lockForUpdate()->findOrFail($analysis->lead_id);
+            $batch = $lead->insuranceAnalysesBatches()->latest('id')->lockForUpdate()->first();
+            $analysis = InsuranceAnalysis::query()->with('currentProviderRun.round')->lockForUpdate()->findOrFail($analysis->id);
+            if (! $batch || (int) $analysis->insurance_analysis_batch_id !== (int) $batch->id) {
+                throw new DomainException('Esta cotação não pertence ao pacote atual do lead. Atualize a página.');
+            }
+            if (! ProviderAnalysisStatus::isTerminal($analysis->status)) {
+                throw new DomainException('Esta companhia ainda está em análise. Aguarde o resultado para reanalisar.');
+            }
+            $lead->load('despesas');
+            $values = $this->normalizedExpenseValues($data);
+            $previous = data_get($analysis->currentProviderRun?->round?->lead_snapshot, 'relations.despesas')
+                ?? $lead->despesas?->only(self::EXPENSE_FIELDS) ?? [];
+            if (! $this->expensesDiffer($values, is_array($previous) ? $previous : [])) {
+                throw new DomainException('Altere pelo menos uma despesa em relação à última cotação desta companhia.');
+            }
+            if ($this->expensesDiffer($values, $lead->despesas?->only(self::EXPENSE_FIELDS) ?? [])) {
+                $this->saveLeadExpenses($lead, $values, $corretor);
+            }
+
+            $this->dispatchExpenseReanalysis($lead, $batch, [$analysis], $requestedBy, "Reanálise de {$analysis->provider} do lead {$lead->id}");
+        });
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array<string, string>
+     */
+    private function normalizedExpenseValues(array $data): array
+    {
+        return collect(self::EXPENSE_FIELDS)
+            ->mapWithKeys(fn (string $field): array => [$field => number_format((float) ($data[$field] ?? 0), 2, '.', '')])
+            ->all();
+    }
+
+    /**
+     * @param  array<string, string>  $values
+     * @param  array<string, mixed>  $previous
+     */
+    private function expensesDiffer(array $values, array $previous): bool
+    {
+        return collect($values)->contains(fn (string $value, string $field): bool => $value !== number_format((float) ($previous[$field] ?? 0), 2, '.', ''));
+    }
+
+    /**
+     * @param  array<string, string>  $values
+     */
+    private function saveLeadExpenses(Lead $lead, array $values, ?Corretor $corretor, bool $reanalyzing = true): void
+    {
+        $expenses = $lead->despesas ?? $lead->despesas()->make();
+        $totalCents = collect($values)->sum(fn (string $value): int => (int) round((float) $value * 100));
+        $expenses->fill($values + ['valor_total_encargos' => $totalCents / 100])->save();
+        $lead->setRelation('despesas', $expenses);
+        $lead->data_edited_at = now();
+        if ($reanalyzing) {
+            $lead->forceFill(['status' => 'em-andamento', 'reanalysis_unlocked_at' => null]);
+        }
+        if ($corretor) {
+            $lead->updated_by_corretor_id = $corretor->id;
+        }
+        $lead->save();
+    }
+
+    /**
+     * Reinicia as companhias informadas na mesma tentativa e agenda a conclusão do pacote após o commit.
+     * Companhias aprovadas/recusadas seguem o fluxo de reanálise; as demais (falha ou cotação manual) recebem nova análise.
+     *
+     * @param  list<InsuranceAnalysis>  $analyses
+     */
+    private function dispatchExpenseReanalysis(Lead $lead, InsuranceAnalysisBatch $batch, array $analyses, string $requestedBy, string $name): int
+    {
+        $attemptId = (string) Str::uuid();
+        $jobs = [];
+        foreach ($analyses as $analysis) {
+            $usesReanalysisFlow = $analysis->canRequestProviderReanalysis();
+            $this->restartAnalysisAsReanalysis(
+                analysis: $analysis, message: 'Nova cotação solicitada após alteração das despesas.',
+                attemptId: $attemptId, requestedBy: $requestedBy, replaceCurrentAttempt: true,
+            );
+            $jobs[] = new RunProviderAnalysisJob($analysis->id, $attemptId, $usesReanalysisFlow);
+        }
+        $batchId = (int) $batch->id;
+        $leadId = (int) $lead->id;
+        $lead->getConnection()->afterCommit(function () use ($jobs, $batchId, $leadId, $attemptId, $name): void {
+            Bus::batch($jobs)->onQueue('insurance-analyses')->name($name)->allowFailures()
+                ->finally(static function (Batch $batch) use ($batchId, $attemptId): void {
+                    CompleteInsuranceAnalysesBatchJob::dispatch($batchId, $attemptId, true);
+                })->dispatch();
+            $this->notifyDashboard($leadId, 'lead.reanalysis.requested');
+        });
+
+        return count($jobs);
     }
 
     public function startGeneralReanalysis(
@@ -1079,7 +1178,7 @@ class LeadReanalysisService
                 'events',
             ]);
 
-            if ($replaceCurrentAttempt ? in_array($analysis->status, ['failed', 'error'], true) : ! $analysis->canRequestProviderReanalysis()) {
+            if ($replaceCurrentAttempt ? ! ProviderAnalysisStatus::isTerminal($analysis->status) : ! $analysis->canRequestProviderReanalysis()) {
                 throw new DomainException(
                     'Esta análise já está sendo processada ou não permite reanálise.'
                 );

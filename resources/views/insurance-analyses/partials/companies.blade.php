@@ -1,5 +1,6 @@
 @php
     $analysesByProvider = collect($companies)->keyBy('provider');
+    $canEditExpenses = ($pageData['permissions']['edit_lead'] ?? false) && ($pageData['permissions']['create_analysis'] ?? false);
     $planNames = ['Basic' => 'Básico', 'Complete' => 'Completo', 'Traditional' => 'Tradicional', 'Tradicional' => 'Tradicional', 'default' => 'Fiança locatícia'];
 @endphp
 <section class="border-top pt-4 mb-4" aria-labelledby="companies-title">
@@ -25,7 +26,17 @@
                         @if ($blocked)
                             <span class="badge text-bg-secondary">Bloqueada</span>
                         @else
-                            <button type="button" class="btn btn-sm btn-outline-secondary" data-analysis-dialog="details-{{ $provider }}" aria-haspopup="dialog" aria-controls="details-{{ $provider }}" @disabled(! $analysis)>Visualizar</button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" data-reanalysis-mode-only="general" data-analysis-dialog="details-{{ $provider }}" aria-haspopup="dialog" aria-controls="details-{{ $provider }}" @disabled(! $analysis)>Visualizar</button>
+                            @if ($canEditExpenses)
+                                @php($providerReanalysis = $analysis['actions']['expense_reanalysis'] ?? ['available' => false, 'url' => null])
+                                <button type="button" class="btn btn-sm btn-primary" data-reanalysis-mode-only="separate" hidden
+                                    data-provider-reanalysis="{{ $provider }}" data-provider-name="{{ $providerName }}" data-url="{{ $providerReanalysis['url'] }}"
+                                    @disabled(! $providerReanalysis['available'])
+                                    @unless ($providerReanalysis['available']) title="Disponível quando esta companhia concluir a análise atual." @endunless>
+                                    <span class="spinner-border spinner-border-sm me-1 d-none" aria-hidden="true" data-loading-indicator></span>
+                                    <span data-button-label>Reanalisar</span>
+                                </button>
+                            @endif
                         @endif
                     </div>
                     <div class="card-body d-flex flex-column justify-content-center text-center">
@@ -33,7 +44,7 @@
                             <p class="text-body-secondary">Aguardando testes e validação da integração.</p>
                             <button type="button" class="btn btn-outline-secondary w-100" disabled>Indisponível</button>
                         @elseif (! $analysis)
-                            <p class="mb-0" role="status">Aguardando análise desta companhia.</p>
+                            <p class="mb-0" role="status"><span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>Aguardando análise desta companhia.</p>
                         @elseif ($plans->isNotEmpty())
                             <ul class="list-group list-group-flush">
                                 @foreach ($plans as $plan)

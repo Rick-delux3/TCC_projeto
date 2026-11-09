@@ -147,6 +147,59 @@ it('does not substitute another assistance or payment method', function () {
     expect(app(TokioQuoteResponse::class)->payment($quote)['selection'])->toBeNull();
 });
 
+function tokioPaymentQuote(string $paymentType, array $calculations): InsuranceQuote
+{
+    return new InsuranceQuote(['payment_type' => $paymentType, 'response_payload' => ['response' => ['calculos' => $calculations]]]);
+}
+
+function tokioVistaOptions(int $max): array
+{
+    $options = [];
+    foreach (range(1, $max) as $count) {
+        $options[(string) $count] = ['qtd' => $count, 'vlPremTot' => 1845.29, 'vlPremPar' => round(1845.29 / $count, 2)];
+    }
+
+    return ['qtdMaxVista' => $max, 'vista' => $options, 'qtdMaxPrazo' => 0, 'prazo' => []];
+}
+
+it('selects the installment listed under vista for the not contracted assistance', function (string $paymentType, int $count, string $amount) {
+    $quote = tokioPaymentQuote($paymentType, ['N' => ['opcaoAssistencia' => 'Não Contratada', 'opcoesPagamento' => [
+        'faturado' => tokioVistaOptions(29), 'credito' => tokioVistaOptions(30),
+    ]]]);
+    $result = app(TokioQuoteResponse::class)->payment($quote);
+    expect($result['unavailable_reason'])->toBeNull();
+    expect($result['selection'])->toMatchArray([
+        'amount' => $amount, 'count' => $count, 'payment_type' => $paymentType,
+        'with_entry' => false, 'assistance_key' => 'N', 'modality' => 'vista', 'option_key' => (string) $count,
+    ]);
+})->with(['faturado em 29' => ['faturado', 29, '63.63'], 'crédito em 30' => ['credito', 30, '61.51']]);
+
+it('identifies the no assistance calculation by key or by label', function (string $key, string $label) {
+    $quote = tokioPaymentQuote('credito', [$key => ['opcaoAssistencia' => $label, 'opcoesPagamento' => ['credito' => tokioVistaOptions(30)]]]);
+    expect(app(TokioQuoteResponse::class)->payment($quote)['selection']['assistance_key'])->toBe($key);
+})->with([
+    'chave N' => ['N', 'Rótulo inesperado'],
+    'rótulo sem assistência' => ['X', 'Sem assistência'],
+    'rótulo não contratada' => ['X', 'NÃO CONTRATADA'],
+]);
+
+it('ignores calculations with contracted assistance', function () {
+    $quote = tokioPaymentQuote('credito', ['C' => ['opcaoAssistencia' => 'Plano Completo', 'opcoesPagamento' => ['credito' => tokioVistaOptions(30)]]]);
+    $result = app(TokioQuoteResponse::class)->payment($quote);
+    expect($result['selection'])->toBeNull();
+    expect($result['unavailable_reason'])->toContain('30 parcelas');
+});
+
+it('does not fall back to another installment count when the expected one is missing', function (string $paymentType, int $max) {
+    $quote = tokioPaymentQuote($paymentType, ['N' => ['opcaoAssistencia' => 'Não Contratada', 'opcoesPagamento' => [$paymentType => tokioVistaOptions($max)]]]);
+    expect(app(TokioQuoteResponse::class)->payment($quote)['selection'])->toBeNull();
+})->with(['faturado só até 28' => ['faturado', 28], 'crédito só até 29' => ['credito', 29]]);
+
+it('does not select an unsupported payment method', function () {
+    $quote = tokioPaymentQuote('debito', ['N' => ['opcaoAssistencia' => 'Não Contratada', 'opcoesPagamento' => ['debito' => tokioVistaOptions(30)]]]);
+    expect(app(TokioQuoteResponse::class)->payment($quote)['selection'])->toBeNull();
+});
+
 it('authenticates and creates a new quote without recalculation headers', function () {
     Http::preventStrayRequests();
     config(['services.tokio.enabled' => true,

@@ -70,6 +70,10 @@ Route::prefix('/Dashboard')->group(function () {
             ->middleware(['analysis.enabled', 'throttle:5,1'])->whereNumber('lead')
             ->name('insurance-analyses.expense-reanalysis');
 
+        Route::put('/leads/{lead}/analises/despesas/salvar', [InsuranceAnalysisController::class, 'saveExpenses'])
+            ->middleware(['analysis.enabled', 'throttle:5,1'])->whereNumber('lead')
+            ->name('insurance-analyses.save-expenses');
+
         Route::get('/leads/{lead}/analises/dados', [InsuranceAnalysisController::class, 'leadData'])
             ->whereNumber('lead')
             ->name('insurance-analyses.data');
@@ -85,6 +89,10 @@ Route::prefix('/Dashboard')->group(function () {
         Route::post('/analises/provider/{analysis}/reanalisar', [InsuranceAnalysisController::class, 'providerReanalysis'])
             ->middleware('analysis.enabled')
             ->name('insurance-analyses.provider-reanalysis');
+
+        Route::post('/analises/provider/{analysis}/despesas', [InsuranceAnalysisController::class, 'reanalyzeProviderExpenses'])
+            ->middleware(['analysis.enabled', 'throttle:10,1'])->whereNumber('analysis')
+            ->name('insurance-analyses.provider-expense-reanalysis');
 
         Route::post('/analises/provider/{analysis}/sync-status', [InsuranceAnalysisController::class, 'syncStatus'])
             ->middleware('analysis.enabled')
@@ -166,6 +174,10 @@ Route::prefix('/Dashboard')->group(function () {
             ->middleware(['analysis.enabled', 'throttle:5,1'])->whereNumber('lead')
             ->name('admin.insurance-analyses.expense-reanalysis');
 
+        Route::put('/leads/{lead}/analises/despesas/salvar', [InsuranceAnalysisController::class, 'saveExpenses'])
+            ->middleware(['analysis.enabled', 'throttle:5,1'])->whereNumber('lead')
+            ->name('admin.insurance-analyses.save-expenses');
+
         Route::get('/leads/{lead}/analises/dados', [InsuranceAnalysisController::class, 'adminLeadData'])
             ->middleware('can:view-analyses')
             ->whereNumber('lead')
@@ -183,6 +195,10 @@ Route::prefix('/Dashboard')->group(function () {
         Route::post('/analises/provider/{analysis}/reanalisar', [InsuranceAnalysisController::class, 'adminProviderReanalysis'])
             ->middleware(['can:create-analysis', 'analysis.enabled'])
             ->name('admin.insurance-analyses.provider-reanalysis');
+
+        Route::post('/analises/provider/{analysis}/despesas', [InsuranceAnalysisController::class, 'adminReanalyzeProviderExpenses'])
+            ->middleware(['analysis.enabled', 'throttle:10,1'])->whereNumber('analysis')
+            ->name('admin.insurance-analyses.provider-expense-reanalysis');
 
         Route::post('/analises/provider/{analysis}/sync-status', [InsuranceAnalysisController::class, 'adminSyncStatus'])
             ->middleware(['can:view-analyses', 'analysis.enabled'])

@@ -143,6 +143,7 @@ class InsuranceAnalysisPageService
                     'actions' => [
                         'retry' => $this->action($allowed && $permissions['create_analysis'] && in_array($analysis->status, ['failed', 'error'], true), $prefix.'retry', $analysis->id),
                         'reanalysis' => $this->action($canReanalyzeWithChanges && $this->canReanalyze($analysis), $prefix.'provider-reanalysis', $analysis->id) + ['requires_data_changes' => true],
+                        'expense_reanalysis' => $this->action($canReanalyzeWithChanges && ProviderAnalysisStatus::isTerminal($analysis->status), $prefix.'provider-expense-reanalysis', $analysis->id),
                         'sync' => $this->action($allowed && $attempt !== null && $this->canSync($analysis), $prefix.'sync-status', $analysis->id),
                     ],
                 ];
@@ -154,7 +155,8 @@ class InsuranceAnalysisPageService
             ],
             'permissions' => $permissions,
             'actions' => [
-                'expense_reanalysis' => $this->action($canReanalyzeWithChanges && $analyses->contains(fn (InsuranceAnalysis $analysis): bool => ! in_array($analysis->status, ['failed', 'error'], true)), $prefix.'expense-reanalysis', $lead->id, 'PUT') + ['revision' => $batch ? app(LeadReanalysisService::class)->expenseRevision($lead, $batch) : null],
+                'save_expenses' => $this->action($canReanalyzeWithChanges && $batch !== null && $analyses->isNotEmpty(), $prefix.'save-expenses', $lead->id, 'PUT'),
+                'expense_reanalysis' => $this->action($canReanalyzeWithChanges && $analyses->contains(fn (InsuranceAnalysis $analysis): bool => ProviderAnalysisStatus::isTerminal($analysis->status)), $prefix.'expense-reanalysis', $lead->id, 'PUT') + ['revision' => $batch ? app(LeadReanalysisService::class)->expenseRevision($lead, $batch) : null],
                 'update_lead' => $this->action($permissions['edit_lead'], $admin ? 'admin.leads.update' : 'dashboard.leads.update', $lead->id, $admin ? 'POST' : 'PUT'),
                 'reanalysis' => $this->action($enabled && $permissions['create_analysis'] && $final
                     && (int) $lead->last_analysis_batch_id === $batch->id && $lead->canRequestGeneralReanalysis()

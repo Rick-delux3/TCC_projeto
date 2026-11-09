@@ -40,42 +40,59 @@ class TokioQuoteResponse
         ]);
     }
 
+    /**
+     * Quantidade de parcelas selecionada por meio de pagamento.
+     *
+     * @var array<string, int>
+     */
+    private const INSTALLMENTS_BY_PAYMENT_TYPE = ['faturado' => 29, 'credito' => 30];
+
     public function payment(\App\Models\InsuranceQuote $quote): array
     {
         $response = data_get($quote->providerResponsePayload(), 'response', []);
         $calculations = $response['calculos'] ?? [];
+        $expectedCount = self::INSTALLMENTS_BY_PAYMENT_TYPE[$quote->payment_type] ?? null;
         $candidates = [];
-        if (is_array($calculations)) {
+        if (is_array($calculations) && $expectedCount !== null) {
             foreach ($calculations as $key => $calculation) {
-                if (! is_array($calculation)) {
+                if (! is_array($calculation) || ! $this->isWithoutAssistance((string) $key, $calculation['opcaoAssistencia'] ?? null)) {
                     continue;
                 }
-                $description = $calculation['opcaoAssistencia'] ?? null;
-                if (! is_string($description) || ! str_contains(\Illuminate\Support\Str::lower(\Illuminate\Support\Str::ascii($description)), 'sem assistencia')) {
-                    continue;
-                }
-                $options = data_get($calculation, 'opcoesPagamento.'.$quote->payment_type.'.prazo', []);
-                if (! is_array($options)) {
-                    continue;
-                }
-                foreach ($options as $optionKey => $option) {
-                    if (! is_array($option) || filter_var($option['qtd'] ?? null, FILTER_VALIDATE_INT) !== 30 || ! $this->positive($option['vlPremPar'] ?? null)) {
+                $description = is_string($calculation['opcaoAssistencia'] ?? null) ? $calculation['opcaoAssistencia'] : null;
+                foreach (['prazo', 'vista'] as $modality) {
+                    $options = data_get($calculation, 'opcoesPagamento.'.$quote->payment_type.'.'.$modality, []);
+                    if (! is_array($options)) {
                         continue;
                     }
-                    $candidates[] = [
-                        'amount' => number_format((float) $option['vlPremPar'], 2, '.', ''), 'count' => 30,
-                        'payment_type' => $quote->payment_type, 'with_entry' => false,
-                        'assistance_key' => (string) $key, 'assistance' => $description,
-                        'option_key' => (string) $optionKey, 'modality' => 'prazo',
-                        'details' => $option, 'coverages' => is_array($calculation['coberturas'] ?? null) ? $calculation['coberturas'] : [],
-                    ];
+                    foreach ($options as $optionKey => $option) {
+                        if (! is_array($option) || filter_var($option['qtd'] ?? null, FILTER_VALIDATE_INT) !== $expectedCount || ! $this->positive($option['vlPremPar'] ?? null)) {
+                            continue;
+                        }
+                        $candidates[] = [
+                            'amount' => number_format((float) $option['vlPremPar'], 2, '.', ''), 'count' => $expectedCount,
+                            'payment_type' => $quote->payment_type, 'with_entry' => false,
+                            'assistance_key' => (string) $key, 'assistance' => $description,
+                            'option_key' => (string) $optionKey, 'modality' => $modality,
+                            'details' => $option, 'coverages' => is_array($calculation['coberturas'] ?? null) ? $calculation['coberturas'] : [],
+                        ];
+                    }
                 }
             }
         }
-        usort($candidates, fn ($a, $b) => ((float) $a['amount'] <=> (float) $b['amount']) ?: strcmp($a['assistance_key'].'/'.$a['option_key'], $b['assistance_key'].'/'.$b['option_key']));
+        usort($candidates, fn ($a, $b) => ((float) $a['amount'] <=> (float) $b['amount']) ?: strcmp($a['assistance_key'].'/'.$a['modality'].'/'.$a['option_key'], $b['assistance_key'].'/'.$b['modality'].'/'.$b['option_key']));
 
         return ['response' => [], 'selection' => $candidates[0] ?? null,
-            'unavailable_reason' => $candidates === [] ? 'Não foi identificada a condição Sem assistência, sem entrada e em 30 parcelas no meio de pagamento esperado.' : null];
+            'unavailable_reason' => $candidates === [] ? 'Não foi identificada a condição sem assistência em '.($expectedCount ?? '?').' parcelas no meio de pagamento esperado.' : null];
+    }
+
+    private function isWithoutAssistance(string $key, mixed $description): bool
+    {
+        if ($key === 'N') {
+            return true;
+        }
+        $normalized = is_string($description) ? \Illuminate\Support\Str::lower(\Illuminate\Support\Str::ascii($description)) : '';
+
+        return str_contains($normalized, 'sem assistencia') || str_contains($normalized, 'nao contratada');
     }
 
     private function positive(mixed $value): bool

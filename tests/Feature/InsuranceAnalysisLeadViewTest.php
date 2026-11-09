@@ -269,7 +269,8 @@ it('renders the bootstrap structure using the same contract as the refresh endpo
         ->assertSee('Todas as companhias')
         ->assertDontSee('dashboard-user.css', false)
         ->assertDontSee('class="modal', false);
-    expect($includes)->toHaveCount(6)
+    expect($includes)->toHaveCount(7)
+        ->and($includes['insurance-analyses.partials.live-content']['pageData'])->toBe($page)
         ->and($includes['insurance-analyses.partials.lead']['leadData'])->toBe($page['lead'])
         ->and($includes['insurance-analyses.partials.lead']['navigation']['return_url'])->toBe($response->viewData('returnUrl'))
         ->and($includes['insurance-analyses.partials.batch']['progress'])->toBe($page['progress'])
@@ -559,6 +560,7 @@ global.document = {
 };
 global.CustomEvent = class {};
 function createAnalysisComponents() { return { update(html) { updates.push(html); }, flush() {} }; }
+function createReanalysisModes() { return { apply() {}, setMode() {} }; }
 function createAnalysisRealtime(state, options) {
     onState = options.onState;
     return { start() { onState(state); }, destroy() {} };

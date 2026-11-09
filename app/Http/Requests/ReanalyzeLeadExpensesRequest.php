@@ -23,7 +23,17 @@ class ReanalyzeLeadExpensesRequest extends FormRequest
 
     public function rules(): array
     {
-        $rules = ['revision' => ['required', 'string', 'size:64']];
+        return ['revision' => ['required', 'string', 'size:64']] + $this->expenseRules();
+    }
+
+    /**
+     * Regras dos valores mensais, compartilhadas com a reanálise por companhia.
+     *
+     * @return array<string, array<int, string>>
+     */
+    public function expenseRules(): array
+    {
+        $rules = [];
         foreach (LeadReanalysisService::EXPENSE_FIELDS as $field) {
             $rules[$field] = ['required', 'numeric', 'decimal:0,2', 'min:'.($field === 'valor_aluguel' ? '0.01' : '0'), 'max:9999999.99'];
         }

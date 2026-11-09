@@ -12,6 +12,7 @@ use App\Services\Insurance\InsuranceAnalysisPageService;
 use App\Services\Insurance\LeadReanalysisService;
 use DomainException;
 use Illuminate\Contracts\View\View;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -35,6 +36,20 @@ class InsuranceAnalysisController extends Controller
         return $this->saveExpensesAndReanalyze($request, $lead, true);
     }
 
+    public function saveExpenses(\App\Http\Requests\SaveLeadExpensesRequest $request, Lead $lead): JsonResponse
+    {
+        try {
+            $result = $this->leadReanalysisService->saveExpenses(
+                $lead, $request->validated(),
+                $request->routeIs('admin.*') ? Auth::guard('admin')->user() : null,
+            );
+
+            return response()->json(['message' => 'Despesas salvas. Escolha a companhia que deseja reanalisar.'] + $result);
+        } catch (DomainException $exception) {
+            return response()->json(['message' => $exception->getMessage()], 422);
+        }
+    }
+
     private function saveExpensesAndReanalyze(\App\Http\Requests\ReanalyzeLeadExpensesRequest $request, Lead $lead, bool $admin): RedirectResponse
     {
         $route = $admin ? 'admin.insurance-analyses.lead' : 'insurance-analyses.lead';
@@ -47,6 +62,30 @@ class InsuranceAnalysisController extends Controller
             return redirect()->route($route, $lead)->with('success', "Novas cotações solicitadas para {$total} companhia(s).");
         } catch (DomainException $exception) {
             return redirect()->route($route, $lead)->withErrors(['expenses' => $exception->getMessage()], 'expenseReanalysis')->withInput($request->validated());
+        }
+    }
+
+    public function reanalyzeProviderExpenses(\App\Http\Requests\ReanalyzeProviderExpensesRequest $request, InsuranceAnalysis $analysis): JsonResponse
+    {
+        return $this->saveExpensesAndReanalyzeProvider($request, $analysis, false);
+    }
+
+    public function adminReanalyzeProviderExpenses(\App\Http\Requests\ReanalyzeProviderExpensesRequest $request, InsuranceAnalysis $analysis): JsonResponse
+    {
+        return $this->saveExpensesAndReanalyzeProvider($request, $analysis, true);
+    }
+
+    private function saveExpensesAndReanalyzeProvider(\App\Http\Requests\ReanalyzeProviderExpensesRequest $request, InsuranceAnalysis $analysis, bool $admin): JsonResponse
+    {
+        try {
+            $this->leadReanalysisService->reanalyzeProviderExpenses(
+                $analysis, $request->validated(), $admin ? 'admin' : 'imobiliaria',
+                $admin ? Auth::guard('admin')->user() : null,
+            );
+
+            return response()->json(['message' => 'Nova cotação solicitada para esta companhia.', 'analysis_id' => $analysis->id], 202);
+        } catch (DomainException $exception) {
+            return response()->json(['message' => $exception->getMessage(), 'analysis_id' => $analysis->id], 422);
         }
     }
 

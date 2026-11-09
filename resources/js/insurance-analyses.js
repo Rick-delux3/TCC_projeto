@@ -1,5 +1,10 @@
 import { createAnalysisRealtime } from './insurance-analysis-realtime';
 import { createAnalysisComponents } from './insurance-analysis-components';
+import { createReanalysisModes } from './insurance-analysis-reanalysis';
+
+const reanalysisModes = createReanalysisModes({
+    onRequested: () => window.insuranceAnalysis?.refresh(),
+});
 
 document.addEventListener('click', (event) => {
     const opener = event.target.closest('[data-analysis-dialog]');
@@ -18,10 +23,16 @@ function initializeExpenseForms() {
         };
         form.addEventListener('input', updateTotal);
         form.addEventListener('submit', (event) => {
+            if (event.defaultPrevented) return;
             if (form.dataset.submitting === 'true') { event.preventDefault(); return; }
             form.dataset.submitting = 'true';
-            form.querySelector('[type="submit"]').disabled = true;
-            form.querySelector('[type="submit"]').textContent = 'Solicitando cotações…';
+            const submit = form.querySelector('[type="submit"]');
+            submit.disabled = true;
+            submit.setAttribute('aria-busy', 'true');
+            const spinner = document.createElement('span');
+            spinner.className = 'spinner-border spinner-border-sm me-2';
+            spinner.setAttribute('aria-hidden', 'true');
+            submit.replaceChildren(spinner, submit.dataset.loadingLabel ?? 'Solicitando cotações…');
         });
         updateTotal();
     });
@@ -39,7 +50,12 @@ async function startInsuranceAnalyses() {
             // Periodic reads remain available if the WebSocket client cannot initialize.
         }
     }
-    const components = createAnalysisComponents({ onUpdated: initializeExpenseForms });
+    const components = createAnalysisComponents({
+        onUpdated: () => {
+            initializeExpenseForms();
+            reanalysisModes.apply();
+        },
+    });
     document.addEventListener('close', () => components.flush(), true);
     const controller = createAnalysisRealtime(initialState, {
         echo: window.Echo,
