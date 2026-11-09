@@ -275,6 +275,7 @@ it('selects the Too monthly option without entry using its returned 29 installme
 it('builds one Pottencial payload per plan and includes both documents only for the joint scenario', function (): void {
     config(['services.pottencial.broker_document' => '11222333000181']);
     $analysis = multipleQuoteAnalysis();
+    $analysis->lead->update(['tel' => '(11) 99999-8888']);
     $analysis->lead->endereco()->create([
         'logradouro' => 'Rua de Teste', 'numero' => '12', 'bairro' => 'Centro',
         'cidade_imovel' => 'Sao Paulo', 'estado' => 'SP', 'cep' => '01001000',
@@ -289,6 +290,7 @@ it('builds one Pottencial payload per plan and includes both documents only for 
         expect($payload['riskObjects'][0]['planKey'])->toBe($quote->plan_key)
             ->and($payload['participants'])->toHaveCount(1)
             ->and($payload['participants'][0]['documentNumber'])->toBe($quote->scenario->kind === 'spouse' ? '11144477735' : '52998224725')
+            ->and($payload['participants'][0]['contact'])->toBe(['email' => 'quotes@example.test', 'cellPhoneNumber' => '11999998888'])
             ->and($payload['paymentConditions']['installments'])->toBe(30);
         finishMultipleQuote($quote, 'rejected');
     }
@@ -296,8 +298,8 @@ it('builds one Pottencial payload per plan and includes both documents only for 
     $quote = $run->scenarios()->where('kind', 'joint')->first()->quotes()->first();
     $snapshots->attach($quote);
     expect($builder->build($quote)['participants'])->toBe([
-        ['documentNumber' => '52998224725', 'role' => 'PolicyHolder'],
-        ['documentNumber' => '11144477735', 'role' => 'PolicyHolder'],
+        ['documentNumber' => '52998224725', 'role' => 'PolicyHolder', 'contact' => ['email' => 'quotes@example.test', 'cellPhoneNumber' => '11999998888']],
+        ['documentNumber' => '11144477735', 'role' => 'PolicyHolder', 'contact' => ['email' => 'quotes@example.test', 'cellPhoneNumber' => '11999998888']],
     ]);
 });
 

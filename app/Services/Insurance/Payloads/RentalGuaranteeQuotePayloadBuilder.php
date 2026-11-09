@@ -81,7 +81,7 @@ class RentalGuaranteeQuotePayloadBuilder
              */
             'participants' => $analysis instanceof \App\Models\InsuranceQuote
                 ? $this->quoteParticipants($analysis)
-                : [['documentNumber' => $policyHolderDocument, 'role' => 'PolicyHolder']],
+                : [['documentNumber' => $policyHolderDocument, 'role' => 'PolicyHolder', 'contact' => $this->participantContact($lead)]],
 
             /*
              * paymentConditions fica no nível raiz.
@@ -138,7 +138,7 @@ class RentalGuaranteeQuotePayloadBuilder
             throw new \App\Exceptions\InvalidInsuranceAnalysisPayload('CPF/CNPJ do broker ausente ou inválido para envio da cotação.');
         }
 
-        $commission = config('services.pottencial.default_commission', 0.15);
+        $commission = config('services.pottencial.default_commission', 0.25);
         if (Validator::make(['commission' => $commission], ['commission' => ['required', 'numeric', 'between:0,1', 'decimal:0,3']])->fails()) {
             throw new \App\Exceptions\InvalidInsuranceAnalysisPayload('Comissão da Pottencial deve ser uma fração entre 0 e 1, com no máximo três casas decimais.');
         }
@@ -194,16 +194,28 @@ class RentalGuaranteeQuotePayloadBuilder
 
     private function quoteParticipants(\App\Models\InsuranceQuote $quote): array
     {
-        $participants = [['documentNumber' => $quote->lead->rentalApplicantDocument(), 'role' => 'PolicyHolder']];
+        $contact = $this->participantContact($quote->lead);
+        $participants = [['documentNumber' => $quote->lead->rentalApplicantDocument(), 'role' => 'PolicyHolder', 'contact' => $contact]];
         if ($quote->scenario->kind === 'joint') {
             $document = CpfOrCnpj::normalize($quote->lead->conjuge?->cpf);
             if (Validator::make(['document' => $document], ['document' => ['required', new CpfOrCnpj]])->fails()) {
                 throw new \App\Exceptions\InvalidInsuranceAnalysisPayload('CPF do cônjuge inválido para a cotação conjunta.');
             }
-            $participants[] = ['documentNumber' => $document, 'role' => 'PolicyHolder'];
+            $participants[] = ['documentNumber' => $document, 'role' => 'PolicyHolder', 'contact' => $contact];
         }
 
         return $participants;
+    }
+
+    /**
+     * @return array{email: string, cellPhoneNumber: string}
+     */
+    private function participantContact(Lead $lead): array
+    {
+        return [
+            'email' => trim((string) $lead->email),
+            'cellPhoneNumber' => \only_numbers($lead->tel),
+        ];
     }
 
     private function addressFromLead(Lead $lead): array
@@ -227,7 +239,7 @@ class RentalGuaranteeQuotePayloadBuilder
     {
         $aluguel = $this->expenseValue($lead, 'valor_aluguel') ?? 0.0;
         if ($lead->tipo_solicitante === 'locatario') {
-            return [['key' => 'basica', 'insuredAmount' => max($aluguel * $months, 12000)]];
+            return [['key' => 'basica', 'insuredAmount' => $aluguel * $months]];
         }
         $condominio = $this->expenseValue($lead, 'valor_condominio') ?? 0.0;
         $iptu = $this->expenseValue($lead, 'valor_iptu') ?? 0.0;
@@ -238,7 +250,7 @@ class RentalGuaranteeQuotePayloadBuilder
         return array_values(array_filter([
             [
                 'key' => 'basica',
-                'insuredAmount' => max($aluguel * $months, 12000),
+                'insuredAmount' => $aluguel * $months,
             ],
             [
                 'key' => 'condominio',
@@ -315,26 +327,12 @@ class RentalGuaranteeQuotePayloadBuilder
 
     private function valorAgua(Lead $lead): float
     {
-        $aluguel = $this->expenseValue($lead, 'valor_aluguel') ?? 0.0;
-        $valorAgua = $this->expenseValue($lead, 'valor_agua');
-
-        /*
-         * Regra do seu TCC:
-         * se água não for informada, usar 10% do aluguel.
-         */
-        return $valorAgua ?? ($aluguel * 0.10);
+        return $this->expenseValue($lead, 'valor_agua') ?? 0.0;
     }
 
     private function valorLuz(Lead $lead): float
     {
-        $aluguel = $this->expenseValue($lead, 'valor_aluguel') ?? 0.0;
-        $valorLuz = $this->expenseValue($lead, 'valor_luz');
-
-        /*
-         * Regra do seu TCC:
-         * se luz não for informada, usar 10% do aluguel.
-         */
-        return $valorLuz ?? ($aluguel * 0.10);
+        return $this->expenseValue($lead, 'valor_luz') ?? 0.0;
     }
 
     private function expenseValue(Lead $lead, string $field): ?float

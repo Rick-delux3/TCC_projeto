@@ -90,6 +90,7 @@ it('aligns both insurers with the document and rental purpose selected on the fo
     expect($pottencial['riskObjects'][0]['occupation'])->toBe($rentalType === 'residencial' ? 'Residencial' : 'Commercial')
         ->and($pottencial['riskObjects'][0]['tenantDocumentNumber'])->toBe($company ? '11222333000181' : '07234828702')
         ->and($pottencial['participants'][0]['documentNumber'])->toBe($pottencial['riskObjects'][0]['tenantDocumentNumber'])
+        ->and($pottencial['participants'][0]['contact'])->toBe(['email' => 'payload@example.test', 'cellPhoneNumber' => '11999998888'])
         ->and($analysis->lead->canBeSentToToo())->toBeTrue();
     Http::assertNothingSent();
 })->with([false, true])->with(['residencial', 'comercial']);
@@ -180,7 +181,7 @@ it('applies the Pottencial agents payment and coverage rules by form origin', fu
         $agents[] = ['documentNumber' => '11222333000181', 'role' => 'PolicyOwner'];
     }
     expect($payload['commissionedAgents'])->toBe($agents)
-        ->and($payload['participants'])->toBe([['documentNumber' => '07234828702', 'role' => 'PolicyHolder']])
+        ->and($payload['participants'])->toBe([['documentNumber' => '07234828702', 'role' => 'PolicyHolder', 'contact' => ['email' => 'payload@example.test', 'cellPhoneNumber' => '11999998888']]])
         ->and($payload['paymentConditions'])->toBe(['paymentType' => $origin === 'imobiliaria_cadastrada' ? 'Invoice' : 'Boleto', 'installments' => 30])
         ->and($payload['policyType'])->toBe('Unique')
         ->and($payload['policyPeriodStart'])->toBe('2026-10-29')
@@ -190,10 +191,59 @@ it('applies the Pottencial agents payment and coverage rules by form origin', fu
         expect($risk['coverages'])->toBe([['key' => 'basica', 'insuredAmount' => 45000.0]])
             ->and($risk['expenses'])->toBe([['description' => 'VALOR_ALUGUEL', 'value' => 1500.0]]);
     } else {
-        expect(array_column($risk['coverages'], 'key'))->toContain('danos', 'pintura', 'multa-rescisao', 'agua', 'luz');
+        expect(array_column($risk['coverages'], 'key'))->toContain('danos', 'pintura', 'multa-rescisao')
+            ->not->toContain('agua', 'luz');
     }
     Http::assertNothingSent();
 })->with(['imobiliaria_cadastrada', 'imobiliaria_nao_cadastrada', 'locador', 'locatario']);
+
+it('keeps the Pottencial basic coverage at thirty rents for low rental amounts', function (string $plan, string $origin) {
+    $analysis = alignedInsuranceAnalysis();
+    $analysis->lead->update(['tipo_solicitante' => $origin]);
+    $analysis->lead->despesas->update(['valor_aluguel' => 300]);
+    $analysis->forceFill(['multiple' => 30, 'plan_key' => $plan]);
+
+    $risk = app(RentalGuaranteeQuotePayloadBuilder::class)->build($analysis)['riskObjects'][0];
+    $coverage = collect($risk['coverages'])->firstWhere('key', 'basica');
+    $expense = collect($risk['expenses'])->firstWhere('description', 'VALOR_ALUGUEL');
+
+    expect($risk['planKey'])->toBe($plan)
+        ->and($risk['multiple'])->toBe(30)
+        ->and($coverage['insuredAmount'])->toBe(9000.0)
+        ->and($expense['value'])->toBe(300.0)
+        ->and($coverage['insuredAmount'] / $expense['value'])->toEqual(30);
+    Http::assertNothingSent();
+})->with(['Complete', 'Traditional'])->with(['locador', 'locatario']);
+
+it('includes only requested Pottencial expenses while preserving additional coverages', function (?float $water, ?float $electricity) {
+    $analysis = alignedInsuranceAnalysis();
+    $analysis->lead->despesas->update([
+        'valor_condominio' => 0, 'valor_iptu' => null, 'valor_gas' => 0,
+        'valor_agua' => $water, 'valor_luz' => $electricity,
+    ]);
+    $analysis->multiple = 30;
+    $risk = app(RentalGuaranteeQuotePayloadBuilder::class)->build($analysis)['riskObjects'][0];
+    $coverages = array_column($risk['coverages'], 'insuredAmount', 'key');
+    $expenses = array_column($risk['expenses'], 'value', 'description');
+    $expectedCoverages = ['basica'];
+    $expectedExpenses = ['VALOR_ALUGUEL'];
+    foreach (['agua' => $water, 'luz' => $electricity] as $key => $value) {
+        if ($value > 0) {
+            $expectedCoverages[] = $key;
+            $expectedExpenses[] = 'VALOR_'.strtoupper($key);
+            expect($coverages[$key])->toBe($value * 30)
+                ->and($expenses['VALOR_'.strtoupper($key)])->toBe($value);
+        }
+    }
+    expect(array_keys($coverages))->toBe([...$expectedCoverages, 'danos', 'pintura', 'multa-rescisao'])
+        ->and(array_keys($expenses))->toBe($expectedExpenses);
+    Http::assertNothingSent();
+})->with([
+    'removed' => [null, null],
+    'zeroed' => [0.0, 0.0],
+    'water only' => [45.0, null],
+    'electricity only' => [null, 60.0],
+]);
 
 it('rejects invalid Pottencial agent and contract settings before any request', function (string $invalid) {
     $analysis = alignedInsuranceAnalysis();
