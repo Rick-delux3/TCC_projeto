@@ -48,6 +48,15 @@ class AnalysisDocumentService
 
                 $attachments = [];
                 foreach ($prepared['analyses'] as $analysis) {
+                    if ($analysis['provider'] === 'porto') {
+                        // Porto: uma carta por cenário recusado, cada uma com seu orçamento.
+                        foreach ($this->letters->portoRefusedBudgets($batch, $attemptId, $analysis['id']) as $budget) {
+                            $attachments[] = $this->document($batch, $attemptId, 'refusal-'.$analysis['id'].'-'.$budget, $analysis['id'],
+                                fn (): string => $this->letters->fetch($batch, $attemptId, $analysis['id'], $budget));
+                        }
+
+                        continue;
+                    }
                     $attachments[] = $this->document($batch, $attemptId, 'refusal-'.$analysis['id'], $analysis['id'],
                         fn (): string => $this->letters->fetch($batch, $attemptId, $analysis['id']));
                 }
@@ -61,7 +70,8 @@ class AnalysisDocumentService
     {
         $disk = Storage::disk('local');
         $relativePath = 'analysis-results/batch-'.$batch->id.'/'.hash('sha256', $attemptId).'/'.$key.'.pdf';
-        $name = $key === 'summary' ? 'orcamento-seguro-fianca.pdf' : 'carta-recusa-'.$analysisId.'.pdf';
+        // refusal-{análise} => carta-recusa-{análise}.pdf; Porto acrescenta o orçamento do cenário.
+        $name = $key === 'summary' ? 'orcamento-seguro-fianca.pdf' : 'carta-recusa-'.substr($key, strlen('refusal-')).'.pdf';
         $existing = InsuranceAnalysisEvent::query()->where('insurance_analysis_id', $analysisId)
             ->where('event_type', 'document_generated')->where('payload->attempt_id', $attemptId)
             ->where('payload->document_key', $key)->latest('id')->first();

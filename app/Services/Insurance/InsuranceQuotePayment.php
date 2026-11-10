@@ -13,6 +13,9 @@ final class InsuranceQuotePayment
         if ($quote->provider === 'tokio') {
             return app(TokioQuoteResponse::class)->payment($quote);
         }
+        if ($quote->provider === 'porto') {
+            return app(Providers\PortoInsuranceProvider::class)->payment($quote);
+        }
         $result = match ($quote->provider) {
             'pottencial' => $this->pottencial->getPaymentSimulations($quote->quote_id),
             'too' => $this->too->getPaymentOptions($quote->quote_id),

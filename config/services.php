@@ -160,6 +160,29 @@ return [
         'client_id' => env('PORTO_CLIENT_ID'),
         'client_secret' => env('PORTO_CLIENT_SECRET'),
         'env' => env('PORTO_ENV', 'sandbox'),
+        // Código interno do corretor na Porto: 6 caracteres, terminando em F ou J.
+        'susep' => env('PORTO_SUSEP'),
+        // CPF do operador (corretor) enviado em cpfCotador.
+        'cpf_cotador' => env('CPF_COTADOR'),
+        // 22 = nova contratação (inclui reanálises por novo POST); 40 = renovação.
+        'origin' => '22',
+        // Pontos percentuais inteiros enviados em ofertas[].comissao.codComissao.
+        'commission' => 15,
+        // 002 = IGP-M (FGV).
+        'rent_adjustment_code' => '002',
+        // 1 = locação em vigor (início na data da rodada).
+        'contract_validity_type' => '1',
+        // Capital social fixo para PJ, em reais.
+        'company_share_capital' => 450000,
+        // Margem, em segundos, para renovar o token antes da expiração informada.
+        'token_cache_margin_seconds' => 60,
+        // Produto que representa a Porto na comparação entre seguradoras (0008 = Fiança).
+        'comparison_offer' => '0008',
+        // Sem entrada na base de 30 meses = 29 pagamentos.
+        'installments_without_entry' => 29,
+        // Fonte dos preços após o ajuste de comissão: "offers" (GET de ofertas)
+        // ou "budget" (GET do orçamento atualizado), conforme a homologação.
+        'price_source' => env('PORTO_PRICE_SOURCE', 'offers'),
     ],
 
 ];

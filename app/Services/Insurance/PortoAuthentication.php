@@ -2,12 +2,109 @@
 
 namespace App\Services\Insurance;
 
+use Illuminate\Contracts\Cache\LockTimeoutException;
+use Illuminate\Contracts\Encryption\DecryptException;
 use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Http;
 use Throwable;
 
 class PortoAuthentication
 {
+    /**
+     * Devolve um token reutilizável, renovando-o somente perto da expiração.
+     *
+     * O token fica cifrado no cache, isolado por ambiente/credencial, e a
+     * renovação é protegida por lock para que jobs simultâneos não disparem
+     * várias autenticações ao mesmo tempo.
+     *
+     * @return array{success: bool, message: string, http_status: int|null, access_token: string|null, expires_in: int|null}
+     */
+    public function token(): array
+    {
+        $key = $this->cacheKey();
+        if ($key === null) {
+            return $this->requestToken();
+        }
+
+        if (($cached = $this->cachedToken($key)) !== null) {
+            return $cached;
+        }
+
+        try {
+            return Cache::lock($key.':lock', 45)->block(40, function () use ($key) {
+                if (($cached = $this->cachedToken($key)) !== null) {
+                    return $cached;
+                }
+
+                $result = $this->requestToken();
+                $margin = max(0, (int) config('services.porto.token_cache_margin_seconds', 60));
+                $ttl = $result['success'] ? (int) $result['expires_in'] - $margin : 0;
+                if ($ttl > 0) {
+                    Cache::put($key, Crypt::encryptString($result['access_token']), $ttl);
+                }
+
+                return $result;
+            });
+        } catch (LockTimeoutException) {
+            return [
+                'success' => false,
+                'message' => 'Tempo limite ao aguardar a renovação do token da Porto.',
+                'http_status' => null, 'access_token' => null, 'expires_in' => null,
+            ];
+        }
+    }
+
+    /**
+     * Descarta o token em cache, por exemplo após um 401 nas operações de negócio.
+     */
+    public function forgetToken(): void
+    {
+        if (($key = $this->cacheKey()) !== null) {
+            Cache::forget($key);
+        }
+    }
+
+    /**
+     * @return array{success: bool, message: string, http_status: int|null, access_token: string|null, expires_in: int|null}|null
+     */
+    private function cachedToken(string $key): ?array
+    {
+        $encrypted = Cache::get($key);
+        if (! is_string($encrypted) || $encrypted === '') {
+            return null;
+        }
+
+        try {
+            $token = Crypt::decryptString($encrypted);
+        } catch (DecryptException) {
+            Cache::forget($key);
+
+            return null;
+        }
+
+        return $token === '' ? null : [
+            'success' => true,
+            'message' => 'Token de acesso da Porto reutilizado do cache.',
+            'http_status' => null, 'access_token' => $token, 'expires_in' => null,
+        ];
+    }
+
+    private function cacheKey(): ?string
+    {
+        $parts = [];
+        foreach (['token_url', 'client_id', 'client_secret'] as $setting) {
+            $value = config("services.porto.{$setting}");
+            if (! is_string($value) || trim($value) === '') {
+                return null;
+            }
+            $parts[] = $value;
+        }
+
+        return 'porto:access-token:'.hash_hmac('sha256', implode('|', $parts), (string) config('app.key'));
+    }
+
     /**
      * @return array{success: bool, message: string, http_status: int|null, access_token: string|null, expires_in: int|null}
      */

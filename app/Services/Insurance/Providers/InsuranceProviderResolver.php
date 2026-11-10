@@ -10,6 +10,7 @@ class InsuranceProviderResolver
         private PottencialInsuranceProvider $pottencialProvider,
         private TooInsuranceProvider $tooProvider,
         private TokioInsuranceProvider $tokioProvider,
+        private PortoInsuranceProvider $portoProvider,
     ) {}
 
     public function availableProviders(): array
@@ -20,6 +21,7 @@ class InsuranceProviderResolver
             'pottencial',
             'too',
             'tokio',
+            'porto',
         ], fn (string $provider) => config("services.{$provider}.enabled", false)));
     }
 
@@ -35,6 +37,7 @@ class InsuranceProviderResolver
             'pottencial' => $this->pottencialProvider,
             'too' => $this->tooProvider,
             'tokio' => $this->tokioProvider,
+            'porto' => $this->portoProvider,
 
             default => throw new InvalidArgumentException("Provider inválido: {$provider}"),
         };

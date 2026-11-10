@@ -125,7 +125,7 @@ final class InsuranceQuoteCoordinator
                         'payment_type' => $winner?->payment_type,
                     ],
                 ]);
-                if ($analysis->provider === 'tokio') {
+                if (in_array($analysis->provider, ['tokio', 'porto'], true)) {
                     $attributes['request_payload'] = null;
                     $attributes['response_payload'] = \Illuminate\Support\Arr::only($attributes['response_payload'], ['payment', 'messages', 'manual_required', 'quote_selection']);
                 }
@@ -167,6 +167,14 @@ final class InsuranceQuoteCoordinator
         return $quotes->every(fn ($quote) => $quote->status === 'rejected') ? 'rejected' : 'failed';
     }
 
+    /** FAT somente para imobiliária cadastrada com código Porto; CC para as demais. */
+    private function portoPaymentType(array $snapshot): string
+    {
+        $partnerCode = app(Payloads\PortoQuotePayloadBuilder::class)->partnerCode($this->snapshots->restore($snapshot));
+
+        return $partnerCode !== null ? 'FAT' : 'CC';
+    }
+
     private function createScenario(InsuranceProviderRun $run, string $kind): void
     {
         $scenario = $run->scenarios()->create(['kind' => $kind]);
@@ -180,9 +188,11 @@ final class InsuranceQuoteCoordinator
                 'rent_amount', 'charges_amount', 'total_monthly_amount', 'inhabited',
             ]), [
                 'status' => 'pending', 'plan_key' => $plan, 'multiple' => 30, 'installments' => 30,
-                'payment_type' => $analysis->provider === 'tokio'
-                    ? (filled(data_get($run->round->lead_snapshot, 'tokio.partner_code')) ? 'faturado' : 'credito')
-                    : ($registered ? 'Invoice' : 'Boleto'),
+                'payment_type' => match ($analysis->provider) {
+                    'tokio' => filled(data_get($run->round->lead_snapshot, 'tokio.partner_code')) ? 'faturado' : 'credito',
+                    'porto' => $this->portoPaymentType($run->round->lead_snapshot),
+                    default => $registered ? 'Invoice' : 'Boleto',
+                },
                 'lease_start_date' => $run->round->lease_start_date,
                 'lease_end_date' => $run->round->lease_end_date,
             ]));

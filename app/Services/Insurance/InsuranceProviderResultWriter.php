@@ -21,6 +21,11 @@ class InsuranceProviderResultWriter
 
             return;
         }
+        if ($analysis->provider === 'porto') {
+            app(PortoQuoteResponse::class)->apply($analysis, $result);
+
+            return;
+        }
         $isToo = strtolower((string) $analysis->provider) === 'too';
         $response = $result['response'] ?? [];
         $httpStatus = $result['http_status'] ?? null;
