@@ -9,8 +9,8 @@
         'incomparable_currencies' => 'As propostas não possuem moedas compatíveis para comparação.',
         'incomparable_periods' => 'As propostas não possuem vigências compatíveis para comparação.',
     ];
-    $offers = collect($pageData['analyses'])->filter(fn ($analysis) => in_array($analysis['provider'], $activeProviders, true)
-        && $analysis['status'] === 'approved'
+    // Resultados do pacote atual, inclusive de companhia desligada depois da análise.
+    $offers = collect($pageData['analyses'])->filter(fn ($analysis) => $analysis['status'] === 'approved'
         && (($analysis['quote']['price']['comparison_basis'] ?? null) === 'installment'
             ? (float) ($analysis['quote']['price']['installment_amount'] ?? 0) > 0
             : ($analysis['quote']['price']['basis'] === 'gross_total' && (float) $analysis['quote']['price']['total'] > 0)));

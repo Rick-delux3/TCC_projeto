@@ -138,7 +138,7 @@ function portoDocsPdfUrls(): array
 it('attaches one Porto refusal letter per refused scenario, using the 409 budget', function () {
     portoDocsFake();
     [$batch, $analysis, $run] = portoDocsBatch();
-    expect($run->scenarios()->pluck('kind')->all())->toBe(['primary', 'spouse', 'joint']);
+    expect($run->scenarios()->orderBy('id')->pluck('kind')->all())->toBe(['primary', 'spouse', 'joint']);
     expect($analysis->status)->toBe('rejected');
 
     $attachments = app(AnalysisDocumentService::class)->generate($batch, 'porto-docs');

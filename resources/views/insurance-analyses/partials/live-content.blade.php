@@ -1,6 +1,6 @@
 @php
     $providerNames = ['pottencial' => 'Pottencial', 'too' => 'Too Seguros', 'porto' => 'Porto Seguro', 'tokio' => 'Tokio Marine'];
-    $activeProviders = ['pottencial', 'too', 'tokio'];
+    $activeProviders = $pageData['providers']['enabled'] ?? [];
     $statusLabels = [
         'pending' => 'Aguardando análise', 'queued' => 'Na fila', 'processing' => 'Em análise',
         'running' => 'Em análise', 'manual_review' => 'Análise manual', 'approved' => 'Aprovada',

@@ -433,6 +433,10 @@ class InsuranceAnalysisController extends Controller
      */
     private function syncAnalysisStatus(InsuranceAnalysis $analysis, string $requestedBy): RedirectResponse
     {
+        if (! \App\Services\Insurance\Providers\InsuranceProviderResolver::providerEnabled((string) $analysis->provider)) {
+            return back()->with('error', 'Esta companhia está desativada no momento. O resultado anterior permanece apenas para consulta.');
+        }
+
         $responsePayload = $analysis->providerResponsePayload();
 
         $isToo = mb_strtolower((string) $analysis->provider) === 'too';

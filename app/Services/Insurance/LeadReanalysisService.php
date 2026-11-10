@@ -798,6 +798,7 @@ class LeadReanalysisService
     public function reanalyzeProviderExpenses(InsuranceAnalysis $analysis, array $data, string $requestedBy, ?Corretor $corretor = null): void
     {
         $this->ensureAnalysisEnabled();
+        $this->ensureProviderEnabled($analysis);
 
         $analysis->getConnection()->transaction(function () use ($analysis, $data, $requestedBy, $corretor): void {
             $lead = Lead::query()->lockForUpdate()->findOrFail($analysis->lead_id);
@@ -1026,6 +1027,7 @@ class LeadReanalysisService
         array $options = []
     ): string {
         $this->ensureAnalysisEnabled();
+        $this->ensureProviderEnabled($analysis);
         $analysis->loadMissing([
             'lead.endereco',
             'lead.despesas',
@@ -1136,6 +1138,14 @@ class LeadReanalysisService
         }
 
         return $changed;
+    }
+
+    /** Ações por companhia exigem a seguradora ligada no .env; o resultado anterior segue só para leitura. */
+    private function ensureProviderEnabled(InsuranceAnalysis $analysis): void
+    {
+        if (! \App\Services\Insurance\Providers\InsuranceProviderResolver::providerEnabled((string) $analysis->provider)) {
+            throw new DomainException('Esta companhia está desativada no momento. O resultado anterior permanece apenas para consulta.');
+        }
     }
 
     private function ensureAnalysisEnabled(): void
@@ -1333,6 +1343,7 @@ class LeadReanalysisService
         InsuranceAnalysis $analysis,
         string $requestedBy = 'imobiliaria'
     ): string {
+        $this->ensureProviderEnabled($analysis);
         $normalizedStatus = mb_strtolower((string) $analysis->status);
 
         if (! in_array($normalizedStatus, ['failed', 'error'], true)) {

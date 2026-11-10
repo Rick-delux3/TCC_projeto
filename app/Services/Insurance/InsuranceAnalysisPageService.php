@@ -7,6 +7,7 @@ use App\Models\Corretor;
 use App\Models\InsuranceAnalysis;
 use App\Models\Lead;
 use App\Models\User;
+use App\Services\Insurance\Providers\InsuranceProviderResolver;
 use Illuminate\Support\Facades\Gate;
 
 class InsuranceAnalysisPageService
@@ -75,6 +76,9 @@ class InsuranceAnalysisPageService
                 'conjuge' => $lead->conjuge?->only(['nome', 'cpf']),
             ],
             'navigation' => ['viewer_type' => $viewerType, 'return_url' => $returnUrl],
+            // Seguradoras ligadas no .env. Desligada sem análise no pacote aparece
+            // bloqueada; com análise anterior, exibe o resultado sem ações.
+            'providers' => ['enabled' => InsuranceProviderResolver::enabledProviders()],
             'awaiting_batch' => $batch === null,
             'batch' => $batch === null ? null : [
                 'id' => $batch->id,
@@ -90,7 +94,8 @@ class InsuranceAnalysisPageService
             'result' => ['is_final' => $final, 'status' => $final ? InsuranceBatchResult::status($batch) : null],
             'analyses' => $analyses->map(function (InsuranceAnalysis $analysis) use ($data, $quotes, $enabled, $permissions, $canReanalyzeWithChanges, $prefix, $admin): array {
                 $attempt = $data['analysisAttempts'][$analysis->id];
-                $allowed = $enabled;
+                $providerEnabled = InsuranceProviderResolver::providerEnabled((string) $analysis->provider);
+                $allowed = $enabled && $providerEnabled;
                 $activeQuotes = ($analysis->currentProviderRun?->scenarios->flatMap(fn ($scenario) => $scenario->quotes) ?? collect())
                     ->filter(fn ($quote) => ! ProviderAnalysisStatus::isTerminal($quote->status)
                         || ($quote->status === 'approved' && $quote->payment_status === 'pending'));
@@ -103,6 +108,7 @@ class InsuranceAnalysisPageService
                     'display_state' => $this->displayState($analysis->status, null, $activeQuotes->isNotEmpty()
                         && $activeQuotes->every(fn ($quote) => (bool) data_get($quote->providerResponsePayload(), 'too_status_check_stopped', false))),
                     'provider_status' => $analysis->provider_status,
+                    'provider_enabled' => $providerEnabled,
                     'is_terminal' => ProviderAnalysisStatus::isTerminal($analysis->status),
                     'manual_required' => $analysis->status === 'manual_required',
                     'manual_message' => $analysis->status === 'manual_required'
@@ -142,8 +148,8 @@ class InsuranceAnalysisPageService
                     'updated_at' => $analysis->updated_at?->toIso8601String(),
                     'actions' => [
                         'retry' => $this->action($allowed && $permissions['create_analysis'] && in_array($analysis->status, ['failed', 'error'], true), $prefix.'retry', $analysis->id),
-                        'reanalysis' => $this->action($canReanalyzeWithChanges && $this->canReanalyze($analysis), $prefix.'provider-reanalysis', $analysis->id) + ['requires_data_changes' => true],
-                        'expense_reanalysis' => $this->action($canReanalyzeWithChanges && ProviderAnalysisStatus::isTerminal($analysis->status), $prefix.'provider-expense-reanalysis', $analysis->id),
+                        'reanalysis' => $this->action($providerEnabled && $canReanalyzeWithChanges && $this->canReanalyze($analysis), $prefix.'provider-reanalysis', $analysis->id) + ['requires_data_changes' => true],
+                        'expense_reanalysis' => $this->action($providerEnabled && $canReanalyzeWithChanges && ProviderAnalysisStatus::isTerminal($analysis->status), $prefix.'provider-expense-reanalysis', $analysis->id),
                         'sync' => $this->action($allowed && $attempt !== null && $this->canSync($analysis), $prefix.'sync-status', $analysis->id),
                     ],
                 ];

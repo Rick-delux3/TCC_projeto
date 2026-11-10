@@ -282,7 +282,8 @@ it('renders the bootstrap structure using the same contract as the refresh endpo
     $this->getJson($response->viewData('refreshUrl'))->assertOk()->assertExactJson(['data' => $page]);
 })->with(['company', 'admin']);
 
-it('renders four company cards and keeps unvalidated providers blocked', function () {
+it('renders four company cards and keeps providers disabled in the environment blocked', function () {
+    config(['services.pottencial.enabled' => true, 'services.too.enabled' => true, 'services.tokio.enabled' => true, 'services.porto.enabled' => false]);
     $response = $this->actingAs($this->user)->withSession(['2fa_passed' => true])
         ->get(route('insurance-analyses.lead', $this->lead))->assertOk();
     $document = new DOMDocument;
@@ -427,7 +428,7 @@ it('does not offer unconfirmed prices as the best budget', function () {
 });
 
 it('offers company actions only for allowed states ownership and feature configuration', function () {
-    config(['features.insurance_analysis.enabled' => true]);
+    config(['features.insurance_analysis.enabled' => true, 'services.too.enabled' => true]);
     $batch = $this->lead->insuranceAnalysesBatches()->create(['status' => 'processing', 'total_providers' => 1]);
     $analysis = $batch->analyses()->create([
         'lead_id' => $this->lead->id, 'company_id' => $this->company->id,
@@ -461,7 +462,7 @@ it('offers company actions only for allowed states ownership and feature configu
 });
 
 it('keeps read-only broker actions separate from editing and analysis permissions', function () {
-    config(['features.insurance_analysis.enabled' => true]);
+    config(['features.insurance_analysis.enabled' => true, 'services.pottencial.enabled' => true]);
     $batch = $this->lead->insuranceAnalysesBatches()->create(['status' => 'processing', 'total_providers' => 1]);
     $analysis = $batch->analyses()->create([
         'lead_id' => $this->lead->id, 'provider' => 'pottencial', 'product' => 'fianca_locaticia', 'status' => 'failed', 'quote_id' => 'quote',

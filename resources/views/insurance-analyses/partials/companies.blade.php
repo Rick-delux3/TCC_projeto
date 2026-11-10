@@ -8,8 +8,13 @@
     <div class="row g-3">
         @foreach ($providerNames as $provider => $providerName)
             @php
-                $blocked = ! in_array($provider, $activeProviders, true);
-                $analysis = $blocked ? null : $analysesByProvider->get($provider);
+                $analysis = $analysesByProvider->get($provider);
+                // Desligada no .env: sem análise no pacote fica bloqueada; com análise
+                // anterior, mostra o resultado somente para leitura.
+                $readOnly = $analysis !== null && ! in_array($provider, $activeProviders, true);
+                $blocked = $analysis === null && ! in_array($provider, $activeProviders, true);
+                // Ligada depois que o pacote atual foi criado: entra na próxima análise.
+                $notIncluded = ! $blocked && $analysis === null && ! ($pageData['awaiting_batch'] ?? true);
                 $attempts = collect($analysis['quote_attempts'] ?? []);
                 $plans = $attempts->groupBy('plan_key')->map(function ($attempts) {
                     return $attempts->filter(fn ($item) => $item['status'] === 'approved' && $item['payment_status'] === 'ready' && (float) $item['installment_amount'] > 0)
@@ -20,14 +25,16 @@
                 });
             @endphp
             <div class="col-12 col-md-6 col-xl-3" data-analysis-component="provider-{{ $provider }}">
-                <article @class(['card h-100', 'bg-body-tertiary' => $blocked]) aria-labelledby="provider-{{ $provider }}" data-provider="{{ $provider }}" data-analysis-state="{{ $blocked ? 'blocked' : ($analysis['display_state']['state'] ?? 'processing') }}" aria-busy="{{ ! $blocked && ($analysis['display_state']['processing'] ?? true) ? 'true' : 'false' }}">
+                <article @class(['card h-100', 'bg-body-tertiary' => $blocked]) data-provider-read-only="{{ $readOnly ? 'true' : 'false' }}" aria-labelledby="provider-{{ $provider }}" data-provider="{{ $provider }}" data-analysis-state="{{ $blocked ? 'blocked' : ($notIncluded ? 'not_included' : ($analysis['display_state']['state'] ?? 'processing')) }}" aria-busy="{{ ! $blocked && ! $notIncluded && ($analysis['display_state']['processing'] ?? true) ? 'true' : 'false' }}">
                     <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
                         <h3 id="provider-{{ $provider }}" class="h6 mb-0">{{ $providerName }}</h3>
                         @if ($blocked)
                             <span class="badge text-bg-secondary">Bloqueada</span>
                         @else
                             <button type="button" class="btn btn-sm btn-outline-secondary" data-reanalysis-mode-only="general" data-analysis-dialog="details-{{ $provider }}" aria-haspopup="dialog" aria-controls="details-{{ $provider }}" @disabled(! $analysis)>Visualizar</button>
-                            @if ($canEditExpenses)
+                            @if ($readOnly)
+                                <span class="badge text-bg-secondary">Desativada</span>
+                            @elseif ($canEditExpenses)
                                 @php($providerReanalysis = $analysis['actions']['expense_reanalysis'] ?? ['available' => false, 'url' => null])
                                 <button type="button" class="btn btn-sm btn-primary" data-reanalysis-mode-only="separate" hidden
                                     data-provider-reanalysis="{{ $provider }}" data-provider-name="{{ $providerName }}" data-url="{{ $providerReanalysis['url'] }}"
@@ -43,6 +50,8 @@
                         @if ($blocked)
                             <p class="text-body-secondary">Aguardando testes e validação da integração.</p>
                             <button type="button" class="btn btn-outline-secondary w-100" disabled>Indisponível</button>
+                        @elseif ($notIncluded)
+                            <p class="text-body-secondary mb-0">Esta companhia não participou deste pacote de análises.</p>
                         @elseif (! $analysis)
                             <p class="mb-0" role="status"><span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>Aguardando análise desta companhia.</p>
                         @elseif ($plans->isNotEmpty())
