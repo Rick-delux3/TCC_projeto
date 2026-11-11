@@ -83,10 +83,11 @@ function portoDocsFake(?Closure $create = null, ?Closure $documents = null): voi
         }
 
         return Http::response(['orcamento' => '000000010009512', 'ofertas' => [[
-            'seguro' => '0008', 'nomeSeguro' => 'FIANCA',
+            // codComissao aplicado: Fiança 15 depois do PUT; Essencial no padrão 10.
+            'seguro' => '0008', 'nomeSeguro' => 'FIANCA', 'comissao' => ['codComissao' => 15],
             'formasPagamento' => [['formaPagamento' => 'CC', 'condicoesPagamento' => ['condicaoPagamento' => '029', 'quantidadeParcela' => 29, 'valorParcela' => 210.5]]],
         ], [
-            'seguro' => '0001', 'nomeSeguro' => 'ESSENCIAL 12',
+            'seguro' => '0001', 'nomeSeguro' => 'ESSENCIAL 12', 'comissao' => ['codComissao' => 10],
             'formasPagamento' => [['formaPagamento' => 'CC', 'condicoesPagamento' => ['condicaoPagamento' => '129', 'quantidadeParcela' => 29, 'valorParcela' => 90.1]]],
         ]]], 200);
     });

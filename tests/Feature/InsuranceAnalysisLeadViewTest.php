@@ -656,3 +656,157 @@ it('returns authorized Blade components and individual processing states without
     }
     $this->get(route($admin ? 'admin.insurance-analyses.lead' : 'insurance-analyses.lead', $this->lead))->assertOk()->assertDontSee('Atualizar visualização');
 })->with(['company', 'admin']);
+
+/**
+ * Consulta de preços Porto gravada em payment, no formato real do GET de
+ * ofertas: Fiança selecionada (ou sem preço) e Essenciais como alternativas.
+ */
+function portoViewPayment(bool $fiancaPriced = true): array
+{
+    $condition = fn (float $amount, float $total, float $net, float $iof): array => [
+        'condicaoPagamento' => '029', 'quantidadeParcela' => 29, 'valorParcela' => $amount,
+        'primeiroVencimento' => '10/12/2026', 'premioLiquido' => $net, 'iof' => $iof, 'premioTotal' => $total,
+    ];
+    $priced = fn (string $code, string $name, array $details): array => [
+        'amount' => number_format($details['valorParcela'], 2, '.', ''), 'count' => 29, 'payment_type' => 'FAT', 'with_entry' => false,
+        'offer_code' => $code, 'offer_name' => $name, 'payment_method' => 'FAT', 'payment_method_name' => 'Fatura sem entrada',
+        'condition_code' => '029', 'details' => $details,
+    ];
+    $offer = fn (string $code, string $name, float $lmg, array $coverages, array $benefits = []): array => [
+        'seguro' => $code, 'nomeSeguro' => $name, 'comissao' => ['codComissao' => $code === '0008' ? 15 : 10],
+        'calculo' => ['valorLMG' => $lmg], 'beneficios' => $benefits,
+        'coberturas' => array_map(fn (array $item): array => array_combine(['codCobertura', 'nomeCobertura', 'valorIS', 'valorLMI', 'valorPremio'], $item), $coverages),
+    ];
+
+    return [
+        'source' => 'offers',
+        'commission' => ['0008' => ['applied' => $fiancaPriced, 'http_status' => $fiancaPriced ? 200 : 400, 'error' => null, 'requested' => 15, 'returned' => 15]],
+        'response' => ['orcamento' => '000000011912710', 'ofertas' => [
+            $offer('0008', 'FIANÇA', 64679.7, [['001', 'Aluguel', 1400, 42000, 6051.76], ['010', 'MULTA RESCISÓRIA', 1400, 4200, 1106.48]],
+                [['codigo' => '003', 'titulo' => 'Serviços para residência']]),
+            $offer('0001', 'ESSENCIAL 12', 16800, [['001', 'Aluguel', 1400, 16800, 3474.18]]),
+            $offer('0007', 'ESSENCIAL 20', 28000, [['001', 'Aluguel', 1400, 28000, 4250.98]]),
+        ]],
+        'selection' => $fiancaPriced ? $priced('0008', 'FIANÇA', $condition(617.46, 17906.48, 16675.81, 1230.67)) : null,
+        // Ordem gravada por código; a tela ordena as alternativas pelo preço.
+        'alternatives' => [
+            $priced('0007', 'ESSENCIAL 20', $condition(173.79, 5040.0, 4693.61, 346.39)),
+            $priced('0001', 'ESSENCIAL 12', $condition(144.83, 4200.0, 3911.34, 288.66)),
+        ],
+        'unavailable_reason' => $fiancaPriced ? null : 'A Porto não confirmou a comissão da oferta 0008 (HTTP 400).',
+    ];
+}
+
+/** Pacote Porto concluído com um cenário aprovado e a consulta de preços gravada. */
+function portoViewQuote($test, bool $fiancaPriced = true): \DOMXPath
+{
+    config(['services.porto.enabled' => true]);
+    $batch = $test->lead->insuranceAnalysesBatches()->create(['status' => 'completed', 'total_providers' => 1, 'finished_at' => now()]);
+    $analysis = $batch->analyses()->create([
+        'lead_id' => $test->lead->id, 'provider' => 'porto', 'product' => 'fianca_locaticia_residencial', 'status' => 'approved',
+        'lease_start_date' => '2026-11-11', 'lease_end_date' => '2029-05-11',
+    ]);
+    $analysis->events()->create(['event_type' => 'analysis_started', 'payload' => ['attempt_id' => 'porto-display']]);
+    $run = app(\App\Services\Insurance\InsuranceQuoteCoordinator::class)->prepare($analysis, 'porto-display', false);
+    $quote = $run->scenarios()->first()->quotes()->first();
+    $quote->update([
+        'status' => 'approved', 'quote_id' => '000000011912710', 'payment_type' => 'FAT',
+        'payment_status' => $fiancaPriced ? 'ready' : 'unavailable', 'installment_amount' => $fiancaPriced ? 617.46 : null, 'installments' => 29,
+        'lease_start_date' => '2026-11-11', 'lease_end_date' => '2029-05-11',
+        'response_payload' => ['http_status' => 201, 'response' => ['orcamento' => '000000011912710', 'secret' => 'secret-response'],
+            'payment' => portoViewPayment($fiancaPriced)],
+    ]);
+    $run->update(['status' => 'approved', 'selected_quote_id' => $fiancaPriced ? $quote->id : null]);
+    $response = $test->actingAs($test->user)->withSession(['2fa_passed' => true])
+        ->get(route('insurance-analyses.lead', $test->lead))->assertOk()->assertDontSee('secret-response');
+    $document = new DOMDocument;
+    @$document->loadHTML('<?xml encoding="UTF-8">'.$response->getContent());
+
+    return new DOMXPath($document);
+}
+
+it('shows the Porto Fiança on the card and every offer with its values in the details', function () {
+    $xpath = portoViewQuote($this);
+
+    $card = $xpath->query('//article[@data-provider="porto"]')->item(0);
+    expect($card->textContent)->toContain('R$ 617,46', 'Por parcela · 29 parcelas')
+        ->not->toContain('Essencial', 'R$ 144,83', 'Alternativa');
+
+    $details = $xpath->query('//dialog[@id="details-porto"]')->item(0);
+    $titles = $xpath->query('.//section//h3', $details);
+    expect($titles->length)->toBe(3)
+        ->and($titles->item(0)->textContent)->toBe('Fiança')
+        ->and($titles->item(1)->textContent)->toBe('Essencial 12')
+        ->and($titles->item(2)->textContent)->toBe('Essencial 20');
+
+    $sections = $xpath->query('.//section', $details);
+    expect($sections->item(0)->textContent)->toContain(
+        'Exibido no card', '29 parcelas de R$ 617,46', 'Fatura sem entrada', 'Primeiro vencimento', '10/12/2026',
+        '11/11/2026 até 11/05/2029', 'R$ 17.906,48', 'Prêmio líquido', 'R$ 16.675,81', 'IOF', 'R$ 1.230,67',
+        'Limite máximo de garantia', 'R$ 64.679,70', 'Aluguel', 'Limite de cobertura: R$ 42.000,00', 'Valor declarado: R$ 1.400,00',
+        'Custo da cobertura: R$ 6.051,76', 'Multa rescisória', 'Benefícios', 'Serviços para residência',
+    )->not->toContain('Alternativa', 'MULTA RESCISÓRIA', 'Não informado');
+    expect($sections->item(1)->textContent)->toContain('Alternativa', '29 parcelas de R$ 144,83', 'Fatura sem entrada',
+        'R$ 4.200,00', 'R$ 3.911,34', 'R$ 288,66', 'R$ 16.800,00', 'Custo da cobertura: R$ 3.474,18')
+        ->not->toContain('Exibido no card', 'Benefícios');
+    expect($sections->item(2)->textContent)->toContain('Alternativa', 'R$ 173,79', 'R$ 5.040,00');
+});
+
+it('keeps the Porto alternatives priced when the Fiança has no confirmed price', function () {
+    $xpath = portoViewQuote($this, fiancaPriced: false);
+
+    $card = $xpath->query('//article[@data-provider="porto"]')->item(0);
+    expect($card->textContent)->toContain('Aprovada. Preço indisponível.')->not->toContain('R$ 144,83');
+
+    $sections = $xpath->query('//dialog[@id="details-porto"]//section');
+    expect($sections->length)->toBe(3);
+    // A Fiança aparece sem preço e sem custo das coberturas calculado com 10%.
+    expect($sections->item(0)->textContent)->toContain('Fiança', 'Aprovada. Preço indisponível.', 'Limite de cobertura: R$ 42.000,00')
+        ->not->toContain('Exibido no card', 'R$ 617,46', 'Custo da cobertura', 'Prêmio líquido');
+    expect($sections->item(1)->textContent)->toContain('Essencial 12', 'Alternativa', '29 parcelas de R$ 144,83');
+});
+
+/** Análise Porto consolidada: o coordenador guarda payment e quote_selection. */
+function portoSummaryAnalysis($test, string $status, array $payload): \App\Models\InsuranceAnalysis
+{
+    return \App\Models\InsuranceAnalysis::query()->create([
+        'lead_id' => $test->lead->id, 'provider' => 'porto', 'product' => 'fianca_locaticia_residencial', 'status' => $status,
+        'result' => $status === 'approved' ? 'approved' : null, 'quote_id' => '000000011912710',
+        'lease_start_date' => '2026-11-11', 'lease_end_date' => '2029-05-11', 'response_payload' => $payload,
+    ]);
+}
+
+it('summarizes the Porto Fiança and its alternatives while keeping the comparison keys', function () {
+    $analysis = portoSummaryAnalysis($this, 'approved', [
+        'payment' => portoViewPayment(),
+        'quote_selection' => ['provider_run_id' => 1, 'quote_id' => 2, 'installment_amount' => '617.46', 'installments' => 29, 'payment_type' => 'FAT'],
+    ]);
+
+    $summary = app(\App\Services\Insurance\AnalysisQuoteSummary::class)->summarize($analysis);
+
+    expect($summary['price'])->toMatchArray([
+        'total' => '17906.48', 'basis' => 'gross_total', 'currency' => 'BRL',
+        'period_start' => '2026-11-11', 'period_end' => '2029-05-11',
+        'comparison_basis' => 'installment', 'installment_amount' => '617.46', 'installments' => 29, 'payment_type' => 'FAT',
+        'net' => '16675.81', 'iof' => '1230.67', 'first_due' => '2026-12-10', 'guarantee_limit' => '64679.70',
+        'payment_label' => 'Fatura sem entrada',
+    ]);
+    expect(array_column($summary['offers'], 'role', 'code'))->toBe(['0008' => 'comparison', '0001' => 'alternative', '0007' => 'alternative']);
+    expect(array_column($summary['coverages'], 'name'))->toBe(['Aluguel', 'Multa rescisória']);
+    expect($summary['coverages'][0])->toMatchArray(['insured_amount' => '42000.00', 'declared_amount' => '1400.00', 'premium' => '6051.76']);
+
+    // A comparação entre companhias continua pela parcela da Fiança.
+    $comparison = app(\App\Services\Insurance\AnalysisQuoteComparison::class)->compare(collect([$summary]));
+    expect($comparison['comparison_issue'])->toBeNull();
+    expect($comparison['best_quote']['price']['installment_amount'])->toBe('617.46');
+});
+
+it('shows no Porto offer or price for a refused or technically failed analysis', function (string $status) {
+    $summary = app(\App\Services\Insurance\AnalysisQuoteSummary::class)
+        ->summarize(portoSummaryAnalysis($this, $status, ['payment' => portoViewPayment()]));
+
+    expect($summary['offers'])->toBe([])
+        ->and($summary['coverages'])->toBe([])
+        ->and($summary['price']['total'])->toBeNull()
+        ->and($summary['price']['comparison_basis'])->toBe('gross_total');
+})->with(['rejected', 'failed']);

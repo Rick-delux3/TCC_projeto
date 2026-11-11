@@ -7,11 +7,24 @@ use Illuminate\Support\Arr;
 
 class AnalysisQuoteSummary
 {
+    /** Domínio documentado das ofertas Porto (PUT/GET do orçamento). */
+    private const PORTO_OFFERS = ['0001' => 'Essencial 12', '0005' => 'Essencial 30', '0007' => 'Essencial 20', '0008' => 'Fiança'];
+
+    /** Coberturas Porto pelo código enviado no POST; o nome da API vem com caixa irregular. */
+    private const PORTO_COVERAGES = [
+        '001' => 'Aluguel', '002' => 'IPTU', '003' => 'Condomínio', '004' => 'Água', '005' => 'Energia elétrica',
+        '006' => 'Gás', '007' => 'Danos ao imóvel', '008' => 'Pintura interna', '009' => 'Pintura externa',
+        '010' => 'Multa rescisória',
+    ];
+
     /** @return array<string, mixed> */
     public function summarize(InsuranceExecution $analysis): array
     {
         if ($analysis->provider === 'tokio') {
             return $this->tokio($analysis);
+        }
+        if ($analysis->provider === 'porto') {
+            return $this->porto($analysis);
         }
         $payload = $analysis->providerResponsePayload();
         $response = $payload['response'] ?? $payload;
@@ -111,6 +124,116 @@ class AnalysisQuoteSummary
                 'details' => Arr::only($item, ['codigo', 'caracteristica', 'textoFranquia', 'textoFranquiaComplementar']),
             ])->values()->all() : [],
         ];
+    }
+
+    /**
+     * Porto: preços, totais e coberturas vêm da consulta de preços gravada em
+     * payment (GET de ofertas ou do orçamento atualizado). A Fiança é a oferta
+     * comparada; os Essenciais são alternativas com os valores da mesma consulta.
+     * As chaves usadas na comparação entre companhias seguem a regra genérica.
+     */
+    private function porto(InsuranceExecution $analysis): array
+    {
+        $payload = $analysis->providerResponsePayload();
+        $payment = is_array($payload['payment'] ?? null) ? $payload['payment'] : [];
+        $approved = $analysis->isApprovedResult();
+        $selection = is_array($payment['selection'] ?? null) ? $payment['selection'] : null;
+        $quoteSelection = is_array($payload['quote_selection'] ?? null) ? $payload['quote_selection'] : null;
+        $comparison = (string) config('services.porto.comparison_offer', '0008');
+        $catalog = collect(data_get($payment, 'response.ofertas'))
+            ->filter(fn ($offer): bool => is_array($offer) && is_string($offer['seguro'] ?? null))->keyBy('seguro');
+
+        $offers = [];
+        if ($approved) {
+            if ($selection !== null || $catalog->has($comparison)) {
+                $offers[] = $this->portoOffer($comparison, $catalog->get($comparison, []), $selection, 'comparison');
+            }
+            collect($payment['alternatives'] ?? [])
+                ->filter(fn ($item): bool => is_array($item) && is_string($item['offer_code'] ?? null))
+                ->sortBy(fn (array $item): float => (float) ($item['amount'] ?? 0))
+                ->each(function (array $item) use (&$offers, $catalog): void {
+                    $offers[] = $this->portoOffer($item['offer_code'], $catalog->get($item['offer_code'], []), $item, 'alternative');
+                });
+        }
+        $main = ($offers[0]['role'] ?? null) === 'comparison' ? $offers[0] : null;
+        $total = $main['price']['total'] ?? null;
+
+        return [
+            'analysis_id' => $analysis->id, 'provider' => 'porto', 'status' => $analysis->status,
+            'quote_id' => $analysis->quote_id, 'quote_number' => $analysis->quote_number, 'proposal_id' => $analysis->proposal_id,
+            'price' => [
+                'total' => $total,
+                'basis' => $total !== null ? 'gross_total' : 'unconfirmed',
+                'currency' => 'BRL',
+                'period_start' => $analysis->lease_start_date?->format('Y-m-d'),
+                'period_end' => $analysis->lease_end_date?->format('Y-m-d'),
+                'comparison_basis' => $quoteSelection !== null ? 'installment' : 'gross_total',
+                'installment_amount' => $quoteSelection !== null ? $this->money($quoteSelection['installment_amount'] ?? null) : null,
+                'installments' => $quoteSelection['installments'] ?? null,
+                'payment_type' => $quoteSelection['payment_type'] ?? null,
+            ] + Arr::except($main['price'] ?? [], ['total']),
+            'payment_issue' => $payment['unavailable_reason'] ?? null,
+            'coverages' => $main['coverages'] ?? [],
+            'offers' => $offers,
+        ];
+    }
+
+    /**
+     * Uma oferta Porto pronta para exibição. Sem condição selecionada (Fiança
+     * sem comissão confirmada) não há preço nem custo de cobertura: os valores
+     * da consulta não são apresentados como finais.
+     *
+     * @param  array<string, mixed>  $offer  oferta da consulta de preços
+     * @param  array<string, mixed>|null  $priced  condição selecionada (selection ou alternativa)
+     */
+    private function portoOffer(string $code, array $offer, ?array $priced, string $role): array
+    {
+        $condition = is_array($priced['details'] ?? null) ? $priced['details'] : [];
+        $isPriced = $priced !== null;
+
+        return [
+            'code' => $code,
+            'name' => self::PORTO_OFFERS[$code] ?? (is_string($offer['nomeSeguro'] ?? null) ? trim($offer['nomeSeguro']) : 'Oferta '.$code),
+            'role' => $role,
+            'installment_amount' => $isPriced ? $this->money($priced['amount'] ?? null) : null,
+            'installments' => $isPriced ? ($priced['count'] ?? null) : null,
+            'price' => [
+                'total' => $isPriced ? $this->money($condition['premioTotal'] ?? null) : null,
+                'net' => $isPriced ? $this->money($condition['premioLiquido'] ?? null) : null,
+                'iof' => $isPriced ? $this->money($condition['iof'] ?? null) : null,
+                'first_due' => $isPriced ? $this->brazilianDate($condition['primeiroVencimento'] ?? null) : null,
+                'guarantee_limit' => $this->money(data_get($offer, 'calculo.valorLMG')),
+                'payment_label' => $isPriced && is_string($priced['payment_method_name'] ?? null) ? trim($priced['payment_method_name']) : null,
+            ],
+            'coverages' => collect($offer['coberturas'] ?? [])->filter(fn ($item): bool => is_array($item))
+                ->map(function (array $item) use ($isPriced): array {
+                    $code = $item['codCobertura'] ?? null;
+                    $code = is_int($code) ? str_pad((string) $code, 3, '0', STR_PAD_LEFT) : (string) $code;
+
+                    return [
+                        'name' => self::PORTO_COVERAGES[$code] ?? (is_string($item['nomeCobertura'] ?? null) ? trim($item['nomeCobertura']) : null),
+                        'insured_amount' => $this->money($item['valorLMI'] ?? null),
+                        'declared_amount' => $this->money($item['valorIS'] ?? null),
+                        'premium' => $isPriced ? $this->money($item['valorPremio'] ?? null) : null,
+                        'premium_basis' => 'net', 'indemnity_period' => null, 'contracted' => null, 'details' => [],
+                    ];
+                })->values()->all(),
+            'benefits' => collect($offer['beneficios'] ?? [])
+                ->map(fn ($item): mixed => is_array($item) ? ($item['titulo'] ?? $item['descricao'] ?? null) : null)
+                ->filter(fn ($title): bool => is_string($title) && trim($title) !== '')
+                ->map(fn (string $title): string => trim($title))->unique()->values()->all(),
+        ];
+    }
+
+    /** Data da Porto em DD/MM/AAAA para Y-m-d; inválida vira null. */
+    private function brazilianDate(mixed $value): ?string
+    {
+        if (! is_string($value) || ! preg_match('/^(\d{2})\/(\d{2})\/(\d{4})$/D', $value, $parts)
+            || ! checkdate((int) $parts[2], (int) $parts[1], (int) $parts[3])) {
+            return null;
+        }
+
+        return "{$parts[3]}-{$parts[2]}-{$parts[1]}";
     }
 
     private function money(mixed $value): ?string

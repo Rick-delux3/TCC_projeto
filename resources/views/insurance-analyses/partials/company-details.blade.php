@@ -13,14 +13,40 @@
                     'payment_type' => $analysis['quote']['price']['payment_type'] ?? null,
                     'payment_status' => 'ready',
                 ]]);
+                // Porto: cada orçamento aprovado traz a Fiança (preço do card e da
+                // comparação) e os Essenciais (alternativas), cada um com preço,
+                // totais e coberturas próprios. Cada oferta vira uma seção.
+                if ($provider === 'porto') {
+                    $detailOffers = $detailOffers->flatMap(fn ($detail) => $detail['status'] === 'approved' && ! empty($detail['quote']['offers'])
+                        ? collect($detail['quote']['offers'])->map(fn ($offer) => array_merge($detail, [
+                            'title' => $offer['name'],
+                            'offer_role' => $offer['role'],
+                            'installment_amount' => $offer['installment_amount'],
+                            'installments' => $offer['installments'] ?? $detail['installments'],
+                            'payment_status' => $offer['installment_amount'] !== null ? 'ready' : $detail['payment_status'],
+                            'benefits' => $offer['benefits'],
+                            'quote' => array_merge($detail['quote'], [
+                                'price' => array_merge($detail['quote']['price'], $offer['price']),
+                                'coverages' => $offer['coverages'],
+                            ]),
+                        ]))->all()
+                        : [$detail])->values();
+                }
+                $paymentNames = [
+                    'faturado' => 'Fatura', 'credito' => 'Cartão de crédito', 'Invoice' => 'Fatura', 'Boleto' => 'Boleto',
+                    'CreditCard' => 'Cartão de crédito', 'FAT' => 'Fatura', 'CC' => 'Cartão de crédito',
+                ];
             @endphp
             @foreach ($detailOffers as $detail)
                 <section class="card mb-3">
                     <div class="card-body">
                         <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
-                            <h3 class="h6 mb-0">{{ $planNames[$detail['plan_key']] ?? $detail['plan_key'] ?: 'Fiança locatícia' }}</h3>
-                            @if (($cardPlan['id'] ?? null) !== null && ($detail['id'] ?? null) === $cardPlan['id'] && $detailOffers->count() > 1)
+                            <h3 class="h6 mb-0">{{ $detail['title'] ?? ($planNames[$detail['plan_key']] ?? $detail['plan_key'] ?: 'Fiança locatícia') }}</h3>
+                            @if ((($cardPlan['id'] ?? null) !== null && ($detail['id'] ?? null) === $cardPlan['id'] && $detailOffers->count() > 1)
+                                || (($detail['offer_role'] ?? null) === 'comparison' && ($detail['selected'] ?? true) && (float) $detail['installment_amount'] > 0 && $detailOffers->count() > 1))
                                 <span class="badge text-bg-success">Exibido no card</span>
+                            @elseif (($detail['offer_role'] ?? null) === 'alternative')
+                                <span class="badge text-bg-secondary">Alternativa</span>
                             @endif
                         </div>
                         @if (array_filter($detail['applicants']))
@@ -40,9 +66,18 @@
                                 </p>
                             @endif
                             <dl class="row small mt-3 mb-0">
-                                <dt class="col-sm-5">Pagamento</dt><dd class="col-sm-7">{{ ['faturado' => 'Fatura', 'credito' => 'Cartão de crédito', 'Invoice' => 'Fatura', 'Boleto' => 'Boleto', 'CreditCard' => 'Cartão de crédito'][$detail['payment_type']] ?? 'Não informado' }}</dd>
+                                <dt class="col-sm-5">Pagamento</dt><dd class="col-sm-7">{{ ($detailPrice['payment_label'] ?? null) ?: ($paymentNames[$detail['payment_type']] ?? 'Não informado') }}</dd>
+                                @if (! empty($detailPrice['first_due']))
+                                    <dt class="col-sm-5">Primeiro vencimento</dt><dd class="col-sm-7">{{ $formatDate($detailPrice['first_due']) }}</dd>
+                                @endif
                                 <dt class="col-sm-5">Vigência</dt><dd class="col-sm-7">{{ $formatDate($detailPrice['period_start']) }} até {{ $formatDate($detailPrice['period_end']) }}</dd>
                                 <dt class="col-sm-5">Custo total do seguro</dt><dd class="col-sm-7">{{ $formatMoney($detailPrice['total'], $detailPrice['currency']) }}</dd>
+                                {{-- Composição e limite informados pela Porto; ausentes nas demais companhias. --}}
+                                @foreach (['net' => 'Prêmio líquido', 'iof' => 'IOF', 'guarantee_limit' => 'Limite máximo de garantia'] as $field => $label)
+                                    @if (($detailPrice[$field] ?? null) !== null)
+                                        <dt class="col-sm-5">{{ $label }}</dt><dd class="col-sm-7">{{ $formatMoney($detailPrice[$field], $detailPrice['currency']) }}</dd>
+                                    @endif
+                                @endforeach
                             </dl>
                             <h4 class="h6 mt-3">Coberturas e valores</h4>
                             <ul class="list-group list-group-flush">
@@ -75,6 +110,14 @@
                                     <li class="list-group-item px-0 text-body-secondary">A seguradora não informou os valores das coberturas.</li>
                                 @endforelse
                             </ul>
+                            @if (! empty($detail['benefits']))
+                                <h4 class="h6 mt-3">Benefícios</h4>
+                                <ul class="small mb-0">
+                                    @foreach ($detail['benefits'] as $benefit)
+                                        <li>{{ $benefit }}</li>
+                                    @endforeach
+                                </ul>
+                            @endif
                         @endif
                     </div>
                 </section>

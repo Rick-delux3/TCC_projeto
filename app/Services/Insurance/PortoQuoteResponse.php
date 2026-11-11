@@ -79,7 +79,7 @@ class PortoQuoteResponse
     }
 
     /**
-     * Códigos das ofertas retornadas na criação, que receberão o ajuste de comissão.
+     * Códigos das ofertas retornadas na criação (a de comparação recebe o ajuste de comissão).
      *
      * @return list<string>
      */
@@ -141,23 +141,42 @@ class PortoQuoteResponse
     }
 
     /**
-     * Escolhe, por oferta com comissão confirmada, a condição da forma de
-     * pagamento esperada com a quantidade de pagamentos Sem entrada.
-     *
-     * Somente a oferta de comparação (Fiança) vira "selection"; as demais ficam
-     * em "alternatives" para exibição e nunca substituem o preço comparado.
-     *
-     * @param  list<string>  $confirmedOffers  ofertas cujo ajuste de comissão foi confirmado
+     * Comissão informada pelo GET de ofertas para a oferta, em pontos
+     * percentuais (ofertas[].comissao.codComissao). Igual à enviada no PUT indica
+     * que esse GET já reflete o ajuste. Null quando a oferta ou o campo não
+     * vierem como inteiro.
      */
-    public function payment(array $response, string $paymentType, array $confirmedOffers): array
+    public function commissionCode(array $response, string $offerCode): ?int
+    {
+        foreach (is_array($response['ofertas'] ?? null) ? $response['ofertas'] : [] as $offer) {
+            if (is_array($offer) && ($offer['seguro'] ?? null) === $offerCode) {
+                $code = $offer['comissao']['codComissao'] ?? null;
+
+                return is_int($code) ? $code : null;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Escolhe, por oferta, a condição da forma de pagamento esperada com a
+     * quantidade de pagamentos Sem entrada.
+     *
+     * Somente a oferta de comparação (Fiança), com a comissão confirmada, vira
+     * "selection". As demais ficam em "alternatives" com a comissão padrão da
+     * Porto e nunca substituem o preço comparado.
+     *
+     * @param  bool  $commissionConfirmed  comissão da oferta de comparação confirmada pelo HTTP 200 do PUT
+     */
+    public function payment(array $response, string $paymentType, bool $commissionConfirmed): array
     {
         $count = (int) config('services.porto.installments_without_entry', 29);
         $comparison = (string) config('services.porto.comparison_offer', '0008');
 
         $byOffer = [];
         foreach ($this->alternatives($response) as $alternative) {
-            if ($alternative['payment_method'] !== $paymentType || $alternative['count'] !== $count
-                || ! in_array($alternative['offer_code'], $confirmedOffers, true)) {
+            if ($alternative['payment_method'] !== $paymentType || $alternative['count'] !== $count) {
                 continue;
             }
             $current = $byOffer[$alternative['offer_code']] ?? null;
@@ -172,7 +191,7 @@ class PortoQuoteResponse
             'payment_type' => $paymentType, 'with_entry' => false,
         ] + $alternative;
 
-        $selection = isset($byOffer[$comparison]) ? $format($byOffer[$comparison]) : null;
+        $selection = $commissionConfirmed && isset($byOffer[$comparison]) ? $format($byOffer[$comparison]) : null;
         unset($byOffer[$comparison]);
         ksort($byOffer, SORT_STRING);
 

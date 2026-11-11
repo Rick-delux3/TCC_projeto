@@ -81,8 +81,11 @@ function portoCreated(array $offers = ['0008', '0001', '0005', '0007']): array
     ];
 }
 
-/** GET de ofertas: condicoesPagamento como objeto, uma forma por condição. */
-function portoOffers(array $prices = ['0008' => 210.5, '0001' => 90.1, '0005' => 150.25, '0007' => 120.0]): array
+/**
+ * GET de ofertas: condicoesPagamento como objeto, uma forma por condição.
+ * codComissao aplicado: Fiança 15 depois do PUT; Essenciais no padrão 10.
+ */
+function portoOffers(array $prices = ['0008' => 210.5, '0001' => 90.1, '0005' => 150.25, '0007' => 120.0], array $commissions = []): array
 {
     $method = fn (string $code, string $condition, int $count, float $amount) => [
         'formaPagamento' => $code, 'nomeFormaPagamento' => 'FORMA '.$code,
@@ -95,7 +98,10 @@ function portoOffers(array $prices = ['0008' => 210.5, '0001' => 90.1, '0005' =>
     foreach ($prices as $code => $price) {
         $offers[] = [
             'seguro' => (string) $code, 'nomeSeguro' => 'OFERTA '.$code,
-            'comissao' => ['percentualMinimo' => 0, 'percentualMaximo' => 30],
+            'comissao' => array_filter([
+                'codComissao' => array_key_exists($code, $commissions) ? $commissions[$code] : ($code === '0008' ? 15 : 10),
+                'ranges' => [['codOperacaoMinimo' => 10, 'codOperacaoMaximo' => $code === '0008' ? 35 : 10]],
+            ], fn ($value) => $value !== null),
             'formasPagamento' => [
                 $method('CC', '029', 29, $price),
                 // Com entrada (30 pagamentos) é mais barata, mas não é o padrão.
@@ -153,7 +159,7 @@ function portoRequests(string $method): array
         ->map(fn (array $pair) => $pair[0])->values()->all();
 }
 
-it('creates the budget, adjusts every offer commission and selects the Fiança price', function () {
+it('creates the budget, adjusts only the Fiança commission and selects its price', function () {
     portoFake();
     [$analysis, $run] = portoRun();
     $quote = portoQuote($run);
@@ -171,24 +177,16 @@ it('creates the budget, adjusts every offer commission and selects the Fiança p
         ->not->toHaveKey('imobiliaria');
     expect($posts[0]['locatarios'])->toHaveCount(1);
 
-    // Um PUT mínimo por oferta retornada na criação, no mesmo orçamento.
+    // Um único PUT, somente da Fiança: os Essenciais não aceitam comissão diferente de 10.
     $puts = portoRequests('PUT');
-    expect($puts)->toHaveCount(4);
-    $bodies = [];
-    foreach ($puts as $put) {
-        expect($put->url())->toBe(PORTO_API.'/orcamentos/'.PORTO_BUDGET.'/ABC12J');
-        expect($put->header('access_token'))->toBe(['porto-token-1']);
-        $bodies[] = $put->data();
-    }
-    usort($bodies, fn (array $a, array $b) => strcmp($a['ofertas'][0]['seguro'], $b['ofertas'][0]['seguro']));
-    expect($bodies)->toBe(array_map(
-        fn (string $code) => ['ofertas' => [['seguro' => $code, 'comissao' => ['codComissao' => 15]]]],
-        ['0001', '0005', '0007', '0008'],
-    ));
+    expect($puts)->toHaveCount(1);
+    expect($puts[0]->url())->toBe(PORTO_API.'/orcamentos/'.PORTO_BUDGET.'/ABC12J');
+    expect($puts[0]->header('access_token'))->toBe(['porto-token-1']);
+    expect($puts[0]->data())->toBe(['ofertas' => [['seguro' => '0008', 'comissao' => ['codComissao' => 15]]]]);
 
-    // O GET de ofertas só acontece depois de todos os PUTs.
+    // O GET de ofertas só acontece depois do PUT.
     $operations = Http::recorded()->map(fn (array $pair) => $pair[0]->method())->all();
-    expect($operations)->toBe(['POST', 'POST', 'PUT', 'PUT', 'PUT', 'PUT', 'GET']);
+    expect($operations)->toBe(['POST', 'POST', 'PUT', 'GET']);
     expect(portoRequests('GET')[0]->url())->toBe(PORTO_API.'/orcamentos/22/'.PORTO_BUDGET.'/ABC12J/ofertas');
 
     // Fiança (0008), CC, 29 pagamentos Sem entrada — não a mais barata nem a de 30.
@@ -203,7 +201,10 @@ it('creates the budget, adjusts every offer commission and selects the Fiança p
         'offer_code' => '0008', 'payment_method' => 'CC', 'condition_code' => '029', 'count' => 29, 'with_entry' => false,
     ]);
     expect(array_column($payment['alternatives'], 'amount', 'offer_code'))->toBe(['0001' => '90.10', '0005' => '150.25', '0007' => '120.00']);
-    expect($payment['commission'])->each->toMatchArray(['applied' => true, 'http_status' => 200]);
+    // Confirmada pelo PUT 200 e pelo codComissao 15 lido no GET.
+    expect($payment['commission'])->toBe(['0008' => [
+        'applied' => true, 'http_status' => 200, 'error' => null, 'requested' => 15, 'returned' => 15,
+    ]]);
 
     // Consolidado na análise sem payload de pretendentes.
     $analysis->refresh();
@@ -216,7 +217,7 @@ it('creates the budget, adjusts every offer commission and selects the Fiança p
 
     // Reexecutar o job não recria o orçamento nem repete chamadas.
     runPortoQuote($quote);
-    Http::assertSentCount(7);
+    Http::assertSentCount(4);
 });
 
 it('quotes invoice for a registered agency with a Porto code and credit card without one', function (?string $code, string $type, string $amount) {
@@ -382,7 +383,7 @@ it('keeps the approval without a comparable price when Fiança cannot be publish
         ['commission' => fn (Request $request) => $request['ofertas'][0]['seguro'] === '0008'
             ? Http::response(['errorCode' => 400, 'errorMessage' => 'Comissão fora do limite'], 400)
             : Http::response(['status' => '1'], 200)],
-        ['0008', '0001'], ['0001'],
+        ['0008', '0001'], ['0001', '0005', '0007'],
     ],
     'Fiança sem condição de 29 parcelas' => [
         ['offers' => function () {
@@ -415,9 +416,9 @@ it('retries only the price stage when the offers query fails', function () {
 
     expect($quote->fresh()->payment_status)->toBe('ready');
     expect($quote->fresh()->installment_amount)->toBe('210.50');
-    // O orçamento foi criado uma única vez; só PUTs e GET foram repetidos.
+    // O orçamento foi criado uma única vez; só o PUT da Fiança e o GET foram repetidos.
     expect(portoRequests('POST'))->toHaveCount(1);
-    expect(portoRequests('PUT'))->toHaveCount(8);
+    expect(portoRequests('PUT'))->toHaveCount(2);
     expect(portoRequests('GET'))->toHaveCount(2);
 });
 
@@ -439,25 +440,20 @@ it('renews a refused token once and resends the budget creation', function () {
     expect($posts[1]->header('Authorization'))->toBe(['Bearer porto-token-2']);
 });
 
-it('retries a transient commission failure once and only for the failed offer', function (callable $failure) {
-    $attempts = [];
-    portoFake(['commission' => function (Request $request) use (&$attempts, $failure) {
-        $offer = $request['ofertas'][0]['seguro'];
-        $attempts[$offer] = ($attempts[$offer] ?? 0) + 1;
-
-        return $offer === '0005' && $attempts[$offer] === 1 ? $failure() : Http::response(['status' => '1'], 200);
+it('retries a transient commission failure once', function (callable $failure) {
+    $attempts = 0;
+    portoFake(['commission' => function () use (&$attempts, $failure) {
+        return ++$attempts === 1 ? $failure() : Http::response(['mensagem' => 'DADOS SALVOS COM SUCESSO', 'status' => '5'], 200);
     }]);
-    $payloads = [];
-    foreach (['0008', '0001', '0005'] as $offer) {
-        $payloads[$offer] = ['ofertas' => [['seguro' => $offer, 'comissao' => ['codComissao' => 15]]]];
-    }
 
-    $results = app(PortoService::class)->updateCommissions(PORTO_BUDGET, $payloads);
+    $result = app(PortoService::class)->updateCommission(PORTO_BUDGET, ['ofertas' => [['seguro' => '0008', 'comissao' => ['codComissao' => 15]]]]);
 
-    expect(array_map(fn (array $result) => $result['success'], $results))->toBe(['0008' => true, '0001' => true, '0005' => true]);
-    expect($attempts)->toBe(['0008' => 1, '0001' => 1, '0005' => 2]);
+    expect($result)->toMatchArray(['success' => true, 'http_status' => 200]);
+    expect($attempts)->toBe(2);
 })->with([
     'HTTP 500' => [fn () => fn () => Http::response(['errorCode' => 500, 'errorMessage' => 'Internal Server Error'], 500)],
+    // Retorno real do gateway a PUTs concorrentes no mesmo orçamento (11/11/2026).
+    'HTTP 501' => [fn () => fn () => Http::response(['message' => "The server doesn't recognize the request method."], 501)],
     'falha de conexão' => [fn () => fn () => throw new ConnectionException('cURL error 28: timeout')],
 ]);
 
@@ -469,10 +465,93 @@ it('does not retry a definitive commission refusal', function () {
         return Http::response(['errorCode' => 400, 'errorMessage' => 'Comissão fora do limite'], 400);
     }]);
 
-    $results = app(PortoService::class)->updateCommissions(PORTO_BUDGET, ['0008' => ['ofertas' => []]]);
+    $result = app(PortoService::class)->updateCommission(PORTO_BUDGET, ['ofertas' => []]);
 
-    expect($results['0008'])->toMatchArray(['success' => false, 'http_status' => 400]);
+    expect($result)->toMatchArray(['success' => false, 'http_status' => 400]);
     expect($attempts)->toBe(1);
+});
+
+it('keeps the quote pending and reads no price while the Fiança commission keeps failing', function () {
+    portoFake(['commission' => fn () => Http::response(['message' => "The server doesn't recognize the request method."], 501)]);
+    [, $run] = portoRun();
+    $quote = portoQuote($run);
+
+    expect(fn () => runPortoQuote($quote))->toThrow(RuntimeException::class);
+
+    // Falha técnica: continua aprovada, sem preço com 10% e sem novo orçamento.
+    $quote->refresh();
+    expect($quote->status)->toBe('approved');
+    expect($quote->payment_status)->toBe('pending');
+    expect($quote->installment_amount)->toBeNull();
+    expect(portoRequests('POST'))->toHaveCount(1);
+    expect(portoRequests('PUT'))->toHaveCount(2);
+    expect(portoRequests('GET'))->toBeEmpty();
+});
+
+it('reads the updated budget when the offers query does not reflect the commission yet', function (?int $offersCommission) {
+    // GET do orçamento atualizado: condicoesPagamento como lista, com dados pessoais.
+    $budget = [
+        'orcamento' => PORTO_BUDGET, 'susep' => 'ABC12J', 'status' => '1',
+        'locatarios' => [['cpfCnpj' => '09238037698', 'nome' => 'Pretendente de Teste']],
+        'ofertas' => [[
+            'seguro' => '0008', 'nomeSeguro' => 'FIANCA',
+            'formasPagamento' => [['formaPagamento' => 'CC', 'nomeFormaPagamento' => 'DEMAIS CARTOES', 'condicoesPagamento' => [
+                ['condicaoPagamento' => '029', 'quantidadeParcela' => 29, 'valorParcela' => 225.4],
+            ]]],
+        ]],
+    ];
+    portoFake([
+        'offers' => fn () => Http::response(portoOffers(commissions: ['0008' => $offersCommission]), 200),
+        'budget' => fn () => Http::response($budget, 200),
+    ]);
+    [, $run] = portoRun();
+    $quote = portoQuote($run);
+
+    runPortoQuote($quote);
+
+    // GET de ofertas primeiro; sem a comissão enviada, o orçamento atualizado define o preço.
+    expect(array_map(fn (Request $request) => $request->url(), portoRequests('GET')))->toBe([
+        PORTO_API.'/orcamentos/22/'.PORTO_BUDGET.'/ABC12J/ofertas',
+        PORTO_API.'/orcamentos/'.PORTO_BUDGET.'/ABC12J',
+    ]);
+    $quote->refresh();
+    expect($quote->payment_status)->toBe('ready');
+    expect($quote->installment_amount)->toBe('225.40');
+    $payment = $quote->response_payload['payment'];
+    expect($payment['source'])->toBe('budget');
+    expect($payment['commission']['0008'])->toMatchArray(['applied' => true, 'http_status' => 200, 'requested' => 15, 'returned' => $offersCommission]);
+    expect($payment['response'])->not->toHaveKey('locatarios');
+})->with(['comissão padrão no GET de ofertas' => [10], 'GET de ofertas sem codComissao' => [null]]);
+
+it('does not read the updated budget when the offers query already reflects the commission', function () {
+    portoFake();
+    [, $run] = portoRun();
+    $quote = portoQuote($run);
+
+    runPortoQuote($quote);
+
+    expect(portoRequests('GET'))->toHaveCount(1);
+    expect($quote->fresh()->response_payload['payment']['source'])->toBe('offers');
+});
+
+it('sends no commission update when the budget has no Fiança offer', function () {
+    portoFake([
+        'create' => fn () => Http::response(portoCreated(['0001', '0005', '0007']), 201),
+        'offers' => fn () => Http::response(portoOffers(['0001' => 90.1, '0005' => 150.25, '0007' => 120.0]), 200),
+    ]);
+    [, $run] = portoRun();
+    $quote = portoQuote($run);
+
+    runPortoQuote($quote);
+
+    expect(portoRequests('PUT'))->toBeEmpty();
+    $quote->refresh();
+    expect($quote->status)->toBe('approved');
+    expect($quote->payment_status)->toBe('unavailable');
+    $payment = $quote->response_payload['payment'];
+    expect($payment['commission'])->toBe([]);
+    expect($payment['unavailable_reason'])->toContain('não retornou a oferta 0008');
+    expect(array_column($payment['alternatives'], 'amount', 'offer_code'))->toBe(['0001' => '90.10', '0005' => '150.25', '0007' => '120.00']);
 });
 
 it('reads prices from the updated budget when configured, without storing tenant data', function () {
@@ -482,7 +561,7 @@ it('reads prices from the updated budget when configured, without storing tenant
         'orcamento' => PORTO_BUDGET, 'susep' => 'ABC12J', 'status' => '1',
         'locatarios' => [['cpfCnpj' => '09238037698', 'nome' => 'Pretendente de Teste']],
         'ofertas' => [[
-            'seguro' => '0008', 'nomeSeguro' => 'FIANCA',
+            'seguro' => '0008', 'nomeSeguro' => 'FIANCA', 'comissao' => ['codComissao' => 15],
             'formasPagamento' => [['formaPagamento' => 'CC', 'nomeFormaPagamento' => 'DEMAIS CARTOES', 'condicoesPagamento' => [
                 ['condicaoPagamento' => '030', 'quantidadeParcela' => 30, 'valorParcela' => 180.0],
                 ['condicaoPagamento' => '029', 'quantidadeParcela' => 29, 'valorParcela' => 199.9],
@@ -510,7 +589,7 @@ it('sends nothing when the integration is disabled or misconfigured', function (
     expect($service->createBudget(['susep' => 'ABC12J']))->toMatchArray(['success' => false, 'http_status' => null]);
     expect($service->createBudget([])['error'])->toContain($message);
     expect($service->offers(PORTO_BUDGET)['success'])->toBeFalse();
-    expect($service->updateCommissions(PORTO_BUDGET, ['0008' => []])['0008']['success'])->toBeFalse();
+    expect($service->updateCommission(PORTO_BUDGET, [])['success'])->toBeFalse();
     Http::assertNothingSent();
 })->with([
     'desativada' => [['services.porto.enabled' => false], 'desativada'],
@@ -526,7 +605,7 @@ it('rejects a malformed budget number before building any URL', function (string
 
     expect($service->offers($budget)['success'])->toBeFalse();
     expect($service->budget($budget)['success'])->toBeFalse();
-    expect($service->updateCommissions($budget, ['0008' => []])['0008']['success'])->toBeFalse();
+    expect($service->updateCommission($budget, [])['success'])->toBeFalse();
     Http::assertNothingSent();
 })->with(['curto' => ['10009512'], 'com caminho' => ['../../oauth/v2/xx'], 'com letras' => ['00000001000951A']]);
 

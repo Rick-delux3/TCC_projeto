@@ -16,8 +16,9 @@ use Illuminate\Support\Arr;
  * Porto Seguro: uma criação de orçamento por cenário de pretendentes, com
  * várias ofertas dentro dele.
  *
- * Fluxo: POST do orçamento (requestAnalysis) -> PUTs simultâneos de comissão
- * por oferta -> consulta dos preços finais (payment). O orçamento é gravado
+ * Fluxo: POST do orçamento (requestAnalysis) -> um único PUT de comissão,
+ * somente da Fiança (0008) -> consulta dos preços finais, que também confirma
+ * a comissão aplicada (payment). O orçamento é gravado
  * pelo writer entre as duas etapas, então uma repetição da etapa de preços
  * nunca recria o orçamento.
  */
@@ -68,7 +69,13 @@ class PortoInsuranceProvider implements ReanalyzesInsuranceQuotes
     }
 
     /**
-     * Ajusta a comissão de cada oferta e seleciona o preço final do orçamento aprovado.
+     * Ajusta a comissão da Fiança e seleciona o preço final do orçamento aprovado.
+     *
+     * Somente a oferta de comparação (0008) recebe o PUT: os Essenciais aceitam
+     * apenas a comissão padrão de 10% e seguem como alternativas. O HTTP 200 do
+     * PUT confirma a comissão. Os preços vêm do GET de ofertas quando ele já traz
+     * a Fiança com o codComissao enviado; senão, do GET do orçamento atualizado,
+     * que sempre reflete o ajuste (regra de 11/11/2026).
      *
      * @return array{response: array, selection: array|null, alternatives: array, commission: array, source: string, unavailable_reason: string|null}
      */
@@ -82,51 +89,51 @@ class PortoInsuranceProvider implements ReanalyzesInsuranceQuotes
             return $this->unavailable('A criação do orçamento Porto não informou ofertas para o ajuste de comissão.');
         }
 
-        // Um payload novo e independente por oferta, correlacionado pelo código.
-        $payloads = [];
-        foreach ($offers as $offer) {
-            $payloads[$offer] = $this->builder->commissionUpdate($offer);
-        }
-        $updates = $this->service->updateCommissions($budget, $payloads);
-
+        $comparison = (string) config('services.porto.comparison_offer', '0008');
         $commission = [];
-        $confirmed = [];
-        foreach ($offers as $offer) {
-            $update = $updates[$offer] ?? ['success' => false, 'http_status' => null, 'error' => 'Ajuste de comissão sem resposta.'];
-            $applied = ($update['success'] ?? false) === true;
-            $commission[$offer] = [
-                'applied' => $applied,
+        $reason = null;
+        if (in_array($comparison, $offers, true)) {
+            $payload = $this->builder->commissionUpdate($comparison);
+            $update = $this->service->updateCommission($budget, $payload);
+            $commission[$comparison] = [
+                'applied' => ($update['success'] ?? false) === true,
                 'http_status' => $update['http_status'] ?? null,
-                'error' => $applied ? null : ($update['error'] ?? null),
+                'error' => ($update['success'] ?? false) ? null : ($update['error'] ?? 'Ajuste de comissão sem resposta.'),
+                'requested' => $payload['ofertas'][0]['comissao']['codComissao'],
+                'returned' => null,
             ];
-            if ($applied) {
-                $confirmed[] = $offer;
-            } else {
+            if (! ($update['success'] ?? false)) {
                 $this->record($quote, $update);
+                if (PortoService::transient($update['http_status'] ?? null)) {
+                    // Repete somente a etapa de preços; o orçamento não é recriado.
+                    throw new \RuntimeException('Falha temporária ao ajustar a comissão da oferta Fiança da Porto.');
+                }
+                $reason = "A Porto não confirmou a comissão da oferta {$comparison} (HTTP ".($update['http_status'] ?? 'sem resposta').').';
             }
-        }
-        if ($confirmed === []) {
-            if (collect($commission)->contains(fn (array $item) => self::transient($item['http_status']))) {
-                throw new \RuntimeException('Falha temporária ao ajustar a comissão das ofertas da Porto.');
-            }
-
-            return $this->unavailable('A comissão não foi confirmada em nenhuma oferta da Porto.', $commission);
+        } else {
+            $reason = "A criação do orçamento Porto não retornou a oferta {$comparison} (Fiança); não houve ajuste de comissão.";
         }
 
-        // Somente depois de todas as atualizações concluídas os preços são lidos.
+        // Os preços são lidos depois do ajuste; os Essenciais aparecem com o padrão da Porto.
+        $confirmed = ($commission[$comparison]['applied'] ?? false) === true;
         $source = config('services.porto.price_source') === 'budget' ? 'budget' : 'offers';
-        $prices = $source === 'budget' ? $this->service->budget($budget) : $this->service->offers($budget);
-        if (! ($prices['success'] ?? false)) {
-            $this->record($quote, $prices);
-            throw new \RuntimeException('Não foi possível consultar as ofertas atualizadas da Porto.');
+        $response = $this->prices($quote, $budget, $source);
+        if ($source === 'offers' && $confirmed) {
+            $returned = $this->responses->commissionCode($response, $comparison);
+            $commission[$comparison]['returned'] = $returned;
+            if ($returned !== $commission[$comparison]['requested']) {
+                // GET de ofertas ainda sem o ajuste: o orçamento atualizado garante o preço vigente.
+                $source = 'budget';
+                $response = $this->prices($quote, $budget, $source);
+            }
         }
 
-        // O GET do orçamento traz dados pessoais dos locatários; guardamos só o
-        // que identifica o orçamento e suas ofertas.
-        $response = Arr::only($prices['response'], ['orcamento', 'susep', 'origem', 'status', 'ofertas']);
+        $payment = $this->responses->payment($response, (string) $quote->payment_type, $confirmed);
+        if ($reason !== null) {
+            $payment['unavailable_reason'] = $reason;
+        }
 
-        return ['response' => $response, 'commission' => $commission, 'source' => $source]
-            + $this->responses->payment($response, (string) $quote->payment_type, $confirmed);
+        return ['response' => $response, 'commission' => $commission, 'source' => $source] + $payment;
     }
 
     /**
@@ -156,6 +163,22 @@ class PortoInsuranceProvider implements ReanalyzesInsuranceQuotes
         );
     }
 
+    /**
+     * GET de preços (ofertas ou orçamento atualizado). Falha repete somente a
+     * etapa de preços. O GET do orçamento traz dados pessoais dos locatários;
+     * guardamos só o que identifica o orçamento e suas ofertas.
+     */
+    private function prices(InsuranceQuote $quote, string $budget, string $source): array
+    {
+        $prices = $source === 'budget' ? $this->service->budget($budget) : $this->service->offers($budget);
+        if (! ($prices['success'] ?? false)) {
+            $this->record($quote, $prices);
+            throw new \RuntimeException('Não foi possível consultar as ofertas atualizadas da Porto.');
+        }
+
+        return Arr::only($prices['response'], ['orcamento', 'susep', 'origem', 'status', 'ofertas']);
+    }
+
     private function unavailable(string $reason, array $commission = []): array
     {
         return [
@@ -167,10 +190,5 @@ class PortoInsuranceProvider implements ReanalyzesInsuranceQuotes
     private function record(InsuranceQuote $quote, array $result): void
     {
         app(InsuranceAnalysisLogger::class)->record($quote, $quote->executionAttemptId ?? '', $result, payment: true);
-    }
-
-    private static function transient(?int $status): bool
-    {
-        return $status === null || in_array($status, [401, 408, 429], true) || $status >= 500;
     }
 }

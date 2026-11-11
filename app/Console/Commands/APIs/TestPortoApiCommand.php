@@ -253,8 +253,15 @@ class TestPortoApiCommand extends Command
             return;
         }
         foreach ($commission as $offer => $item) {
+            // Desde 11/11/2026: um único PUT da Fiança; o 200 confirma a comissão.
+            $check = array_key_exists('requested', $item)
+                ? ' | enviado '.($item['requested'] ?? '-').' / GET de ofertas '.($item['returned'] ?? 'não informado')
+                : ' | registro anterior a 11/11/2026: confirmado só pelo HTTP do PUT';
             $this->field('Oferta '.$offer, (($item['applied'] ?? false) ? 'comissão confirmada' : 'NÃO confirmada')
-                .' | HTTP '.($item['http_status'] ?? 'sem resposta').(($item['error'] ?? null) ? ' | '.$item['error'] : ''));
+                .' | HTTP '.($item['http_status'] ?? 'sem resposta').$check.(($item['error'] ?? null) ? ' | '.$item['error'] : ''));
+        }
+        if (count($commission) > 1) {
+            $this->field('Atenção', 'mais de um PUT no mesmo orçamento (fluxo anterior a 11/11/2026); a Porto devolve 501 a escritas concorrentes');
         }
         try {
             $sample = app(PortoQuotePayloadBuilder::class)->commissionUpdate((string) array_key_first($commission));
@@ -281,7 +288,12 @@ class TestPortoApiCommand extends Command
 
         $selection = is_array($payment['selection'] ?? null) ? $payment['selection'] : null;
         $count = (int) config('services.porto.installments_without_entry', 29);
-        $this->field('Fonte', $source === 'budget' ? 'GET do orçamento (PORTO_PRICE_SOURCE=budget)' : 'GET de ofertas');
+        $fallback = $source === 'budget' && config('services.porto.price_source') !== 'budget';
+        $this->field('Fonte', match (true) {
+            $fallback => 'GET do orçamento atualizado (o GET de ofertas não trouxe a comissão enviada)',
+            $source === 'budget' => 'GET do orçamento (PORTO_PRICE_SOURCE=budget)',
+            default => 'GET de ofertas (já atualizado com a comissão enviada)',
+        });
         $this->field('Critério', 'oferta '.config('services.porto.comparison_offer', '0008').' com comissão confirmada, '.$count.' pagamentos sem entrada');
         $this->field('Selecionada', $selection
             ? $this->alternative($selection)

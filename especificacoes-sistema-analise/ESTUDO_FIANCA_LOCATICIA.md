@@ -1,5 +1,58 @@
 # Estudo das APIs de Fiança Locatícia
 
+## Porto — PUT de comissão somente da Fiança (0008) e confirmação pelo GET — 11/11/2026
+
+**Regra confirmada pelo usuário em 11/11/2026; backend implementado no mesmo dia** (`PortoService::updateCommission`, `PortoInsuranceProvider::payment`, `PortoQuoteResponse::commissionCode`/`payment` e `porto:test-api`). Escopo exclusivo da Porto; não altera Pottencial, Too ou Tokio. Esta seção prevalece sobre a decisão de 02/11/2026 de enviar um PUT de comissão por oferta, simultâneos, e sobre o critério de considerar a comissão confirmada apenas pelo HTTP 200 do PUT (ver "Trechos superados" abaixo).
+
+### Evidência que originou a regra — análise local 1, rodada de 11/11/2026
+
+Leitura dos dados salvos com `php artisan porto:test-api --analise=1` (sem chamada à API) e do `laravel.log`. Cotação #2, cenário `primary`, orçamento `000000011912710`, forma esperada FAT (imobiliária com código Porto). A rodada 1 (cotação #1) falhou por 401 de token, assunto da seção de autenticação, e não entra nesta regra.
+
+1. **POST /orcamentos:** HTTP 201, aprovado, com quatro ofertas: 0001 ESSENCIAL 12, 0007 ESSENCIAL 20, 0005 ESSENCIAL 30 e 0008 FIANÇA.
+2. **PUTs de comissão simultâneos** (um por oferta, `{"ofertas":[{"seguro":"<código>","comissao":{"codComissao":15}}]}`):
+
+   | Oferta | HTTP do PUT | Faixa de comissão (`comissao.ranges`) | `codComissao` no GET seguinte |
+   | --- | --- | --- | --- |
+   | 0001 Essencial 12 | 501 | 10 a 10 | 10 |
+   | 0007 Essencial 20 | 200 | 10 a 10 | 10 |
+   | 0005 Essencial 30 | 200 | 10 a 10 | 10 |
+   | 0008 Fiança | 501 | 10 a 35 | 10 |
+
+   O corpo do 501 foi `"The server doesn't recognize the request method."`. Esse status não consta nas respostas documentadas do PUT (200, 400, 401, 409, 500 e 502). Em cada onda de PUTs paralelos passou exatamente um: 1 de 4 na primeira e 1 de 3 no retry automático. O URL, o método e o token eram os mesmos, e a oferta que passou não dependia de regra de negócio. Conclusão: o gateway da Porto não aceita escritas concorrentes no mesmo orçamento.
+3. **GET de ofertas:** HTTP 200 com preços em todas as ofertas, inclusive Fiança FAT 029 (29× R$ 583,16). Como a 0008 não teve a comissão confirmada, o sistema gravou "aprovado, preço indisponível". Esse preço estava calculado com a comissão padrão de 10%, não 15%.
+4. **Falso positivo do critério atual:** o PUT da 0007 e da 0005 voltou 200, mas o GET seguinte manteve `codComissao = 10`. Os Essenciais só aceitam comissão de 10 a 10, então os 15% nunca se aplicam a eles. O HTTP 200 sozinho não prova a aplicação.
+
+**Teste real em homologação, autorizado pelo usuário em 11/11/2026, no mesmo orçamento e sem gravação no banco:**
+- um único PUT, somente da 0008 com `codComissao = 15`, voltou HTTP 200 em cerca de 24 s, com `mensagem` "DADOS SALVOS COM SUCESSO" e `status` "5";
+- o GET de ofertas seguinte trouxe 0008 com `codComissao = 15` e FAT 029 de **29× R$ 617,46** (`premioTotal` 17.906,48), contra 29× R$ 583,16 com 10%;
+- os Essenciais permaneceram com 10% e seus preços não mudaram.
+
+O efeito colateral do teste é que esse orçamento de homologação ficou com 15% na Fiança.
+
+### Regras confirmadas
+
+1. **Um único PUT de comissão por orçamento, somente da Fiança:** para cada orçamento aprovado (um por cenário), enviar um só PUT com `{"ofertas":[{"seguro":"0008","comissao":{"codComissao":15}}]}`. Não enviar PUT para as ofertas Essenciais (0001, 0005 e 0007): elas não aceitam comissão diferente de 10% e permanecem com o padrão da Porto. Não há mais PUTs simultâneos no mesmo orçamento.
+2. **Sem Fiança na criação:** se o POST aprovado não retornar a oferta 0008, não enviar PUT. A aprovação continua aprovada, com preço indisponível e o motivo registrado; as Essenciais retornadas seguem como alternativas.
+3. **Confirmação da comissão e fonte do preço — corrigida pelo usuário em 11/11/2026:** o HTTP 200 do PUT da 0008 confirma que a comissão foi alterada. Os preços são lidos primeiro no GET de ofertas (`/orcamentos/{origem}/{orcamento}/{susep}/ofertas`). Se esse GET já trouxer a oferta 0008 com o `comissao.codComissao` enviado (15), ele está atualizado e o GET do orçamento não é chamado. Se trouxer outro valor ou não trouxer o campo, os preços passam a vir do GET do orçamento atualizado ([retorna-os-dados-atualizados.md](Porto_endpoitsMarkdown/retorna-os-dados-atualizados.md), `/orcamentos/{orcamento}/{susep}`), que sempre reflete o ajuste; esse retorno não exige `codComissao`. `PORTO_PRICE_SOURCE=budget` continua indo direto ao GET do orçamento. Falha em qualquer um dos GETs repete somente a etapa de preços. Não calcular localmente a diferença de prêmio para simular 15%. *Superado:* a versão inicial desta regra exigia `codComissao = 15` no GET para confirmar a comissão e deixava o preço indisponível na falta dele.
+4. **Preço para comparação:** continua sendo o `valorParcela` da oferta 0008, na forma FAT (com código Porto) ou CC (demais), na condição de 29 pagamentos sem entrada, lido do GET posterior ao PUT confirmado. Nunca apresentar preço calculado com 10% como resultado.
+5. **Essenciais como alternativas:** 0001, 0005 e 0007 continuam preservadas como alternativas do card, com os preços do mesmo GET e a comissão padrão de 10% informada pela própria Porto. Não entram na comparação entre companhias.
+6. **Falhas do PUT:** HTTP 501, 5xx, timeout ou falha de conexão no PUT da 0008 são falha técnica, nunca recusa, e não autorizam a análise conjunta. A repetição da etapa segue a regra vigente (sem recriar o orçamento). Como agora existe um único PUT, a repetição não concorre com outra escrita no mesmo orçamento.
+
+### Trechos superados por esta seção
+
+- "4.1. Pendências encerradas e limites da confirmação": o item "Preservado: uma chamada por oferta, simultâneas".
+- "4.2. Aplicação por oferta e efeitos a validar": um PUT por oferta retornada, execução concorrente e justificativa da concorrência. O isolamento local por oferta deixa de ser necessário, porque há um único PUT.
+- "4.3. Consulta do orçamento atualizado como alternativa": o parágrafo "Concorrência preservada".
+- "5. Fluxo proposto dentro da arquitetura existente", item 3 (PUT por oferta, simultâneos) e a menção a PUTs concorrentes no item 7.
+- "6. Pendências consolidadas", linha "Atualizações simultâneas — homologação": encerrada pela evidência acima (a Porto devolve 501 em PUTs concorrentes no mesmo orçamento).
+- Resumo do fluxo no CLAUDE.md ("PUTs simultâneos de comissão por oferta"): atualizado em 11/11/2026.
+
+### Pendências para a implementação
+
+- **Dados já gravados:** a análise local 1 continua "aprovada, preço indisponível". Depois da implementação, reprocessar a etapa de preços sem recriar o orçamento.
+- **Comando de diagnóstico — feito em 11/11/2026:** `porto:test-api --analise` exibe o `codComissao` enviado e o lido no GET, e avisa quando o registro é do fluxo anterior (mais de um PUT no mesmo orçamento).
+- **Too:** o usuário relatou o mesmo sintoma ("aprovada, valor indisponível"). Investigar em tarefa própria, sem estender esta regra à Too.
+
 ## Pottencial — somente Complete e Traditional, plano indisponível e menor parcela — 11/11/2026
 
 **Regra confirmada pelo usuário em 11/11/2026, ainda não implementada.** Escopo exclusivo da Pottencial; não altera Too, Tokio ou Porto. Esta seção prevalece sobre todas as orientações anteriores que mandam cotar Basic, Complete e Traditional e sobre a premissa de que as 30 parcelas da Pottencial são sempre iguais (ver "Trechos superados" abaixo).
@@ -303,10 +356,12 @@ Omitir `seguro` na raiz, `cobranca`, `locador`, `localRisco`, `locatarios` e `lo
 - **Fora do escopo atual:** escolher locador na conjunta, obter endereçoPrincipal/enderecoAtual e telefone comercial PJ para completar o PUT. Não ampliar formulários nem bloquear o ajuste por ausência desses complementos.
 - **Regra anterior superada para esta operação:** reutilizar dados dos locatários em locador. Uma eventual emissão futura exigirá estudo próprio dos dados reais e dos requisitos aplicáveis.
 - **Preservado:** POST de criação com seus próprios requisitos, comissão inteira 15, seleção de pagamento FAT/CC conforme origem e consulta posterior do preço real.
-- **Preservado:** uma chamada por oferta, simultâneas, conforme decisão anterior. O suporte mencionar “ofertas desejadas” não altera automaticamente essa decisão para um único PUT com todas as ofertas.
+- **Superado em 11/11/2026: um único PUT, somente da 0008, confirmado pelo GET (ver seção da Porto no topo).** ~~Preservado: uma chamada por oferta, simultâneas, conforme decisão anterior.~~ O suporte mencionar “ofertas desejadas” não altera automaticamente essa decisão para um único PUT com todas as ofertas.
 - **Validação técnica pendente:** executar o payload mínimo em homologação, conferir aplicação dos 15%, isolamento entre ofertas e atualização dos valores retornados. A resposta do suporte é confirmação contratual, não teste executado pelo projeto.
 
 ### 4.2. Aplicação por oferta e efeitos a validar
+
+**Superado em 11/11/2026: um único PUT, somente da 0008, confirmado pelo GET (ver seção da Porto no topo).** O texto abaixo fica como histórico.
 
 Criar orçamento → preparar um PUT mínimo por oferta retornada na criação, somente com ofertas[].seguro e comissão 15 → executar os PUTs simultaneamente → aguardar suas conclusões → consultar ofertas atualizadas para comparação. **Confirmação do usuário: realizar uma chamada de atualização para cada oferta disponível no orçamento, com execução concorrente, sem esperar uma terminar para iniciar outra.** Uma oferta resulta em um PUT; duas em dois; três em três; quatro em quatro. A quantidade vem das ofertas efetivamente retornadas pelo POST, não de uma lista fixa nem da quantidade de condições de pagamento. Não reunir produtos diferentes no mesmo PUT nem criar novo orçamento/análise por oferta apenas para ajustar comissão. Essa regra vale separadamente para cada orçamento/cenário aprovado; atualizar os Essenciais não os inclui automaticamente na comparação entre seguradoras. A orientação anterior de execução sequencial foi substituída por esta decisão.
 
@@ -346,7 +401,7 @@ Fonte lida integralmente: [retorna-os-dados-atualizados.md](Porto_endpoitsMarkdo
 
 **Limite da evidência:** o schema não declara `comissao.codComissao` aplicado, nem dentro de ofertas, nem na raiz. `cocorretagens.percentual` refere-se à cocorretagem e não deve ser interpretado como a comissão configurada pelo PUT. A palavra “atualizados” não comprova sozinha o percentual. Nos testes, correlacionar PUT com codComissao 15, sua resposta e a consulta posterior do mesmo orçamento/seguro/forma/condição; confirmar o efeito do ajuste com evidência do ambiente ou suporte, sem exigir uma variação arbitrária de preço nem calcular localmente a parcela.
 
-**Concorrência preservada:** aguardar todos os PUTs por oferta terminarem antes das leituras finais. Comparar ambas as consultas com todas as ofertas atualizadas, verificar se cada produto conserva sua alteração e registrar qual endpoint originou cada preço. O novo GET não recebe filtro `seguro`; se retornar apenas o último produto selecionado ou ofertas não recalculadas, não consegue comprovar sozinho todos os preços após atualizações concorrentes. Nesse caso, registrar a incompatibilidade para resolver com o usuário/suporte, sem serializar silenciosamente os PUTs ou criar novas cotações.
+**Superado em 11/11/2026: um único PUT, somente da 0008, confirmado pelo GET (ver seção da Porto no topo).** **Concorrência preservada (histórico):** aguardar todos os PUTs por oferta terminarem antes das leituras finais. Comparar ambas as consultas com todas as ofertas atualizadas, verificar se cada produto conserva sua alteração e registrar qual endpoint originou cada preço. O novo GET não recebe filtro `seguro`; se retornar apenas o último produto selecionado ou ofertas não recalculadas, não consegue comprovar sozinho todos os preços após atualizações concorrentes. Nesse caso, registrar a incompatibilidade para resolver com o usuário/suporte, sem serializar silenciosamente os PUTs ou criar novas cotações.
 
 **Respostas e inconsistências:** 400 usa `status`/`message` (incluindo orçamento não pertencente ao corretor), enquanto 500 usa errorCode/errorMessage; 401/502 podem ser strings. Falha de consulta não é recusa. O status de negócio 0/1/2/3/4/5/7/9/C/D/E/F/G/M é distinto do HTTP; campos apolice/renovacao/status 4 no exemplo não autorizam emissão. O exemplo contém ofertas vazias e formasPagamento null, logo não prova o fallback. Schema ainda possui integer para dinheiro, quantidadeParcela mínimo 100 incompatível com 30, CEP máximo 7, nomes/limites conflitantes e seguro 0008 com nome FIanca Essencial 12: manter regras confirmadas e validar respostas reais, sem copiar esses limites cegamente. `locatarios.cpfCnpj` com máximo 14 e tipoPessoa F/J reforçam o suporte já confirmado a CNPJ.
 
@@ -356,7 +411,7 @@ A consulta exige um orçamento conhecido, portanto **não resolve a obtenção d
 
 1. Coordenador prepara pacote/rodada/cenários; Porto terá uma criação por cenário, não quatro criações por produto. PF sem cônjuge: uma; PF com cônjuge: duas individuais e terceira conjunta somente se ambas forem recusadas. PJ: somente cenário empresarial primary, sem estado civil, cônjuge ou análise individual do responsável, conforme regra geral de 02/11/2026.
 2. Builder consome snapshot e datas da rodada e monta POST mínimo. Service autentica/transmite; provider interpreta 201/409 e grava o ID remoto na cotação correta. Falha após criação não autoriza recriar orçamento.
-3. Para aprovado, usar `ofertas[]` e suas formas/condições presentes na resposta do POST, sem GET preliminar no fluxo definido. Para cada oferta retornada, montar um PUT mínimo independente contendo somente ofertas, com um item identificado por seguro e comissao.codComissao = 15. Disparar as atualizações simultaneamente no mesmo orçamento, conforme decisão do usuário, com resultados isolados por oferta e proteção contra sobrescrita local. Se a resposta real do POST não fornecer códigos das ofertas suficientes, registrar a lacuna para homologação e revisar a integração com evidência; não inventar valores nem inserir silenciosamente outra etapa. Código de oferta ausente impede seu ajuste, sem transformar aprovação em recusa; complementos de emissão não são exigidos neste PUT. Não publicar preços calculados com padrão 10% como se fossem 15%.
+3. **Superado em 11/11/2026: um único PUT, somente da 0008, confirmado pelo GET (ver seção da Porto no topo).** Para aprovado, usar `ofertas[]` e suas formas/condições presentes na resposta do POST, sem GET preliminar no fluxo definido. Para cada oferta retornada, montar um PUT mínimo independente contendo somente ofertas, com um item identificado por seguro e comissao.codComissao = 15. Disparar as atualizações simultaneamente no mesmo orçamento, conforme decisão do usuário, com resultados isolados por oferta e proteção contra sobrescrita local. Se a resposta real do POST não fornecer códigos das ofertas suficientes, registrar a lacuna para homologação e revisar a integração com evidência; não inventar valores nem inserir silenciosamente outra etapa. Código de oferta ausente impede seu ajuste, sem transformar aprovação em recusa; complementos de emissão não são exigidos neste PUT. Não publicar preços calculados com padrão 10% como se fossem 15%.
 4. Após todas as atualizações disparadas concluírem, consultar preços finais: preferir o GET de ofertas; se a homologação mostrar que não reflete o recálculo, usar GET do orçamento atualizado conforme seção 4.3. Selecionar forma por origem e 29 parcelas Sem entrada na base de 30 meses, conforme confirmação geral de 05/11/2026, considerando o sucesso do ajuste de cada oferta. Persistir resposta completa, endpoint de origem e seleção (produto + forma + condição + parcela) associadas à cotação, com o estado da aplicação da comissão. O catálogo inicial não deve sobrescrever preços finais.
 5. `InsuranceQuotePayment` receberá tratamento Porto próprio. Hoje seu match só cobre Too/Pottencial, e o coordenador inicializa Invoice/Boleto: adaptar o pagamento para FAT/CC sem mudar as outras companhias. Manter uma cotação remota por cenário, preservando múltiplas ofertas nos dados da cotação; não alterar o `plan_key` de coordenação para cada produto retornado. A representação normalizada das ofertas será definida na implementação, sem prometer que a simples inclusão do provider já basta.
 6. Coordenador consolida somente parcela elegível. Aprovação sem ofertas utilizáveis continua aprovação com pagamento indisponível/falho; não autoriza conjunta. Painel/e-mail/PDF devem apontar a mesma oferta/condição final. Downloads preservam os IDs de cada alternativa e são autorizados localmente.
@@ -370,7 +425,7 @@ No service, diferenciar sucesso HTTP de resultado de negócio: GET/PUT 200 não 
 | --- | --- |
 | **Dados do PUT — resolvido pelo suporte em 04/11/2026** | Enviar somente ofertas com seguro e comissão 15. Demais campos obrigatórios do contrato completo são para emissão, fora desta versão; mapeamento de locador/endereço/telefone para esse PUT deixa de ser pendência |
 | **Fonte dos preços recalculados — validação** | Testar GET de ofertas após os PUTs com 15%; se não refletir, usar GET do orçamento atualizado. Confirmar atualização e isolamento por produto, pois o novo schema não expõe comissão aplicada e a consulta não filtra por seguro |
-| **Atualizações simultâneas — homologação** | Simultaneidade definida pelo usuário, uma requisição por oferta, resultados locais isolados. Verificar se a Porto preserva comissão/condições de todas as ofertas nos PUTs concorrentes sobre o mesmo orçamento e mantém seus PDFs coerentes; não presumir isolamento remoto. Vários produtos na mesma requisição continuam descartados |
+| **Atualizações simultâneas — encerrada em 11/11/2026** | A Porto devolve 501 em PUTs concorrentes no mesmo orçamento; ver seção da Porto no topo. Histórico: Simultaneidade definida pelo usuário, uma requisição por oferta, resultados locais isolados. Verificar se a Porto preserva comissão/condições de todas as ofertas nos PUTs concorrentes sobre o mesmo orçamento e mantém seus PDFs coerentes; não presumir isolamento remoto. Vários produtos na mesma requisição continuam descartados |
 | **Com/Sem entrada — regra resolvida em 05/11/2026** | Base 30: Com entrada = 30 pagamentos; Sem entrada = 29. Para Porto, selecionar a condição pela quantidade retornada, junto de seguro, FAT/CC e código da condição. Não há parâmetro específico a exigir; resta validar resposta real e PDF coerentes com essa seleção |
 | **Carta de recusa — encerrada em 06/11/2026** | O 409 do POST traz o orçamento em `detailedMessage`; `GET /orcamentos/{proposta}/{corretor}/pdf/carta-recusa` com proposta = orçamento e corretor = SUSEP; PDF em Base64 em `data.file`. Falha da carta não altera a recusa. Ver seção de 06/11/2026 no topo; resta só gerar com recusa real em homologação |
 | **CNPJ e cônjuge — resolvido** | Regra geral de 02/11/2026: analisar somente a empresa pelo CNPJ; desconsiderar estado civil e cônjuge; não analisar o responsável nem criar spouse/joint. Em 06/11/2026 o usuário confirmou que a Porto não exige CPF/nome do responsável: payload PJ só com dados da empresa. Aplicação no código ainda pendente |
