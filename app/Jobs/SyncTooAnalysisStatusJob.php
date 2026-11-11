@@ -73,12 +73,22 @@ class SyncTooAnalysisStatusJob implements ShouldQueue
             return;
         }
 
+        $coordinator = app(\App\Services\Insurance\InsuranceQuoteCoordinator::class);
+        if ($run = $coordinator->findRun($analysis, $this->attemptId)) {
+            $coordinator->resume($run);
+
+            return;
+        }
+
         if (mb_strtolower((string) $analysis->provider) !== 'too') {
             return;
         }
 
         InsuranceAnalysisAttempt::assertCurrent($analysis, $this->attemptId);
         $analysis->executionAttemptId = $this->attemptId;
+        if ($this->schedulePolling && data_get($analysis->providerResponsePayload(), 'too_status_check_stop_reason') === 'pending_limit_reached') {
+            return;
+        }
 
         if (in_array(
             $analysis->status,
@@ -350,6 +360,9 @@ class SyncTooAnalysisStatusJob implements ShouldQueue
         int $consecutiveFailures = 0,
     ): void {
         if (! $this->schedulePolling) {
+            return;
+        }
+        if ($consecutiveFailures === 0 && \App\Services\Insurance\InsuranceStatusPolling::stopTooAtLimit($analysis, $this->attemptId, $this->attemptNumber)) {
             return;
         }
 

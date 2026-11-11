@@ -8,6 +8,7 @@ use App\Jobs\SendLeadToLeadLoversJob;
 use App\Models\InsuranceAnalysisBatch;
 use App\Models\Lead;
 use App\Models\LeadLoversTag;
+use App\Services\Insurance\InsuranceBatchResult;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
@@ -32,7 +33,6 @@ function independentAnalysisBatch(array $statuses): InsuranceAnalysisBatch
     $lead = Lead::query()->create([
         'nome' => 'Local result', 'email' => 'local@example.test', 'tipo_solicitante' => 'locatario',
         'origem' => 'locatario', 'leadlovers_status' => 'pending', 'tags_originais' => 'Locatario, Origem X, Imobiliaria Aprovados',
-        'reanalysis_unlocked_at' => now(),
     ]);
     $batch = InsuranceAnalysisBatch::query()->create(['lead_id' => $lead->id, 'status' => 'processing', 'total_providers' => count($statuses)]);
     foreach ($statuses as $index => $status) {
@@ -55,7 +55,6 @@ it('consolidates results locally even without remote identifiers or enabled inte
         ->and($lead->analysis_finalized_at)->not->toBeNull()
         ->and($lead->analysis_finalized_at)->toBe($firstFinalizedAt)
         ->and($lead->leadlovers_lead_id)->toBeNull()
-        ->and($lead->canRequestGeneralReanalysis())->toBe($result !== 'failed')
         ->and($lead->leadlovers_confirmed_final_tag_key)->toBeNull();
     Queue::assertPushed(SendAnalysisResultsEmailJob::class, 1);
     if ($enabled && $result !== 'failed') {
@@ -132,7 +131,6 @@ it('creates the remote lead with the final tag and keeps local approval through 
     $lead = $batch->lead->fresh();
     expect($lead->analysis_final_status)->toBe('approved')
         ->and($lead->tags_originais)->toContain('Aprovado')
-        ->and($lead->canRequestGeneralReanalysis())->toBeTrue()
         ->and($lead->leadlovers_confirmed_final_tag_key)->toBeNull();
     if (! $outage) {
         Queue::assertPushed(ApplyFinalAnalysisTagToLeadLoversJob::class, 1);
@@ -152,14 +150,33 @@ it('discards old completion without replacing a newer local result', function ()
         ->and($batch->lead->fresh()->tags_originais)->toContain('Recusado')->not->toContain(', Aprovado,');
 });
 
+it('switches the lead from refused to approved when a per company reanalysis approves later', function () {
+    $batch = independentAnalysisBatch(['rejected', 'rejected']);
+    (new CompleteInsuranceAnalysesBatchJob($batch->id, 'local'))->handle();
+    expect($batch->lead->fresh()->analysis_final_status)->toBe('rejected')
+        ->and($batch->lead->fresh()->tags_originais)->toContain('Recusado');
+
+    // Reanálise parcial: somente a segunda companhia recebe nova rodada e aprova.
+    $reanalyzed = $batch->analyses()->orderByDesc('id')->first();
+    $reanalyzed->events()->create(['event_type' => 'reanalysis_requested', 'payload' => ['attempt_id' => 'partial', 'is_reanalysis' => true]]);
+    $reanalyzed->update(['status' => 'approved']);
+    (new CompleteInsuranceAnalysesBatchJob($batch->id, 'partial', true))->handle();
+
+    $lead = $batch->lead->fresh();
+    expect($lead->analysis_final_status)->toBe('approved')
+        ->and($lead->analysis_final_tag_key)->toBe(InsuranceBatchResult::tagKey($batch->fresh('analyses')))
+        ->and($lead->tags_originais)->toContain('Aprovado')->not->toContain('Recusado')
+        ->and($batch->analyses()->orderBy('id')->first()->status)->toBe('rejected');
+    Http::assertNothingSent();
+});
+
 it('keeps a local result when the final remote tag is not configured', function () {
     LeadLoversTag::query()->create(['key' => 'locatario', 'title' => 'Locatario', 'leadlovers_tag_id' => 123, 'active' => true]);
     $batch = independentAnalysisBatch(['approved']);
     (new CompleteInsuranceAnalysesBatchJob($batch->id, 'local'))->handle();
     app()->call([(new SendLeadToLeadLoversJob($batch->lead_id)), 'handle']);
     expect($batch->lead->fresh()->analysis_final_status)->toBe('approved')
-        ->and($batch->lead->fresh()->leadlovers_status)->toBe('tag_failed')
-        ->and($batch->lead->fresh()->canRequestGeneralReanalysis())->toBeTrue();
+        ->and($batch->lead->fresh()->leadlovers_status)->toBe('tag_failed');
     Http::assertNothingSent();
 });
 

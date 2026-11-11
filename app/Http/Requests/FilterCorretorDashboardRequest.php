@@ -2,7 +2,7 @@
 
 namespace App\Http\Requests;
 
-use App\Services\CorretorDashboardLeadQuery;
+use App\Services\Dashboard\CorretorDashboardLeadQuery;
 use App\Support\LeadLoversInitialFailureCatalog;
 use App\Support\ManualLeadResultTags;
 use Illuminate\Foundation\Http\FormRequest;

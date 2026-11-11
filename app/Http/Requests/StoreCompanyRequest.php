@@ -2,8 +2,8 @@
 
 namespace App\Http\Requests;
 
-use App\Services\CepService;
-use App\Services\CompanyTagService;
+use App\Services\LeadLovers\CompanyTagService;
+use App\Services\Lookup\CepService;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;

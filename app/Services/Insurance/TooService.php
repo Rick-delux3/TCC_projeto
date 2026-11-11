@@ -1,0 +1,457 @@
+<?php
+
+namespace App\Services\Insurance;
+
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
+
+class TooService
+{
+    private string $baseUrl;
+
+    private ?string $clientId;
+
+    private ?string $clientSecret;
+
+    private ?array $authenticationFailure = null;
+
+    public function __construct()
+    {
+        $this->baseUrl = rtrim((string) config('services.too.base_url'), '/');
+        $this->clientId = config('services.too.client_id');
+        $this->clientSecret = config('services.too.client_secret');
+    }
+
+    /**
+     * Gera ou recupera do cache o access_token da Too.
+     *
+     * Endpoint da collection:
+     * POST /authentication
+     *
+     * Auth:
+     * Basic Auth
+     * username = client_id
+     * password = client_secret
+     *
+     * Body:
+     * grant_type=client_credentials
+     */
+    public function getAccessToken(): ?string
+    {
+        $this->ensureEnabled();
+        $this->authenticationFailure = null;
+
+        return Cache::remember('too_access_token', now()->addMinutes(55), function () {
+            if (! $this->baseUrl) {
+                Log::error('Base URL da Too não configurada.');
+
+                return null;
+            }
+
+            if (! $this->clientId || ! $this->clientSecret) {
+                Log::error('Credenciais da Too não configuradas.');
+
+                return null;
+            }
+
+            $url = $this->baseUrl.'/authentication';
+
+            $response = Http::withBasicAuth($this->clientId, $this->clientSecret)
+                ->asForm()
+                ->acceptJson()
+                ->timeout(30)
+                ->withoutRedirecting()
+                ->post($url, [
+                    'grant_type' => 'client_credentials',
+                ]);
+
+            if (! $response->successful()) {
+                $this->authenticationFailure = $this->normalizeResponse($response, '/authentication', $url)
+                    + ['operation' => 'authentication'];
+                Log::warning('Erro ao gerar access_token da Too', [
+                    'status' => $response->status(),
+                ]);
+
+                return null;
+            }
+
+            $data = $this->safeJson($response);
+
+            Log::info('Access token da Too gerado com sucesso', [
+                'token_type' => $data['token_type'] ?? null,
+                'expires_in' => $data['expires_in'] ?? null,
+            ]);
+
+            return $data['access_token']
+                ?? $data['accessToken']
+                ?? $data['token']
+                ?? null;
+        });
+    }
+
+    /**
+     * Headers obrigatórios para as rotas da Too.
+     *
+     * A collection envia:
+     * - clientid
+     * - clientsecret
+     * - Authorization: Bearer token
+     * - Content-Type: application/json
+     */
+    private function authHeaders(): array
+    {
+        $token = $this->getAccessToken();
+
+        if (! $token) {
+            throw new \RuntimeException('Não foi possível autenticar na API da Too.');
+        }
+
+        return [
+            'clientid' => $this->clientId,
+            'clientsecret' => $this->clientSecret,
+            'Authorization' => 'Bearer '.$token,
+        ];
+    }
+
+    /**
+     * Teste simples de autenticação.
+     * Use esse método antes de conectar a Too no fluxo de análises.
+     */
+    public function testAuthentication(): array
+    {
+        $token = $this->getAccessToken();
+
+        if (! $token) {
+            return [
+                'success' => false,
+                'message' => 'Não foi possível gerar o access_token da Too.',
+            ];
+        }
+
+        return [
+            'success' => true,
+            'message' => 'Access token da Too gerado com sucesso.',
+            'token_preview' => substr($token, 0, 8).'...',
+        ];
+    }
+
+    /**
+     * 1. Registrar ficha/proposta.
+     *
+     * Endpoint da collection:
+     * POST /fianca/proposta/ficha
+     */
+    public function registerProposalFicha(array $payload): array
+    {
+        return $this->postJson('/fianca/proposta/ficha', $payload);
+    }
+
+    /**
+     * 2. Enviar proposta para análise de crédito.
+     *
+     * Endpoint da collection:
+     * POST /fianca/credito/{cpf}/{numeroProposta}/analisar
+     */
+    public function submitCreditAnalysis(string $cpf, string|int $numeroProposta): array
+    {
+        $cpf = $this->onlyNumbers($cpf);
+
+        return $this->postJson(
+            "/fianca/credito/{$cpf}/{$numeroProposta}/analisar",
+            []
+        );
+    }
+
+    /**
+     * 3. Consultar status da proposta/análise.
+     *
+     * Endpoint da collection:
+     * GET /fianca/proposta/{cpf}/status/{numeroProposta}
+     */
+    public function getProposalStatus(string $cpf, string|int $numeroProposta): array
+    {
+        $cpf = $this->onlyNumbers($cpf);
+
+        return $this->getJson(
+            "/fianca/proposta/v3/{$cpf}/status/{$numeroProposta}"
+        );
+    }
+
+    /**
+     * 4. Solicitar cotação.
+     *
+     * Endpoint da collection:
+     * POST /fianca/proposta/cotacao
+     */
+    public function requestQuote(array $payload): array
+    {
+        return $this->postJson('/fianca/proposta/cotacao', $payload);
+    }
+
+    public function getPaymentOptions(string $quoteId): array
+    {
+        return $this->getJson('/fianca/proposta/formaspagamento/'.rawurlencode($quoteId));
+    }
+
+    /**
+     * Futuro: consultar carta/parecer de crédito.
+     *
+     * Endpoint:
+     * GET /fianca/credito/{cpf}/{numeroProposta}/parecer
+     */
+    public function getCreditOpinion(string $cpf, string|int $numeroProposta): array
+    {
+        $cpf = $this->onlyNumbers($cpf);
+
+        return $this->getJson(
+            "/fianca/credito/{$cpf}/{$numeroProposta}/parecer"
+        );
+    }
+
+    public function getCreditOpinionPdf(string $cpf, string $numeroProposta): string
+    {
+        $this->ensureEnabled();
+        $cpf = $this->onlyNumbers($cpf);
+        if (strlen($cpf) !== 11 || $numeroProposta === '') {
+            throw new \RuntimeException('Identificação da proposta da Too incompleta.');
+        }
+
+        return app(\App\Services\Insurance\ProviderDocumentDownload::class)->fetch(
+            $this->baseUrl.'/fianca/credito/'.$cpf.'/'.rawurlencode($numeroProposta).'/parecer',
+            $this->authHeaders(),
+            config('services.too.document_download_hosts', []),
+        );
+    }
+
+    /**
+     * Consulta o PDF com a condição de pagamento selecionada, sem emitir a proposta.
+     */
+    public function getQuotePdf(string|int $numeroCotacao, array $payload): array
+    {
+        $result = $this->postJson(
+            '/fianca/proposta/cotacao/'.rawurlencode((string) $numeroCotacao).'/pdf',
+            $payload,
+        );
+        if (! ($result['success'] ?? false)) {
+            return $result;
+        }
+
+        $encoded = data_get($result, 'response.result.pdfCotacao');
+        $pdf = is_string($encoded) ? base64_decode($encoded, true) : false;
+        if ($pdf === false || ! str_starts_with($pdf, '%PDF-')) {
+            return array_replace($result, ['success' => false, 'error' => 'A Too retornou um PDF de cotação ausente ou inválido.']);
+        }
+
+        return $result + ['pdf_content' => $pdf];
+    }
+
+    private function postJson(string $endpoint, array $payload): array
+    {
+        $this->ensureEnabled();
+
+        $url = $this->baseUrl.$endpoint;
+
+        if (! $this->baseUrl) {
+            return [
+                'success' => false,
+                'http_status' => null,
+                'endpoint' => $endpoint,
+                'url' => null,
+                'payload' => $payload,
+                'response' => [],
+                'raw_body' => null,
+                'error' => 'Configuração services.too.base_url não encontrada.',
+            ];
+        }
+
+        try {
+            $response = Http::asJson()
+                ->acceptJson()
+                ->timeout(60)
+                ->withoutRedirecting()
+                ->withHeaders($this->authHeaders())
+                ->post($url, $payload);
+
+            return $this->normalizeResponse(
+                response: $response,
+                endpoint: $endpoint,
+                url: $url,
+                payload: $payload
+            );
+        } catch (\Throwable $e) {
+            if ($this->authenticationFailure !== null) {
+                return $this->authenticationFailure;
+            }
+            Log::error('Falha inesperada ao chamar API da Too', [
+            ]);
+
+            return [
+                'success' => false,
+                'http_status' => null,
+                'endpoint' => $endpoint,
+                'url' => $url,
+                'payload' => $payload,
+                'response' => [
+                    'message' => $e->getMessage(),
+                ],
+                'raw_body' => null,
+                'error' => $e->getMessage(),
+            ];
+        }
+    }
+
+    private function getJson(string $endpoint): array
+    {
+        $this->ensureEnabled();
+
+        $url = $this->baseUrl.$endpoint;
+
+        if (! $this->baseUrl) {
+            return [
+                'success' => false,
+                'http_status' => null,
+                'endpoint' => $endpoint,
+                'url' => null,
+                'response' => [],
+                'raw_body' => null,
+                'error' => 'Configuração services.too.base_url não encontrada.',
+            ];
+        }
+
+        try {
+            $response = Http::acceptJson()
+                ->timeout(60)
+                ->withoutRedirecting()
+                ->withHeaders($this->authHeaders())
+                ->get($url);
+
+            return $this->normalizeResponse(
+                response: $response,
+                endpoint: $endpoint,
+                url: $url
+            );
+        } catch (\Throwable $e) {
+            if ($this->authenticationFailure !== null) {
+                return $this->authenticationFailure;
+            }
+            Log::error('Falha inesperada ao consultar API da Too', [
+            ]);
+
+            return [
+                'success' => false,
+                'http_status' => null,
+                'endpoint' => $endpoint,
+                'url' => $url,
+                'response' => [
+                    'message' => $e->getMessage(),
+                ],
+                'raw_body' => null,
+                'error' => $e->getMessage(),
+            ];
+        }
+    }
+
+    private function putJson(string $endpoint, array $payload): array
+    {
+        $this->ensureEnabled();
+
+        $url = $this->baseUrl.$endpoint;
+
+        if (! $this->baseUrl) {
+            return [
+                'success' => false,
+                'http_status' => null,
+                'endpoint' => $endpoint,
+                'url' => null,
+                'payload' => $payload,
+                'response' => [],
+                'raw_body' => null,
+                'error' => 'Configuração services.too.base_url não encontrada.',
+            ];
+        }
+
+        try {
+            $response = Http::asJson()
+                ->acceptJson()
+                ->timeout(60)
+                ->withHeaders($this->authHeaders())
+                ->put($url, $payload);
+
+            return $this->normalizeResponse(
+                response: $response,
+                endpoint: $endpoint,
+                url: $url,
+                payload: $payload
+            );
+        } catch (\Throwable $e) {
+            Log::error('Falha inesperada ao chamar API da Too com PUT', [
+            ]);
+
+            return [
+                'success' => false,
+                'http_status' => null,
+                'endpoint' => $endpoint,
+                'url' => $url,
+                'payload' => $payload,
+                'response' => [
+                    'message' => $e->getMessage(),
+                ],
+                'raw_body' => null,
+                'error' => $e->getMessage(),
+            ];
+        }
+    }
+
+    private function ensureEnabled(): void
+    {
+        if (! config('features.insurance_analysis.enabled', false)) {
+            throw new \LogicException('O sistema de análises está temporariamente desativado.');
+        }
+
+        if (! config('services.too.enabled', false)) {
+            throw new \LogicException('O provider too está desativado.');
+        }
+    }
+
+    private function normalizeResponse($response, string $endpoint, string $url, ?array $payload = null): array
+    {
+        $json = $this->safeJson($response);
+        $rawBody = $response->body();
+
+        $normalized = [
+            'success' => $response->successful(),
+            'http_status' => $response->status(),
+            'endpoint' => $endpoint,
+            'url' => $url,
+            'response' => is_array($json) ? $json : [],
+            'raw_body' => $rawBody,
+            'headers' => $response->headers(),
+        ];
+
+        if ($payload !== null) {
+            $normalized['payload'] = $payload;
+        }
+
+        Log::info('Resposta HTTP da Too', [
+            'http_status' => $normalized['http_status'],
+            'success' => $normalized['success'],
+        ]);
+
+        return $normalized;
+    }
+
+    private function safeJson($response): mixed
+    {
+        try {
+            return $response->json();
+        } catch (\Throwable $e) {
+            return null;
+        }
+    }
+
+    private function onlyNumbers(?string $value): string
+    {
+        return preg_replace('/\D+/', '', (string) $value);
+    }
+}

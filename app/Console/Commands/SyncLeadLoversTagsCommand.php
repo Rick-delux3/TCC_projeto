@@ -4,8 +4,8 @@ namespace App\Console\Commands;
 
 use App\Exceptions\LeadLoversApiException;
 use App\Models\LeadLoversTag;
-use App\Services\CompanyTagService;
-use App\Services\LeadLoversApiClient;
+use App\Services\LeadLovers\CompanyTagService;
+use App\Services\LeadLovers\LeadLoversApiClient;
 use Illuminate\Console\Command;
 
 class SyncLeadLoversTagsCommand extends Command

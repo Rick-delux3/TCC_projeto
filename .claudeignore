@@ -1,0 +1,10 @@
+vendor/
+node_modules/
+storage/
+public/build/
+public/hot
+.git/
+*.log
+database/seeders/*.csv
+especificacoes-sistema-analise/
+README.md

@@ -1,7 +1,7 @@
 <?php
 
 use App\Exceptions\LeadLoversApiException;
-use App\Services\LeadLoversApiClient;
+use App\Services\LeadLovers\LeadLoversApiClient;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;

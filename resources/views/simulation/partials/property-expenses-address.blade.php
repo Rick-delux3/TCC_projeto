@@ -30,7 +30,7 @@
     </div>
     @foreach (['valor_agua' => 'Água', 'valor_luz' => 'Luz', 'valor_gas' => 'Gás', 'valor_iptu' => 'IPTU', 'valor_condominio' => 'Condomínio'] as $name => $label)
         @php
-            $expenseVisible = old($name) !== null || in_array($name, ['valor_agua', 'valor_luz'], true);
+            $expenseVisible = old($name) !== null || (! session()->hasOldInput() && in_array($name, ['valor_agua', 'valor_luz'], true));
         @endphp
         <div class="expense-field {{ $expenseVisible ? '' : 'd-none' }}" data-expense-field="{{ $name }}">
             <div class="simulation-expense-row">
@@ -42,7 +42,7 @@
     @include('simulation.partials.input', ['field' => ['name' => 'outras_despesas', 'label' => 'Outras despesas', 'type' => 'money', 'placeholder' => 'Opcional']])
     <div class="simulation-expense-info md:col-span-2">
         @include('simulation.partials.form-icon', ['icon' => 'info'])
-        <p>Água e luz são preenchidas com 10% do aluguel para cada uma. Você pode editar os valores. Se deixar em branco, será usado esse padrão.</p>
+        <p>Água e luz são sugeridas com 10% do aluguel para cada uma. Você pode editar ou remover os valores. Campos vazios ou removidos não serão incluídos no total.</p>
     </div>
     @if ($isTccMonetaryForm)
         </div>
@@ -109,7 +109,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     automaticExpenses.forEach(function (automatic, input) {
         input.addEventListener('input', function () {
-            automaticExpenses.set(input, input.value.trim() === '');
+            automaticExpenses.set(input, false);
         });
     });
     rentInput?.addEventListener('input', updateAutomaticExpenses);

@@ -2,14 +2,17 @@
 
 namespace App\Services\Insurance;
 
-use App\Models\InsuranceAnalysis;
+use App\Models\InsuranceExecution;
 use Illuminate\Support\Arr;
 
 class AnalysisQuoteSummary
 {
     /** @return array<string, mixed> */
-    public function summarize(InsuranceAnalysis $analysis): array
+    public function summarize(InsuranceExecution $analysis): array
     {
+        if ($analysis->provider === 'tokio') {
+            return $this->tokio($analysis);
+        }
         $payload = $analysis->providerResponsePayload();
         $response = $payload['response'] ?? $payload;
         $response = is_array($response) ? $response : [];
@@ -39,6 +42,7 @@ class AnalysisQuoteSummary
         }
 
         $total = $this->money($gross);
+        $selection = $payload['quote_selection'] ?? null;
 
         return [
             'analysis_id' => $analysis->id,
@@ -53,6 +57,10 @@ class AnalysisQuoteSummary
                 'currency' => strtoupper(trim((string) ($quote['currency'] ?? 'BRL'))),
                 'period_start' => $this->date($start),
                 'period_end' => $this->date($end),
+                'comparison_basis' => is_array($selection) ? 'installment' : 'gross_total',
+                'installment_amount' => is_array($selection) ? $this->money($selection['installment_amount'] ?? null) : null,
+                'installments' => $selection['installments'] ?? null,
+                'payment_type' => $selection['payment_type'] ?? null,
             ],
             'coverages' => $analysis->isApprovedResult() ? collect($coverages)->filter(fn ($coverage): bool => is_array($coverage))
                 ->map(fn (array $coverage): array => [
@@ -69,6 +77,39 @@ class AnalysisQuoteSummary
                         'grossPremium', 'commercialPremium', 'iof', 'deductible', 'periodoIndenitario', 'contratada',
                     ]),
                 ])->values()->all() : [],
+        ];
+    }
+
+    private function tokio(InsuranceExecution $analysis): array
+    {
+        $payload = $analysis->providerResponsePayload();
+        $selection = data_get($payload, 'payment.selection', []);
+        $selection = is_array($selection) ? $selection : [];
+        $approved = $analysis->isApprovedResult();
+        $coverages = $selection['coverages'] ?? [];
+
+        return [
+            'analysis_id' => $analysis->id, 'provider' => 'tokio', 'status' => $analysis->status,
+            'quote_id' => $analysis->quote_id, 'quote_number' => $analysis->quote_number, 'proposal_id' => null,
+            'price' => [
+                'total' => $approved ? $this->money(data_get($selection, 'details.vlPremTot')) : null,
+                'basis' => 'reported_total', 'currency' => 'BRL', 'comparison_basis' => 'installment',
+                'period_start' => $analysis->lease_start_date?->format('Y-m-d'),
+                'period_end' => $analysis->lease_end_date?->format('Y-m-d'),
+                'installment_amount' => $approved ? $this->money(data_get($payload, 'quote_selection.installment_amount')) : null,
+                'installments' => data_get($payload, 'quote_selection.installments'),
+                'payment_type' => data_get($payload, 'quote_selection.payment_type'),
+            ],
+            'assistance' => $selection['assistance'] ?? null,
+            'payment_issue' => data_get($payload, 'payment.unavailable_reason'),
+            'document_available' => false,
+            'coverages' => $approved ? collect($coverages)->filter(fn ($item) => is_array($item))->map(fn ($item) => [
+                'name' => $item['descricao'] ?? null, 'insured_amount' => $this->money($item['valorIS'] ?? null),
+                'declared_amount' => $this->money($item['valorVerba'] ?? null),
+                'premium' => $this->money($item['valorPremio'] ?? null), 'premium_basis' => 'reported',
+                'indemnity_period' => null, 'contracted' => null,
+                'details' => Arr::only($item, ['codigo', 'caracteristica', 'textoFranquia', 'textoFranquiaComplementar']),
+            ])->values()->all() : [],
         ];
     }
 

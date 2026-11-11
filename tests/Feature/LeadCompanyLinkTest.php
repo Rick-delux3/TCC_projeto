@@ -12,7 +12,7 @@ use App\Models\Lead;
 use App\Models\LeadLoversTag;
 use App\Models\User;
 use App\Services\Insurance\Providers\InsuranceProviderResolver;
-use App\Services\LeadCompanyLinkService;
+use App\Services\Leads\LeadCompanyLinkService;
 use App\Support\CorretorPermissions;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Event;
@@ -358,7 +358,6 @@ it('queues once and atomically links the lead and existing analyses while preser
         ->and($lead->origem)->toBe('locador')
         ->and($lead->tags_originais)->toBe('diretoprop, aprovados, '.$this->company->name)
         ->and($lead->locador->id)->toBe($owner->id)
-        ->and($lead->reanalysis_unlocked_at)->toBeNull()
         ->and($lead->updated_by_corretor_id)->toBe($this->corretor->id)
         ->and($batch->fresh()->company_id)->toBe($this->company->id)
         ->and($analysis->fresh()->company_id)->toBe($this->company->id)

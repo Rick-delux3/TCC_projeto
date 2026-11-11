@@ -4,12 +4,12 @@ use App\Jobs\RunProviderAnalysisJob;
 use App\Jobs\StartInsuranceAnalysesBatchJob;
 use App\Models\InsuranceAnalysis;
 use App\Models\Lead;
-use App\Services\CpfLookupService;
 use App\Services\Insurance\Payloads\RentalGuaranteeQuotePayloadBuilder;
 use App\Services\Insurance\Payloads\TooRentalGuaranteePayloadBuilder;
 use App\Services\Insurance\Providers\InsuranceProviderResolver;
 use App\Services\Insurance\Providers\TooInsuranceProvider;
-use App\Services\TooService;
+use App\Services\Insurance\TooService;
+use App\Services\Lookup\CpfLookupService;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Http;
 
@@ -26,6 +26,9 @@ beforeEach(function () {
         'services.too.default_employment' => 'Autonomo',
         'services.too.default_profession' => 'Consultor',
         'services.too.default_reside_property' => true,
+        'services.too.default_commission_percentage' => 15.0,
+        'services.too.default_rent_adjustment_index' => 'IGP_M',
+        'services.too.default_indemnity_period' => 30,
         'services.pottencial.broker_document' => '11222333000181',
     ]);
     $this->mock(CpfLookupService::class)->shouldNotReceive('birthdateForToo');
@@ -64,20 +67,68 @@ function alignedInsuranceAnalysis(bool $company = false, ?string $rentalType = '
     return $analysis;
 }
 
+it('sends the confirmed Pottencial coverage contract for each plan', function (string $plan, string $origin) {
+    config([
+        'services.pottencial.base_url' => 'https://pottencial.example.test',
+        'services.pottencial.client_id' => 'test-client',
+        'services.pottencial.client_secret' => 'test-secret',
+        'services.pottencial.rental_endpoint' => '/insurance/v1/fianca-locaticia/quotes',
+    ]);
+    Illuminate\Support\Facades\Cache::forget('pottencial_access_token');
+    Http::fake([
+        'https://pottencial.example.test/oauth/v3/access-token' => Http::response(['access_token' => 'test-token']),
+        'https://pottencial.example.test/insurance/v1/fianca-locaticia/quotes' => Http::response(['quoteId' => 'test-quote'], 201),
+    ]);
+    $analysis = alignedInsuranceAnalysis();
+    $analysis->forceFill(['provider' => 'pottencial', 'plan_key' => $plan, 'multiple' => 30]);
+    $analysis->lead->update(['tipo_solicitante' => $origin]);
+    $analysis->lead->despesas()->update([
+        'valor_aluguel' => 300, 'valor_condominio' => 100, 'valor_iptu' => 20,
+        'valor_gas' => 10, 'valor_agua' => null, 'valor_luz' => 0,
+    ]);
+    $payload = app(RentalGuaranteeQuotePayloadBuilder::class)->build($analysis);
+    $result = app(App\Services\Insurance\PottencialService::class)->createRentalGuaranteeQuote($payload);
+
+    expect($result['success'])->toBeTrue()->and($result['response']['quoteId'])->toBe('test-quote');
+    Http::assertSent(function (Illuminate\Http\Client\Request $request) use ($plan, $origin): bool {
+        if (! str_ends_with($request->url(), '/quotes')) {
+            return false;
+        }
+        $risk = $request['riskObjects'][0];
+        $coverages = ['basica' => 9000];
+        if ($plan === 'Traditional' && $origin !== 'locatario') {
+            $coverages += ['condominio' => 3000, 'iptu' => 600, 'gas' => 60, 'danos' => 1800, 'pintura' => 1800, 'multa-rescisao' => 900];
+        }
+        expect($request->method())->toBe('POST')
+            ->and($request->hasHeader('access_token', 'test-token'))->toBeTrue()
+            ->and($risk['type'])->toBe($plan === 'Traditional' ? 'FiancaLocaticia' : 'rentalProperty')
+            ->and($risk['planKey'])->toBe($plan)
+            ->and(array_column($risk['coverages'], 'insuredAmount', 'key'))->toEqual($coverages)
+            ->and(array_column($risk['expenses'], 'value', 'description'))->toEqual($origin === 'locatario'
+                ? ['VALOR_ALUGUEL' => 300]
+                : ['VALOR_ALUGUEL' => 300, 'VALOR_CONDOMINIO' => 100, 'VALOR_IPTU' => 20, 'VALOR_GAS' => 10])
+            ->and($request['participants'])->toHaveCount(1)
+            ->and($request['participants'][0]['role'])->toBe('PolicyHolder')
+            ->and($request['participants'][0]['contact'])->toBe(['email' => 'payload@example.test', 'cellPhoneNumber' => '11999998888']);
+
+        return true;
+    });
+    Http::assertSentCount(2);
+})->with(['Basic', 'Complete', 'Traditional'])->with(['locador', 'locatario']);
+
 it('aligns both insurers with the document and rental purpose selected on the form', function (bool $company, string $rentalType) {
     $analysis = alignedInsuranceAnalysis($company, $rentalType);
     $too = app(TooRentalGuaranteePayloadBuilder::class);
-    foreach ([$too->buildFichaPayload($analysis), $too->buildBasicDataPayload($analysis)] as $payload) {
-        expect($payload['pretendentes'][0])->toMatchArray([
-            'cpf' => '07234828702',
-            'nome' => $company ? 'Representante da empresa' : 'Pessoa locatária',
-            'dataNascimento' => '1992-02-29',
-            'rendaFixaMensal' => 6000.0,
-            'vinculoEmpregaticio' => 'Autonomo',
-            'profissao' => 'Consultor',
-            'residiraImovel' => $rentalType === 'residencial',
-        ])->and($payload['locacao']['finalidadeLocacao'])->toBe($rentalType === 'residencial' ? 'Residencial' : 'Comercial');
-    }
+    $payload = $too->buildFichaPayload($analysis);
+    expect($payload['pretendentes'][0])->toMatchArray([
+        'cpf' => '07234828702',
+        'nome' => $company ? 'Representante da empresa' : 'Pessoa locatária',
+        'dataNascimento' => '1992-02-29',
+        'rendaFixaMensal' => 6000.0,
+        'vinculoEmpregaticio' => 'Autonomo',
+        'profissao' => 'Consultor',
+        'residiraImovel' => $rentalType === 'residencial',
+    ])->and($payload['locacao']['finalidadeLocacao'])->toBe($rentalType === 'residencial' ? 'Residencial' : 'Comercial');
     $quote = $too->buildQuotePayload($analysis, 123);
     expect($quote['inicioVigenciaContratoLocacao'])->toBe(now()->toDateString())
         ->and($quote['coberturas']['valorAluguel'])->toBe(1500.0)
@@ -87,6 +138,7 @@ it('aligns both insurers with the document and rental purpose selected on the fo
     expect($pottencial['riskObjects'][0]['occupation'])->toBe($rentalType === 'residencial' ? 'Residencial' : 'Commercial')
         ->and($pottencial['riskObjects'][0]['tenantDocumentNumber'])->toBe($company ? '11222333000181' : '07234828702')
         ->and($pottencial['participants'][0]['documentNumber'])->toBe($pottencial['riskObjects'][0]['tenantDocumentNumber'])
+        ->and($pottencial['participants'][0]['contact'])->toBe(['email' => 'payload@example.test', 'cellPhoneNumber' => '11999998888'])
         ->and($analysis->lead->canBeSentToToo())->toBeTrue();
     Http::assertNothingSent();
 })->with([false, true])->with(['residencial', 'comercial']);
@@ -106,21 +158,13 @@ it('uses the representative CPF through Too creation credit analysis and status 
         ->and($provider->getStatus($analysis->fresh())['success'])->toBeTrue();
 });
 
-it('uses the same representative and purpose when updating and reanalyzing Too', function () {
-    $analysis = alignedInsuranceAnalysis(true, 'comercial');
-    $analysis->update(['proposal_id' => '123', 'response_payload' => ['numeroFicha' => 456]]);
-    $analysis->events()->create(['event_type' => 'reanalysis_requested', 'payload' => ['attempt_id' => 'new-attempt', 'is_reanalysis' => true]]);
-    $service = $this->mock(TooService::class);
-    $service->shouldReceive('getProposalStatus')->once()->with('07234828702', '123')
-        ->andReturn(['success' => true, 'response' => ['proposta' => ['status' => 8]]]);
-    $service->shouldReceive('updateProposalBasicData')->once()->withArgs(fn ($number, array $payload): bool => $number == 456 && $payload['pretendentes'][0]['nome'] === 'Representante da empresa'
-        && $payload['pretendentes'][0]['dataNascimento'] === '1992-02-29'
-        && $payload['locacao']['finalidadeLocacao'] === 'Comercial'
-    )->andReturn(['success' => true]);
-    $service->shouldReceive('submitReanalysis')->once()->with('07234828702', '123', Mockery::type('array'))
-        ->andReturn(['success' => true]);
-
-    expect(app(TooInsuranceProvider::class)->requestReanalysis($analysis, 'new-attempt')['success'])->toBeTrue();
+it('no longer exposes the Too reanalysis endpoints or provider contract', function () {
+    expect(method_exists(TooService::class, 'submitReanalysis'))->toBeFalse()
+        ->and(method_exists(TooService::class, 'getReanalysisReasons'))->toBeFalse()
+        ->and(method_exists(TooService::class, 'updateProposalBasicData'))->toBeFalse()
+        ->and(method_exists(TooRentalGuaranteePayloadBuilder::class, 'buildBasicDataPayload'))->toBeFalse()
+        ->and(app(TooInsuranceProvider::class))->not->toBeInstanceOf(\App\Services\Insurance\Providers\ReanalyzesInsuranceQuotes::class)
+        ->and(app(\App\Services\Insurance\Providers\PottencialInsuranceProvider::class))->not->toBeInstanceOf(\App\Services\Insurance\Providers\ReanalyzesInsuranceQuotes::class);
 });
 
 it('fails Too locally for incomplete or invalid applicant data instead of sending invented data', function (string $missing) {
@@ -151,11 +195,208 @@ it('rejects a Pottencial applicant without a valid document or rental purpose', 
 })->with(['document', 'purpose']);
 
 it('selects the rental product for all providers when starting the batch', function (string $rentalType) {
+    config(['services.tokio.enabled' => true]);
     $analysis = alignedInsuranceAnalysis(true, $rentalType);
     (new StartInsuranceAnalysesBatchJob($analysis->lead_id))->handle(app(InsuranceProviderResolver::class));
     $analyses = InsuranceAnalysis::query()->whereNotNull('insurance_analysis_batch_id')->get();
-    expect($analyses)->toHaveCount(2);
+    expect($analyses)->toHaveCount(3);
     foreach ($analyses as $created) {
         expect($created->product)->toBe('fianca_locaticia_'.$rentalType);
     }
 })->with(['residencial', 'comercial']);
+
+it('applies the Pottencial agents payment and coverage rules by form origin', function (string $origin) {
+    config(['services.pottencial.default_commission' => 0.15, 'services.pottencial.default_policy_type' => 'Unico']);
+    $analysis = alignedInsuranceAnalysis();
+    $company = \App\Models\Imobiliaria::factory()->create(['cnpj' => '11222333000181']);
+    $analysis->lead->update(['tipo_solicitante' => $origin, 'company_id' => $company->id]);
+    $analysis->lead->despesas->update(['valor_condominio' => 200, 'valor_iptu' => 100, 'valor_gas' => 50, 'valor_agua' => null, 'valor_luz' => null]);
+    $analysis->forceFill(['installments' => 30, 'multiple' => 30, 'lease_start_date' => '2026-10-29', 'lease_end_date' => '2029-04-29', 'plan_key' => 'Traditional']);
+    $payload = app(RentalGuaranteeQuotePayloadBuilder::class)->build($analysis);
+    $agents = [[
+        'documentNumber' => '11222333000181', 'role' => 'Broker',
+        'commissionPercentage' => 0.15, 'lead' => true, 'participationPercentage' => 1,
+    ]];
+    if ($origin === 'imobiliaria_cadastrada') {
+        $agents[] = ['documentNumber' => '11222333000181', 'role' => 'PolicyOwner'];
+    }
+    expect($payload['commissionedAgents'])->toBe($agents)
+        ->and($payload['participants'])->toBe([['documentNumber' => '07234828702', 'role' => 'PolicyHolder', 'contact' => ['email' => 'payload@example.test', 'cellPhoneNumber' => '11999998888']]])
+        ->and($payload['paymentConditions'])->toBe(['paymentType' => $origin === 'imobiliaria_cadastrada' ? 'Invoice' : 'Boleto', 'installments' => 30])
+        ->and($payload['policyType'])->toBe('Unique')
+        ->and($payload['policyPeriodStart'])->toBe('2026-10-29')
+        ->and($payload['policyPeriodEnd'])->toBe('2029-04-29');
+    $risk = $payload['riskObjects'][0];
+    if ($origin === 'locatario') {
+        expect($risk['coverages'])->toBe([['key' => 'basica', 'insuredAmount' => 45000.0]])
+            ->and($risk['expenses'])->toBe([['description' => 'VALOR_ALUGUEL', 'value' => 1500.0]]);
+    } else {
+        expect(array_column($risk['coverages'], 'key'))->toContain('danos', 'pintura', 'multa-rescisao')
+            ->not->toContain('agua', 'luz');
+    }
+    Http::assertNothingSent();
+})->with(['imobiliaria_cadastrada', 'imobiliaria_nao_cadastrada', 'locador', 'locatario']);
+
+it('keeps the Pottencial basic coverage at thirty rents for low rental amounts', function (string $plan, string $origin) {
+    $analysis = alignedInsuranceAnalysis();
+    $analysis->lead->update(['tipo_solicitante' => $origin]);
+    $analysis->lead->despesas->update(['valor_aluguel' => 300]);
+    $analysis->forceFill(['multiple' => 30, 'plan_key' => $plan]);
+
+    $risk = app(RentalGuaranteeQuotePayloadBuilder::class)->build($analysis)['riskObjects'][0];
+    $coverage = collect($risk['coverages'])->firstWhere('key', 'basica');
+    $expense = collect($risk['expenses'])->firstWhere('description', 'VALOR_ALUGUEL');
+
+    expect($risk['planKey'])->toBe($plan)
+        ->and($risk['multiple'])->toBe(30)
+        ->and($coverage['insuredAmount'])->toBe(9000.0)
+        ->and($expense['value'])->toBe(300.0)
+        ->and($coverage['insuredAmount'] / $expense['value'])->toEqual(30);
+    Http::assertNothingSent();
+})->with(['Complete', 'Traditional'])->with(['locador', 'locatario']);
+
+it('includes only requested Pottencial expenses while preserving additional coverages', function (?float $water, ?float $electricity) {
+    $analysis = alignedInsuranceAnalysis();
+    $analysis->lead->despesas->update([
+        'valor_condominio' => 0, 'valor_iptu' => null, 'valor_gas' => 0,
+        'valor_agua' => $water, 'valor_luz' => $electricity,
+    ]);
+    $analysis->multiple = 30;
+    $risk = app(RentalGuaranteeQuotePayloadBuilder::class)->build($analysis)['riskObjects'][0];
+    $coverages = array_column($risk['coverages'], 'insuredAmount', 'key');
+    $expenses = array_column($risk['expenses'], 'value', 'description');
+    $expectedCoverages = ['basica'];
+    $expectedExpenses = ['VALOR_ALUGUEL'];
+    foreach (['agua' => $water, 'luz' => $electricity] as $key => $value) {
+        if ($value > 0) {
+            $expectedCoverages[] = $key;
+            $expectedExpenses[] = 'VALOR_'.strtoupper($key);
+            expect($coverages[$key])->toBe($value * 6)
+                ->and($expenses['VALOR_'.strtoupper($key)])->toBe($value);
+        }
+    }
+    expect(array_keys($coverages))->toBe([...$expectedCoverages, 'danos', 'pintura', 'multa-rescisao'])
+        ->and(array_keys($expenses))->toBe($expectedExpenses);
+    Http::assertNothingSent();
+})->with([
+    'removed' => [null, null],
+    'zeroed' => [0.0, 0.0],
+    'water only' => [45.0, null],
+    'electricity only' => [null, 60.0],
+]);
+
+it('rejects invalid Pottencial agent and contract settings before any request', function (string $invalid) {
+    $analysis = alignedInsuranceAnalysis();
+    switch ($invalid) {
+        case 'broker':
+            config(['services.pottencial.broker_document' => '00000000000000']);
+            break;
+        case 'company':
+            $company = \App\Models\Imobiliaria::factory()->create(['cnpj' => '00000000000000']);
+            $analysis->lead->update(['tipo_solicitante' => 'imobiliaria_cadastrada', 'company_id' => $company->id]);
+            break;
+        case 'missing company':
+            $analysis->lead->update(['tipo_solicitante' => 'imobiliaria_cadastrada']);
+            break;
+        case 'commission':
+            config(['services.pottencial.default_commission' => 15]);
+            break;
+        case 'commission precision':
+            config(['services.pottencial.default_commission' => 0.1501]);
+            break;
+        case 'plan':
+            $analysis->plan_key = 'unknown';
+            break;
+        case 'policy':
+            config(['services.pottencial.default_policy_type' => 'unknown']);
+            break;
+    }
+    expect(fn () => app(RentalGuaranteeQuotePayloadBuilder::class)->build($analysis))
+        ->toThrow(\App\Exceptions\InvalidInsuranceAnalysisPayload::class);
+    Http::assertNothingSent();
+})->with(['broker', 'company', 'missing company', 'commission', 'commission precision', 'plan', 'policy']);
+
+it('preserves Pottencial payment rules when creating a legacy execution without configured defaults', function (string $origin) {
+    $source = alignedInsuranceAnalysis();
+    $source->lead->update(['tipo_solicitante' => $origin]);
+    config(['services.pottencial' => \Illuminate\Support\Arr::except(config('services.pottencial'), ['default_installments', 'default_plan_key'])]);
+    config(['services.pottencial.default_payment_type' => 'AutomaticDebit']);
+
+    $analysis = app(\App\Services\Insurance\InsuranceAnalysisService::class)->createPendingAnalysis($source->lead);
+
+    expect($analysis->installments)->toBe(30)
+        ->and($analysis->plan_key)->toBe('Traditional')
+        ->and($analysis->payment_type)->toBe($origin === 'imobiliaria_cadastrada' ? 'Invoice' : 'Boleto')
+        ->and($analysis->lease_end_date->toDateString())->toBe($analysis->lease_start_date->copy()->addMonthsNoOverflow(30)->toDateString());
+    Http::assertNothingSent();
+})->with(['imobiliaria_cadastrada', 'imobiliaria_nao_cadastrada', 'locador', 'locatario']);
+
+it('accepts the documented Pottencial commission precision', function () {
+    config(['services.pottencial.default_commission' => 0.155]);
+    $payload = app(RentalGuaranteeQuotePayloadBuilder::class)->build(alignedInsuranceAnalysis());
+    expect($payload['commissionedAgents'][0]['commissionPercentage'])->toBe(0.155);
+    Http::assertNothingSent();
+});
+
+it('builds the Pottencial participant with contact and canonicalizes plans', function (string $plan, string $expected) {
+    $analysis = alignedInsuranceAnalysis();
+    $analysis->lead->forceFill(['nome' => null]);
+    $analysis->plan_key = $plan;
+    config(['services.pottencial.default_installments' => 30]);
+    $payload = app(RentalGuaranteeQuotePayloadBuilder::class)->build($analysis);
+    expect($payload['participants'])->toBe([['documentNumber' => '07234828702', 'role' => 'PolicyHolder', 'contact' => ['email' => 'payload@example.test', 'cellPhoneNumber' => '11999998888']]])
+        ->and($payload['riskObjects'][0]['planKey'])->toBe($expected)
+        ->and($payload['paymentConditions']['installments'])->toBe(30);
+    Http::assertNothingSent();
+})->with([['basic', 'Basic'], ['Complete', 'Complete'], ['traditional', 'Traditional']]);
+
+it('builds Too coverages and PDF conditions by origin with the frozen lease dates', function (string $origin) {
+    $analysis = alignedInsuranceAnalysis();
+    $analysis->lead->forceFill(['tipo_solicitante' => $origin, 'company_id' => 1]);
+    $analysis->lead->despesas->forceFill(['valor_agua' => null, 'valor_luz' => null, 'valor_condominio' => 300]);
+    $analysis->forceFill(['lease_start_date' => '2026-08-31', 'lease_end_date' => '2029-02-28']);
+    $builder = app(TooRentalGuaranteePayloadBuilder::class);
+    $quote = $builder->buildQuotePayload($analysis, '123');
+    expect($quote)->toMatchArray(['numeroFicha' => 123, 'percentualComissao' => 15.0, 'indiceDeReajusteAluguel' => 'IGP_M', 'periodoIndenitario' => 30, 'inicioVigenciaContratoLocacao' => '2026-08-31', 'finalVigenciaContratoLocacao' => '2029-02-28']);
+    foreach ([$quote, $builder->buildFichaPayload($analysis)] as $payload) {
+        if ($origin === 'locatario') {
+            expect($payload['coberturas'])->toBe(['valorAluguel' => 1500.0]);
+        } else {
+            expect($payload['coberturas'])->toMatchArray(['valorDanosAoImovel' => 1500.0, 'valorMultasContratuais' => 1500.0, 'valorPinturaExterna' => 1500.0, 'valorPinturaInterna' => 1500.0, 'valorAgua' => 150.0, 'valorLuz' => 150.0]);
+        }
+    }
+    expect($builder->buildQuotePdfPayload($analysis, '123'))->toBe([
+        'numeroFicha' => 123,
+        'formaPagamento' => ['tipoPagamento' => $origin === 'imobiliaria_cadastrada' ? 2 : 1, 'tipoEntrada' => 2, 'opcaoParcelamento' => [['tipoOpcaoParcelamento' => 2, 'quantidadeParcelas' => 30]]],
+    ]);
+    Http::assertNothingSent();
+})->with(['imobiliaria_cadastrada', 'imobiliaria_nao_cadastrada', 'locador', 'locatario']);
+
+it('rejects invalid Too commission settings before sending a quote', function (mixed $commission) {
+    config(['services.too.default_commission_percentage' => $commission]);
+    expect(fn () => app(TooRentalGuaranteePayloadBuilder::class)->buildQuotePayload(alignedInsuranceAnalysis(), 123))->toThrow(\App\Exceptions\InvalidInsuranceAnalysisPayload::class);
+    Http::assertNothingSent();
+})->with([0.15, 9.99, 40.01, 'invalid']);
+
+it('does not count excluded tenant expenses toward the Too limit', function () {
+    $analysis = alignedInsuranceAnalysis();
+    $analysis->lead->tipo_solicitante = 'locatario';
+    $analysis->lead->despesas->forceFill(['valor_aluguel' => 24000, 'valor_condominio' => 10000, 'valor_agua' => 10, 'valor_luz' => null]);
+    expect(app(TooRentalGuaranteePayloadBuilder::class)->buildFichaPayload($analysis)['coberturas'])->toBe(['valorAluguel' => 24000.0]);
+});
+
+it('posts the Too PDF payment payload and validates the base64 document', function (?string $encoded, bool $valid) {
+    config(['services.too.base_url' => 'https://too.example.test', 'services.too.client_id' => 'test', 'services.too.client_secret' => 'test']);
+    \Illuminate\Support\Facades\Cache::put('too_access_token', 'test-token', 60);
+    Http::fake(['https://too.example.test/fianca/proposta/cotacao/456/pdf' => Http::response(['result' => ['pdfCotacao' => $encoded]])]);
+    $payload = app(TooRentalGuaranteePayloadBuilder::class)->buildQuotePdfPayload(alignedInsuranceAnalysis(), 123);
+    $result = app(TooService::class)->getQuotePdf(456, $payload);
+    expect($result['success'])->toBe($valid);
+    if ($valid) {
+        expect($result['pdf_content'])->toBe("%PDF-1.7\n%%EOF");
+    } else {
+        expect($result)->not->toHaveKey('pdf_content');
+    }
+    Http::assertSent(fn ($request) => $request->method() === 'POST' && $request->data() === $payload && $request->hasHeader('Authorization', 'Bearer test-token'));
+    Http::assertSentCount(1);
+})->with([[base64_encode("%PDF-1.7\n%%EOF"), true], [null, false], ['!!!', false], [base64_encode('not a PDF'), false]]);

@@ -2,7 +2,7 @@
 
 namespace App\Console\Commands;
 
-use App\Services\PottencialService;
+use App\Services\Insurance\PottencialService;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Cache;
 
@@ -33,6 +33,7 @@ class DebugPottencialTokenCommand extends Command
          */
         if (app()->environment('production')) {
             $this->error('Este comando não deve ser executado em produção.');
+
             return self::FAILURE;
         }
 
@@ -46,13 +47,14 @@ class DebugPottencialTokenCommand extends Command
 
         $token = $pottencialService->getAccessToken();
 
-        if (!$token) {
+        if (! $token) {
             $this->error('Não foi possível gerar o access_token da Pottencial.');
+
             return self::FAILURE;
         }
 
         $this->info('Access token gerado com sucesso.');
-        $this->line('Tamanho: ' . strlen($token) . ' caracteres');
+        $this->line('Tamanho: '.strlen($token).' caracteres');
 
         /*
          * Mostra o token completo apenas se você pedir explicitamente.
@@ -61,7 +63,7 @@ class DebugPottencialTokenCommand extends Command
             $this->warn('Token completo:');
             $this->line($token);
         } else {
-            $this->line('Prévia: ' . substr($token, 0, 20) . '...');
+            $this->line('Prévia: '.substr($token, 0, 20).'...');
             $this->comment('Use --show para exibir o token completo.');
         }
 

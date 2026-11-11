@@ -3,7 +3,7 @@
 namespace App\Services\Insurance\Payloads;
 
 use App\Models\Lead;
-use App\Services\CompanyApplicantService;
+use App\Services\Leads\CompanyApplicantService;
 
 class TokioCompanyApplicantsPayloadBuilder
 {

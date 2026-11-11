@@ -121,3 +121,25 @@ it('requires an active authorized broker and second factor for lead channels', f
             ->assertJsonPath('data.realtime.transport', 'reverb');
     }
 })->with([['authorized', true], ['inactive', false], ['no permission', false], ['missing 2fa', false], ['missing lead', false]]);
+
+it('broadcasts individual quote progress after commit while its provider is still processing', function () {
+    $batch = $this->lead->insuranceAnalysesBatches()->create(['status' => 'processing', 'total_providers' => 1]);
+    $analysis = $batch->analyses()->create(['lead_id' => $this->lead->id, 'provider' => 'pottencial', 'product' => 'fianca_locaticia', 'status' => 'processing']);
+    $analysis->events()->create(['event_type' => 'analysis_started', 'payload' => ['attempt_id' => 'quote-realtime']]);
+    $run = app(\App\Services\Insurance\InsuranceQuoteCoordinator::class)->prepare($analysis, 'quote-realtime', false);
+    $quote = $run->scenarios()->first()->quotes()->first();
+    Queue::fake();
+    DB::transaction(function () use ($quote): void {
+        $quote->update(['status' => 'approved', 'payment_status' => 'pending']);
+        Queue::assertNothingPushed();
+    });
+    Queue::assertPushedOn('broadcasts', BroadcastEvent::class, fn ($job): bool => $job->event->broadcastWith() === ['lead_id' => $this->lead->id]);
+    expect($analysis->fresh()->status)->toBe('processing');
+    Queue::fake();
+    DB::beginTransaction();
+    $quote->update(['payment_status' => 'ready', 'installment_amount' => 100]);
+    DB::rollBack();
+    Queue::assertNothingPushed();
+    $quote->refresh()->update(['payment_status' => 'ready', 'installment_amount' => 100]);
+    Queue::assertPushed(BroadcastEvent::class, 1);
+});

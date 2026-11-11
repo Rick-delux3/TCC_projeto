@@ -13,7 +13,7 @@ use App\Services\Insurance\Payloads\TooRentalGuaranteePayloadBuilder;
 use App\Services\Insurance\Providers\InsuranceProviderInterface;
 use App\Services\Insurance\Providers\InsuranceProviderResolver;
 use App\Services\Insurance\Providers\TooInsuranceProvider;
-use App\Services\TooService;
+use App\Services\Insurance\TooService;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 
@@ -103,7 +103,7 @@ it('polls until the last provider decides and only then finishes the batch', fun
     );
     Queue::fake();
     if ($providerName === 'too') {
-        (new SyncTooAnalysisStatusJob($analysis->id, 'polling-attempt', false, 16))->handle($pollProvider);
+        (new SyncTooAnalysisStatusJob($analysis->id, 'polling-attempt', false, 1))->handle($pollProvider);
     } else {
         (new SyncProviderAnalysisStatusJob($analysis->id, 'polling-attempt', automatic: true))->handle($resolver);
     }
@@ -112,7 +112,7 @@ it('polls until the last provider decides and only then finishes the batch', fun
 
     Queue::fake();
     if ($providerName === 'too') {
-        (new SyncTooAnalysisStatusJob($analysis->id, 'polling-attempt', false, 17))->handle($pollProvider);
+        (new SyncTooAnalysisStatusJob($analysis->id, 'polling-attempt', false, 2))->handle($pollProvider);
     } else {
         (new SyncProviderAnalysisStatusJob($analysis->id, 'polling-attempt', automatic: true))->handle($resolver);
     }
@@ -175,9 +175,10 @@ it('retries Pottencial communication failures before recording a terminal techni
     expect($analysis->fresh()->status)->toBe('failed')->and($analysis->fresh()->finished_at)->not->toBeNull();
 });
 
-it('keeps Too preapproval open and schedules its next consultation after creation', function () {
+it('quotes Too preapproval and completes the analysis after creation', function () {
     $analysis = waitingProviderAnalysis('too');
     $this->mock(TooRentalGuaranteePayloadBuilder::class)->shouldReceive('buildFichaPayload')->once()->andReturn([]);
+    app(TooRentalGuaranteePayloadBuilder::class)->shouldReceive('buildQuotePayload')->once()->andReturn([]);
     $service = $this->mock(TooService::class);
     $service->shouldReceive('registerProposalFicha')->once()->andReturn([
         'success' => true, 'response' => ['numeroProposta' => 'proposal-test', 'numeroFicha' => 'ficha-test'],
@@ -186,16 +187,19 @@ it('keeps Too preapproval open and schedules its next consultation after creatio
     $service->shouldReceive('getProposalStatus')->once()->andReturn([
         'success' => true, 'response' => ['proposta' => ['status' => 16, 'descricaoStatus' => 'Pré-aprovada']],
     ]);
-    $service->shouldNotReceive('requestQuote');
+    $service->shouldReceive('requestQuote')->once()->andReturn([
+        'success' => true, 'response' => ['numeroCotacao' => '123', 'premio' => 150],
+    ]);
 
     (new RunProviderAnalysisJob($analysis->id, 'polling-attempt'))->handle(app(InsuranceProviderResolver::class));
     (new CompleteInsuranceAnalysesBatchJob($analysis->insurance_analysis_batch_id, 'polling-attempt'))->handle();
 
-    expect($analysis->fresh()->status)->toBe('manual_review')
-        ->and($analysis->fresh()->finished_at)->toBeNull()
-        ->and($analysis->batch->fresh()->finished_at)->toBeNull();
-    Queue::assertPushed(SyncTooAnalysisStatusJob::class, 1);
-    Queue::assertNotPushed(SendAnalysisResultsEmailJob::class);
+    expect($analysis->fresh()->status)->toBe('approved')
+        ->and($analysis->fresh()->provider_status)->toBe('Pré-aprovada')
+        ->and($analysis->fresh()->quote_id)->toBe('123')
+        ->and($analysis->fresh()->finished_at)->not->toBeNull()
+        ->and($analysis->batch->fresh()->finished_at)->not->toBeNull();
+    Queue::assertNotPushed(SyncTooAnalysisStatusJob::class);
     Http::assertNothingSent();
 });
 
@@ -212,6 +216,7 @@ it('records an ineligible Too submission as a failure instead of leaving it proc
 });
 
 it('resets consecutive communication failures when the company responds with a pending decision', function (string $providerName) {
+    config(['services.too.status_check_max_pending_checks' => 30]);
     $analysis = waitingProviderAnalysis($providerName, 'processing');
     $result = ['success' => true, 'response' => ['status' => 'UnderAnalysis']];
     if ($providerName === 'too') {
@@ -230,3 +235,16 @@ it('resets consecutive communication failures when the company responds with a p
     expect($analysis->fresh()->status)->toBe('processing')->and($analysis->fresh()->finished_at)->toBeNull();
     Queue::assertPushed($nextJob, fn ($job): bool => $job->consecutiveFailures === 0);
 })->with(['too', 'pottencial']);
+
+it('stops legacy Too polling at the configured pending limit', function () {
+    config(['services.too.status_check_max_pending_checks' => 2]);
+    $analysis = waitingProviderAnalysis('too', 'processing');
+    $provider = $this->mock(TooInsuranceProvider::class);
+    $provider->shouldReceive('getStatus')->once()->andReturn(['success' => true, 'response' => ['status' => 'UnderAnalysis']]);
+    $job = new SyncTooAnalysisStatusJob($analysis->id, 'polling-attempt', false, 2);
+    $job->handle($provider);
+    $job->handle($provider);
+    expect($analysis->fresh()->status)->toBe('processing')
+        ->and($analysis->fresh()->response_payload['too_status_check_stop_reason'])->toBe('pending_limit_reached');
+    Queue::assertNotPushed(SyncTooAnalysisStatusJob::class);
+});

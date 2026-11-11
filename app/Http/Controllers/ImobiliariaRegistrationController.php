@@ -5,7 +5,7 @@ namespace App\Http\Controllers;
 use App\Actions\Companies\RegisterCompany;
 use App\Actions\Companies\StartCompanyTwoFactorChallenge;
 use App\Http\Requests\StoreCompanyRequest;
-use App\Services\CompanyTagService;
+use App\Services\LeadLovers\CompanyTagService;
 use Illuminate\Auth\Events\Registered;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Log;

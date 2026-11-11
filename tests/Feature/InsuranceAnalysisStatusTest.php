@@ -10,9 +10,9 @@ use App\Models\InsuranceAnalysisBatch;
 use App\Models\Lead;
 use App\Models\User;
 use App\Services\Insurance\InsuranceAnalysisService;
+use App\Services\Insurance\PottencialService;
 use App\Services\Insurance\Providers\InsuranceProviderInterface;
 use App\Services\Insurance\Providers\InsuranceProviderResolver;
-use App\Services\PottencialService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
@@ -70,7 +70,7 @@ dataset('insurance provider decisions', [
     'HTTP failure despite approval body' => [['status' => 'Approved'], false, 'failed'],
 ]);
 
-it('persists only explicit provider decisions across creation reanalysis and synchronization', function (
+it('persists only explicit provider decisions across creation and synchronization', function (
     array $response,
     bool $success,
     string $expectedStatus,
@@ -79,7 +79,7 @@ it('persists only explicit provider decisions across creation reanalysis and syn
     $analysis = insuranceStatusAnalysis();
     $result = ['success' => $success, 'http_status' => $success ? 200 : 500, 'response' => $response];
     $analysis->events()->create(['event_type' => 'created', 'payload' => ['attempt_id' => 'status-test']]);
-    if (in_array($operation, ['create', 'reanalyze'], true)) {
+    if ($operation === 'create') {
         $analysis->update(['status' => 'pending']);
     }
 
@@ -92,7 +92,6 @@ it('persists only explicit provider decisions across creation reanalysis and syn
         $provider = Mockery::mock(InsuranceProviderInterface::class);
         $provider->shouldReceive(match ($operation) {
             'create' => 'requestAnalysis',
-            'reanalyze' => 'requestReanalysis',
             'sync' => 'getStatus',
         })->once()->andReturn($result);
 
@@ -101,7 +100,7 @@ it('persists only explicit provider decisions across creation reanalysis and syn
 
         $job = $operation === 'sync'
             ? new SyncProviderAnalysisStatusJob($analysis->id, 'status-test')
-            : new RunProviderAnalysisJob($analysis->id, 'status-test', $operation === 'reanalyze');
+            : new RunProviderAnalysisJob($analysis->id, 'status-test');
         if (! $success && $job instanceof RunProviderAnalysisJob) {
             expect(fn () => $job->handle($resolver))->toThrow(RuntimeException::class);
             expect($analysis->fresh()->status)->toBe('processing')
@@ -127,7 +126,25 @@ it('persists only explicit provider decisions across creation reanalysis and syn
     }
 
     Http::assertNothingSent();
-})->with('insurance provider decisions')->with(['create', 'reanalyze', 'sync', 'legacy_sync']);
+})->with('insurance provider decisions')->with(['create', 'sync', 'legacy_sync']);
+
+it('refuses a queued reanalysis for Pottencial and Too without calling the provider', function (string $providerName) {
+    $analysis = insuranceStatusAnalysis();
+    $analysis->update(['provider' => $providerName, 'status' => 'pending']);
+    $analysis->events()->create(['event_type' => 'created', 'payload' => ['attempt_id' => 'blocked-reanalysis']]);
+    $provider = Mockery::mock(InsuranceProviderInterface::class);
+    $provider->shouldNotReceive('requestAnalysis', 'getStatus');
+    $resolver = $this->mock(InsuranceProviderResolver::class);
+    $resolver->shouldReceive('resolve')->once()->with($providerName)->andReturn($provider);
+
+    (new RunProviderAnalysisJob($analysis->id, 'blocked-reanalysis', true))->handle($resolver);
+
+    $analysis->refresh();
+    expect($analysis->status)->toBe('failed')
+        ->and($analysis->error_message)->not->toBeEmpty()
+        ->and(InsuranceProviderResolver::supportsReanalysis($providerName))->toBeFalse();
+    Http::assertNothingSent();
+})->with(['pottencial', 'too']);
 
 it('does not treat historical quotes as approval or a final decision for reanalysis', function () {
     $analysis = new InsuranceAnalysis(['status' => 'quoted', 'result' => 'approved', 'premium_amount' => 100]);
@@ -158,7 +175,7 @@ it('counts only explicit approvals in company and broker dashboards', function (
         ->and($filteredStats['approvedAnalyses'])->toBe(2);
 });
 
-it('keeps Too preapproval distinct from approval', function (array $response, string $status) {
+it('persists Too decisions after the provider quote flow', function (array $response, string $status) {
     $analysis = insuranceStatusAnalysis();
     $analysis->update(['provider' => 'too', 'status' => 'pending']);
     $analysis->events()->create(['event_type' => 'created', 'payload' => ['attempt_id' => 'too-decision']]);
@@ -180,5 +197,5 @@ it('keeps Too preapproval distinct from approval', function (array $response, st
     'approved credit' => [['status' => 'Approved', 'quoteId' => 'too-quote'], 'approved'],
     'denied credit' => [['status' => 'Denied'], 'rejected'],
     'credit in progress' => [['status' => 'UnderAnalysis'], 'processing'],
-    'preapproved credit' => [['status' => 'UnderAnalysis', 'too_internal_decision' => 'PreApproved'], 'manual_review'],
+    'preapproved credit with quote' => [['status' => 'Approved', 'too_internal_decision' => 'Approved', 'provider_original_status' => 16, 'quoteId' => 'too-quote'], 'approved'],
 ]);

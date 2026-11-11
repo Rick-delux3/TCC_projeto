@@ -6,7 +6,7 @@ use App\Models\Imobiliaria;
 use App\Models\Lead;
 use App\Models\LeadLoversTag;
 use App\Models\User;
-use App\Services\LeadLoversTagOperationCoordinator;
+use App\Services\LeadLovers\LeadLoversTagOperationCoordinator;
 use App\Support\CorretorPermissions;
 use App\Support\LeadLoversInitialFailureCatalog;
 use App\Support\ManualLeadResultTags;
@@ -970,6 +970,11 @@ it('keeps Editar alongside Corrigir and renders field-exclusive admin correction
     $emailModal = updateLeadDashboardNodeHtml($html, $emailModalId);
     $phoneTrigger = updateLeadDashboardTriggerHtml($html, $phoneModalId);
 
+    $document = new DOMDocument;
+    @$document->loadHTML('<?xml encoding="UTF-8">'.$html);
+    $xpath = new DOMXPath($document);
+    expect($xpath->query('//article[.//button[@data-bs-target="#'.$phoneModalId.'"] and contains(., "O telefone informado já está cadastrado na LeadLovers.")]')->length)->toBe(1);
+
     foreach ([$phoneLead, $emailLead] as $failedLead) {
         $detailsModal = updateLeadDashboardNodeHtml($html, 'adminLeadModal'.$failedLead->id);
 
@@ -1127,6 +1132,11 @@ it('uses the company correction route with the same exclusive modal contract', f
     $modalId = 'leadLoversCorrectionModal'.$phoneLead->id;
     $modal = updateLeadDashboardNodeHtml($html, $modalId);
     $trigger = updateLeadDashboardTriggerHtml($html, $modalId);
+
+    $document = new DOMDocument;
+    @$document->loadHTML('<?xml encoding="UTF-8">'.$html);
+    $xpath = new DOMXPath($document);
+    expect($xpath->query('//article[.//button[@data-bs-target="#'.$modalId.'"] and contains(., "O telefone informado já está cadastrado na LeadLovers.")]')->length)->toBe(1);
 
     expect($trigger)
         ->toContain('Corrigir')

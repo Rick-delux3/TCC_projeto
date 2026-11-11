@@ -25,7 +25,7 @@ class AnalysisResultPreparationService
             if (! in_array($batch->status, ['completed', 'completed_with_errors'], true)
                 || ! $batch->finished_at || $analyses->isEmpty()
                 || $analyses->count() < $batch->total_providers
-                || $analyses->contains(fn (InsuranceAnalysis $analysis): bool => ! in_array($analysis->status, ['approved', 'rejected', 'failed'], true))) {
+                || $analyses->contains(fn (InsuranceAnalysis $analysis): bool => ! ProviderAnalysisStatus::isTerminal($analysis->status))) {
                 throw new RuntimeException('O pacote ainda não está concluído para preparar o envio.');
             }
 

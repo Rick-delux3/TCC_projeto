@@ -55,16 +55,16 @@ Route::prefix('/Dashboard')->group(function () {
             ->middleware('throttle:5,1')
             ->name('dashboard.leads.leadlovers.correct');
 
-        Route::post('/leads/{lead}/reanalisar', [DashboardLeadController::class, 'reanalyze'])
-            ->middleware(['analysis.enabled', 'can:requestAnalysis,lead'])
-            ->name('dashboard.leads.reanalyze');
-
         Route::get('/analises', [InsuranceAnalysisController::class, 'index'])
             ->name('insurance-analyses.index');
 
         Route::get('/leads/{lead}/analises', [InsuranceAnalysisController::class, 'showLead'])
             ->whereNumber('lead')
             ->name('insurance-analyses.lead');
+
+        Route::put('/leads/{lead}/analises/despesas/salvar', [InsuranceAnalysisController::class, 'saveExpenses'])
+            ->middleware(['analysis.enabled', 'throttle:5,1'])->whereNumber('lead')
+            ->name('insurance-analyses.save-expenses');
 
         Route::get('/leads/{lead}/analises/dados', [InsuranceAnalysisController::class, 'leadData'])
             ->whereNumber('lead')
@@ -81,6 +81,10 @@ Route::prefix('/Dashboard')->group(function () {
         Route::post('/analises/provider/{analysis}/reanalisar', [InsuranceAnalysisController::class, 'providerReanalysis'])
             ->middleware('analysis.enabled')
             ->name('insurance-analyses.provider-reanalysis');
+
+        Route::post('/analises/provider/{analysis}/despesas', [InsuranceAnalysisController::class, 'reanalyzeProviderExpenses'])
+            ->middleware(['analysis.enabled', 'throttle:10,1'])->whereNumber('analysis')
+            ->name('insurance-analyses.provider-expense-reanalysis');
 
         Route::post('/analises/provider/{analysis}/sync-status', [InsuranceAnalysisController::class, 'syncStatus'])
             ->middleware('analysis.enabled')
@@ -145,10 +149,6 @@ Route::prefix('/Dashboard')->group(function () {
             ->middleware(['can:edit-leads', 'throttle:5,1'])
             ->name('admin.leads.leadlovers.correct');
 
-        Route::post('/leads/{lead}/reanalisar', [DashboardLeadController::class, 'adminReanalyze'])
-            ->middleware(['can:create-analysis', 'analysis.enabled', 'can:requestAnalysis,lead'])
-            ->name('admin.leads.reanalyze');
-
         Route::get('/analises', [InsuranceAnalysisController::class, 'adminIndex'])
             ->middleware('can:view-analyses')
             ->name('admin.insurance-analyses.index');
@@ -157,6 +157,10 @@ Route::prefix('/Dashboard')->group(function () {
             ->middleware('can:view-analyses')
             ->whereNumber('lead')
             ->name('admin.insurance-analyses.lead');
+
+        Route::put('/leads/{lead}/analises/despesas/salvar', [InsuranceAnalysisController::class, 'saveExpenses'])
+            ->middleware(['analysis.enabled', 'throttle:5,1'])->whereNumber('lead')
+            ->name('admin.insurance-analyses.save-expenses');
 
         Route::get('/leads/{lead}/analises/dados', [InsuranceAnalysisController::class, 'adminLeadData'])
             ->middleware('can:view-analyses')
@@ -175,6 +179,10 @@ Route::prefix('/Dashboard')->group(function () {
         Route::post('/analises/provider/{analysis}/reanalisar', [InsuranceAnalysisController::class, 'adminProviderReanalysis'])
             ->middleware(['can:create-analysis', 'analysis.enabled'])
             ->name('admin.insurance-analyses.provider-reanalysis');
+
+        Route::post('/analises/provider/{analysis}/despesas', [InsuranceAnalysisController::class, 'adminReanalyzeProviderExpenses'])
+            ->middleware(['analysis.enabled', 'throttle:10,1'])->whereNumber('analysis')
+            ->name('admin.insurance-analyses.provider-expense-reanalysis');
 
         Route::post('/analises/provider/{analysis}/sync-status', [InsuranceAnalysisController::class, 'adminSyncStatus'])
             ->middleware(['can:view-analyses', 'analysis.enabled'])
@@ -293,6 +301,8 @@ Route::middleware(['auth:admin', 'corretor.active'])->group(function () {
 Route::prefix('simulacao')
     ->name('simulation.')
     ->group(function () {
+        Route::post('/consultar-cpf', [SimulationController::class, 'lookupCpf'])
+            ->middleware('throttle:6,1')->name('cpf.lookup');
         // Página inicial do questionário.
         Route::get('/', [SimulationController::class, 'start'])
             ->middleware('throttle:simulation-page')
@@ -362,7 +372,7 @@ Route::prefix('/empresa')->middleware([RedirectAuthenticatedCompany::using('web'
         ->name('empresa.register.post');
     Route::get('/login', [ImobiliariaAuthController::class, 'showLoginForm'])->name('empresa.login');
     Route::post('/login/post', [ImobiliariaAuthController::class, 'login'])
-        ->middleware('throttle:10,1')
+        ->middleware('throttle:company-login-access')
         ->name('empresa.login.post');
 
     Route::get('/forgot-password', [CompanyPasswordResetLinkController::class, 'create'])

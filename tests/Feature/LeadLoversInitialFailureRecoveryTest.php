@@ -7,7 +7,7 @@ use App\Models\CorretorActivityLog;
 use App\Models\Imobiliaria;
 use App\Models\Lead;
 use App\Models\User;
-use App\Services\LeadLoversInitialFailureRecoveryService;
+use App\Services\LeadLovers\LeadLoversInitialFailureRecoveryService;
 use App\Support\LeadLoversInitialFailureCatalog;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Routing\Route;
@@ -506,7 +506,8 @@ it('normalizes and accepts PHONE_EXISTS corrections with ten or eleven digits', 
     ])->assertRedirect('/Dashboard/Admin')
         ->assertSessionHasNoErrors();
 
-    expect($lead->refresh()->tel)->toBe($expected);
+    expect($lead->refresh()->tel)->toBe('11911112222')
+        ->and($lead->leadLoversContact('tel'))->toBe($expected);
     Queue::assertPushedOn(
         'leadlovers',
         SendLeadToLeadLoversJob::class,
@@ -562,7 +563,7 @@ it('drops malicious fields from a phone correction request', function () {
     ])->assertSessionHasNoErrors();
 
     expect($lead->refresh())
-        ->tel->toBe('11977776666')
+        ->tel->not->toBe('11977776666')
         ->nome->toBe('Nome preservado LLIFR')
         ->email->toBe('llifr-preserved@example.test')
         ->cpf->toBe('12345678900')
@@ -571,6 +572,57 @@ it('drops malicious fields from a phone correction request', function () {
         ->leadlovers_status->toBe('pending')
         ->observacoes->toBeNull();
 });
+
+it('retries only LeadLovers with encrypted contact overrides and the approved tag', function (bool $companyRequest) {
+    \Illuminate\Support\Facades\Event::fake([\App\Events\DashboardActivityChanged::class]);
+    config([
+        'services.leadlovers.api_url' => 'https://correction.example.test',
+        'services.leadlovers.machine' => 456,
+        'services.leadlovers.sequence_2' => 654,
+        'services.leadlovers.step' => 2,
+    ]);
+    foreach (['locatario' => 123, 'aprovados' => 124] as $key => $id) {
+        \App\Models\LeadLoversTag::query()->create(['key' => $key, 'title' => $key, 'leadlovers_tag_id' => $id, 'active' => true]);
+    }
+    $company = llifrCompany();
+    $lead = llifrLead(['company_id' => $company->id, 'tel' => '11911112222']);
+    $batch = \App\Models\InsuranceAnalysisBatch::query()->create([
+        'lead_id' => $lead->id, 'total_providers' => 1, 'status' => 'completed', 'finished_at' => now(),
+    ]);
+    $batch->analyses()->create(['lead_id' => $lead->id, 'provider' => 'too', 'product' => 'fianca_locaticia_residencial', 'status' => 'approved']);
+    $lead->forceFill(['analysis_final_status' => 'approved', 'analysis_final_tag_key' => 'aprovados', 'last_analysis_batch_id' => $batch->id])->save();
+    if ($companyRequest) {
+        $response = $this->actingAs(llifrCompanyUser($company))->withSession(['company_id' => $company->id, '2fa_passed' => true])
+            ->post(route('dashboard.leads.leadlovers.correct', $lead), ['tel' => '11977776666']);
+    } else {
+        $response = llifrAdminPost($this, llifrCorretor(), $lead, ['tel' => '11977776666']);
+    }
+    $response->assertSessionHasNoErrors();
+    Queue::assertPushed(SendLeadToLeadLoversJob::class, 1);
+    Queue::assertCount(1);
+    expect($lead->refresh()->tel)->toBe('11911112222')
+        ->and($lead->analysis_final_status)->toBe('approved')
+        ->and($lead->data_edited_at)->toBeNull()
+        ->and($lead->getRawOriginal('leadlovers_contact_overrides'))->not->toContain('11977776666')
+        ->and($lead->toArray())->not->toHaveKey('leadlovers_contact_overrides');
+    Http::swap(new \Illuminate\Http\Client\Factory);
+    Http::preventStrayRequests();
+    Http::fake(['https://correction.example.test/leads/' => Http::response([
+        'success' => false, 'error' => ['code' => 'PHONE_EXISTS', 'reason' => 'Phone already exists.'],
+    ], 400)]);
+    $job = (new SendLeadToLeadLoversJob($lead->id))->withFakeQueueInteractions();
+    $job->handle(app(\App\Services\LeadLovers\LeadLoversApiClient::class));
+    Http::assertSent(fn ($request): bool => $request->url() === 'https://correction.example.test/leads/'
+        && $request['staticFields']['phone'] === '11977776666' && $request['tags'] === [123, 124]);
+    Http::assertSentCount(1);
+    $job->assertFailed();
+    expect($lead->refresh()->tel)->toBe('11911112222')->and($lead->analysis_final_status)->toBe('approved');
+    expect($batch->analyses()->count())->toBe(1);
+    \Illuminate\Support\Facades\Event::assertDispatched(\App\Events\DashboardActivityChanged::class,
+        fn ($event): bool => $event->resourceId === $lead->id && $event->companyId === $company->id && $event->change === 'lead.sync.retrying');
+    \Illuminate\Support\Facades\Event::assertDispatched(\App\Events\DashboardActivityChanged::class,
+        fn ($event): bool => $event->resourceId === $lead->id && $event->companyId === $company->id && $event->change === 'lead.sync.failed');
+})->with([false, true]);
 
 it('normalizes and accepts only a valid different email for EMAIL_EXISTS', function () {
     $admin = llifrCorretor();
@@ -587,9 +639,10 @@ it('normalizes and accepts only a valid different email for EMAIL_EXISTS', funct
         ->assertSessionHasNoErrors();
 
     expect($lead->refresh())
-        ->email->toBe('llifr.new.address@example.com')
+        ->email->toBe('llifr-old-email@example.test')
         ->tel->not->toBe('11900000000')
         ->nome->not->toBe('Nao deve mudar');
+    expect($lead->leadLoversContact('email'))->toBe('llifr.new.address@example.com');
     Queue::assertPushed(SendLeadToLeadLoversJob::class, 1);
 });
 
@@ -660,7 +713,8 @@ it('allows the same unlinked email in a different project identity', function ()
     ])->assertSessionHasNoErrors();
 
     expect($lead->refresh()->email)
-        ->toBe('llifr-shared-other-origin@example.test');
+        ->toBe('llifr-current-other-origin@example.test')
+        ->and($lead->leadLoversContact('email'))->toBe('llifr-shared-other-origin@example.test');
     Queue::assertPushed(SendLeadToLeadLoversJob::class, 1);
 });
 
@@ -758,8 +812,10 @@ it('corrects only the mapped field and resets incompatible sync state', function
     $lead->refresh();
 
     expect($result['lead_id'])->toBe($lead->id)
-        ->and($lead->data_edited_at)->not->toBeNull()
-        ->and($lead->{$changedField})->toBe($expectedValue)
+        ->and($lead->data_edited_at)->toBeNull()
+        ->and($lead->leadLoversContact($changedField))->toBe($expectedValue)
+        ->and($lead->email)->toBe('llifr-service-old@example.test')
+        ->and($lead->tel)->toBe('11911112222')
         ->and($lead->nome)->not->toBe('Tentativa indevida')
         ->and($lead->status)->not->toBe('recusado')
         ->and($lead->leadlovers_status)->toBe('pending')
@@ -826,7 +882,7 @@ it('keeps correction idempotent across rapid duplicate requests', function () {
         'LLIFR second click',
     ))->toThrow(DomainException::class);
 
-    expect($lead->refresh()->tel)->toBe('11933334444');
+    expect($lead->refresh()->leadLoversContact('tel'))->toBe('11933334444');
     Queue::assertPushed(SendLeadToLeadLoversJob::class, 1);
 });
 

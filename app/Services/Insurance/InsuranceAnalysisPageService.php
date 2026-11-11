@@ -7,6 +7,7 @@ use App\Models\Corretor;
 use App\Models\InsuranceAnalysis;
 use App\Models\Lead;
 use App\Models\User;
+use App\Services\Insurance\Providers\InsuranceProviderResolver;
 use Illuminate\Support\Facades\Gate;
 
 class InsuranceAnalysisPageService
@@ -56,6 +57,7 @@ class InsuranceAnalysisPageService
             'approved' => $analyses->where('status', 'approved')->count(),
             'rejected' => $analyses->where('status', 'rejected')->count(),
             'failed' => $analyses->where('status', 'failed')->count(),
+            'manual_required' => $analyses->where('status', 'manual_required')->count(),
             'percent' => $total > 0 ? (int) floor($completed * 100 / $total) : 0,
         ];
         $page = [
@@ -74,12 +76,15 @@ class InsuranceAnalysisPageService
                 'conjuge' => $lead->conjuge?->only(['nome', 'cpf']),
             ],
             'navigation' => ['viewer_type' => $viewerType, 'return_url' => $returnUrl],
+            // Seguradoras ligadas no .env. Desligada sem análise no pacote aparece
+            // bloqueada; com análise anterior, exibe o resultado sem ações.
+            'providers' => ['enabled' => InsuranceProviderResolver::enabledProviders()],
             'awaiting_batch' => $batch === null,
             'batch' => $batch === null ? null : [
                 'id' => $batch->id,
                 'status' => $batch->status,
                 'total_providers' => $total,
-                'completed_providers' => $progress['approved'] + $progress['rejected'],
+                'completed_providers' => $progress['approved'] + $progress['rejected'] + $progress['manual_required'],
                 'failed_providers' => $progress['failed'],
                 'started_at' => $batch->started_at?->toIso8601String(),
                 'finished_at' => $batch->finished_at?->toIso8601String(),
@@ -87,28 +92,66 @@ class InsuranceAnalysisPageService
             ],
             'progress' => $progress,
             'result' => ['is_final' => $final, 'status' => $final ? InsuranceBatchResult::status($batch) : null],
-            'analyses' => $analyses->map(function (InsuranceAnalysis $analysis) use ($data, $quotes, $enabled, $permissions, $canReanalyzeWithChanges, $prefix): array {
+            'analyses' => $analyses->map(function (InsuranceAnalysis $analysis) use ($data, $quotes, $enabled, $permissions, $canReanalyzeWithChanges, $prefix, $admin): array {
                 $attempt = $data['analysisAttempts'][$analysis->id];
-                $allowed = $enabled;
+                $providerEnabled = InsuranceProviderResolver::providerEnabled((string) $analysis->provider);
+                $allowed = $enabled && $providerEnabled;
+                $activeQuotes = ($analysis->currentProviderRun?->scenarios->flatMap(fn ($scenario) => $scenario->quotes) ?? collect())
+                    ->filter(fn ($quote) => ! ProviderAnalysisStatus::isTerminal($quote->status)
+                        || ($quote->status === 'approved' && $quote->payment_status === 'pending'));
 
                 return [
                     'id' => $analysis->id,
                     'provider' => $analysis->provider,
                     'product' => $analysis->product,
                     'status' => $analysis->status,
+                    'display_state' => $this->displayState($analysis->status, null, $activeQuotes->isNotEmpty()
+                        && $activeQuotes->every(fn ($quote) => (bool) data_get($quote->providerResponsePayload(), 'too_status_check_stopped', false))),
                     'provider_status' => $analysis->provider_status,
+                    'provider_enabled' => $providerEnabled,
+                    // Porto e Tokio aceitam reanálise; Pottencial e Too não (aviso fixo no card).
+                    'reanalysis_supported' => $analysis->supportsProviderReanalysis(),
                     'is_terminal' => ProviderAnalysisStatus::isTerminal($analysis->status),
+                    'manual_required' => $analysis->status === 'manual_required',
+                    'manual_message' => $analysis->status === 'manual_required'
+                        ? ($admin ? 'realizar cotação manualmente' : 'entrar em contato com corretor') : null,
+                    'messages' => $analysis->provider === 'tokio' ? data_get($analysis->providerResponsePayload(), 'messages', []) : [],
                     'attempt' => $attempt,
                     'premium_amount' => $analysis->premium_amount,
                     'gross_premium' => $analysis->gross_premium,
                     'total_monthly_amount' => $analysis->total_monthly_amount,
                     'quote' => $quotes[$analysis->id],
+                    'quote_attempts' => $analysis->currentProviderRun?->scenarios->flatMap(function ($scenario) use ($analysis, $admin): array {
+                        $snapshot = $analysis->currentProviderRun->round->lead_snapshot;
+                        $names = $scenario->kind === 'spouse'
+                            ? [data_get($snapshot, 'relations.conjuge.nome')]
+                            : [data_get($snapshot, 'attributes.nome')];
+                        if ($scenario->kind === 'joint') {
+                            $names[] = data_get($snapshot, 'relations.conjuge.nome');
+                        }
+
+                        return $scenario->quotes->map(fn ($quote): array => [
+                            'id' => $quote->id, 'scenario' => $scenario->kind, 'applicants' => $names,
+                            'plan_key' => $quote->plan_key, 'status' => $quote->status,
+                            'display_state' => $this->displayState($quote->status, $quote->payment_status,
+                                (bool) data_get($quote->providerResponsePayload(), 'too_status_check_stopped', false)),
+                            'quote' => $this->quotes->summarize($quote),
+                            'message' => $quote->status === 'manual_required' ? ($admin ? 'realizar cotação manualmente' : 'entrar em contato com corretor') : ($quote->status === 'failed'
+                                ? 'Não foi possível concluir esta cotação.'
+                                : ($quote->rejection_reason ?? $quote->provider_status)),
+                            'installment_amount' => $quote->installment_amount, 'installments' => $quote->installments,
+                            'payment_status' => $quote->payment_status,
+                            'payment_type' => $quote->payment_type,
+                            'selected' => $analysis->currentProviderRun->selected_quote_id === $quote->id,
+                        ])->all();
+                    })->values()->all() ?? [],
                     'requested_at' => $analysis->requested_at?->toIso8601String(),
                     'finished_at' => $analysis->finished_at?->toIso8601String(),
                     'updated_at' => $analysis->updated_at?->toIso8601String(),
                     'actions' => [
                         'retry' => $this->action($allowed && $permissions['create_analysis'] && in_array($analysis->status, ['failed', 'error'], true), $prefix.'retry', $analysis->id),
-                        'reanalysis' => $this->action($canReanalyzeWithChanges && $this->canReanalyze($analysis), $prefix.'provider-reanalysis', $analysis->id) + ['requires_data_changes' => true],
+                        'reanalysis' => $this->action($providerEnabled && $canReanalyzeWithChanges && $this->canReanalyze($analysis), $prefix.'provider-reanalysis', $analysis->id) + ['requires_data_changes' => true],
+                        'expense_reanalysis' => $this->action($providerEnabled && $canReanalyzeWithChanges && $analysis->supportsProviderReanalysis() && ProviderAnalysisStatus::isTerminal($analysis->status), $prefix.'provider-expense-reanalysis', $analysis->id),
                         'sync' => $this->action($allowed && $attempt !== null && $this->canSync($analysis), $prefix.'sync-status', $analysis->id),
                     ],
                 ];
@@ -120,15 +163,11 @@ class InsuranceAnalysisPageService
             ],
             'permissions' => $permissions,
             'actions' => [
+                'save_expenses' => $this->action($canReanalyzeWithChanges && $batch !== null && $analyses->isNotEmpty(), $prefix.'save-expenses', $lead->id, 'PUT') + ['revision' => $batch ? app(LeadReanalysisService::class)->expenseRevision($lead, $batch) : null],
                 'update_lead' => $this->action($permissions['edit_lead'], $admin ? 'admin.leads.update' : 'dashboard.leads.update', $lead->id, $admin ? 'POST' : 'PUT'),
-                'reanalysis' => $this->action($enabled && $permissions['create_analysis'] && $final
-                    && (int) $lead->last_analysis_batch_id === $batch->id && $lead->canRequestGeneralReanalysis()
-                    && $analyses->contains(fn (InsuranceAnalysis $analysis): bool => $analysis->canRequestProviderReanalysis())
-                    && $analyses->filter(fn (InsuranceAnalysis $analysis): bool => $analysis->canRequestProviderReanalysis())
-                        ->every(fn (InsuranceAnalysis $analysis): bool => $this->canReanalyze($analysis)),
-                    $admin ? 'admin.leads.reanalyze' : 'dashboard.leads.reanalyze', $lead->id),
             ],
             'realtime' => [
+                'round_id' => (int) ($analyses->max(fn ($analysis) => $analysis->currentProviderRun?->insurance_analysis_round_id) ?? 0),
                 'transport' => config('broadcasting.default') === 'reverb' ? 'reverb' : 'polling',
                 'refresh_url' => $refreshUrl,
                 'method' => 'GET',
@@ -147,25 +186,49 @@ class InsuranceAnalysisPageService
         return $data + ['pageData' => $page, 'viewerType' => $viewerType, 'returnUrl' => $returnUrl, 'refreshUrl' => $refreshUrl];
     }
 
+    /** @return array{state: string, processing: bool, label: string} */
+    private function displayState(string $status, ?string $paymentStatus, bool $pollingStopped): array
+    {
+        $state = match (true) {
+            $status === 'approved' && $paymentStatus === 'pending' => 'pricing',
+            $status === 'approved' && in_array($paymentStatus, ['failed', 'unavailable'], true) => 'price_unavailable',
+            $status === 'approved' => 'approved',
+            $status === 'rejected' => 'rejected',
+            in_array($status, ['failed', 'error'], true) => 'failed',
+            $status === 'manual_required' => 'manual_required',
+            $pollingStopped => 'awaiting_provider',
+            default => 'processing',
+        };
+
+        return ['state' => $state, 'processing' => in_array($state, ['processing', 'pricing'], true), 'label' => match ($state) {
+            'pricing' => 'Consultando preço', 'approved' => 'Aprovada', 'rejected' => 'Cotação recusada',
+            'failed' => 'Não foi possível concluir a cotação.', 'manual_required' => 'Cotação manual necessária',
+            'price_unavailable' => 'Aprovada. Preço indisponível.',
+            'awaiting_provider' => 'Aguardando decisão da companhia. Consultas automáticas encerradas.',
+            default => 'Processando análise',
+        }];
+    }
+
     /** @return array{available: bool, url: string|null, method: string} */
     private function action(bool $available, string $route, int $id, string $method = 'POST'): array
     {
         return ['available' => $available, 'url' => $available ? route($route, $id) : null, 'method' => $method];
     }
 
+    /** Pottencial e Too não aceitam reanálise; a regra fica em canRequestProviderReanalysis(). */
     private function canReanalyze(InsuranceAnalysis $analysis): bool
     {
-        $payload = $analysis->providerResponsePayload();
-
-        return $analysis->canRequestProviderReanalysis()
-            && (! $analysis->isTooProvider() || (
-                filled($payload['numeroProposta'] ?? $payload['numero_proposta'] ?? $analysis->proposal_id)
-                && filled($payload['numeroFicha'] ?? $payload['numero_ficha'] ?? $payload['numeroProposta'] ?? $analysis->proposal_id)
-            ));
+        return $analysis->canRequestProviderReanalysis();
     }
 
     private function canSync(InsuranceAnalysis $analysis): bool
     {
+        if ($analysis->provider === 'tokio') {
+            return false;
+        }
+        if ($analysis->currentProviderRun) {
+            return ! ProviderAnalysisStatus::isTerminal($analysis->status);
+        }
         if (! $analysis->isTooProvider()) {
             return filled($analysis->quote_id);
         }

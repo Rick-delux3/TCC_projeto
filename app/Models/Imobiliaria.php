@@ -25,6 +25,7 @@ class Imobiliaria extends Model implements CanResetPasswordContract
         'city', 'state',
         'lead_form_token', 'lead_form_active',
         'lead_access_code', 'leadlovers_tag_id', 'leadlovers_tag_name',
+        'tokio_partner_code', 'porto_partner_code',
     ];
 
     protected $hidden = [

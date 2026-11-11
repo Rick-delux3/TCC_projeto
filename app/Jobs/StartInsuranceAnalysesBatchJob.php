@@ -28,9 +28,9 @@ class StartInsuranceAnalysesBatchJob implements ShouldQueue
 
     public int $timeout = 120;
 
+    /** Somente a análise inicial: a reanálise é por companhia (LeadReanalysisService). */
     public function __construct(
         public int $leadId,
-        public bool $isReanalysis = false
     ) {
         $this->onQueue('insurance-analyses');
     }
@@ -41,12 +41,6 @@ class StartInsuranceAnalysesBatchJob implements ShouldQueue
             logger()->notice('Job de análise ignorado porque o módulo está desativado.', ['job' => static::class]);
 
             return;
-        }
-
-        if ($this->isReanalysis) {
-            throw new \LogicException(
-                'Reanálises devem ser iniciadas pelo LeadReanalysisService.'
-            );
         }
 
         $lead = Lead::with([
@@ -81,7 +75,6 @@ class StartInsuranceAnalysesBatchJob implements ShouldQueue
         if (empty($providers)) {
             Log::warning('Nenhum provider disponível para iniciar análises.', [
                 'lead_id' => $lead->id,
-                'is_reanalysis' => $this->isReanalysis,
             ]);
 
             return;
@@ -188,7 +181,7 @@ class StartInsuranceAnalysesBatchJob implements ShouldQueue
                         'total_monthly_amount' => $totalMonthlyAmount,
 
                         'payment_type' => config('services.pottencial.default_payment_type', 'Boleto'),
-                        'installments' => (int) config('services.pottencial.default_installments', 12),
+                        'installments' => (int) config('services.pottencial.default_installments', 30),
                     ]);
 
                     $analysis->events()->create([
@@ -205,85 +198,19 @@ class StartInsuranceAnalysesBatchJob implements ShouldQueue
                         ),
                     ]);
                 } else {
-                    if ($this->isReanalysis) {
-                        $analysis->events()->create([
-                            'event_type' => 'previous_analysis_snapshot',
-                            'status' => $analysis->status,
-                            'message' => "Snapshot da análise anterior para provider {$provider}.",
-                            'payload' => [
-                                'attempt_id' => $attemptId,
-                                'is_reanalysis' => true,
-                                'snapshot_type' => 'before_reanalysis',
-
-                                'analysis_id' => $analysis->id,
-                                'batch_id' => $analysis->insurance_analysis_batch_id,
-                                'lead_id' => $analysis->lead_id,
-                                'company_id' => $analysis->company_id,
-
-                                'provider' => $analysis->provider,
-                                'product' => $analysis->product,
-
-                                'previous_status' => $analysis->status,
-                                'previous_result' => $analysis->result,
-
-                                /*
-                                |--------------------------------------------------------------------------
-                                | Valores enviados na análise anterior
-                                |--------------------------------------------------------------------------
-                                */
-                                'rent_amount' => (float) $analysis->rent_amount,
-                                'charges_amount' => (float) $analysis->charges_amount,
-                                'total_monthly_amount' => (float) $analysis->total_monthly_amount,
-
-                                'plan_key' => $analysis->plan_key,
-                                'multiple' => $analysis->multiple,
-                                'lease_start_date' => optional($analysis->lease_start_date)->toDateString(),
-                                'lease_end_date' => optional($analysis->lease_end_date)->toDateString(),
-
-                                'captured_at' => now()->toDateTimeString(),
-                            ],
-
-                            /*
-                            |--------------------------------------------------------------------------
-                            | Valores retornados pela companhia na análise anterior
-                            |--------------------------------------------------------------------------
-                            | Aqui deixamos os campos normalizados para a view conseguir exibir
-                            | sem depender do JSON bruto da API.
-                            */
-                            'response' => [
-                                'provider' => $analysis->provider,
-                                'provider_status' => $analysis->provider_status,
-                                'quote_id' => $analysis->quote_id,
-                                'quote_number' => $analysis->quote_number,
-                                'product_key' => $analysis->product_key,
-
-                                'premium_amount' => $analysis->premium_amount,
-                                'commercial_premium' => $analysis->commercial_premium,
-                                'gross_premium' => $analysis->gross_premium,
-                                'iof' => $analysis->iof,
-                                'insured_amount' => $analysis->insured_amount,
-
-                                'available_plans' => $analysis->available_plans,
-                                'available_assistances' => $analysis->available_assistances,
-                            ],
-                        ]);
-                    }
-
                     /*
                     |--------------------------------------------------------------------------
                     | Evento de solicitação da nova rodada
                     |--------------------------------------------------------------------------
-                    | Esse evento marca que uma reanálise foi solicitada.
+                    | Esse evento marca uma nova execução da análise inicial.
                     */
                     $analysis->events()->create([
-                        'event_type' => $this->isReanalysis ? 'reanalysis_requested' : 'analysis_restarted',
+                        'event_type' => 'analysis_restarted',
                         'status' => 'pending',
-                        'message' => $this->isReanalysis
-                            ? "Reanálise solicitada para provider {$provider}."
-                            : "Nova execução de análise solicitada para provider {$provider}.",
+                        'message' => "Nova execução de análise solicitada para provider {$provider}.",
                         'payload' => [
                             'attempt_id' => $attemptId,
-                            'is_reanalysis' => $this->isReanalysis,
+                            'is_reanalysis' => false,
                             'requested_at' => now()->toDateTimeString(),
                         ],
                     ]);
@@ -322,18 +249,16 @@ class StartInsuranceAnalysesBatchJob implements ShouldQueue
                         'charges_amount' => $chargesAmount,
                         'total_monthly_amount' => $totalMonthlyAmount,
                         'payment_type' => config('services.pottencial.default_payment_type', 'Boleto'),
-                        'installments' => (int) config('services.pottencial.default_installments', 12),
+                        'installments' => (int) config('services.pottencial.default_installments', 30),
                         'requested_at' => null,
                         'finished_at' => null,
                     ])->save();
                 }
 
                 $analysis->events()->create([
-                    'event_type' => $this->isReanalysis ? 'reanalysis_started' : 'analysis_started',
+                    'event_type' => 'analysis_started',
                     'status' => 'pending',
-                    'message' => $this->isReanalysis
-                        ? "Reanálise iniciada para provider {$provider}."
-                        : "Análise iniciada para provider {$provider}.",
+                    'message' => "Análise iniciada para provider {$provider}.",
                     'payload' => $this->attemptPayload(
                         attemptId: $attemptId,
                         lead: $lead,
@@ -344,6 +269,7 @@ class StartInsuranceAnalysesBatchJob implements ShouldQueue
                     ),
                 ]);
 
+                app(\App\Services\Insurance\InsuranceQuoteCoordinator::class)->prepare($analysis, $attemptId, false);
                 $analysisIds[] = $analysis->id;
             }
 
@@ -361,18 +287,13 @@ class StartInsuranceAnalysesBatchJob implements ShouldQueue
                     attemptId: $attemptId,
                     isReanalysis: false
                 ))->beforeCommit())->all();
-            $isReanalysis = false;
             $batchModelId = (int) $batchModel->id;
             $leadId = (int) $lead->id;
 
             Bus::batch($jobs)
                 ->onConnection($connection)
                 ->onQueue('insurance-analyses')
-                ->name(
-                    $isReanalysis
-                        ? "Reanálise do lead {$leadId}"
-                        : "Análises do lead {$leadId}"
-                )
+                ->name("Análises do lead {$leadId}")
                 ->allowFailures()
                 ->catch(static function (Batch $batch, Throwable $e) use ($batchModelId, $attemptId) {
                     Log::warning('Erro em algum job do lote de análises', [
@@ -382,11 +303,11 @@ class StartInsuranceAnalysesBatchJob implements ShouldQueue
                         'message' => $e->getMessage(),
                     ]);
                 })
-                ->finally(static function (Batch $batch) use ($batchModelId, $attemptId, $isReanalysis) {
+                ->finally(static function (Batch $batch) use ($batchModelId, $attemptId) {
                     CompleteInsuranceAnalysesBatchJob::dispatch(
                         batchId: $batchModelId,
                         attemptId: $attemptId,
-                        isReanalysis: $isReanalysis,
+                        isReanalysis: false,
                     );
                 })
                 ->dispatch();
@@ -411,7 +332,7 @@ class StartInsuranceAnalysesBatchJob implements ShouldQueue
     ): array {
         return [
             'attempt_id' => $attemptId,
-            'is_reanalysis' => $this->isReanalysis,
+            'is_reanalysis' => false,
             'provider' => $provider,
 
             'lead_id' => $lead->id,

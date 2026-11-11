@@ -9,14 +9,14 @@ use App\Models\InsuranceAnalysis;
 use App\Models\InsuranceAnalysisBatch;
 use App\Models\Lead;
 use App\Services\Insurance\InsuranceAnalysisPageService;
-use App\Services\LeadReanalysisService;
+use App\Services\Insurance\LeadReanalysisService;
 use DomainException;
 use Illuminate\Contracts\View\View;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Gate;
-use Illuminate\Validation\ValidationException;
 
 class InsuranceAnalysisController extends Controller
 {
@@ -24,6 +24,44 @@ class InsuranceAnalysisController extends Controller
         private LeadReanalysisService $leadReanalysisService,
         private InsuranceAnalysisPageService $analysisPageService,
     ) {}
+
+    public function saveExpenses(\App\Http\Requests\SaveLeadExpensesRequest $request, Lead $lead): JsonResponse
+    {
+        try {
+            $result = $this->leadReanalysisService->saveExpenses(
+                $lead, $request->validated(),
+                $request->routeIs('admin.*') ? Auth::guard('admin')->user() : null,
+            );
+
+            return response()->json(['message' => 'Despesas salvas. Escolha a companhia que deseja reanalisar.'] + $result);
+        } catch (DomainException $exception) {
+            return response()->json(['message' => $exception->getMessage()], 422);
+        }
+    }
+
+    public function reanalyzeProviderExpenses(\App\Http\Requests\ReanalyzeProviderExpensesRequest $request, InsuranceAnalysis $analysis): JsonResponse
+    {
+        return $this->saveExpensesAndReanalyzeProvider($request, $analysis, false);
+    }
+
+    public function adminReanalyzeProviderExpenses(\App\Http\Requests\ReanalyzeProviderExpensesRequest $request, InsuranceAnalysis $analysis): JsonResponse
+    {
+        return $this->saveExpensesAndReanalyzeProvider($request, $analysis, true);
+    }
+
+    private function saveExpensesAndReanalyzeProvider(\App\Http\Requests\ReanalyzeProviderExpensesRequest $request, InsuranceAnalysis $analysis, bool $admin): JsonResponse
+    {
+        try {
+            $this->leadReanalysisService->reanalyzeProviderExpenses(
+                $analysis, $request->validated(), $admin ? 'admin' : 'imobiliaria',
+                $admin ? Auth::guard('admin')->user() : null,
+            );
+
+            return response()->json(['message' => 'Nova cotação solicitada para esta companhia.', 'analysis_id' => $analysis->id], 202);
+        } catch (DomainException $exception) {
+            return response()->json(['message' => $exception->getMessage(), 'analysis_id' => $analysis->id], 422);
+        }
+    }
 
     public function index(): RedirectResponse
     {
@@ -205,16 +243,18 @@ class InsuranceAnalysisController extends Controller
             );
         }
 
-        $data = $this->validateProviderReanalysisRequest($request, $analysis);
-        $options = $this->reanalysisOptionsForProvider($analysis, $data);
+        $data = $this->validateProviderReanalysisRequest($request);
 
         try {
+            // Antes de salvar qualquer dado: Pottencial e Too não aceitam reanálise.
+            $this->leadReanalysisService->ensureReanalysisAllowed($analysis);
+
             $corretor = $requestedBy === 'admin'
                 ? Auth::guard('admin')->user()
                 : null;
 
             $updateResult = $this->leadReanalysisService
-                ->updateLeadDataAndMaybeUnlock(
+                ->updateLeadData(
                     lead: $analysis->lead,
                     data: $data,
                     corretor: $corretor instanceof Corretor
@@ -239,7 +279,6 @@ class InsuranceAnalysisController extends Controller
             $this->leadReanalysisService->startProviderReanalysis(
                 analysis: $analysis,
                 requestedBy: $requestedBy,
-                options: $options
             );
 
             return back()->with(
@@ -298,30 +337,11 @@ class InsuranceAnalysisController extends Controller
     }
 
     /**
-     * Monta opções específicas de reanálise por provider.
-     */
-    private function reanalysisOptionsForProvider(InsuranceAnalysis $analysis, array $data): array
-    {
-        if (! $analysis->isTooProvider()) {
-            return [];
-        }
-
-        $reason = (int) ($data['too_reanalysis_reason'] ?? 10);
-
-        return [
-            'motivosReanalise' => [$reason],
-            'observacoes' => filled($data['too_reanalysis_observations'] ?? null)
-                ? $data['too_reanalysis_observations']
-                : 'Reanálise solicitada após alteração dos dados do lead.',
-        ];
-    }
-
-    /**
      * Valida dados alteráveis na reanálise por companhia.
      */
-    private function validateProviderReanalysisRequest(Request $request, InsuranceAnalysis $analysis): array
+    private function validateProviderReanalysisRequest(Request $request): array
     {
-        $data = $request->validate([
+        return $request->validate([
             'nome' => ['nullable', 'string', 'max:255'],
             'email' => ['nullable', 'email', 'max:255'],
             'tel' => ['nullable', 'string', 'max:30'],
@@ -345,23 +365,7 @@ class InsuranceAnalysisController extends Controller
             'logradouro' => ['nullable', 'string', 'max:255'],
             'numero' => ['nullable', 'string', 'max:30'],
             'complemento' => ['nullable', 'string', 'max:255'],
-
-            'too_reanalysis_reason' => ['nullable', 'integer', 'between:1,10'],
-            'too_reanalysis_observations' => ['nullable', 'string', 'max:1000'],
         ]);
-
-        if ($analysis->isTooProvider()) {
-            $reason = (int) ($data['too_reanalysis_reason'] ?? 10);
-            $observations = $data['too_reanalysis_observations'] ?? null;
-
-            if (in_array($reason, [3, 7, 10], true) && blank($observations)) {
-                throw ValidationException::withMessages([
-                    'too_reanalysis_observations' => 'Informe as observações para este motivo de reanálise da Too.',
-                ]);
-            }
-        }
-
-        return $data;
     }
 
     /**
@@ -369,6 +373,10 @@ class InsuranceAnalysisController extends Controller
      */
     private function syncAnalysisStatus(InsuranceAnalysis $analysis, string $requestedBy): RedirectResponse
     {
+        if (! \App\Services\Insurance\Providers\InsuranceProviderResolver::providerEnabled((string) $analysis->provider)) {
+            return back()->with('error', 'Esta companhia está desativada no momento. O resultado anterior permanece apenas para consulta.');
+        }
+
         $responsePayload = $analysis->providerResponsePayload();
 
         $isToo = mb_strtolower((string) $analysis->provider) === 'too';
@@ -398,7 +406,10 @@ class InsuranceAnalysisController extends Controller
             && $tooManualSyncAvailable
             && ! in_array($normalizedStatus, $finalStatuses, true);
 
-        if (! $canSyncByQuote && ! $canSyncTooManually) {
+        $canSyncScenarios = $analysis->currentProviderRun !== null
+            && ! \App\Services\Insurance\ProviderAnalysisStatus::isTerminal($analysis->status);
+
+        if (! $canSyncByQuote && ! $canSyncTooManually && ! $canSyncScenarios) {
             return back()->with(
                 'error',
                 'Essa análise ainda não está disponível para sincronização manual.'

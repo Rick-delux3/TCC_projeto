@@ -7,8 +7,8 @@ use App\Http\Requests\UpdateAdminLeadRequest;
 use App\Models\Corretor;
 use App\Models\Imobiliaria;
 use App\Models\Lead;
-use App\Services\LeadLoversInitialFailureRecoveryService;
-use App\Services\LeadReanalysisService;
+use App\Services\Insurance\LeadReanalysisService;
+use App\Services\LeadLovers\LeadLoversInitialFailureRecoveryService;
 use DomainException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -61,20 +61,6 @@ class DashboardLeadController extends Controller
         $corretor = $this->authorizeAdminAbility('edit-leads');
 
         return $this->saveLeadsUpdates($request, $lead, $corretor);
-    }
-
-    public function reanalyze(Lead $lead)
-    {
-        $this->authorizeCompanyLead($lead);
-
-        return $this->startLeadReanalysis($lead, 'imobiliaria');
-    }
-
-    public function adminReanalyze(Lead $lead)
-    {
-        $this->authorizeAdminAbility('create-analysis');
-
-        return $this->startLeadReanalysis($lead, 'admin');
     }
 
     public function correctLeadLoversFailure(
@@ -132,7 +118,7 @@ class DashboardLeadController extends Controller
             ? $request->validated()
             : $this->validateLeadUpdateRequest($request);
 
-        $result = $this->leadReanalysisService->updateLeadDataAndMaybeUnlock(
+        $result = $this->leadReanalysisService->updateLeadData(
             lead: $lead,
             data: $data,
             corretor: $corretor,
@@ -145,29 +131,6 @@ class DashboardLeadController extends Controller
         }
 
         return back()->with('success', $result['message']);
-    }
-
-    private function startLeadReanalysis(Lead $lead, string $requestedBy)
-    {
-        try {
-            $total = $this->leadReanalysisService->startGeneralReanalysis(
-                lead: $lead,
-                requestedBy: $requestedBy,
-                options: [
-                    'motivosReanalise' => [10],
-                    'observacoes' => 'Reanálise geral solicitada após alteração dos dados do lead.',
-
-                ]
-            );
-
-            return back()->with(
-                'success',
-                "Reanálise geral iniciada com sucesso para {$total} companhia(s)."
-            );
-
-        } catch (DomainException $exception) {
-            return back()->with('error', $exception->getMessage());
-        }
     }
 
     private function validateLeadUpdateRequest(Request $request): array

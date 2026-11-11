@@ -1,4 +1,4 @@
-<section class="mb-4" aria-labelledby="batch-title">
+<section class="mb-4" aria-labelledby="batch-title" data-analysis-component="batch">
     <h2 id="batch-title" class="h5">Andamento do pacote</h2>
     @if ($awaitingBatch)
         <div class="alert alert-info" role="status">Aguardando a criação do pacote de análises deste lead.</div>

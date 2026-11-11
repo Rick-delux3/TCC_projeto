@@ -4,7 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Corretor;
 use App\Models\CorretorLoginVerificacaoCode;
-use App\Services\CorretorInvitationService;
+use App\Services\Access\CorretorInvitationService;
 use DomainException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;

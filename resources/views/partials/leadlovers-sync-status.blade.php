@@ -112,7 +112,7 @@
         : null;
 @endphp
 
-<div class="leadlovers-sync-status {{ $leadLoversFailureMessageMode === 'full' ? 'leadlovers-sync-status--full' : 'leadlovers-sync-status--compact' }}">
+<div data-leadlovers-pending="{{ config('services.leadlovers.enabled', false) && in_array($leadLoversInitialStatus, ['pending', 'processing'], true) ? 'true' : 'false' }}" class="leadlovers-sync-status {{ $leadLoversFailureMessageMode === 'full' ? 'leadlovers-sync-status--full' : 'leadlovers-sync-status--compact' }}">
     @if ($showLeadLoversBadge ?? true)
         <span class="badge {{ $leadLoversPresentation['class'] }}">
             <i

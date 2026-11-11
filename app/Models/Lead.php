@@ -29,6 +29,8 @@ class Lead extends Model
 
     protected $table = 'leads';
 
+    protected $hidden = ['leadlovers_contact_overrides'];
+
     public function atividadeEconomica(): BelongsTo
     {
         return $this->belongsTo(AtividadeEconomica::class);
@@ -50,6 +52,7 @@ class Lead extends Model
         'cpf',
         'data_nascimento',
         'tipo_locacao',
+        'motivo_contratacao',
         'tipo_pessoa',
         'empresa_constituida',
         'data_fundacao_calculada',
@@ -75,7 +78,6 @@ class Lead extends Model
         'created_by_corretor_id',
         'updated_by_corretor_id',
         'data_edited_at',
-        'reanalysis_unlocked_at',
         'leadlovers_update_status',
         'leadlovers_update_version',
         'leadlovers_update_response',
@@ -103,10 +105,10 @@ class Lead extends Model
         'ramo_atividade' => RamoAtividade::class,
         'leadlovers_lead_id' => 'integer',
         'leadlovers_response' => 'array',
+        'leadlovers_contact_overrides' => 'encrypted:array',
         'leadlovers_recovery' => 'array',
         'sent_to_leadlovers_at' => 'datetime',
         'aceite_termos' => 'boolean',
-        'reanalysis_unlocked_at' => 'datetime',
         'leadlovers_update_response' => 'array',
         'leadlovers_update_requested_at' => 'datetime',
         'leadlovers_update_at' => 'datetime',
@@ -116,6 +118,15 @@ class Lead extends Model
         'leadlovers_confirmed_tag_version' => 'integer',
         'rejected_deletion_due_at' => 'datetime',
     ];
+
+    public function leadLoversContact(string $field): ?string
+    {
+        if (! in_array($field, ['tel', 'email'], true)) {
+            throw new \InvalidArgumentException('Campo de contato inválido.');
+        }
+
+        return ($this->leadlovers_contact_overrides ?? [])[$field] ?? $this->getAttribute($field);
+    }
 
     public function scopeCreatedThroughSystem(Builder $query): Builder
     {
@@ -278,23 +289,6 @@ class Lead extends Model
         return $this->belongsTo(Corretor::class, 'updated_by_corretor_id');
     }
 
-    public function canRequestReanalysis(): bool
-    {
-        if (! $this->reanalysis_unlocked_at) {
-            return false;
-        }
-
-        $lastAnalysis = $this->insuranceAnalyses()
-            ->latest('created_at')
-            ->first();
-
-        if (! $lastAnalysis) {
-            return true;
-        }
-
-        return $this->reanalysis_unlocked_at->gt($lastAnalysis->created_at);
-    }
-
     public function rentalApplicantDocument(): string
     {
         return (string) \App\Rules\CpfOrCnpj::normalize($this->lead_empresa ? ($this->lead_empresa->cnpj ?? '') : ($this->cpf ?? ''));
@@ -329,20 +323,6 @@ class Lead extends Model
     {
         return preg_match('/^[0-9]{11}$/D', $this->rentalApplicantCpf()) === 1
             && $this->tipo_locacao !== null;
-    }
-
-    public function hasFinalInsuranceResultForReanalysis(): bool
-    {
-        return in_array($this->analysis_final_status, [
-            'approved',
-            'rejected',
-        ], true);
-    }
-
-    public function canRequestGeneralReanalysis(): bool
-    {
-        return $this->hasFinalInsuranceResultForReanalysis()
-            && filled($this->reanalysis_unlocked_at);
     }
 
     // Leads cujo envio inicial foi recusado pela LeadLovers devido a um erro HTTP 400 e que ainda não possuem identificação remota.

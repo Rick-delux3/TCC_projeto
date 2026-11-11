@@ -6,6 +6,11 @@ use Illuminate\Database\Eloquent\Model;
 
 class InsuranceAnalysisBatch extends Model
 {
+    public function rounds(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(InsuranceAnalysisRound::class);
+    }
+
     protected $table = 'lotes_analises_seguro';
 
     protected $fillable = [

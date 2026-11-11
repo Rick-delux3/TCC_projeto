@@ -95,13 +95,22 @@ class StoreSimulationLeadRequest extends FormRequest
 
             'aceite_termos' => ['accepted'],
 
-            'nome' => ['required', 'string', 'min:3', 'max:255'],
-            'data_nascimento' => BirthDate::rules(),
+            'nome' => config('features.cpf_lookup.enabled') && ! $this->hasCompanyDocument()
+                ? ['exclude'] : ['required', 'string', 'min:3', 'max:255'],
+            'data_nascimento' => config('features.cpf_lookup.enabled') ? ['exclude'] : BirthDate::rules(),
+            'conjuge_data_nascimento' => config('features.cpf_lookup.enabled') || ! $this->allowsSpouse()
+                ? ['exclude']
+                : array_merge(['nullable'], array_values(array_diff(BirthDate::rules(), ['required']))),
             'email' => ['required', 'string', 'email:rfc', 'max:255'],
             'tel' => ['required', 'string', 'min:10', 'max:11'],
 
-            'cpf' => ['bail', 'required', 'string', new CpfOrCnpj],
+            'cpf' => ['bail', 'required', 'string', $this->documentRule($this->input('cpf'))],
             'tipo_locacao' => ['required', Rule::enum(TipoLocacao::class)],
+            'motivo_contratacao' => [
+                'exclude_unless:tipo_locacao,comercial',
+                'bail', 'required', 'string',
+                Rule::in(['1', '2', '3', '4', '5', '6', '7', '8', '9']),
+            ],
             'empresa_constituida' => [
                 Rule::excludeIf(! $this->hasCompanyDocument() || $this->input('tipo_locacao') !== 'comercial'),
                 'bail',
@@ -112,7 +121,7 @@ class StoreSimulationLeadRequest extends FormRequest
             'ramo_atividade' => [
                 'exclude_unless:tipo_locacao,comercial',
                 'bail',
-                'nullable',
+                'required',
                 'integer',
                 Rule::enum(RamoAtividade::class),
             ],
@@ -129,9 +138,10 @@ class StoreSimulationLeadRequest extends FormRequest
                 'required',
                 'string',
                 'size:11',
-                new CpfOrCnpj,
+                $this->documentRule($this->input('cpf_responsavel')),
             ],
             'nome_responsavel' => [
+                Rule::excludeIf((bool) config('features.cpf_lookup.enabled')),
                 Rule::excludeIf(! $this->hasCompanyDocument()),
                 'required',
                 'string',
@@ -142,6 +152,7 @@ class StoreSimulationLeadRequest extends FormRequest
             'estado_civil' => ['nullable', 'string', 'in:solteiro,separado,casado,uniao_estavel,divorciado,viuvo'],
 
             'conjuge_nome' => [
+                Rule::excludeIf((bool) config('features.cpf_lookup.enabled')),
                 Rule::excludeIf(! $this->allowsSpouse()),
                 'nullable',
                 'required_if:estado_civil,casado,uniao_estavel',
@@ -157,7 +168,7 @@ class StoreSimulationLeadRequest extends FormRequest
                 'required_if:estado_civil,casado,uniao_estavel',
                 'string',
                 'size:11',
-                new CpfOrCnpj,
+                $this->documentRule($this->input('conjuge_cpf')),
             ],
 
             'responsavel_tipo' => [
@@ -216,6 +227,9 @@ class StoreSimulationLeadRequest extends FormRequest
     public function messages(): array
     {
         return [
+            'motivo_contratacao.required' => 'Selecione o motivo da contratação.',
+            'motivo_contratacao.string' => 'Selecione um motivo de contratação válido.',
+            'motivo_contratacao.in' => 'Selecione um dos motivos de contratação disponíveis para locação comercial.',
             /*
         |--------------------------------------------------------------------------
         | Proteção contra bots / termos
@@ -258,6 +272,7 @@ class StoreSimulationLeadRequest extends FormRequest
                 ? CompanyConstitution::REJECTION_MESSAGE
                 : 'Selecione Sim ou Não para a constituição da empresa.',
             'ramo_atividade.integer' => 'Selecione um ramo de atividade válido: Comércio, Indústria ou Serviços.',
+            'ramo_atividade.required' => 'Selecione o ramo de atividade para a locação comercial.',
             'ramo_atividade.enum' => 'Selecione um ramo de atividade válido: Comércio, Indústria ou Serviços.',
             'atividade_economica_id.required' => 'Pesquise e selecione uma atividade da lista.',
             'atividade_economica_id.integer' => 'Selecione uma atividade válida da lista.',
@@ -507,5 +522,14 @@ class StoreSimulationLeadRequest extends FormRequest
         }
 
         return is_numeric($normalizedValue) ? $normalizedValue : $valor;
+    }
+
+    private function documentRule(mixed $document): CpfOrCnpj|string
+    {
+        if (! config('features.cpf_lookup.enabled') && is_string($document) && strlen($document) === 11) {
+            return 'regex:/^[0-9]{11}$/';
+        }
+
+        return new CpfOrCnpj;
     }
 }

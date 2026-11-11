@@ -2,7 +2,6 @@
 
 namespace App\Services\Insurance;
 
-use App\Services\PottencialService;
 use Illuminate\Support\Facades\Http;
 use Throwable;
 

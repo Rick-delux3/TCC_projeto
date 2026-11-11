@@ -8,8 +8,8 @@ use App\Jobs\UpdateLeadOnLeadLoversJob;
 use App\Models\Imobiliaria;
 use App\Models\Lead;
 use App\Models\LeadLoversTag;
-use App\Services\LeadLoversApiClient;
-use App\Services\LeadReanalysisService;
+use App\Services\Insurance\LeadReanalysisService;
+use App\Services\LeadLovers\LeadLoversApiClient;
 use App\Support\LeadLoversInitialFailureCatalog;
 use Illuminate\Broadcasting\BroadcastEvent;
 use Illuminate\Http\Client\Request;
@@ -608,7 +608,7 @@ it('does not orphan an edit made while the creation request is running', functio
     ]);
     Http::fake([
         'https://api.leadlovers.test/leads/' => function () use ($lead) {
-            app(LeadReanalysisService::class)->updateLeadDataAndMaybeUnlock(
+            app(LeadReanalysisService::class)->updateLeadData(
                 $lead,
                 ['nome' => 'Nome alterado durante HTTP']
             );

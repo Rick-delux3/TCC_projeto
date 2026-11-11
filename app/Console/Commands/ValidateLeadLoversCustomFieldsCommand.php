@@ -3,8 +3,8 @@
 namespace App\Console\Commands;
 
 use App\Exceptions\LeadLoversApiException;
-use App\Services\LeadLoversApiClient;
-use App\Services\LeadLoversLeadResolver;
+use App\Services\LeadLovers\LeadLoversApiClient;
+use App\Services\LeadLovers\LeadLoversLeadResolver;
 use Illuminate\Console\Command;
 
 class ValidateLeadLoversCustomFieldsCommand extends Command

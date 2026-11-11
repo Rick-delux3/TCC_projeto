@@ -2,10 +2,10 @@
 
 namespace App\Services\Insurance\Providers;
 
-use App\Models\InsuranceAnalysis;
+use App\Models\InsuranceExecution;
 use App\Services\Insurance\InsuranceAnalysisAttempt;
 use App\Services\Insurance\Payloads\RentalGuaranteeQuotePayloadBuilder;
-use App\Services\PottencialService;
+use App\Services\Insurance\PottencialService;
 
 class PottencialInsuranceProvider implements CreatesInsuranceQuotes, InsuranceProviderInterface
 {
@@ -19,7 +19,7 @@ class PottencialInsuranceProvider implements CreatesInsuranceQuotes, InsurancePr
         return 'Pottencial';
     }
 
-    public function createQuote(InsuranceAnalysis $analysis): array
+    public function createQuote(InsuranceExecution $analysis): array
     {
         $this->ensureEnabled();
 
@@ -27,51 +27,17 @@ class PottencialInsuranceProvider implements CreatesInsuranceQuotes, InsurancePr
     }
 
     public function requestAnalysis(
-        InsuranceAnalysis $analysis,
+        InsuranceExecution $analysis,
         string $attemptId
     ): array {
         $this->ensureEnabled();
         $analysis->executionAttemptId = $attemptId;
         InsuranceAnalysisAttempt::assertCurrent($analysis, $analysis->executionAttemptId);
 
-        return $this->requestQuote(
-            analysis: $analysis,
-            attemptId: $attemptId,
-            isReanalysis: false
-        );
+        return $this->requestQuote($analysis, $attemptId);
     }
 
-    public function requestReanalysis(
-        InsuranceAnalysis $analysis,
-        string $attemptId,
-        array $options = []
-    ): array {
-        $this->ensureEnabled();
-        $analysis->executionAttemptId = $attemptId;
-        InsuranceAnalysisAttempt::assertCurrent($analysis, $analysis->executionAttemptId);
-
-        InsuranceAnalysisAttempt::run($analysis, $attemptId, function () use ($analysis, $attemptId, $options): void {
-            $analysis->events()->create([
-                'event_type' => 'pottencial_reanalysis_fallback',
-                'status' => 'processing',
-                'message' => 'A Pottencial ainda não possui fluxo oficial de reanálise. Uma nova cotação externa será solicitada.',
-                'payload' => [
-                    'attempt_id' => $attemptId,
-                    'is_reanalysis' => true,
-                    'fallback' => 'request_analysis',
-                    'options' => $options,
-                ],
-            ]);
-        });
-
-        return $this->requestQuote(
-            analysis: $analysis,
-            attemptId: $attemptId,
-            isReanalysis: true
-        );
-    }
-
-    public function getStatus(InsuranceAnalysis $analysis): array
+    public function getStatus(InsuranceExecution $analysis): array
     {
         $this->ensureEnabled();
         $analysis->executionAttemptId ??= $analysis->currentAttemptContext()['attempt_id'] ?? null;
@@ -88,11 +54,9 @@ class PottencialInsuranceProvider implements CreatesInsuranceQuotes, InsurancePr
         );
     }
 
-    private function requestQuote(
-        InsuranceAnalysis $analysis,
-        string $attemptId,
-        bool $isReanalysis
-    ): array {
+    /** A Pottencial não aceita reanálise: cada rodada é uma cotação nova do objeto de risco. */
+    private function requestQuote(InsuranceExecution $analysis, string $attemptId): array
+    {
         $this->ensureEnabled();
 
         $analysis->loadMissing([
@@ -111,18 +75,14 @@ class PottencialInsuranceProvider implements CreatesInsuranceQuotes, InsurancePr
             'request_payload' => $payload,
         ]);
 
-        InsuranceAnalysisAttempt::run($analysis, $attemptId, function () use ($analysis, $attemptId, $isReanalysis): void {
+        InsuranceAnalysisAttempt::run($analysis, $attemptId, function () use ($analysis, $attemptId): void {
             $analysis->events()->create([
-                'event_type' => $isReanalysis
-                    ? 'pottencial_quote_restarted'
-                    : 'pottencial_quote_started',
+                'event_type' => 'pottencial_quote_started',
                 'status' => 'processing',
-                'message' => $isReanalysis
-                    ? 'Nova cotação externa da Pottencial iniciada como fallback da reanálise.'
-                    : 'Cotação da Pottencial iniciada.',
+                'message' => 'Cotação da Pottencial iniciada.',
                 'payload' => [
                     'attempt_id' => $attemptId,
-                    'is_reanalysis' => $isReanalysis,
+                    'is_reanalysis' => false,
                 ],
             ]);
         });

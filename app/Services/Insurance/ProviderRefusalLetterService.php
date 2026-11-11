@@ -3,13 +3,14 @@
 namespace App\Services\Insurance;
 
 use App\Models\InsuranceAnalysisBatch;
-use App\Services\PottencialService;
-use App\Services\TooService;
 use RuntimeException;
 
 class ProviderRefusalLetterService
 {
-    public function fetch(InsuranceAnalysisBatch $batch, string $attemptId, int $analysisId): string
+    /**
+     * @param  string|null  $budget  Porto: orçamento recusado do cenário (cada cenário tem sua carta).
+     */
+    public function fetch(InsuranceAnalysisBatch $batch, string $attemptId, int $analysisId, ?string $budget = null): string
     {
         $reference = InsuranceAnalysisAttempt::runBatch($batch, $attemptId, function () use ($batch, $attemptId, $analysisId): array {
             $prepared = app(AnalysisResultPreparationService::class)->prepare($batch, $attemptId);
@@ -35,11 +36,34 @@ class ProviderRefusalLetterService
             'too' => filled($reference['cpf']) && filled($reference['proposal_id'])
                 ? app(TooService::class)->getCreditOpinionPdf($reference['cpf'], $reference['proposal_id'])
                 : throw new RuntimeException('CPF original ou proposta da Too não identificados.'),
+            'porto' => $budget !== null && in_array($budget, $this->portoRefusedBudgets($batch, $attemptId, $analysisId), true)
+                ? app(PortoService::class)->refusalLetter($budget)
+                : throw new RuntimeException('Orçamento recusado da Porto não identificado nesta rodada.'),
             default => throw new RuntimeException('Companhia sem integração de carta de recusa.'),
         };
 
         InsuranceAnalysisAttempt::runBatch($batch, $attemptId, fn (): bool => true);
 
         return $contents;
+    }
+
+    /**
+     * Orçamentos recusados da Porto na rodada, um por cenário (principal,
+     * cônjuge e conjunta). Recusas sem orçamento válido não geram carta.
+     *
+     * @return list<string>
+     */
+    public function portoRefusedBudgets(InsuranceAnalysisBatch $batch, string $attemptId, int $analysisId): array
+    {
+        $analysis = $batch->analyses()->whereKey($analysisId)->where('provider', 'porto')->first();
+        $run = $analysis ? app(InsuranceQuoteCoordinator::class)->findRun($analysis, $attemptId) : null;
+        if (! $run) {
+            return [];
+        }
+
+        return $run->scenarios()->orderBy('id')->with('quotes')->get()
+            ->flatMap(fn ($scenario) => $scenario->quotes->where('status', 'rejected'))
+            ->map(fn ($quote) => PortoQuoteResponse::budgetNumber($quote->quote_id))
+            ->filter()->unique()->values()->all();
     }
 }

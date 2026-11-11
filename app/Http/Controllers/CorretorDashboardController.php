@@ -6,7 +6,7 @@ use App\Http\Requests\FilterCorretorDashboardRequest;
 use App\Models\CorretorActivityLog;
 use App\Models\Imobiliaria;
 use App\Models\Lead;
-use App\Services\CorretorDashboardLeadQuery;
+use App\Services\Dashboard\CorretorDashboardLeadQuery;
 use App\Support\LeadLoversInitialFailureCatalog;
 use App\Support\ManualLeadResultTags;
 use Illuminate\Database\Eloquent\Relations\HasMany;

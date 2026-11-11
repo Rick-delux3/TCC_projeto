@@ -5,6 +5,7 @@ namespace App\Providers;
 use App\Models\Corretor;
 use App\Models\InsuranceAnalysis;
 use App\Models\InsuranceAnalysisBatch;
+use App\Models\InsuranceQuote;
 use App\Observers\InsuranceAnalysisStateObserver;
 use App\Support\CorretorPermissions;
 use Illuminate\Auth\Notifications\ResetPassword;
@@ -31,6 +32,7 @@ class AppServiceProvider extends ServiceProvider
     {
         InsuranceAnalysis::observe(InsuranceAnalysisStateObserver::class);
         InsuranceAnalysisBatch::observe(InsuranceAnalysisStateObserver::class);
+        InsuranceQuote::observe(InsuranceAnalysisStateObserver::class);
 
         ResetPassword::createUrlUsing(function (object $notifiable, string $token): string {
             return rtrim((string) config('app.url'), '/').route('password.reset', [
@@ -63,6 +65,12 @@ class AppServiceProvider extends ServiceProvider
                 return Limit::none();
             }
 
+            $scope = $request->isMethodSafe() ? 'pages:' : 'credentials:';
+
+            return Limit::perMinute(5)->by($scope.$request->ip());
+        });
+
+        RateLimiter::for('company-login-access', function (Request $request): Limit {
             return Limit::perMinute(5)->by($request->ip());
         });
 

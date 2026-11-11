@@ -15,7 +15,12 @@ class InsuranceAnalysisLeadResource extends JsonResource
      */
     public function toArray(Request $request): array
     {
-        return $this->resource['pageData'];
+        $data = $this->resource['pageData'];
+        if ($request->header('X-Analysis-Components') === '1') {
+            $data['components'] = view('insurance-analyses.partials.live-content', ['pageData' => $data])->render();
+        }
+
+        return $data;
     }
 
     public function withResponse(Request $request, JsonResponse $response): void

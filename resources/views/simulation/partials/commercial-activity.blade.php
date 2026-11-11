@@ -20,4 +20,5 @@
             <span id="activity-error" class="text-xs text-red-600">{{ $message }}</span>
         @enderror
     </div>
+    @include('simulation.partials.contracting-reason')
 </div>

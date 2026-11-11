@@ -10,12 +10,16 @@ class AnalysisQuoteComparison
     public function compare(Collection $quotes): array
     {
         $approved = $quotes->where('status', 'approved');
+        $monthly = $approved->contains(fn (array $quote): bool => ($quote['price']['comparison_basis'] ?? null) === 'installment');
+        $priceKey = $monthly ? 'installment_amount' : 'total';
         $issue = null;
         if ($approved->isEmpty()) {
             $issue = 'no_approved_quotes';
-        } elseif ($approved->contains(fn (array $quote): bool => $quote['price']['basis'] !== 'gross_total'
-            || (float) $quote['price']['total'] <= 0)) {
-            $issue = 'missing_confirmed_total';
+        } elseif ($approved->contains(fn (array $quote): bool => ($monthly
+            ? ($quote['price']['comparison_basis'] ?? null) !== 'installment'
+            : $quote['price']['basis'] !== 'gross_total')
+            || (float) ($quote['price'][$priceKey] ?? 0) <= 0)) {
+            $issue = $monthly ? 'missing_confirmed_installment' : 'missing_confirmed_total';
         } elseif ($approved->contains(fn (array $quote): bool => preg_match('/^[A-Z]{3}$/D', $quote['price']['currency']) !== 1)
             || $approved->pluck('price.currency')->unique()->count() > 1) {
             $issue = 'incomparable_currencies';
@@ -28,7 +32,7 @@ class AnalysisQuoteComparison
         }
 
         return [
-            'best_quote' => $issue === null ? $approved->sortBy(fn (array $quote): float => (float) $quote['price']['total'])->first() : null,
+            'best_quote' => $issue === null ? $approved->sortBy(fn (array $quote): float => (float) $quote['price'][$priceKey])->first() : null,
             'comparison_issue' => $issue,
         ];
     }

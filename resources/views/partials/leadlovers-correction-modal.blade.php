@@ -134,6 +134,8 @@
                             </div>
                         @endif
 
+                        <p class="small mt-3">Esta correção será usada somente na LeadLovers. Os dados das seguradoras serão preservados e nenhuma nova análise será solicitada.</p>
+
                         @foreach ($failure['fields'] as $field)
                             @continue(! in_array($field, ['tel', 'email'], true))
                             @php
@@ -143,8 +145,8 @@
                                     ? $correctionErrors->first($field)
                                     : null;
                                 $fieldValue = $isCorrectionValidationContext
-                                    ? old($field, $lead->{$field})
-                                    : $lead->{$field};
+                                    ? old($field, $lead->leadLoversContact($field))
+                                    : $lead->leadLoversContact($field);
                                 $errorId = $fieldId.'Error';
                             @endphp
 

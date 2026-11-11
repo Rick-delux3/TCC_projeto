@@ -5,7 +5,6 @@ namespace App\Services\Insurance;
 use App\Models\InsuranceAnalysis;
 use App\Models\Lead;
 use App\Services\Insurance\Payloads\RentalGuaranteeQuotePayloadBuilder;
-use App\Services\PottencialService;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
 
@@ -52,7 +51,7 @@ class InsuranceAnalysisService
             'status' => 'pending',
             'result' => null,
 
-            'plan_key' => config('services.pottencial.default_plan_key', 'traditional'),
+            'plan_key' => config('services.pottencial.default_plan_key', 'Traditional'),
             'multiple' => $leaseMonths,
 
             'lease_start_date' => $start->toDateString(),
@@ -64,8 +63,8 @@ class InsuranceAnalysisService
             'charges_amount' => $charges,
             'total_monthly_amount' => $rent + $charges,
 
-            'payment_type' => config('services.pottencial.default_payment_type', 'Boleto'),
-            'installments' => (int) config('services.pottencial.default_installments', 12),
+            'payment_type' => $lead->tipo_solicitante === 'imobiliaria_cadastrada' ? 'Invoice' : 'Boleto',
+            'installments' => (int) config('services.pottencial.default_installments', 30),
         ]);
 
         $analysis->events()->create([

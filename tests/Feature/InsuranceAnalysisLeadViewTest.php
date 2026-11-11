@@ -269,7 +269,8 @@ it('renders the bootstrap structure using the same contract as the refresh endpo
         ->assertSee('Todas as companhias')
         ->assertDontSee('dashboard-user.css', false)
         ->assertDontSee('class="modal', false);
-    expect($includes)->toHaveCount(6)
+    expect($includes)->toHaveCount(7)
+        ->and($includes['insurance-analyses.partials.live-content']['pageData'])->toBe($page)
         ->and($includes['insurance-analyses.partials.lead']['leadData'])->toBe($page['lead'])
         ->and($includes['insurance-analyses.partials.lead']['navigation']['return_url'])->toBe($response->viewData('returnUrl'))
         ->and($includes['insurance-analyses.partials.batch']['progress'])->toBe($page['progress'])
@@ -281,7 +282,8 @@ it('renders the bootstrap structure using the same contract as the refresh endpo
     $this->getJson($response->viewData('refreshUrl'))->assertOk()->assertExactJson(['data' => $page]);
 })->with(['company', 'admin']);
 
-it('renders four company cards and keeps unvalidated providers blocked', function () {
+it('renders four company cards and keeps providers disabled in the environment blocked', function () {
+    config(['services.pottencial.enabled' => true, 'services.too.enabled' => true, 'services.tokio.enabled' => true, 'services.porto.enabled' => false]);
     $response = $this->actingAs($this->user)->withSession(['2fa_passed' => true])
         ->get(route('insurance-analyses.lead', $this->lead))->assertOk();
     $document = new DOMDocument;
@@ -289,15 +291,35 @@ it('renders four company cards and keeps unvalidated providers blocked', functio
     $xpath = new DOMXPath($document);
 
     expect($xpath->query('//article[@data-provider]')->length)->toBe(4);
-    foreach (['porto', 'tokio'] as $provider) {
+    foreach (['porto'] as $provider) {
         $card = $xpath->query('//article[@data-provider="'.$provider.'"]')->item(0);
         expect($card->textContent)->toContain('Bloqueada')->toContain('Aguardando testes e validação');
         expect($xpath->query('.//button[@disabled]', $card)->length)->toBe(1)
             ->and($xpath->query('.//a | .//form', $card)->length)->toBe(0);
     }
+    $tokio = $xpath->query('//article[@data-provider="tokio"]')->item(0);
+    expect($tokio->textContent)->not->toContain('Bloqueada')->toContain('Aguardando análise desta companhia.');
     expect($xpath->query('//form')->length)->toBe(0)
         ->and($xpath->query('//button[not(@disabled)]')->length)->toBe(0);
 });
+
+it('renders Tokio installments and manual guidance for each viewer', function (string $viewer, string $status) {
+    $batch = $this->lead->insuranceAnalysesBatches()->create(['status' => 'completed', 'total_providers' => 1, 'finished_at' => now()]);
+    $batch->analyses()->create([
+        'lead_id' => $this->lead->id, 'provider' => 'tokio', 'product' => 'fianca_locaticia', 'status' => $status,
+        'lease_start_date' => '2026-11-03', 'lease_end_date' => '2029-05-03',
+        'response_payload' => ['quote_selection' => ['installment_amount' => '45.50', 'installments' => 30, 'payment_type' => 'credito']],
+    ]);
+    $admin = $viewer === 'admin';
+    $response = $this->actingAs($admin ? $this->corretor : $this->user, $admin ? 'admin' : 'web')
+        ->withSession(['2fa_passed' => true])
+        ->get(route($admin ? 'admin.insurance-analyses.lead' : 'insurance-analyses.lead', $this->lead))->assertOk();
+    if ($status === 'approved') {
+        $response->assertSee('30 parcelas de R$ 45,50')->assertSee('Cartão de crédito')->assertSee('Melhor preço');
+    } else {
+        $response->assertSee($admin ? 'realizar cotação manualmente' : 'entrar em contato com corretor');
+    }
+})->with([['admin', 'approved'], ['company', 'approved'], ['admin', 'manual_required'], ['company', 'manual_required']]);
 
 it('renders saved coverages and highlights the confirmed best total only after consolidation', function () {
     $batch = $this->lead->insuranceAnalysesBatches()->create(['status' => 'processing', 'total_providers' => 2]);
@@ -406,7 +428,7 @@ it('does not offer unconfirmed prices as the best budget', function () {
 });
 
 it('offers company actions only for allowed states ownership and feature configuration', function () {
-    config(['features.insurance_analysis.enabled' => true]);
+    config(['features.insurance_analysis.enabled' => true, 'services.too.enabled' => true]);
     $batch = $this->lead->insuranceAnalysesBatches()->create(['status' => 'processing', 'total_providers' => 1]);
     $analysis = $batch->analyses()->create([
         'lead_id' => $this->lead->id, 'company_id' => $this->company->id,
@@ -425,13 +447,18 @@ it('offers company actions only for allowed states ownership and feature configu
         ->assertJsonPath('data.analyses.0.actions.sync.available', false);
     $analysis->update(['status' => 'approved']);
     $batch->update(['status' => 'completed', 'finished_at' => now()]);
-    $this->lead->forceFill(['last_analysis_batch_id' => $batch->id, 'analysis_final_status' => 'approved', 'reanalysis_unlocked_at' => now()])->save();
-    $this->getJson($url)->assertOk()->assertJsonPath('data.actions.reanalysis.available', true)
+    $this->lead->forceFill(['last_analysis_batch_id' => $batch->id, 'analysis_final_status' => 'approved'])->save();
+    // Too aprovada não aceita reanálise; não existe mais reanálise geral do lead.
+    $this->getJson($url)->assertOk()->assertJsonMissingPath('data.actions.reanalysis')
+        ->assertJsonPath('data.analyses.0.reanalysis_supported', false)
+        ->assertJsonPath('data.analyses.0.actions.reanalysis.available', false)
+        ->assertJsonPath('data.analyses.0.actions.expense_reanalysis.available', false);
+    config(['services.tokio.enabled' => true]);
+    $analysis->update(['provider' => 'tokio']);
+    $this->getJson($url)->assertOk()->assertJsonPath('data.analyses.0.reanalysis_supported', true)
         ->assertJsonPath('data.analyses.0.actions.reanalysis.available', true)
         ->assertJsonPath('data.analyses.0.actions.reanalysis.requires_data_changes', true);
-    $analysis->update(['proposal_id' => null]);
-    $this->getJson($url)->assertOk()->assertJsonPath('data.analyses.0.actions.reanalysis.available', false)
-        ->assertJsonPath('data.actions.reanalysis.available', false);
+    $analysis->update(['provider' => 'too']);
     $analysis->update(['status' => 'failed', 'company_id' => null]);
     $this->getJson($url)->assertOk()->assertJsonPath('data.analyses.0.actions.retry.url', route('insurance-analyses.retry', $analysis));
     $analysis->update(['company_id' => $this->company->id]);
@@ -440,7 +467,7 @@ it('offers company actions only for allowed states ownership and feature configu
 });
 
 it('keeps read-only broker actions separate from editing and analysis permissions', function () {
-    config(['features.insurance_analysis.enabled' => true]);
+    config(['features.insurance_analysis.enabled' => true, 'services.pottencial.enabled' => true]);
     $batch = $this->lead->insuranceAnalysesBatches()->create(['status' => 'processing', 'total_providers' => 1]);
     $analysis = $batch->analyses()->create([
         'lead_id' => $this->lead->id, 'provider' => 'pottencial', 'product' => 'fianca_locaticia', 'status' => 'failed', 'quote_id' => 'quote',
@@ -458,3 +485,137 @@ it('keeps read-only broker actions separate from editing and analysis permission
         ->assertJsonPath('data.actions.update_lead.method', 'POST')
         ->assertJsonPath('data.analyses.0.actions.retry.url', route('admin.insurance-analyses.retry', $analysis));
 });
+
+it('keeps every plan coverage inside details and shows only confirmed installments on cards', function () {
+    $batch = $this->lead->insuranceAnalysesBatches()->create(['status' => 'completed', 'total_providers' => 1, 'finished_at' => now()]);
+    $analysis = $batch->analyses()->create([
+        'lead_id' => $this->lead->id, 'provider' => 'pottencial', 'product' => 'fianca_locaticia', 'status' => 'approved',
+    ]);
+    $analysis->events()->create(['event_type' => 'analysis_started', 'payload' => ['attempt_id' => 'plans-display']]);
+    $run = app(\App\Services\Insurance\InsuranceQuoteCoordinator::class)->prepare($analysis, 'plans-display', false);
+    $quotes = $run->scenarios()->first()->quotes()->orderBy('id')->get();
+    expect($quotes)->toHaveCount(3);
+    foreach ($quotes as $index => $quote) {
+        $quote->update([
+            'status' => $index === 2 ? 'rejected' : 'approved',
+            'installment_amount' => 100 + $index * 20, 'installments' => 30,
+            'payment_status' => $index === 2 ? 'unavailable' : 'ready',
+            'response_payload' => ['private' => 'secret-response', 'coverages' => [[
+                'name' => 'Pintura interna plano '.$index, 'insuredAmount' => 4000 + $index, 'premiumAmount' => 50,
+            ]]],
+        ]);
+    }
+    $response = $this->actingAs($this->user)->withSession(['2fa_passed' => true])
+        ->get(route('insurance-analyses.lead', $this->lead))->assertOk()->assertDontSee('secret-response');
+    $document = new DOMDocument;
+    @$document->loadHTML('<?xml encoding="UTF-8">'.$response->getContent());
+    $xpath = new DOMXPath($document);
+    $card = $xpath->query('//article[@data-provider="pottencial"]')->item(0);
+    expect($card->textContent)->toContain('Visualizar', 'Básico', 'Completo', 'Tradicional', 'R$ 100,00', 'R$ 120,00', 'Cotação recusada')
+        ->not->toContain('Pintura interna', 'R$ 140,00', 'Rodada', 'Retorno da companhia');
+    expect($xpath->query('.//button[@data-analysis-dialog and not(@disabled)]', $card)->length)->toBe(1);
+    $details = $xpath->query('//dialog[@id="details-pottencial"]')->item(0);
+    expect($details->hasAttribute('open'))->toBeFalse()
+        ->and($details->textContent)->toContain('Pintura interna plano 0', 'Pintura interna plano 1', 'R$ 4.001,00')
+        ->not->toContain('Pintura interna plano 2');
+});
+
+it('places the cheapest confirmed offer between the next two prices', function () {
+    $batch = $this->lead->insuranceAnalysesBatches()->create(['status' => 'completed', 'total_providers' => 3, 'finished_at' => now()]);
+    foreach (['pottencial' => 150, 'too' => 120, 'tokio' => 100] as $provider => $amount) {
+        $batch->analyses()->create([
+            'lead_id' => $this->lead->id, 'provider' => $provider, 'product' => 'fianca_locaticia', 'status' => 'approved',
+            'lease_start_date' => '2026-11-01', 'lease_end_date' => '2029-05-01',
+            'response_payload' => ['quote_selection' => ['installment_amount' => $amount, 'installments' => 30, 'payment_type' => 'credito']],
+        ]);
+    }
+    $response = $this->actingAs($this->user)->withSession(['2fa_passed' => true])
+        ->get(route('insurance-analyses.lead', $this->lead))->assertOk();
+    $document = new DOMDocument;
+    @$document->loadHTML('<?xml encoding="UTF-8">'.$response->getContent());
+    $cards = (new DOMXPath($document))->query('//section[@aria-labelledby="comparison-title"]//article');
+    expect($cards)->toHaveCount(3)
+        ->and($cards->item(0)->textContent)->toContain('Too Seguros', 'R$ 120,00')
+        ->and($cards->item(1)->textContent)->toContain('Tokio Marine', 'R$ 100,00', 'Melhor preço')
+        ->and($cards->item(2)->textContent)->toContain('Pottencial', 'R$ 150,00');
+});
+
+it('opens quote details while updating components without reloading the page', function () {
+    $source = file_get_contents(resource_path('js/insurance-analyses.js'));
+    $source = preg_replace('/^import .*;\R/m', '', $source);
+    $script = <<<'JS'
+const assert = require('node:assert/strict');
+let click, onState, onClose, reloads = 0, open = false;
+const updates = [];
+const dialog = {
+    showModal() { open = true; },
+    close() { open = false; },
+    addEventListener(event, callback) { if (event === 'close') onClose = callback; }
+};
+const initial = { realtime: { broadcasting: { enabled: false } }, analyses: [] };
+global.window = {
+    insuranceAnalysisInitialState: initial,
+    location: { reload() { reloads++; } },
+    dispatchEvent() {}, addEventListener() {}
+};
+global.document = {
+    addEventListener(event, callback) { if (event === 'click') click = callback; },
+    getElementById() { return dialog; },
+    querySelectorAll(selector) { return selector === 'dialog' ? [dialog] : []; },
+    querySelector(selector) { return selector === 'dialog[open]' && open ? dialog : null; }
+};
+global.CustomEvent = class {};
+function createAnalysisComponents() { return { update(html) { updates.push(html); }, flush() {} }; }
+function createReanalysisModes() { return { apply() {}, setMode() {} }; }
+function createAnalysisRealtime(state, options) {
+    onState = options.onState;
+    return { start() { onState(state); }, destroy() {} };
+}
+JS;
+    $script .= "\n".$source.<<<'JS'
+assert.equal(reloads, 0);
+click({ target: { closest(selector) { return selector === '[data-analysis-dialog]' ? { dataset: { analysisDialog: 'details-too' } } : null; } } });
+assert.equal(open, true);
+onState({ ...initial, analyses: [{ status: 'approved' }], components: 'updated-cards' });
+assert.equal(updates.at(-1), 'updated-cards');
+assert.equal(reloads, 0);
+click({ target: { closest(selector) { return selector === 'dialog' ? dialog : selector === '[data-close-analysis-dialog]' ? {} : null; } } });
+assert.equal(open, false);
+assert.equal(reloads, 0);
+JS;
+    $process = new \Symfony\Component\Process\Process(['node', '-e', $script], base_path());
+    $process->run();
+    expect($process->isSuccessful())->toBeTrue($process->getErrorOutput());
+});
+
+it('returns authorized Blade components and individual processing states without exposing raw provider data', function (string $viewer) {
+    $batch = $this->lead->insuranceAnalysesBatches()->create(['status' => 'processing', 'total_providers' => 1]);
+    $analysis = $batch->analyses()->create(['lead_id' => $this->lead->id, 'provider' => 'too', 'product' => 'fianca_locaticia', 'status' => 'processing']);
+    $analysis->events()->create(['event_type' => 'analysis_started', 'payload' => ['attempt_id' => 'fragment-test']]);
+    $run = app(\App\Services\Insurance\InsuranceQuoteCoordinator::class)->prepare($analysis, 'fragment-test', false);
+    $quote = $run->scenarios()->first()->quotes()->first();
+    $admin = $viewer === 'admin';
+    $this->actingAs($admin ? $this->corretor : $this->user, $admin ? 'admin' : 'web')->withSession(['2fa_passed' => true]);
+    $url = route($admin ? 'admin.insurance-analyses.data' : 'insurance-analyses.data', $this->lead);
+    foreach ([
+        ['processing', 'pending', false, 'processing', true],
+        ['approved', 'pending', false, 'pricing', true],
+        ['approved', 'ready', false, 'approved', false],
+        ['rejected', 'pending', false, 'rejected', false],
+        ['failed', 'pending', false, 'failed', false],
+        ['manual_required', 'pending', false, 'manual_required', false],
+        ['manual_review', 'pending', true, 'awaiting_provider', false],
+    ] as [$status, $payment, $stopped, $state, $processing]) {
+        $quote->update(['status' => $status, 'payment_status' => $payment,
+            'installment_amount' => $payment === 'ready' ? 100 : null,
+            'response_payload' => ['too_status_check_stopped' => $stopped, 'access_token' => 'secret-provider-token', 'cpf' => '00011122233']]);
+        $response = $this->getJson($url, ['X-Analysis-Components' => '1'])->assertOk()
+            ->assertJsonPath('data.analyses.0.quote_attempts.0.display_state.state', $state)
+            ->assertJsonPath('data.analyses.0.quote_attempts.0.display_state.processing', $processing)
+            ->assertJsonPath('data.realtime.round_id', $run->insurance_analysis_round_id)
+            ->assertHeader('Cache-Control', 'no-store, private');
+        expect($response->json('data.components'))->toContain('data-analysis-component="provider-too"', 'data-analysis-component="comparison"', 'data-analysis-state="'.$state.'"')
+            ->not->toContain('Atualizar visualização', 'secret-provider-token', '00011122233', '<script');
+    }
+    $this->get(route($admin ? 'admin.insurance-analyses.lead' : 'insurance-analyses.lead', $this->lead))->assertOk()->assertDontSee('Atualizar visualização');
+})->with(['company', 'admin']);

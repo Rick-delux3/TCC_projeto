@@ -10,7 +10,8 @@ use App\Jobs\StartInsuranceAnalysesBatchJob;
 use App\Models\Imobiliaria;
 use App\Models\InsuranceAnalysisBatch;
 use App\Models\Lead;
-use App\Services\CompanyApplicantService;
+use App\Services\Leads\CompanyApplicantService;
+use App\Services\Lookup\CpfLookupService;
 use App\Support\CompanyConstitution;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -23,7 +24,14 @@ use Illuminate\View\View;
 
 class SimulationController extends Controller
 {
-    public function __construct(private CompanyApplicantService $companyApplicants) {}
+    public function lookupCpf(\App\Http\Requests\LookupSimulationCpfRequest $request): \Illuminate\Http\JsonResponse
+    {
+        $person = $this->cpfLookup->lookupPerson($request->validated('cpf'));
+
+        return response()->json(['name' => $person['name']])->header('Cache-Control', 'no-store, private');
+    }
+
+    public function __construct(private CompanyApplicantService $companyApplicants, private CpfLookupService $cpfLookup) {}
 
     private const REGISTERED_COMPANY_SESSION_KEY = 'simulation.registered_company_access';
 
@@ -188,6 +196,8 @@ class SimulationController extends Controller
                 );
         }
 
+        $request->attributes->set('resolved_birthdates', $this->cpfLookup->resolveBirthdates($request->validated()));
+
         $lead = DB::transaction(function () use ($request, $company) {
             return $this->saveLead(
                 $request,
@@ -276,6 +286,8 @@ class SimulationController extends Controller
                 );
         }
 
+        $request->attributes->set('resolved_birthdates', $this->cpfLookup->resolveBirthdates($request->validated()));
+
         $lead = DB::transaction(function () use ($request, $tipo) {
             return $this->saveLead(
                 $request,
@@ -311,6 +323,8 @@ class SimulationController extends Controller
         ) {
             return $this->redirectToRegisteredCompanyAccess();
         }
+
+        $request->attributes->set('resolved_birthdates', $this->cpfLookup->resolveBirthdates($request->validated()));
 
         $lead = DB::transaction(function () use ($request, $company) {
             return $this->saveLead($request, [
@@ -359,6 +373,8 @@ class SimulationController extends Controller
             ]);
         }
 
+        $request->attributes->set('resolved_birthdates', $this->cpfLookup->resolveBirthdates($request->validated()));
+
         $lead = DB::transaction(function () use ($request, $responsavelTipo) {
             return $this->saveLead($request, [
                 'tipo_solicitante' => $responsavelTipo,
@@ -383,6 +399,8 @@ class SimulationController extends Controller
 
     public function storeTenantLead(StoreSimulationLeadRequest $request)
     {
+        $request->attributes->set('resolved_birthdates', $this->cpfLookup->resolveBirthdates($request->validated()));
+
         $lead = DB::transaction(function () use ($request) {
             return $this->saveLead($request, [
                 'tipo_solicitante' => 'locatario',
@@ -534,7 +552,7 @@ class SimulationController extends Controller
         array $context,
         bool $allowExistingUpdate = false
     ): Lead {
-        $data = $request->validated();
+        $data = array_merge($request->validated(), $request->attributes->get('resolved_birthdates', []));
 
         $company = $context['company'] ?? null;
 
@@ -544,13 +562,8 @@ class SimulationController extends Controller
         $valorGas = (float) ($data['valor_gas'] ?? 0);
         $outrasDespesas = (float) ($data['outras_despesas'] ?? 0);
 
-        $valorAgua = isset($data['valor_agua']) && $data['valor_agua'] !== null && $data['valor_agua'] !== ''
-            ? (float) $data['valor_agua']
-            : $valorAluguel * 0.10;
-
-        $valorLuz = isset($data['valor_luz']) && $data['valor_luz'] !== null && $data['valor_luz'] !== ''
-            ? (float) $data['valor_luz']
-            : $valorAluguel * 0.10;
+        $valorAgua = (float) ($data['valor_agua'] ?? 0);
+        $valorLuz = (float) ($data['valor_luz'] ?? 0);
 
         $valorTotalEncargos = $valorAluguel
             + $valorCondominio
@@ -578,6 +591,9 @@ class SimulationController extends Controller
             'cpf' => $request->hasCompanyDocument() ? null : ($data['cpf'] ?? null),
             'data_nascimento' => $data['data_nascimento'],
             'tipo_locacao' => $data['tipo_locacao'],
+            'motivo_contratacao' => $data['tipo_locacao'] === 'comercial'
+                ? ($data['motivo_contratacao'] ?? null)
+                : ($request->hasCompanyDocument() ? 'A' : null),
             'ramo_atividade' => $data['ramo_atividade'] ?? null,
             'descrever_atividade' => isset($data['atividade_economica_id'])
                 ? \App\Models\AtividadeEconomica::query()->disponiveis()->findOrFail($data['atividade_economica_id'])->descricao
@@ -681,6 +697,7 @@ class SimulationController extends Controller
                 [
                     'nome' => $data['conjuge_nome'] ?? null,
                     'cpf' => $data['conjuge_cpf'] ?? null,
+                    'data_nascimento' => $data['conjuge_data_nascimento'] ?? null,
                 ]
             );
         } else {
@@ -760,7 +777,7 @@ class SimulationController extends Controller
         $relationships = ['lead_empresa', 'endereco', 'despesas', 'conjuge', 'locador', 'imobiliariaInformada'];
         $lead->load($relationships);
         $data = $lead->only([
-            'nome', 'email', 'cpf', 'data_nascimento', 'tipo_locacao', 'ramo_atividade', 'descrever_atividade', 'atividade_economica_id', 'tel',
+            'nome', 'email', 'cpf', 'data_nascimento', 'tipo_locacao', 'motivo_contratacao', 'ramo_atividade', 'descrever_atividade', 'atividade_economica_id', 'tel',
             'estado_civil', 'tipo_vinculo', 'aceite_termos', 'observacoes',
             'tipo_pessoa', 'empresa_constituida', 'data_fundacao_calculada',
         ]);

@@ -3,7 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Models\Lead;
-use App\Services\LeadLoversConfirmationRecoveryService;
+use App\Services\LeadLovers\LeadLoversConfirmationRecoveryService;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
 use Throwable;

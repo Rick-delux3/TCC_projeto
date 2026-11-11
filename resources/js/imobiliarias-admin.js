@@ -262,6 +262,8 @@ if (editModalElement) {
     const editCep = editModalElement.querySelector('[data-company-cep-input]');
     const editCity = editModalElement.querySelector('#edit-company-city');
     const editState = editModalElement.querySelector('#edit-company-state');
+    const editTokioCode = editModalElement.querySelector('[name="tokio_partner_code"]');
+    const editPortoCode = editModalElement.querySelector('[name="porto_partner_code"]');
     const editStatus = editModalElement.querySelector('#edit-company-status');
     const validationSummary = editModalElement.querySelector('.company-modal-validation');
     const departmentsByCompany = JSON.parse(document.querySelector('#edit-company-department-data')?.textContent ?? '{}');
@@ -269,7 +271,10 @@ if (editModalElement) {
 
     const clearServerValidation = () => {
         validationSummary?.setAttribute('hidden', '');
-        editForm?.querySelectorAll('.is-invalid').forEach((field) => field.classList.remove('is-invalid'));
+        editForm?.querySelectorAll('.is-invalid').forEach((field) => {
+            field.classList.remove('is-invalid');
+            field.removeAttribute('aria-invalid');
+        });
     };
 
     const populateEditForm = (button, preserveSubmittedValues = false) => {
@@ -320,6 +325,14 @@ if (editModalElement) {
 
         if (editState) {
             editState.value = button.dataset.companyState ?? '';
+        }
+
+        if (editTokioCode) {
+            editTokioCode.value = button.dataset.companyTokioCode ?? '';
+        }
+
+        if (editPortoCode) {
+            editPortoCode.value = button.dataset.companyPortoCode ?? '';
         }
 
         if (editStatus) {

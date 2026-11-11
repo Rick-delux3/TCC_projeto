@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class LeadConjugues extends Model
 {
-    protected $casts = ['tipo_vinculo' => TipoVinculoEmpresa::class];
+    protected $casts = ['tipo_vinculo' => TipoVinculoEmpresa::class, 'data_nascimento' => 'date'];
 
     protected $table = 'lead_conjugues';
 
@@ -15,6 +15,7 @@ class LeadConjugues extends Model
         'lead_id',
         'nome',
         'cpf',
+        'data_nascimento',
     ];
 
     public function leads()

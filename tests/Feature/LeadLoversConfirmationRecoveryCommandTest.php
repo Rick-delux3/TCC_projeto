@@ -2,7 +2,7 @@
 
 use App\Jobs\ConfirmLeadLoversMachineJob;
 use App\Models\Lead;
-use App\Services\LeadLoversApiClient;
+use App\Services\LeadLovers\LeadLoversApiClient;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;

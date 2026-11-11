@@ -1,22 +1,17 @@
 <?php
 
 use App\Events\DashboardActivityChanged;
-use App\Jobs\RunProviderAnalysisJob;
 use App\Jobs\UpdateLeadOnLeadLoversJob;
 use App\Models\Corretor;
 use App\Models\CorretorActivityLog;
-use App\Models\InsuranceAnalysis;
-use App\Models\InsuranceAnalysisBatch;
 use App\Models\Lead;
-use App\Services\LeadLoversApiClient;
-use App\Services\LeadLoversLeadResolver;
-use App\Services\LeadReanalysisService;
+use App\Services\Insurance\LeadReanalysisService;
+use App\Services\LeadLovers\LeadLoversApiClient;
+use App\Services\LeadLovers\LeadLoversLeadResolver;
 use App\Support\CorretorPermissions;
 use Illuminate\Broadcasting\BroadcastEvent;
-use Illuminate\Bus\PendingBatch;
 use Illuminate\Contracts\Queue\Queue as QueueContract;
 use Illuminate\Http\Client\Request;
-use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 
@@ -635,7 +630,7 @@ it('persists locally and dispatches the ID-based update after commit', function 
     ]);
 
     $result = app(LeadReanalysisService::class)
-        ->updateLeadDataAndMaybeUnlock($lead, [
+        ->updateLeadData($lead, [
             'nome' => 'Nome atualizado',
         ]);
 
@@ -764,7 +759,7 @@ it('keeps the local save and marks only the matching version failed when queuein
     ]);
 
     $result = app(LeadReanalysisService::class)
-        ->updateLeadDataAndMaybeUnlock($lead, [
+        ->updateLeadData($lead, [
             'nome' => 'Nome salvo localmente',
         ]);
 
@@ -788,81 +783,6 @@ it('keeps the local save and marks only the matching version failed when queuein
     Http::assertNothingSent();
 });
 
-it('starts a general reanalysis with all prepared analyses and one dashboard broadcast', function () {
-    config(['features.insurance_analysis.enabled' => true]);
-    $lead = stageFourLead([
-        'status' => 'qualificado',
-    ]);
-    $lead->forceFill([
-        'analysis_final_status' => 'approved',
-        'reanalysis_unlocked_at' => now(),
-    ])->save();
-    $lead->despesas()->create([
-        'valor_aluguel' => 1500,
-        'valor_total_encargos' => 1750,
-    ]);
-    $batch = InsuranceAnalysisBatch::query()->create([
-        'lead_id' => $lead->id,
-        'status' => 'completed',
-        'total_providers' => 1,
-        'completed_providers' => 1,
-        'finished_at' => now(),
-    ]);
-    $analysis = InsuranceAnalysis::query()->create([
-        'insurance_analysis_batch_id' => $batch->id,
-        'lead_id' => $lead->id,
-        'provider' => 'pottencial',
-        'product' => 'seguro_fianca_residencial',
-        'status' => 'approved',
-        'result' => 'approved',
-        'rent_amount' => 1500,
-        'charges_amount' => 250,
-        'total_monthly_amount' => 1750,
-        'finished_at' => now(),
-    ]);
-    Bus::fake();
-    Queue::fake();
-
-    $total = app(LeadReanalysisService::class)->startGeneralReanalysis(
-        lead: $lead,
-        requestedBy: 'admin',
-    );
-
-    expect($total)->toBe(1)
-        ->and($lead->refresh()->status)->toBe('em-andamento')
-        ->and($lead->reanalysis_unlocked_at)->toBeNull()
-        ->and($analysis->refresh()->status)->toBe('pending')
-        ->and($analysis->result)->toBeNull()
-        ->and($batch->refresh()->status)->toBe('processing')
-        ->and($batch->completed_providers)->toBe(0)
-        ->and($batch->finished_at)->toBeNull();
-
-    Bus::assertBatched(function (PendingBatch $pendingBatch) use ($analysis): bool {
-        if ($pendingBatch->jobs->count() !== 1) {
-            return false;
-        }
-
-        $job = $pendingBatch->jobs->first();
-
-        return $job instanceof RunProviderAnalysisJob
-            && $job->analysisId === (int) $analysis->id
-            && $pendingBatch->options['queue'] === 'insurance-analyses'
-            && $job->isReanalysis === true;
-    });
-    Bus::assertBatchCount(1);
-    Queue::assertPushedOn(
-        'broadcasts',
-        BroadcastEvent::class,
-        fn (BroadcastEvent $queued): bool => stageFourDashboardBroadcastMatches(
-            $queued,
-            $lead,
-            'lead.reanalysis.requested',
-        )
-    );
-    Queue::assertPushed(BroadcastEvent::class, 1);
-    Http::assertNothingSent();
-});
-
 it('unions pending remote fields across consecutive local edits', function () {
     Queue::fake();
     $lead = stageFourLead([
@@ -873,8 +793,8 @@ it('unions pending remote fields across consecutive local edits', function () {
     ]);
     $service = app(LeadReanalysisService::class);
 
-    $service->updateLeadDataAndMaybeUnlock($lead, ['nome' => 'Nome novo']);
-    $service->updateLeadDataAndMaybeUnlock($lead, ['tel' => '11999990000']);
+    $service->updateLeadData($lead, ['nome' => 'Nome novo']);
+    $service->updateLeadData($lead, ['tel' => '11999990000']);
 
     Queue::assertPushed(
         UpdateLeadOnLeadLoversJob::class,
@@ -896,7 +816,7 @@ it('waits for the initial send and keeps accumulated fields', function () {
         'leadlovers_update_version' => 0,
     ]);
 
-    app(LeadReanalysisService::class)->updateLeadDataAndMaybeUnlock(
+    app(LeadReanalysisService::class)->updateLeadData(
         $lead,
         ['nome' => 'Nome atualizado']
     );
@@ -919,7 +839,7 @@ it('does not disturb a pending remote sync for a local-only edit', function () {
         ],
     ]);
 
-    app(LeadReanalysisService::class)->updateLeadDataAndMaybeUnlock(
+    app(LeadReanalysisService::class)->updateLeadData(
         $lead,
         ['cep' => '01001-000']
     );
@@ -942,7 +862,7 @@ it('normalizes the legacy sent lifecycle before queueing an ID-based update', fu
         'leadlovers_update_version' => 0,
     ]);
 
-    app(LeadReanalysisService::class)->updateLeadDataAndMaybeUnlock(
+    app(LeadReanalysisService::class)->updateLeadData(
         $lead,
         ['nome' => 'Nome atualizado']
     );

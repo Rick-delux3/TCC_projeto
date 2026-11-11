@@ -36,17 +36,13 @@ return [
     ],
 
     'cpf_lookup' => [
-        'enabled' => env('CPF_LOOKUP_ENABLED', false),
-        'provider' => env('CPF_LOOKUP_PROVIDER', 'cpfhub'),
-
-        'cpfhub' => [
-            'base_url' => env('CPFHUB_BASE_URL', 'https://api.cpfhub.io'),
-            'api_key' => env('CPFHUB_API_KEY'),
+        'cpf_brasil' => [
+            'api_key' => env('CPF_BRASIL_TOKEN'),
+            'api_url' => env('CPF_BRASIL_URL', 'https://api.cpf-brasil.org/cpf/'),
+            'timeout' => 10,
+            'connect_timeout' => 3,
         ],
-
         'cache_minutes' => env('CPF_LOOKUP_CACHE_MINUTES', 10080),
-        'fallback_birthdate' => env('CPF_LOOKUP_FALLBACK_BIRTHDATE', '1985/12/10'),
-        'fail_analysis_if_missing_birthdate' => env('CPF_LOOKUP_FAILS_ANALYSIS', false),
     ],
 
     'leadlovers' => [
@@ -98,13 +94,13 @@ return [
         'default_commission' => (float) env('POTTENCIAL_DEFAULT_COMMISSION', 0.15),
         'commercial_loading_fee' => (float) env('POTTENCIAL_COMMERCIAL_LOADING_FEE', 0.10),
         'default_payment_type' => env('POTTENCIAL_DEFAULT_PAYMENT_TYPE', 'Boleto'),
-        'default_installments' => (int) env('POTTENCIAL_DEFAULT_INSTALLMENTS', 1),
-        'default_plan_key' => env('POTTENCIAL_DEFAULT_PLAN_KEY', 'traditional'),
+        'default_installments' => (int) env('POTTENCIAL_DEFAULT_INSTALLMENTS', 30),
+        'default_plan_key' => env('POTTENCIAL_DEFAULT_PLAN_KEY', 'Traditional'),
         'default_assistance' => env('POTTENCIAL_DEFAULT_ASSISTANCE', 'Complete'),
         'policy_owner_document' => env('POTTENCIAL_POLICY_OWNER_DOCUMENT'),
         'default_multiple' => env('POTTENCIAL_DEFAULT_MULTIPLE', 30),
         'default_lease_months' => env('POTTENCIAL_DEFAULT_LEASE_MONTHS', 30),
-        'default_policy_type' => env('POTTENCIAL_DEFAULT_POLICY_TYPE', 'Unico'),
+        'default_policy_type' => env('POTTENCIAL_DEFAULT_POLICY_TYPE', 'Unique'),
 
     ],
 
@@ -117,9 +113,9 @@ return [
         'broker_cnpj' => env('TOO_BROKER_CNPJ'),
         'broker_name' => env('TOO_BROKER_NAME'),
         'default_rental_purpose' => env('TOO_DEFAULT_RENTAL_PURPOSE', 'Residencial'),
-        'default_rent_adjustment_index' => env('TOO_DEFAULT_RENT_ADJUSTMENT_INDEX', 'IPCA'),
+        'default_rent_adjustment_index' => env('TOO_DEFAULT_RENT_ADJUSTMENT_INDEX', 'IGP_M'),
         'default_indemnity_period' => env('TOO_DEFAULT_INDEMNITY_PERIOD', 30),
-        'default_commission_percentage' => env('TOO_DEFAULT_COMMISSION_PERCENTAGE', 0.10),
+        'default_commission_percentage' => env('TOO_DEFAULT_COMMISSION_PERCENTAGE', 15.0),
         'default_birthdate' => env('TOO_DEFAULT_BIRTHDATE', '1985/12/10'),
         'default_monthly_income' => env('TOO_DEFAULT_MONTHLY_INCOME', 12500.24),
         'default_employment' => env('TOO_DEFAULT_EMPLOYMENT', 'Clt'),
@@ -127,11 +123,19 @@ return [
         'default_reside_property' => env('TOO_DEFAULT_RESIDE_PROPERTY', true),
         'default_financial_responsible' => env('TOO_DEFAULT_FINANCIAL_RESPONSIBLE', true),
         'status_check_delay_seconds' => env('TOO_STATUS_CHECK_DELAY_SECONDS', 20),
+        'status_check_max_pending_checks' => (int) env('TOO_STATUS_CHECK_MAX_PENDING_CHECKS', 5),
         'status_check_max_failures' => (int) env('TOO_STATUS_CHECK_MAX_FAILURES', env('TOO_STATUS_CHECK_MAX_ATTEMPTS', 15)),
-        'default_reanalysis_reason' => env('TOO_DEFAULT_REANALYSIS_REASON', 10),
     ],
 
     'tokio' => [
+        'enabled' => env('TOKIO_ENABLED', false),
+        'base_url' => env('TOKIO_BASE_URL', 'https://apim-act.tokiomarine.com.br/massificados/cotador-fianca-service-w/api'),
+        'commission' => 15,
+        'remuneration' => 0,
+        'discount' => 0,
+        'surcharge' => 0,
+        'assistance' => '26203',
+        'tipo_imovel' => env('TIPO_IMOVEL_DEFAULT', 10000),
         'base_url_w' => env('TOKIO_BASE_URL_W', 'https://apim-act.tokiomarine.com.br/massificados/cotador-fianca-service-w/api'),
         'codigo_corretor' => env('TOKIO_CODIGO_CORRETOR', env('COD_CORRETOR')),
         'cpf_usuario' => env('TOKIO_CPF_USUÁRIO', env('TOKIO_CPF_USUARIO')),
@@ -149,11 +153,35 @@ return [
     ],
 
     'porto' => [
+        'token_url' => env('PORTO_TOKEN_URL', 'https://portoapi-hml.portoseguro.com.br/oauth/v2/access-token'),
         'enabled' => env('PORTO_ENABLED', false),
         'base_url' => env('PORTO_BASE_URL'),
         'client_id' => env('PORTO_CLIENT_ID'),
         'client_secret' => env('PORTO_CLIENT_SECRET'),
         'env' => env('PORTO_ENV', 'sandbox'),
+        // Código interno do corretor na Porto: 6 caracteres, terminando em F ou J.
+        'susep' => env('PORTO_SUSEP'),
+        // CPF do operador (corretor) enviado em cpfCotador.
+        'cpf_cotador' => env('CPF_COTADOR'),
+        // 22 = nova contratação (inclui reanálises por novo POST); 40 = renovação.
+        'origin' => '22',
+        // Pontos percentuais inteiros enviados em ofertas[].comissao.codComissao.
+        'commission' => 15,
+        // 002 = IGP-M (FGV).
+        'rent_adjustment_code' => '002',
+        // 1 = locação em vigor (início na data da rodada).
+        'contract_validity_type' => '1',
+        // Capital social fixo para PJ, em reais.
+        'company_share_capital' => 450000,
+        // Margem, em segundos, para renovar o token antes da expiração informada.
+        'token_cache_margin_seconds' => 60,
+        // Produto que representa a Porto na comparação entre seguradoras (0008 = Fiança).
+        'comparison_offer' => '0008',
+        // Sem entrada na base de 30 meses = 29 pagamentos.
+        'installments_without_entry' => 29,
+        // Fonte dos preços após o ajuste de comissão: "offers" (GET de ofertas)
+        // ou "budget" (GET do orçamento atualizado), conforme a homologação.
+        'price_source' => env('PORTO_PRICE_SOURCE', 'offers'),
     ],
 
 ];

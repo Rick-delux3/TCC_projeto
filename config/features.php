@@ -1,6 +1,7 @@
 <?php
 
 return [
+    'cpf_lookup' => ['enabled' => (bool) env('CPF_LOOKUP_ENABLED', false)],
     'insurance_analysis' => [
         'enabled' => env('INSURANCE_ANALYSIS_ENABLED', false),
     ],

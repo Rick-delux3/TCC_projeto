@@ -2,7 +2,7 @@
 
 namespace App\Services\Insurance\Providers;
 
-use App\Models\InsuranceAnalysis;
+use App\Models\InsuranceExecution;
 
 interface CreatesInsuranceQuotes
 {
@@ -11,5 +11,5 @@ interface CreatesInsuranceQuotes
      *
      * @return array{success: bool, http_status: int|null, endpoint: string, url: string|null, response: array, raw_body: string|null, headers?: array, error?: string}
      */
-    public function createQuote(InsuranceAnalysis $analysis): array;
+    public function createQuote(InsuranceExecution $analysis): array;
 }

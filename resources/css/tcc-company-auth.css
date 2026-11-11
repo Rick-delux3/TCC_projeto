@@ -526,3 +526,43 @@ body.auth-layout-body .auth-layout-main.tcc-company-auth-main--standalone {
         @apply max-w-[980px];
     }
 }
+
+.tcc-admin-verification .client-auth-shell {
+    @apply max-w-[1000px] min-h-[540px];
+}
+
+.tcc-admin-verification .client-auth-card {
+    @apply flex flex-col justify-center p-6 sm:p-10 lg:p-12;
+}
+
+.tcc-admin-verification .client-auth-header {
+    @apply mb-8;
+}
+
+.tcc-admin-verification .client-auth-header h1 {
+    @apply text-2xl font-bold leading-tight tracking-tight sm:text-[1.75rem];
+}
+
+.tcc-admin-verification .client-field {
+    @apply mb-0 grid gap-2;
+}
+
+.tcc-admin-verification .client-label {
+    @apply mb-0;
+}
+
+.tcc-admin-verification .tcc-verification-code {
+    @apply min-h-16 w-full text-center font-mono text-2xl font-semibold leading-normal tracking-[0.35em];
+}
+
+.tcc-admin-verification .client-field p {
+    @apply m-0;
+}
+
+.tcc-admin-verification .client-outline-link {
+    @apply text-sm normal-case tracking-normal;
+}
+
+.tcc-admin-verification .tcc-verification-exit {
+    @apply min-h-11 bg-transparent px-4 py-2 text-sm text-slate-500 underline-offset-4 hover:text-slate-800 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2;
+}

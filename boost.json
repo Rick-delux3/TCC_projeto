@@ -1,14 +1,9 @@
 {
     "agents": [
-        "codex"
+        "claude_code"
     ],
-    "skills": [
-        "pest-testing",
-        "echo-development",
-        "tailwindcss-development",
-        "laravel-patterns",
-        "laravel-security",
-        "laravel-specialist",
-        "laravel-verification"
-    ]
+    "herd_mcp": false,
+    "mcp": true,
+    "nightwatch_mcp": false,
+    "sail": false
 }

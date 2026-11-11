@@ -1075,6 +1075,8 @@
                                         @include('partials.leadlovers-sync-status', [
                                             'lead' => $lead,
                                             'failure' => $leadLoversFailure,
+                                            'showLeadLoversFailureMessage' => true,
+                                            'leadLoversFailureMessageMode' => 'compact',
                                         ])
                                     </div>
 
@@ -1160,19 +1162,10 @@
             return mb_strtolower(trim($tag)) === $companyTagName;
         });
 
-    $lastAnalysis = $insuranceAnalysisEnabled
-        ? $lead->insuranceAnalyses()
-            ->latest('created_at')
-            ->first()
-        : null;
-
     $lastLeadUpdate = collect([
         $lead->updated_at,
         optional($lead->endereco)->updated_at,
     ])->filter()->max();
-
-    $canReanalyze = $insuranceAnalysisEnabled
-        && $lead->canRequestReanalysis();
 
     $isLeadValidationContext = filled($firstInvalidLeadField)
         && $leadContextId === (string) $lead->id;
@@ -1254,22 +1247,6 @@
                         </button>
                     </li>
 
-                    @if ($insuranceAnalysisEnabled)
-                        <li class="nav-item" role="presentation">
-                            <button
-                                id="lead-reanalysis-tab-{{ $lead->id }}"
-                                class="nav-link"
-                                data-bs-toggle="pill"
-                                data-bs-target="#lead-reanalysis-pane-{{ $lead->id }}"
-                                type="button"
-                                role="tab"
-                                aria-controls="lead-reanalysis-pane-{{ $lead->id }}"
-                                aria-selected="false"
-                            >
-                                Reanálise
-                            </button>
-                        </li>
-                    @endif
                 </ul>
 
                 <div class="tab-content">
@@ -1361,51 +1338,6 @@
                         </div>
                     </div>
 
-                    @if ($insuranceAnalysisEnabled)
-                        {{-- Aba 3: reanálise --}}
-                        <div
-                            class="tab-pane fade"
-                            id="lead-reanalysis-pane-{{ $lead->id }}"
-                            role="tabpanel"
-                            aria-labelledby="lead-reanalysis-tab-{{ $lead->id }}"
-                        >
-                        @if ($canReanalyze)
-                            <div class="alert alert-success rounded-4">
-                                <strong>Reanálise liberada.</strong>
-                                Este lead possui alterações salvas depois da última análise.
-                            </div>
-
-                            <form
-                                method="POST"
-                                action="{{ route('dashboard.leads.reanalyze', $lead) }}"
-                                id="leadReanalyzeForm{{ $lead->id }}"
-                            >
-                                @csrf
-
-                                <button type="submit" class="btn btn-warning">
-                                    Solicitar reanálise
-                                </button>
-                            </form>
-                        @else
-                            <div class="alert alert-info rounded-4">
-                                <strong>Reanálise bloqueada.</strong>
-                                Para solicitar uma nova análise, altere algum dado do lead e clique em
-                                <strong>Salvar alterações</strong>.
-                            </div>
-
-                            @if ($lastAnalysis)
-                                <p class="text-muted small mb-0">
-                                    Última análise registrada em:
-                                    {{ $lastAnalysis->created_at->format('d/m/Y H:i') }}
-                                </p>
-                            @else
-                                <p class="text-muted small mb-0">
-                                    Nenhuma análise anterior foi encontrada para este lead.
-                                </p>
-                            @endif
-                        @endif
-                        </div>
-                    @endif
                 </div>
             </div>
             

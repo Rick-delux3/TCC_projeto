@@ -1,6 +1,7 @@
 import { initializeAdminLeadFields } from './admin-lead-fields';
 import { initializeLeadCompanyLink } from './admin-lead-company';
 import { initializeDashboardTheme } from './dashboard-theme';
+import { watchPendingLeadLovers } from './leadlovers-dashboard-refresh';
 
 document.addEventListener('DOMContentLoaded', function () {
     initializeDashboardTheme();
@@ -627,6 +628,12 @@ document.addEventListener('DOMContentLoaded', function () {
 
         window.location.reload();
     }
+
+    watchPendingLeadLovers({
+        hasPending: () => Boolean(document.querySelector('[data-leadlovers-pending="true"]')),
+        canReload: () => !document.hidden && !dashboardHasUnsavedChanges(),
+        reload: reloadDashboard,
+    });
 
     realtimeReloadButton?.addEventListener('click', function () {
         if (

@@ -4,7 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\Auth\VerifyCompanyTwoFactorRequest;
 use App\Models\TwoFactorCode;
-use App\Services\CompanyTwoFactorMailService;
+use App\Services\Access\CompanyTwoFactorMailService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;

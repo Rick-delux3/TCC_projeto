@@ -9,7 +9,7 @@ use Throwable;
 class TokioAuthentication
 {
     /**
-     * @return array{success: bool, message: string, http_status: int|null, access_token: string|null, expires_in: int|null}
+     * @return array{success: bool, message: string, http_status: int|null, access_token: string|null, expires_in: int|null, diagnostics?: array}
      */
     public function requestToken(): array
     {
@@ -47,6 +47,11 @@ class TokioAuthentication
 
             $result['http_status'] = $response->status();
             if (! $response->successful()) {
+                $body = $response->json();
+                $result['diagnostics'] = app(InsuranceDiagnosticSanitizer::class)->extract([
+                    'http_status' => $response->status(),
+                    'response' => is_array($body) ? $body : ['message' => $response->body()],
+                ], [$settings]);
                 $result['message'] = match (true) {
                     in_array($response->status(), [400, 401, 403], true) => 'Autenticação recusada. Confira client_id, client_secret, scope e permissões da integração.',
                     $response->status() === 429 => 'Limite de requisições atingido. Aguarde antes de tentar novamente.',
@@ -73,8 +78,9 @@ class TokioAuthentication
                 'access_token' => $token,
                 'expires_in' => $expiresIn === false ? null : $expiresIn,
             ]);
-        } catch (ConnectionException) {
+        } catch (ConnectionException $exception) {
             $result['message'] = 'Falha de conexão, DNS, TLS ou tempo limite ao autenticar na Tokio.';
+            $result['diagnostics'] = app(InsuranceDiagnosticSanitizer::class)->connectionFailure($exception, 'authentication', [$settings]);
         } catch (Throwable) {
             $result['message'] = 'Não foi possível concluir a autenticação na Tokio.';
         }

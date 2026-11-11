@@ -2,7 +2,7 @@
 
 @section('content_a')
 @php
-    use App\Services\CorretorDashboardLeadQuery;
+    use App\Services\Dashboard\CorretorDashboardLeadQuery;
     use App\Support\LeadLoversInitialFailureCatalog;
     use Illuminate\Support\Facades\Gate;
     use Illuminate\Support\Facades\Route;
@@ -365,8 +365,6 @@
     };
 
     $analisesRoute = route('Dashboard-Admin').'#leads-section';
-
-    $solicitarAnaliseRoute = fn ($lead) => route('admin.leads.reanalyze', $lead);
 
     /*
     |--------------------------------------------------------------------------
@@ -1245,6 +1243,8 @@
                                     @include('partials.leadlovers-sync-status', [
                                         'lead' => $lead,
                                         'failure' => $leadLoversFailure,
+                                        'showLeadLoversFailureMessage' => true,
+                                        'leadLoversFailureMessageMode' => 'compact',
                                     ])
 
                                     @if ($visibleTags->isNotEmpty())
@@ -1783,17 +1783,6 @@
                 ? $manualResultOptions->except([$currentManualResult])
                 : $manualResultOptions;
 
-            $lastAnalysis = $insuranceAnalysisEnabled
-                ? $lead->insuranceAnalyses
-                    ->sortByDesc('created_at')
-                    ->first()
-                : null;
-
-            $canReanalyze = $insuranceAnalysisEnabled
-                && filled($lead->reanalysis_unlocked_at)
-                && (! $lastAnalysis
-                    || $lead->reanalysis_unlocked_at->gt($lastAnalysis->created_at));
-
             $leadHasRemoteId = (int) $lead->leadlovers_lead_id > 0;
 
             $leadWasConfirmedByLeadLovers = $lead->leadlovers_status === 'sent'
@@ -1931,24 +1920,6 @@
                                 </li>
                             @endcan
 
-                            @if ($insuranceAnalysisEnabled)
-                                @can('create-analysis')
-                                    <li class="nav-item" role="presentation">
-                                        <button
-                                            id="admin-lead-reanalysis-tab-{{ $lead->id }}"
-                                            class="nav-link"
-                                            data-bs-toggle="pill"
-                                            data-bs-target="#admin-lead-reanalysis-pane-{{ $lead->id }}"
-                                            type="button"
-                                            role="tab"
-                                            aria-controls="admin-lead-reanalysis-pane-{{ $lead->id }}"
-                                            aria-selected="false"
-                                        >
-                                            Reanálise
-                                        </button>
-                                    </li>
-                                @endcan
-                            @endif
                         </ul>
 
                         <div class="tab-content">
@@ -2191,56 +2162,6 @@
                             @endcan
 
 
-                            @if ($insuranceAnalysisEnabled)
-                                @can('create-analysis')
-                                    <div
-                                        class="tab-pane fade"
-                                        id="admin-lead-reanalysis-pane-{{ $lead->id }}"
-                                        role="tabpanel"
-                                        aria-labelledby="admin-lead-reanalysis-tab-{{ $lead->id }}"
-                                    >
-                                        @if ($canReanalyze)
-                                            <div class="alert alert-success rounded-4">
-                                                <strong>Reanálise liberada.</strong>
-                                                Este cliente possui alterações salvas depois da última análise.
-                                            </div>
-
-                                            <form
-                                                method="POST"
-                                                action="{{ $solicitarAnaliseRoute($lead) }}"
-                                            >
-                                                @csrf
-
-                                                <button
-                                                    type="submit"
-                                                    class="btn btn-warning"
-                                                    @disabled($solicitarAnaliseRoute($lead) === '#')
-                                                >
-                                                    <i class="bi bi-arrow-repeat me-1" aria-hidden="true"></i>
-                                                    Solicitar reanálise
-                                                </button>
-                                            </form>
-                                        @else
-                                            <div class="alert alert-info rounded-4">
-                                                <strong>Reanálise bloqueada.</strong>
-                                                Para solicitar uma nova análise, altere algum dado do cliente e clique em
-                                                <strong>Salvar alterações</strong>.
-                                            </div>
-
-                                            @if ($lastAnalysis)
-                                                <p class="text-muted small mb-0">
-                                                    Última análise registrada em:
-                                                    {{ $lastAnalysis->created_at->format('d/m/Y H:i') }}
-                                                </p>
-                                            @else
-                                                <p class="text-muted small mb-0">
-                                                    Nenhuma análise anterior foi encontrada para este cliente.
-                                                </p>
-                                            @endif
-                                        @endif
-                                    </div>
-                                @endcan
-                            @endif
                         </div>
                     </div>
 

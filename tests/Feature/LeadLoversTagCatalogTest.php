@@ -4,7 +4,7 @@ use App\Actions\Companies\RegisterCompany;
 use App\Models\Imobiliaria;
 use App\Models\LeadLoversTag;
 use App\Models\User;
-use App\Services\CompanyTagService;
+use App\Services\LeadLovers\CompanyTagService;
 use App\Support\ManualLeadResultTags;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Client\Request;

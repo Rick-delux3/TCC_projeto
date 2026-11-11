@@ -9,7 +9,7 @@ beforeEach(function () {
 
 it('uses brand-specific requester and validation labels with stable contracts', function (string $profile) {
     config(['branding.active' => $profile]);
-    $options = \App\Services\CorretorDashboardLeadQuery::requesterOptions();
+    $options = \App\Services\Dashboard\CorretorDashboardLeadQuery::requesterOptions();
     $messages = (new \App\Http\Requests\LinkLeadCompanyRequest)->messages();
 
     expect(array_keys($options))->toBe(['imobiliaria_cadastrada', 'imobiliaria_nao_cadastrada', 'locador', 'locatario'])

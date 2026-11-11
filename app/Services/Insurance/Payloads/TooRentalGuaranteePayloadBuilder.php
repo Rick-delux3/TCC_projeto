@@ -3,7 +3,7 @@
 namespace App\Services\Insurance\Payloads;
 
 use App\Enums\TipoLocacao;
-use App\Models\InsuranceAnalysis;
+use App\Models\InsuranceExecution;
 use App\Models\Lead;
 use App\Rules\CpfOrCnpj;
 use Illuminate\Support\Carbon;
@@ -19,7 +19,7 @@ class TooRentalGuaranteePayloadBuilder
      * Esse é o primeiro payload da Too.
      * Ele cria a ficha/proposta de seguro fiança.
      */
-    public function buildFichaPayload(InsuranceAnalysis $analysis): array
+    public function buildFichaPayload(InsuranceExecution $analysis): array
     {
         $this->loadRelations($analysis);
 
@@ -35,33 +35,7 @@ class TooRentalGuaranteePayloadBuilder
             'cnpjCorretor' => $this->brokerCnpj(),
             'razaoSocialCorretor' => $this->brokerName(),
 
-            'pretendentes' => [
-                $this->pretendentePayload($lead),
-            ],
-
-            'locacao' => $this->locacaoPayload($lead),
-
-            'coberturas' => $this->coverages($lead),
-        ];
-    }
-
-    public function buildBasicDataPayload(InsuranceAnalysis $analysis): array
-    {
-        $this->loadRelations($analysis);
-
-        $lead = $analysis->lead;
-
-        if (! $lead) {
-            throw new \App\Exceptions\InvalidInsuranceAnalysisPayload('Lead não encontrado para montar payload de atualização de dados básicos da Too.');
-        }
-
-        $this->validateBaseLeadData($lead);
-
-        return [
-
-            'pretendentes' => [
-                $this->pretendentePayload($lead),
-            ],
+            'pretendentes' => $this->quoteApplicants($analysis),
 
             'locacao' => $this->locacaoPayload($lead),
 
@@ -76,7 +50,7 @@ class TooRentalGuaranteePayloadBuilder
      *
      * Esse payload deve ser usado depois que a ficha/proposta já existir.
      */
-    public function buildQuotePayload(InsuranceAnalysis $analysis, string|int $numeroFicha): array
+    public function buildQuotePayload(InsuranceExecution $analysis, string|int $numeroFicha): array
     {
         $this->loadRelations($analysis);
 
@@ -90,6 +64,9 @@ class TooRentalGuaranteePayloadBuilder
 
         $startDate = $this->leaseStartDate($analysis);
         $endDate = $this->leaseEndDate($analysis, $startDate);
+
+        $this->validateQuoteSettings();
+        $numeroFicha = $this->proposalNumber($numeroFicha);
 
         return [
             'cnpjCorretor' => $this->brokerCnpj(),
@@ -108,14 +85,56 @@ class TooRentalGuaranteePayloadBuilder
             'indiceDeReajusteAluguel' => config('services.too.default_rent_adjustment_index', 'IGP_M'),
             'periodoIndenitario' => (int) config('services.too.default_indemnity_period', 30),
 
-            /*
-             * Mantemos configurável porque algumas APIs interpretam comissão
-             * como 0.10 e outras como 10. Se a Too recusar, basta ajustar no .env.
-             */
-            'percentualComissao' => (float) config('services.too.default_commission_percentage', 0.25),
+            'percentualComissao' => $this->commissionPercentage(),
 
             'coberturas' => $this->coverages($lead),
         ];
+    }
+
+    public function buildQuotePdfPayload(InsuranceExecution $analysis, string|int $numeroFicha): array
+    {
+        $analysis->loadMissing('lead');
+        $lead = $analysis->lead;
+        if (! $lead || ($lead->tipo_solicitante === 'imobiliaria_cadastrada' && ! $lead->company_id)) {
+            throw new \App\Exceptions\InvalidInsuranceAnalysisPayload('Lead ou vínculo da imobiliária ausente para o PDF da Too.');
+        }
+
+        return [
+            'numeroFicha' => $this->proposalNumber($numeroFicha),
+            'formaPagamento' => [
+                'tipoPagamento' => $lead->tipo_solicitante === 'imobiliaria_cadastrada' ? 2 : 1,
+                'tipoEntrada' => 2,
+                'opcaoParcelamento' => [['tipoOpcaoParcelamento' => 2, 'quantidadeParcelas' => 30]],
+            ],
+        ];
+    }
+
+    private function proposalNumber(string|int $number): int
+    {
+        $number = filter_var($number, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+        if ($number === false) {
+            throw new \App\Exceptions\InvalidInsuranceAnalysisPayload('Número da ficha inválido para envio à Too.');
+        }
+
+        return $number;
+    }
+
+    private function validateQuoteSettings(): void
+    {
+        if (config('services.too.default_rent_adjustment_index', 'IGP_M') !== 'IGP_M'
+            || (string) config('services.too.default_indemnity_period', 30) !== '30') {
+            throw new \App\Exceptions\InvalidInsuranceAnalysisPayload('A cotação Too deve usar IGP_M e período indenitário de 30 meses.');
+        }
+    }
+
+    private function commissionPercentage(): float
+    {
+        $commission = config('services.too.default_commission_percentage', 15.0);
+        if (! is_numeric($commission) || ! is_finite((float) $commission) || $commission < 10 || $commission > 40) {
+            throw new \App\Exceptions\InvalidInsuranceAnalysisPayload('Comissão Too deve estar entre 10 e 40, em pontos percentuais (15.0 para 15%).');
+        }
+
+        return (float) $commission;
     }
 
     private function pretendentePayload(Lead $lead): array
@@ -136,6 +155,20 @@ class TooRentalGuaranteePayloadBuilder
 
             'principal' => true,
         ];
+    }
+
+    private function quoteApplicants(InsuranceExecution $analysis): array
+    {
+        $applicants = [$this->pretendentePayload($analysis->lead)];
+        if ($analysis instanceof \App\Models\InsuranceQuote && $analysis->scenario->kind === 'joint') {
+            $spouse = app(\App\Services\Insurance\InsuranceLeadSnapshot::class)->restore(
+                $analysis->scenario->providerRun->round->lead_snapshot, 'spouse',
+            );
+            $this->validateBaseLeadData($spouse);
+            $applicants[] = array_replace($this->pretendentePayload($spouse), ['principal' => false]);
+        }
+
+        return $applicants;
     }
 
     private function locacaoPayload(Lead $lead): array
@@ -164,7 +197,7 @@ class TooRentalGuaranteePayloadBuilder
      *
      * Não use lead.imobiliaria aqui, porque no seu banco esse campo pode ser string.
      */
-    private function loadRelations(InsuranceAnalysis $analysis): void
+    private function loadRelations(InsuranceExecution $analysis): void
     {
         $analysis->loadMissing([
             'lead.lead_empresa',
@@ -190,6 +223,10 @@ class TooRentalGuaranteePayloadBuilder
     {
         $aluguel = $this->expenseValue($lead, 'valor_aluguel') ?? 0.0;
 
+        if ($lead->tipo_solicitante === 'locatario') {
+            return ['valorAluguel' => $this->money($aluguel)];
+        }
+
         $agua = $this->valorAgua($lead);
         $luz = $this->valorLuz($lead);
 
@@ -202,16 +239,11 @@ class TooRentalGuaranteePayloadBuilder
             'valorIptu' => $this->optionalCoverage($this->expenseValue($lead, 'valor_iptu')),
             'valorLuz' => $this->optionalCoverage($luz),
 
-            /*
-             * A Too permite valores iguais ao aluguel ou zero.
-             * Para sandbox, deixamos danos ao imóvel igual ao aluguel
-             * e os demais zerados.
-             */
             'valorDanosAoImovel' => $this->money($aluguel),
             'valorDanosAMoveis' => 0.0,
-            'valorMultasContratuais' => 0.0,
-            'valorPinturaExterna' => 0.0,
-            'valorPinturaInterna' => 0.0,
+            'valorMultasContratuais' => $this->money($aluguel),
+            'valorPinturaExterna' => $this->money($aluguel),
+            'valorPinturaInterna' => $this->money($aluguel),
         ];
 
         /*
@@ -271,6 +303,10 @@ class TooRentalGuaranteePayloadBuilder
             return null;
         }
 
+        if (! is_numeric($value) || ! is_finite((float) $value) || (float) $value < 0) {
+            throw new \App\Exceptions\InvalidInsuranceAnalysisPayload('Valor de despesa inválido para envio à Too.');
+        }
+
         return (float) $value;
     }
 
@@ -328,12 +364,9 @@ class TooRentalGuaranteePayloadBuilder
             throw new \App\Exceptions\InvalidInsuranceAnalysisPayload('Renda fixa mensal inválida para envio à Too.');
         }
 
-        $total = $aluguel
-            + ($this->expenseValue($lead, 'valor_condominio') ?? 0)
-            + ($this->expenseValue($lead, 'valor_iptu') ?? 0)
-            + ($this->expenseValue($lead, 'valor_gas') ?? 0)
-            + $this->valorAgua($lead)
-            + $this->valorLuz($lead);
+        $total = array_sum(\Illuminate\Support\Arr::only($this->coverages($lead), [
+            'valorAluguel', 'valorCondominio', 'valorIptu', 'valorGas', 'valorAgua', 'valorLuz',
+        ]));
 
         if ($total > 24999) {
             throw new \App\Exceptions\InvalidInsuranceAnalysisPayload('A soma de aluguel + encargos não pode ultrapassar 24999 para a Too.');
@@ -348,7 +381,7 @@ class TooRentalGuaranteePayloadBuilder
         }
     }
 
-    private function leaseStartDate(InsuranceAnalysis $analysis): Carbon
+    private function leaseStartDate(InsuranceExecution $analysis): Carbon
     {
         if ($analysis->lease_start_date) {
             return Carbon::parse($analysis->lease_start_date);
@@ -357,7 +390,7 @@ class TooRentalGuaranteePayloadBuilder
         return now();
     }
 
-    private function leaseEndDate(InsuranceAnalysis $analysis, Carbon $startDate): Carbon
+    private function leaseEndDate(InsuranceExecution $analysis, Carbon $startDate): Carbon
     {
         if ($analysis->lease_end_date) {
             return Carbon::parse($analysis->lease_end_date);
@@ -411,6 +444,14 @@ class TooRentalGuaranteePayloadBuilder
     private function birthdateForToo(Lead $lead): string
     {
         $birthdate = $lead->getAttributes()['data_nascimento'] ?? null;
+
+        if ($birthdate instanceof \DateTimeInterface) {
+            $birthdate = $birthdate->format('Y-m-d');
+        }
+
+        if (is_string($birthdate) && preg_match('/^\d{4}-\d{2}-\d{2} 00:00:00$/', $birthdate)) {
+            $birthdate = substr($birthdate, 0, 10);
+        }
 
         if (Validator::make(
             ['data_nascimento' => $birthdate],
