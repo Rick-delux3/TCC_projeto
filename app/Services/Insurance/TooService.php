@@ -178,38 +178,6 @@ class TooService
         );
     }
 
-    // 3.1 Atualizar dados básicos da ficha
-
-    public function updateProposalBasicData(string|int $numeroFicha, array $payload): array
-    {
-        return $this->putJson(
-            "/fianca/proposta/ficha/{$numeroFicha}/dados-basicos",
-            $payload
-        );
-    }
-
-    // 3.2 Obter motivos de reanálise
-
-    public function getReanalysisReasons(): array
-    {
-        return $this->getJson('/fianca/credito/motivos-reanalise');
-    }
-
-    // 3.3 Solicitar Reanálise
-
-    public function submitReanalysis(
-        string $cpf,
-        string|int $numeroProposta,
-        array $payload
-    ): array {
-        $cpf = $this->onlyNumbers($cpf);
-
-        return $this->postJson(
-            "/fianca/credito/{$cpf}/{$numeroProposta}/solicitar-reanalise",
-            $payload
-        );
-    }
-
     /**
      * 4. Solicitar cotação.
      *

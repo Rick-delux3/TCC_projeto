@@ -19,6 +19,19 @@ class InsuranceProviderResolver
             && filter_var(config("services.{$provider}.enabled", false), FILTER_VALIDATE_BOOL);
     }
 
+    /**
+     * Companhias que aceitam reanálise (novo cálculo após aprovação/recusa).
+     * Pottencial e Too ficam fora: vinculam o objeto de risco à cotação anterior.
+     * Deve acompanhar os providers que implementam ReanalyzesInsuranceQuotes.
+     */
+    public const REANALYSIS_PROVIDERS = ['tokio', 'porto'];
+
+    /** Fonte única da permissão de reanálise, usada nos services, jobs e painel. */
+    public static function supportsReanalysis(string $provider): bool
+    {
+        return in_array(mb_strtolower(trim($provider)), self::REANALYSIS_PROVIDERS, true);
+    }
+
     /** @return list<string> */
     public static function enabledProviders(): array
     {

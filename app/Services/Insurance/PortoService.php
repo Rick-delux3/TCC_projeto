@@ -136,7 +136,7 @@ class PortoService
             $token = $this->authentication->token();
             if (! $token['success']) {
                 foreach (array_keys($pending) as $offer) {
-                    $results[(string) $offer] = $this->failure('update_commission', 'Não foi possível autenticar na Porto.', $token['http_status']);
+                    $results[(string) $offer] = $this->authenticationFailure('update_commission', $token);
                 }
                 break;
             }
@@ -182,7 +182,7 @@ class PortoService
         for ($attempt = 0; $attempt < 2; $attempt++) {
             $token = $this->authentication->token();
             if (! $token['success']) {
-                return $this->failure($operation, 'Não foi possível autenticar na Porto.', $token['http_status']);
+                return $this->authenticationFailure($operation, $token);
             }
             try {
                 $request = $this->request(Http::asJson(), $token['access_token'], $timeout);
@@ -242,9 +242,26 @@ class PortoService
         return $this->failure($operation, 'Falha de conexão com a Porto. O resultado remoto pode ser desconhecido; não repetir automaticamente.', null, $diagnostics);
     }
 
-    private function failure(string $operation, string $message, ?int $status = null, array $diagnostics = []): array
+    /**
+     * Falha antes do envio da operação: mantém o motivo real do token (DNS,
+     * TLS, timeout, credencial recusada...) na mensagem gravada e os
+     * diagnósticos sanitizados no log.
+     */
+    private function authenticationFailure(string $operation, array $token): array
     {
-        $this->log('warning', 'Falha no fluxo da Porto', ['operation' => $operation, 'http_status' => $status, 'error' => $message, 'diagnostics' => $diagnostics]);
+        $reason = trim((string) ($token['message'] ?? ''));
+        $message = 'Não foi possível autenticar na Porto.'.($reason !== '' ? ' '.$reason : '');
+        $diagnostics = is_array($token['diagnostics'] ?? null) ? $token['diagnostics'] : [];
+
+        return $this->failure($operation, $message, $token['http_status'] ?? null, $diagnostics, 'authentication');
+    }
+
+    private function failure(string $operation, string $message, ?int $status = null, array $diagnostics = [], ?string $stage = null): array
+    {
+        $this->log('warning', 'Falha no fluxo da Porto', array_filter(
+            ['operation' => $operation, 'stage' => $stage, 'http_status' => $status, 'error' => $message, 'diagnostics' => $diagnostics],
+            fn ($value, $key) => $key !== 'stage' || $value !== null, ARRAY_FILTER_USE_BOTH,
+        ));
 
         return ['success' => false, 'operation' => $operation, 'error' => $message, 'http_status' => $status, 'response' => [], 'errors' => $diagnostics];
     }

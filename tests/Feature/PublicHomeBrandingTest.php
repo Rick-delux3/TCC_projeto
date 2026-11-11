@@ -686,8 +686,8 @@ it('hides analysis navigation and keeps lead simulation available when analyses 
     }
 
     foreach ([
-        'dashboard.leads.reanalyze',
-        'admin.leads.reanalyze',
+        'insurance-analyses.provider-reanalysis',
+        'admin.insurance-analyses.provider-reanalysis',
         'insurance-analyses.retry',
         'admin.insurance-analyses.retry',
     ] as $routeName) {

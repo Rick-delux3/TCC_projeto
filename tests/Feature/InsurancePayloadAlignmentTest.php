@@ -119,17 +119,16 @@ it('sends the confirmed Pottencial coverage contract for each plan', function (s
 it('aligns both insurers with the document and rental purpose selected on the form', function (bool $company, string $rentalType) {
     $analysis = alignedInsuranceAnalysis($company, $rentalType);
     $too = app(TooRentalGuaranteePayloadBuilder::class);
-    foreach ([$too->buildFichaPayload($analysis), $too->buildBasicDataPayload($analysis)] as $payload) {
-        expect($payload['pretendentes'][0])->toMatchArray([
-            'cpf' => '07234828702',
-            'nome' => $company ? 'Representante da empresa' : 'Pessoa locatária',
-            'dataNascimento' => '1992-02-29',
-            'rendaFixaMensal' => 6000.0,
-            'vinculoEmpregaticio' => 'Autonomo',
-            'profissao' => 'Consultor',
-            'residiraImovel' => $rentalType === 'residencial',
-        ])->and($payload['locacao']['finalidadeLocacao'])->toBe($rentalType === 'residencial' ? 'Residencial' : 'Comercial');
-    }
+    $payload = $too->buildFichaPayload($analysis);
+    expect($payload['pretendentes'][0])->toMatchArray([
+        'cpf' => '07234828702',
+        'nome' => $company ? 'Representante da empresa' : 'Pessoa locatária',
+        'dataNascimento' => '1992-02-29',
+        'rendaFixaMensal' => 6000.0,
+        'vinculoEmpregaticio' => 'Autonomo',
+        'profissao' => 'Consultor',
+        'residiraImovel' => $rentalType === 'residencial',
+    ])->and($payload['locacao']['finalidadeLocacao'])->toBe($rentalType === 'residencial' ? 'Residencial' : 'Comercial');
     $quote = $too->buildQuotePayload($analysis, 123);
     expect($quote['inicioVigenciaContratoLocacao'])->toBe(now()->toDateString())
         ->and($quote['coberturas']['valorAluguel'])->toBe(1500.0)
@@ -159,21 +158,13 @@ it('uses the representative CPF through Too creation credit analysis and status 
         ->and($provider->getStatus($analysis->fresh())['success'])->toBeTrue();
 });
 
-it('uses the same representative and purpose when updating and reanalyzing Too', function () {
-    $analysis = alignedInsuranceAnalysis(true, 'comercial');
-    $analysis->update(['proposal_id' => '123', 'response_payload' => ['numeroFicha' => 456]]);
-    $analysis->events()->create(['event_type' => 'reanalysis_requested', 'payload' => ['attempt_id' => 'new-attempt', 'is_reanalysis' => true]]);
-    $service = $this->mock(TooService::class);
-    $service->shouldReceive('getProposalStatus')->once()->with('07234828702', '123')
-        ->andReturn(['success' => true, 'response' => ['proposta' => ['status' => 8]]]);
-    $service->shouldReceive('updateProposalBasicData')->once()->withArgs(fn ($number, array $payload): bool => $number == 456 && $payload['pretendentes'][0]['nome'] === 'Representante da empresa'
-        && $payload['pretendentes'][0]['dataNascimento'] === '1992-02-29'
-        && $payload['locacao']['finalidadeLocacao'] === 'Comercial'
-    )->andReturn(['success' => true]);
-    $service->shouldReceive('submitReanalysis')->once()->with('07234828702', '123', Mockery::type('array'))
-        ->andReturn(['success' => true]);
-
-    expect(app(TooInsuranceProvider::class)->requestReanalysis($analysis, 'new-attempt')['success'])->toBeTrue();
+it('no longer exposes the Too reanalysis endpoints or provider contract', function () {
+    expect(method_exists(TooService::class, 'submitReanalysis'))->toBeFalse()
+        ->and(method_exists(TooService::class, 'getReanalysisReasons'))->toBeFalse()
+        ->and(method_exists(TooService::class, 'updateProposalBasicData'))->toBeFalse()
+        ->and(method_exists(TooRentalGuaranteePayloadBuilder::class, 'buildBasicDataPayload'))->toBeFalse()
+        ->and(app(TooInsuranceProvider::class))->not->toBeInstanceOf(\App\Services\Insurance\Providers\ReanalyzesInsuranceQuotes::class)
+        ->and(app(\App\Services\Insurance\Providers\PottencialInsuranceProvider::class))->not->toBeInstanceOf(\App\Services\Insurance\Providers\ReanalyzesInsuranceQuotes::class);
 });
 
 it('fails Too locally for incomplete or invalid applicant data instead of sending invented data', function (string $missing) {
@@ -367,7 +358,7 @@ it('builds Too coverages and PDF conditions by origin with the frozen lease date
     $builder = app(TooRentalGuaranteePayloadBuilder::class);
     $quote = $builder->buildQuotePayload($analysis, '123');
     expect($quote)->toMatchArray(['numeroFicha' => 123, 'percentualComissao' => 15.0, 'indiceDeReajusteAluguel' => 'IGP_M', 'periodoIndenitario' => 30, 'inicioVigenciaContratoLocacao' => '2026-08-31', 'finalVigenciaContratoLocacao' => '2029-02-28']);
-    foreach ([$quote, $builder->buildFichaPayload($analysis), $builder->buildBasicDataPayload($analysis)] as $payload) {
+    foreach ([$quote, $builder->buildFichaPayload($analysis)] as $payload) {
         if ($origin === 'locatario') {
             expect($payload['coberturas'])->toBe(['valorAluguel' => 1500.0]);
         } else {

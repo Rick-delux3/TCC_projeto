@@ -43,21 +43,20 @@ class LeadReanalysisService
         'outras_despesas',
     ];
 
-    public function updateLeadDataAndMaybeUnlock(
+    /**
+     * Salva os dados do lead e sincroniza a LeadLovers. Não inicia análises:
+     * a reanálise é sempre por companhia (startProviderReanalysis).
+     */
+    public function updateLeadData(
         Lead $lead,
         array $data,
         ?Corretor $corretor = null,
         ?string $ip = null,
         ?string $userAgent = null,
     ): array {
-        $analysisEnabled = (bool) config(
-            'features.insurance_analysis.enabled',
-            false
-        );
         $result = DB::transaction(function () use (
             $lead,
             $data,
-            $analysisEnabled,
             $corretor,
             $ip,
             $userAgent,
@@ -350,7 +349,6 @@ class LeadReanalysisService
             if (! $leadChanged && ! $enderecoChanged && ! $despesasChanged && ! $conjugeChanged && ! $additionalDetailsChanged) {
                 return [
                     'changed' => false,
-                    'unlocked' => false,
                     'sync_status' => 'idle',
                     'dispatch' => null,
                 ];
@@ -517,22 +515,8 @@ class LeadReanalysisService
                 ];
             }
 
-            $unlocked = false;
-
-            if (
-                $analysisEnabled
-                && $lead->hasFinalInsuranceResultForReanalysis()
-            ) {
-                $lead->forceFill([
-                    'reanalysis_unlocked_at' => now(),
-                ])->saveQuietly();
-
-                $unlocked = true;
-            }
-
             return [
                 'changed' => true,
-                'unlocked' => $unlocked,
                 'sync_status' => $syncStatus,
                 'dispatch' => $dispatch,
             ];
@@ -563,7 +547,6 @@ class LeadReanalysisService
         if (! $result['changed']) {
             return [
                 'changed' => false,
-                'unlocked' => false,
                 'message' => 'Altere pelo menos um dado do lead antes de salvar.',
             ];
         }
@@ -643,7 +626,6 @@ class LeadReanalysisService
 
         return [
             'changed' => true,
-            'unlocked' => $result['unlocked'],
             'message' => $message,
         ];
     }
@@ -761,35 +743,6 @@ class LeadReanalysisService
         });
     }
 
-    public function reanalyzeExpenses(Lead $lead, array $data, string $requestedBy, ?Corretor $corretor = null): int
-    {
-        $this->ensureAnalysisEnabled();
-
-        return $lead->getConnection()->transaction(function () use ($lead, $data, $requestedBy, $corretor): int {
-            $lead = Lead::query()->lockForUpdate()->findOrFail($lead->id);
-            $batch = $lead->insuranceAnalysesBatches()->latest('id')->lockForUpdate()->first();
-            if (! $batch) {
-                throw new DomainException('Não há cotações para reanalisar.');
-            }
-            $batch->load(['analyses' => fn ($query) => $query->orderBy('id')->lockForUpdate(), 'analyses.latestAttemptEvent']);
-            $lead->load('despesas');
-            if (! hash_equals($this->expenseRevision($lead, $batch), (string) ($data['revision'] ?? ''))) {
-                throw new DomainException('As despesas ou cotações foram alteradas. Atualize a página antes de reanalisar.');
-            }
-            $eligible = $batch->analyses->filter(fn (InsuranceAnalysis $analysis): bool => ProviderAnalysisStatus::isTerminal($analysis->status));
-            if ($eligible->isEmpty()) {
-                throw new DomainException('Nenhuma companhia concluiu a análise atual. Aguarde o término para reanalisar.');
-            }
-            $values = $this->normalizedExpenseValues($data);
-            if (! $this->expensesDiffer($values, $lead->despesas?->only(self::EXPENSE_FIELDS) ?? [])) {
-                throw new DomainException('Altere pelo menos uma despesa para solicitar uma nova cotação.');
-            }
-            $this->saveLeadExpenses($lead, $values, $corretor);
-
-            return $this->dispatchExpenseReanalysis($lead, $batch, $eligible->values()->all(), $requestedBy, "Reanálise das despesas do lead {$lead->id}");
-        });
-    }
-
     /**
      * Reanalisa somente uma companhia com as despesas informadas, mantendo as demais intactas.
      *
@@ -797,8 +750,7 @@ class LeadReanalysisService
      */
     public function reanalyzeProviderExpenses(InsuranceAnalysis $analysis, array $data, string $requestedBy, ?Corretor $corretor = null): void
     {
-        $this->ensureAnalysisEnabled();
-        $this->ensureProviderEnabled($analysis);
+        $this->ensureReanalysisAllowed($analysis);
 
         $analysis->getConnection()->transaction(function () use ($analysis, $data, $requestedBy, $corretor): void {
             $lead = Lead::query()->lockForUpdate()->findOrFail($analysis->lead_id);
@@ -856,7 +808,7 @@ class LeadReanalysisService
         $lead->setRelation('despesas', $expenses);
         $lead->data_edited_at = now();
         if ($reanalyzing) {
-            $lead->forceFill(['status' => 'em-andamento', 'reanalysis_unlocked_at' => null]);
+            $lead->forceFill(['status' => 'em-andamento']);
         }
         if ($corretor) {
             $lead->updated_by_corretor_id = $corretor->id;
@@ -895,139 +847,11 @@ class LeadReanalysisService
         return count($jobs);
     }
 
-    public function startGeneralReanalysis(
-        Lead $lead,
-        string $requestedBy = 'imobiliaria',
-        array $options = []
-    ): int {
-        $this->ensureAnalysisEnabled();
-
-        $lead->loadMissing([
-            'endereco',
-            'despesas',
-            'conjuge',
-        ]);
-
-        if (! $lead->canRequestGeneralReanalysis()) {
-            throw new DomainException(
-                'Para solicitar reanálise geral, o lead precisa estar aprovado ou recusado e ter alterações salvas.'
-            );
-        }
-
-        $attemptId = (string) Str::uuid();
-
-        $preparedAnalyses = DB::transaction(function () use (
-            $lead,
-            $requestedBy,
-            $options,
-            $attemptId
-        ) {
-            $lead = Lead::query()->lockForUpdate()->findOrFail($lead->id);
-            if (! $lead->canRequestGeneralReanalysis()) {
-                throw new DomainException('Esta reanálise já foi iniciada ou não está mais disponível.');
-            }
-            $batch = InsuranceAnalysisBatch::query()
-                ->where('lead_id', $lead->id)
-                ->latest('id')
-                ->lockForUpdate()
-                ->first();
-
-            if (! $batch) {
-                throw new DomainException(
-                    'Nenhum lote de análise encontrado para este lead.'
-                );
-            }
-
-            $batch->load([
-                'analyses.events',
-                'analyses.lead.endereco',
-                'analyses.lead.despesas',
-                'analyses.lead.conjuge',
-            ]);
-
-            $eligibleAnalyses = $batch->analyses
-                ->filter(
-                    fn (InsuranceAnalysis $analysis) => $analysis->canRequestProviderReanalysis()
-                )->values();
-
-            if ($eligibleAnalyses->isEmpty()) {
-                throw new DomainException(
-                    'Nenhuma companhia deste lead está em status permitido para reanálise.'
-                );
-
-            }
-
-            $prepared = [];
-
-            foreach ($eligibleAnalyses as $analysis) {
-                $providerOptions = $this->optionsForProvider(
-                    $analysis,
-                    $options
-                );
-
-                $this->restartAnalysisAsReanalysis(
-                    analysis: $analysis,
-                    attemptId: $attemptId,
-                    message: 'Reanálise geral solicitada após alteração dos dados do lead.',
-                    requestedBy: $requestedBy,
-                    options: $providerOptions
-                );
-
-                $prepared[] = [
-                    'analysis_id' => $analysis->id,
-                    'options' => $providerOptions,
-                ];
-            }
-
-            $lead->forceFill([
-                'status' => 'em-andamento',
-                'reanalysis_unlocked_at' => null,
-            ])->save();
-
-            return [
-                'batch_id' => $batch->id,
-                'analyses' => $prepared,
-            ];
-
-        });
-
-        $this->notifyDashboard(
-            (int) $lead->id,
-            'lead.reanalysis.requested',
-        );
-
-        $jobs = collect($preparedAnalyses['analyses'])
-            ->map(fn (array $item) => new RunProviderAnalysisJob(
-                analysisId: $item['analysis_id'],
-                attemptId: $attemptId,
-                isReanalysis: true,
-                options: $item['options']
-            ))->all();
-        $batchId = (int) $preparedAnalyses['batch_id'];
-        $leadId = (int) $lead->id;
-
-        Bus::batch($jobs)
-            ->onQueue('insurance-analyses')
-            ->name("Reanálise do lead {$leadId}")
-            ->allowFailures()
-            ->finally(static function (Batch $batch) use ($batchId, $attemptId) {
-                CompleteInsuranceAnalysesBatchJob::dispatch(
-                    batchId: $batchId,
-                    attemptId: $attemptId,
-                    isReanalysis: true
-                );
-            })->dispatch();
-
-        return count($preparedAnalyses['analyses']);
-    }
-
     public function startProviderReanalysis(
         InsuranceAnalysis $analysis,
         string $requestedBy = 'imobiliaria',
-        array $options = []
     ): string {
-        $this->ensureAnalysisEnabled();
-        $this->ensureProviderEnabled($analysis);
+        $this->ensureReanalysisAllowed($analysis);
         $analysis->loadMissing([
             'lead.endereco',
             'lead.despesas',
@@ -1042,8 +866,6 @@ class LeadReanalysisService
             );
         }
 
-        $providerOptions = $this->optionsForProvider($analysis, $options);
-
         $attemptId = (string) Str::uuid();
 
         $this->restartAnalysisAsReanalysis(
@@ -1051,14 +873,12 @@ class LeadReanalysisService
             attemptId: $attemptId,
             message: 'Reanálise por companhia solicitada após alteração dos dados do lead.',
             requestedBy: $requestedBy,
-            options: $providerOptions
         );
 
         RunProviderAnalysisJob::dispatch(
             analysisId: $analysis->id,
             attemptId: $attemptId,
             isReanalysis: true,
-            options: $providerOptions
         );
 
         return $attemptId;
@@ -1140,6 +960,31 @@ class LeadReanalysisService
         return $changed;
     }
 
+    /**
+     * Valida, antes de qualquer gravação, se a companhia pode ser reanalisada.
+     * Pottencial e Too não aceitam reanálise: vinculam o objeto de risco à
+     * cotação anterior e não recalculam só as coberturas.
+     */
+    public function ensureReanalysisAllowed(InsuranceAnalysis $analysis): void
+    {
+        $this->ensureAnalysisEnabled();
+        $this->ensureProviderEnabled($analysis);
+        if (! $analysis->supportsProviderReanalysis()) {
+            throw new DomainException(self::providerLabel((string) $analysis->provider).' não permite reanálise. A cotação anterior permanece registrada; as companhias que aceitam reanálise são a Porto Seguro e a Tokio Marine.');
+        }
+    }
+
+    private static function providerLabel(string $provider): string
+    {
+        return match (mb_strtolower($provider)) {
+            'pottencial' => 'A Pottencial',
+            'too' => 'A Too Seguros',
+            'tokio' => 'A Tokio Marine',
+            'porto' => 'A Porto Seguro',
+            default => 'Esta companhia',
+        };
+    }
+
     /** Ações por companhia exigem a seguradora ligada no .env; o resultado anterior segue só para leitura. */
     private function ensureProviderEnabled(InsuranceAnalysis $analysis): void
     {
@@ -1188,7 +1033,8 @@ class LeadReanalysisService
                 'events',
             ]);
 
-            if ($replaceCurrentAttempt ? ! ProviderAnalysisStatus::isTerminal($analysis->status) : ! $analysis->canRequestProviderReanalysis()) {
+            if (! $analysis->supportsProviderReanalysis()
+                || ($replaceCurrentAttempt ? ! ProviderAnalysisStatus::isTerminal($analysis->status) : ! $analysis->canRequestProviderReanalysis())) {
                 throw new DomainException(
                     'Esta análise já está sendo processada ou não permite reanálise.'
                 );
@@ -1472,43 +1318,6 @@ class LeadReanalysisService
         );
 
         return $attemptId;
-    }
-
-    private function optionsForProvider(InsuranceAnalysis $analysis, array $options): array
-    {
-        if (! $analysis->isTooProvider()) {
-            return $options;
-        }
-
-        $defaultReason = (int) config(
-            'services.too.default_reanalysis_reason',
-            10
-        );
-
-        $motivos = collect(
-            $options['motivosReanalise'] ?? [$defaultReason]
-        )->map(fn ($motivo) => (int) $motivo)
-            ->filter(fn ($motivo) => $motivo > 0)
-            ->unique()
-            ->values()
-            ->all();
-
-        $observacoes = trim((string) (
-            $options['observacoes']
-            ?? 'Reanálise solicitada após alteração dos dados do lead.'
-        ));
-
-        if (blank($observacoes)) {
-            throw new DomainException(
-                'Informe uma observação para a reanálise da Too.'
-            );
-        }
-
-        return [
-            'motivosReanalise' => $motivos,
-            'observacoes' => $observacoes,
-        ];
-
     }
 
     private function notifyDashboard(int $leadId, string $change): void

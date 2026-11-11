@@ -447,13 +447,18 @@ it('offers company actions only for allowed states ownership and feature configu
         ->assertJsonPath('data.analyses.0.actions.sync.available', false);
     $analysis->update(['status' => 'approved']);
     $batch->update(['status' => 'completed', 'finished_at' => now()]);
-    $this->lead->forceFill(['last_analysis_batch_id' => $batch->id, 'analysis_final_status' => 'approved', 'reanalysis_unlocked_at' => now()])->save();
-    $this->getJson($url)->assertOk()->assertJsonPath('data.actions.reanalysis.available', true)
+    $this->lead->forceFill(['last_analysis_batch_id' => $batch->id, 'analysis_final_status' => 'approved'])->save();
+    // Too aprovada não aceita reanálise; não existe mais reanálise geral do lead.
+    $this->getJson($url)->assertOk()->assertJsonMissingPath('data.actions.reanalysis')
+        ->assertJsonPath('data.analyses.0.reanalysis_supported', false)
+        ->assertJsonPath('data.analyses.0.actions.reanalysis.available', false)
+        ->assertJsonPath('data.analyses.0.actions.expense_reanalysis.available', false);
+    config(['services.tokio.enabled' => true]);
+    $analysis->update(['provider' => 'tokio']);
+    $this->getJson($url)->assertOk()->assertJsonPath('data.analyses.0.reanalysis_supported', true)
         ->assertJsonPath('data.analyses.0.actions.reanalysis.available', true)
         ->assertJsonPath('data.analyses.0.actions.reanalysis.requires_data_changes', true);
-    $analysis->update(['proposal_id' => null]);
-    $this->getJson($url)->assertOk()->assertJsonPath('data.analyses.0.actions.reanalysis.available', false)
-        ->assertJsonPath('data.actions.reanalysis.available', false);
+    $analysis->update(['provider' => 'too']);
     $analysis->update(['status' => 'failed', 'company_id' => null]);
     $this->getJson($url)->assertOk()->assertJsonPath('data.analyses.0.actions.retry.url', route('insurance-analyses.retry', $analysis));
     $analysis->update(['company_id' => $this->company->id]);

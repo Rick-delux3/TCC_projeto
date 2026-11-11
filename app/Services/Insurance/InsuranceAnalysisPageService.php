@@ -109,6 +109,8 @@ class InsuranceAnalysisPageService
                         && $activeQuotes->every(fn ($quote) => (bool) data_get($quote->providerResponsePayload(), 'too_status_check_stopped', false))),
                     'provider_status' => $analysis->provider_status,
                     'provider_enabled' => $providerEnabled,
+                    // Porto e Tokio aceitam reanálise; Pottencial e Too não (aviso fixo no card).
+                    'reanalysis_supported' => $analysis->supportsProviderReanalysis(),
                     'is_terminal' => ProviderAnalysisStatus::isTerminal($analysis->status),
                     'manual_required' => $analysis->status === 'manual_required',
                     'manual_message' => $analysis->status === 'manual_required'
@@ -149,7 +151,7 @@ class InsuranceAnalysisPageService
                     'actions' => [
                         'retry' => $this->action($allowed && $permissions['create_analysis'] && in_array($analysis->status, ['failed', 'error'], true), $prefix.'retry', $analysis->id),
                         'reanalysis' => $this->action($providerEnabled && $canReanalyzeWithChanges && $this->canReanalyze($analysis), $prefix.'provider-reanalysis', $analysis->id) + ['requires_data_changes' => true],
-                        'expense_reanalysis' => $this->action($providerEnabled && $canReanalyzeWithChanges && ProviderAnalysisStatus::isTerminal($analysis->status), $prefix.'provider-expense-reanalysis', $analysis->id),
+                        'expense_reanalysis' => $this->action($providerEnabled && $canReanalyzeWithChanges && $analysis->supportsProviderReanalysis() && ProviderAnalysisStatus::isTerminal($analysis->status), $prefix.'provider-expense-reanalysis', $analysis->id),
                         'sync' => $this->action($allowed && $attempt !== null && $this->canSync($analysis), $prefix.'sync-status', $analysis->id),
                     ],
                 ];
@@ -161,15 +163,8 @@ class InsuranceAnalysisPageService
             ],
             'permissions' => $permissions,
             'actions' => [
-                'save_expenses' => $this->action($canReanalyzeWithChanges && $batch !== null && $analyses->isNotEmpty(), $prefix.'save-expenses', $lead->id, 'PUT'),
-                'expense_reanalysis' => $this->action($canReanalyzeWithChanges && $analyses->contains(fn (InsuranceAnalysis $analysis): bool => ProviderAnalysisStatus::isTerminal($analysis->status)), $prefix.'expense-reanalysis', $lead->id, 'PUT') + ['revision' => $batch ? app(LeadReanalysisService::class)->expenseRevision($lead, $batch) : null],
+                'save_expenses' => $this->action($canReanalyzeWithChanges && $batch !== null && $analyses->isNotEmpty(), $prefix.'save-expenses', $lead->id, 'PUT') + ['revision' => $batch ? app(LeadReanalysisService::class)->expenseRevision($lead, $batch) : null],
                 'update_lead' => $this->action($permissions['edit_lead'], $admin ? 'admin.leads.update' : 'dashboard.leads.update', $lead->id, $admin ? 'POST' : 'PUT'),
-                'reanalysis' => $this->action($enabled && $permissions['create_analysis'] && $final
-                    && (int) $lead->last_analysis_batch_id === $batch->id && $lead->canRequestGeneralReanalysis()
-                    && $analyses->contains(fn (InsuranceAnalysis $analysis): bool => $analysis->canRequestProviderReanalysis())
-                    && $analyses->filter(fn (InsuranceAnalysis $analysis): bool => $analysis->canRequestProviderReanalysis())
-                        ->every(fn (InsuranceAnalysis $analysis): bool => $this->canReanalyze($analysis)),
-                    $admin ? 'admin.leads.reanalyze' : 'dashboard.leads.reanalyze', $lead->id),
             ],
             'realtime' => [
                 'round_id' => (int) ($analyses->max(fn ($analysis) => $analysis->currentProviderRun?->insurance_analysis_round_id) ?? 0),
@@ -220,18 +215,10 @@ class InsuranceAnalysisPageService
         return ['available' => $available, 'url' => $available ? route($route, $id) : null, 'method' => $method];
     }
 
+    /** Pottencial e Too não aceitam reanálise; a regra fica em canRequestProviderReanalysis(). */
     private function canReanalyze(InsuranceAnalysis $analysis): bool
     {
-        if ($analysis->currentProviderRun) {
-            return $analysis->canRequestProviderReanalysis();
-        }
-        $payload = $analysis->providerResponsePayload();
-
-        return $analysis->canRequestProviderReanalysis()
-            && (! $analysis->isTooProvider() || (
-                filled($payload['numeroProposta'] ?? $payload['numero_proposta'] ?? $analysis->proposal_id)
-                && filled($payload['numeroFicha'] ?? $payload['numero_ficha'] ?? $payload['numeroProposta'] ?? $analysis->proposal_id)
-            ));
+        return $analysis->canRequestProviderReanalysis();
     }
 
     private function canSync(InsuranceAnalysis $analysis): bool

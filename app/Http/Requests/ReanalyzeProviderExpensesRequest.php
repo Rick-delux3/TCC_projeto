@@ -24,7 +24,7 @@ class ReanalyzeProviderExpensesRequest extends FormRequest
      */
     public function rules(): array
     {
-        return (new ReanalyzeLeadExpensesRequest)->expenseRules();
+        return SaveLeadExpensesRequest::expenseRules();
     }
 
     /**
@@ -32,7 +32,7 @@ class ReanalyzeProviderExpensesRequest extends FormRequest
      */
     public function attributes(): array
     {
-        return (new ReanalyzeLeadExpensesRequest)->attributes();
+        return SaveLeadExpensesRequest::expenseAttributes();
     }
 
     /**
@@ -40,6 +40,6 @@ class ReanalyzeProviderExpensesRequest extends FormRequest
      */
     public function messages(): array
     {
-        return (new ReanalyzeLeadExpensesRequest)->messages();
+        return SaveLeadExpensesRequest::expenseMessages();
     }
 }

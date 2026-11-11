@@ -10,11 +10,6 @@ interface InsuranceProviderInterface
 
     public function requestAnalysis(InsuranceExecution $analysis, string $attemptId): array;
 
-    public function requestReanalysis(
-        InsuranceExecution $analysis,
-        string $attemptId,
-        array $options = []
-    ): array;
-
+    /** Reanálise é opcional: somente providers que implementam ReanalyzesInsuranceQuotes. */
     public function getStatus(InsuranceExecution $analysis): array;
 }

@@ -11,7 +11,9 @@ use App\Services\Insurance\InsuranceQuoteCoordinator;
 use App\Services\Insurance\PortoService;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Request;
+use Illuminate\Log\Events\MessageLogged;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 
@@ -535,4 +537,27 @@ it('does not duplicate the API path when the base URL already contains it', func
     app(PortoService::class)->createBudget(['susep' => 'ABC12J']);
 
     expect(portoRequests('POST')[0]->url())->toBe(PORTO_API.'/orcamentos');
+});
+
+it('records the real authentication reason on the quote without sending the budget', function () {
+    $logs = [];
+    Event::listen(MessageLogged::class, function (MessageLogged $log) use (&$logs) {
+        $logs[] = $log;
+    });
+    portoFake(['token' => fn () => throw new ConnectionException('cURL error 6: Could not resolve host: portoapi-hml.portoseguro.com.br')]);
+    [, $run] = portoRun();
+    $quote = portoQuote($run);
+
+    runPortoQuote($quote);
+
+    $quote->refresh();
+    expect($quote->status)->toBe('failed');
+    expect($quote->error_message)->toBe('Não foi possível autenticar na Porto. Falha de DNS: o host de autenticação da Porto não foi resolvido (cURL 6).');
+    expect(portoRequests('POST'))->toBeEmpty(); // o orçamento nunca saiu
+
+    $failure = collect($logs)->first(fn (MessageLogged $log) => $log->message === 'Falha no fluxo da Porto');
+    expect($failure)->not->toBeNull();
+    expect($failure->context)->toMatchArray(['operation' => 'create_budget', 'stage' => 'authentication', 'http_status' => null]);
+    expect($failure->context['diagnostics'][0]['data'])->toMatchArray(['type' => 'transport_error', 'code' => '6']);
+    expect(json_encode($failure->context))->not->toContain('test-secret')->not->toContain('test-client');
 });

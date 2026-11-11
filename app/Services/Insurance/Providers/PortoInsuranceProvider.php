@@ -21,7 +21,7 @@ use Illuminate\Support\Arr;
  * pelo writer entre as duas etapas, então uma repetição da etapa de preços
  * nunca recria o orçamento.
  */
-class PortoInsuranceProvider implements InsuranceProviderInterface
+class PortoInsuranceProvider implements ReanalyzesInsuranceQuotes
 {
     public function __construct(
         private PortoService $service,

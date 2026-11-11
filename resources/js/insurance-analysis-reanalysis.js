@@ -1,7 +1,6 @@
-const MODES = ['general', 'separate'];
-
 /**
- * Controla o modo de reanálise (geral ou separada) e o envio por companhia.
+ * Reanálise por companhia: o diálogo salva as despesas (sem iniciar cotações) e cada
+ * card reanalisa somente a sua companhia. Não existe reanálise geral do lead.
  * Toda a interação usa atributos data-*, permitindo que um frontend futuro reaproveite
  * o mesmo contrato (endpoint JSON + eventos) sem depender da marcação Bootstrap.
  */
@@ -10,7 +9,7 @@ export function createReanalysisModes({
     fetchJson = window.fetch.bind(window),
     onRequested = () => {},
 } = {}) {
-    let mode = 'general';
+    const mode = 'separate';
     let expenses = null;
     let saving = false;
     const pending = new Set();
@@ -20,34 +19,20 @@ export function createReanalysisModes({
     const form = () => root.querySelector('[data-expense-reanalysis]');
     const csrfToken = () => root.querySelector('meta[name="csrf-token"]')?.content ?? '';
 
-    function setMode(next) {
-        mode = MODES.includes(next) ? next : 'general';
-        if (mode === 'general') expenses = null;
+    /** Mantido por compatibilidade: só existe a reanálise por companhia. */
+    function setMode() {
         apply();
-        root.dispatchEvent(new CustomEvent('insurance-analyses:reanalysis-mode', { detail: { mode } }));
     }
 
     function apply() {
         container()?.setAttribute('data-reanalysis-mode', mode);
-        root.querySelectorAll('[data-reanalysis-mode-only]').forEach(element => {
-            element.hidden = element.dataset.reanalysisModeOnly !== mode;
-        });
-        const selected = root.getElementById(`reanalysis-mode-${mode}`);
-        if (selected) selected.checked = true;
         const expenseForm = form();
         if (expenseForm) {
-            const separate = mode === 'separate';
-            expenseForm.querySelector('[data-reanalysis-mode-selector]').hidden = separate;
-            expenseForm.querySelector('[data-reanalysis-mode-help]').hidden = separate;
-            root.getElementById('expense-reanalysis-title').textContent = separate ? 'Editar despesas' : 'Reanalisar despesas';
-            root.getElementById('expense-reanalysis-description').textContent = separate
-                ? 'Salve os valores mensais. Nenhuma cotação será iniciada até você escolher uma companhia.'
-                : 'Atualize os valores mensais. As novas cotações usarão estas despesas, mantendo os dados do solicitante.';
             const submit = expenseForm.querySelector('[type="submit"]');
-            submit.textContent = saving ? 'Salvando despesas…' : (separate ? 'Salvar despesas' : 'Salvar e reanalisar todas');
+            submit.textContent = saving ? 'Salvando despesas…' : 'Salvar despesas';
             submit.disabled = saving;
             submit.setAttribute('aria-busy', saving ? 'true' : 'false');
-            if (separate && expenses && !dialog()?.open) restoreExpenses();
+            if (expenses && !dialog()?.open) restoreExpenses();
         }
         root.querySelectorAll('[data-provider-reanalysis]').forEach(button => {
             setLoading(button, pending.has(button.dataset.providerReanalysis));
@@ -125,20 +110,6 @@ export function createReanalysisModes({
         alert.classList.toggle('d-none', !message);
     }
 
-    function chooseSeparate() {
-        const expenseForm = form();
-        if (!expenseForm || !expenseForm.reportValidity()) {
-            showModeError('Corrija as despesas antes de escolher a reanálise separada.');
-            const general = root.getElementById('reanalysis-mode-general');
-            if (general) general.checked = true;
-            return;
-        }
-        showModeError('');
-        expenses = readExpenses(expenseForm);
-        dialog()?.close();
-        setMode('separate');
-    }
-
     function notify(message, variant) {
         const region = root.querySelector('[data-reanalysis-feedback]');
         if (!region) return;
@@ -199,22 +170,17 @@ export function createReanalysisModes({
     }
 
     root.addEventListener('click', event => {
-        if (saving && event.target.closest('[data-close-analysis-dialog], [data-reanalysis-mode-set]')) {
+        if (saving && event.target.closest('[data-close-analysis-dialog]')) {
             event.preventDefault();
             event.stopImmediatePropagation();
             return;
         }
         const providerButton = event.target.closest('[data-provider-reanalysis]');
-        if (providerButton) {
-            reanalyze(providerButton);
-            return;
-        }
-        const modeButton = event.target.closest('[data-reanalysis-mode-set]');
-        if (modeButton) setMode(modeButton.dataset.reanalysisModeSet);
+        if (providerButton) reanalyze(providerButton);
     });
 
     root.addEventListener('close', event => {
-        if (mode !== 'separate' || event.target !== dialog()) return;
+        if (event.target !== dialog()) return;
         restoreExpenses();
     }, true);
 
@@ -222,17 +188,12 @@ export function createReanalysisModes({
         if (saving && event.target === dialog()) event.preventDefault();
     }, true);
 
+    // O diálogo só salva as despesas; a cotação é pedida no card de cada companhia.
     root.addEventListener('submit', event => {
-        if (mode !== 'separate' || event.target !== form()) return;
+        if (event.target !== form()) return;
         event.preventDefault();
         saveExpenses(event.target);
     }, true);
-
-    root.addEventListener('change', event => {
-        if (event.target.name !== 'reanalysis_mode') return;
-        if (event.target.value === 'separate') chooseSeparate();
-        else setMode('general');
-    });
 
     apply();
 

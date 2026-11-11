@@ -42,9 +42,15 @@ class InsuranceAnalysis extends InsuranceExecution
         return $this->isApprovedResult() || $this->isRejectedResult();
     }
 
+    /** Somente companhias que aceitam reanálise (Porto e Tokio), após aprovação ou recusa. */
+    public function supportsProviderReanalysis(): bool
+    {
+        return \App\Services\Insurance\Providers\InsuranceProviderResolver::supportsReanalysis((string) $this->provider);
+    }
+
     public function canRequestProviderReanalysis(): bool
     {
-        return $this->hasFinalResultForReanalysis();
+        return $this->supportsProviderReanalysis() && $this->hasFinalResultForReanalysis();
     }
 
     /** @return array{attempt_id: string, is_reanalysis: bool}|null */

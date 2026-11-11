@@ -159,8 +159,9 @@ it('discards stale quote writes after a newer round replaces the provider run', 
     $coordinator = app(InsuranceQuoteCoordinator::class);
     $first = $coordinator->prepare($analysis, 'round-one', false);
     $oldQuote = InsuranceQuote::first();
-    $analysis->events()->create(['event_type' => 'reanalysis_requested', 'payload' => ['attempt_id' => 'round-two']]);
-    $second = $coordinator->prepare($analysis, 'round-two', true);
+    // Reenvio técnico: a Pottencial não aceita reanálise, mas a rodada nova invalida a antiga.
+    $analysis->events()->create(['event_type' => 'technical_retry_requested', 'payload' => ['attempt_id' => 'round-two']]);
+    $second = $coordinator->prepare($analysis, 'round-two', false);
     expect(fn () => InsuranceAnalysisAttempt::run($oldQuote, 'round-one', fn () => $oldQuote->update(['status' => 'approved'])))
         ->toThrow(\App\Exceptions\ObsoleteInsuranceAnalysisAttempt::class);
     expect($first->id)->not->toBe($second->id)
@@ -340,16 +341,31 @@ it('ignores duplicate polling jobs from an earlier generation', function (): voi
     expect(Queue::pushed(RunInsuranceQuoteJob::class)->filter(fn ($job) => $job->quoteId === $quote->id)->count())->toBe(1);
 });
 
-it('creates a fresh round for Too reanalysis without requiring or reusing its previous proposal', function (): void {
-    $analysis = multipleQuoteAnalysis(false, 'too');
+it('refuses reanalysis rounds for Pottencial and Too without creating a round or a job', function (string $provider): void {
+    $analysis = multipleQuoteAnalysis(false, $provider);
     $analysis->update(['status' => 'rejected']);
+    $before = $analysis->fresh()->toArray();
     $service = app(\App\Services\Insurance\LeadReanalysisService::class);
-    $attempt = $service->startProviderReanalysis($analysis, 'admin');
+
+    expect(fn () => $service->startProviderReanalysis($analysis, 'admin'))->toThrow(DomainException::class, 'não permite reanálise')
+        ->and(fn () => app(InsuranceQuoteCoordinator::class)->prepare($analysis, 'forced-reanalysis', true))->toThrow(DomainException::class);
+    expect($analysis->fresh()->toArray())->toBe($before)
+        ->and(\App\Models\InsuranceAnalysisRound::count())->toBe(0)
+        ->and($analysis->events()->where('event_type', 'reanalysis_requested')->exists())->toBeFalse();
+    Queue::assertNotPushed(RunProviderAnalysisJob::class);
+    Http::assertNothingSent();
+})->with(['pottencial', 'too']);
+
+it('creates a fresh reanalysis round for Tokio, which accepts reanalysis', function (): void {
+    config(['services.tokio.enabled' => true]);
+    $analysis = multipleQuoteAnalysis(false, 'tokio');
+    $analysis->update(['status' => 'rejected']);
+    $attempt = app(\App\Services\Insurance\LeadReanalysisService::class)->startProviderReanalysis($analysis, 'admin');
     $run = app(InsuranceQuoteCoordinator::class)->findRun($analysis, $attempt);
     expect($run)->not->toBeNull()
         ->and($run->round->is_reanalysis)->toBeTrue()
-        ->and($run->scenarios->first()->quotes->first()->proposal_id)->toBeNull();
-    Queue::assertPushed(RunProviderAnalysisJob::class);
+        ->and($analysis->fresh()->status)->toBe('pending');
+    Queue::assertPushed(RunProviderAnalysisJob::class, fn ($job) => $job->analysisId === $analysis->id && $job->isReanalysis === true);
     Http::assertNothingSent();
 });
 
@@ -457,10 +473,9 @@ it('uses each persisted birthdate in Too individual and joint snapshot payloads'
     $coordinator->consolidate($run->id);
     $joint = $run->scenarios()->where('kind', 'joint')->first()->quotes()->first();
     app(InsuranceLeadSnapshot::class)->attach($joint);
-    foreach ([$builder->buildFichaPayload($joint), $builder->buildBasicDataPayload($joint)] as $payload) {
-        expect(array_column($payload['pretendentes'], 'dataNascimento'))->toBe(['1990-05-01', '1994-09-12'])
-            ->and(array_column($payload['pretendentes'], 'cpf'))->toBe(['52998224725', '11144477735'])
-            ->and(array_column($payload['pretendentes'], 'principal'))->toBe([true, false]);
-    }
+    $payload = $builder->buildFichaPayload($joint);
+    expect(array_column($payload['pretendentes'], 'dataNascimento'))->toBe(['1990-05-01', '1994-09-12'])
+        ->and(array_column($payload['pretendentes'], 'cpf'))->toBe(['52998224725', '11144477735'])
+        ->and(array_column($payload['pretendentes'], 'principal'))->toBe([true, false]);
     Http::assertNothingSent();
 });

@@ -31,12 +31,12 @@
                         @if ($blocked)
                             <span class="badge text-bg-secondary">Bloqueada</span>
                         @else
-                            <button type="button" class="btn btn-sm btn-outline-secondary" data-reanalysis-mode-only="general" data-analysis-dialog="details-{{ $provider }}" aria-haspopup="dialog" aria-controls="details-{{ $provider }}" @disabled(! $analysis)>Visualizar</button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" data-analysis-dialog="details-{{ $provider }}" aria-haspopup="dialog" aria-controls="details-{{ $provider }}" @disabled(! $analysis)>Visualizar</button>
                             @if ($readOnly)
                                 <span class="badge text-bg-secondary">Desativada</span>
                             @elseif ($canEditExpenses)
                                 @php($providerReanalysis = $analysis['actions']['expense_reanalysis'] ?? ['available' => false, 'url' => null])
-                                <button type="button" class="btn btn-sm btn-primary" data-reanalysis-mode-only="separate" hidden
+                                <button type="button" class="btn btn-sm btn-primary"
                                     data-provider-reanalysis="{{ $provider }}" data-provider-name="{{ $providerName }}" data-url="{{ $providerReanalysis['url'] }}"
                                     @disabled(! $providerReanalysis['available'])
                                     @unless ($providerReanalysis['available']) title="Disponível quando esta companhia concluir a análise atual." @endunless>

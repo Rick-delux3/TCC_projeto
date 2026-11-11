@@ -400,9 +400,9 @@ it('keeps internal linking and automatic tag operations separate from data edits
 it('removes leads after an actual data edit but not after saving unchanged data', function (): void {
     $lead = dashboardFilterLead();
     $service = app(\App\Services\Insurance\LeadReanalysisService::class);
-    $service->updateLeadDataAndMaybeUnlock($lead, ['nome' => $lead->nome]);
+    $service->updateLeadData($lead, ['nome' => $lead->nome]);
     expect($lead->fresh()->data_edited_at)->toBeNull();
-    $service->updateLeadDataAndMaybeUnlock($lead, ['nome' => 'Edited name']);
+    $service->updateLeadData($lead, ['nome' => 'Edited name']);
     expect($lead->fresh()->data_edited_at)->not->toBeNull();
     $response = $this->get(route('Dashboard-Admin', ['resultado' => 'sem_resultado']))->assertOk();
     expect($response->viewData('leads')->total())->toBe(0);

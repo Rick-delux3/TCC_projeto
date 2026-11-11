@@ -2,6 +2,8 @@
 
 namespace App\Services\Insurance;
 
+use GuzzleHttp\Exception\ConnectException;
+use GuzzleHttp\Exception\RequestException;
 use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Contracts\Encryption\DecryptException;
 use Illuminate\Http\Client\ConnectionException;
@@ -19,7 +21,7 @@ class PortoAuthentication
      * renovação é protegida por lock para que jobs simultâneos não disparem
      * várias autenticações ao mesmo tempo.
      *
-     * @return array{success: bool, message: string, http_status: int|null, access_token: string|null, expires_in: int|null}
+     * @return array{success: bool, message: string, http_status: int|null, access_token: string|null, expires_in: int|null, diagnostics: array}
      */
     public function token(): array
     {
@@ -52,6 +54,7 @@ class PortoAuthentication
                 'success' => false,
                 'message' => 'Tempo limite ao aguardar a renovação do token da Porto.',
                 'http_status' => null, 'access_token' => null, 'expires_in' => null,
+                'diagnostics' => $this->diagnostics(['type' => 'lock_timeout', 'operation' => 'authentication']),
             ];
         }
     }
@@ -67,7 +70,7 @@ class PortoAuthentication
     }
 
     /**
-     * @return array{success: bool, message: string, http_status: int|null, access_token: string|null, expires_in: int|null}|null
+     * @return array{success: bool, message: string, http_status: int|null, access_token: string|null, expires_in: int|null, diagnostics: array}|null
      */
     private function cachedToken(string $key): ?array
     {
@@ -87,7 +90,7 @@ class PortoAuthentication
         return $token === '' ? null : [
             'success' => true,
             'message' => 'Token de acesso da Porto reutilizado do cache.',
-            'http_status' => null, 'access_token' => $token, 'expires_in' => null,
+            'http_status' => null, 'access_token' => $token, 'expires_in' => null, 'diagnostics' => [],
         ];
     }
 
@@ -106,11 +109,11 @@ class PortoAuthentication
     }
 
     /**
-     * @return array{success: bool, message: string, http_status: int|null, access_token: string|null, expires_in: int|null}
+     * @return array{success: bool, message: string, http_status: int|null, access_token: string|null, expires_in: int|null, diagnostics: array}
      */
     public function requestToken(): array
     {
-        $result = ['success' => false, 'message' => '', 'http_status' => null, 'access_token' => null, 'expires_in' => null];
+        $result = ['success' => false, 'message' => '', 'http_status' => null, 'access_token' => null, 'expires_in' => null, 'diagnostics' => []];
         $settings = [];
 
         foreach (['token_url', 'client_id', 'client_secret'] as $key) {
@@ -145,6 +148,13 @@ class PortoAuthentication
                     $response->serverError() => 'O servidor da Porto apresentou uma falha.',
                     default => 'Não foi possível obter o token de acesso da Porto.',
                 };
+                // Corpo do erro OAuth (ex.: invalid_client) já sanitizado; 401/502 podem vir em texto simples.
+                $body = $response->json();
+                $result['diagnostics'] = app(InsuranceDiagnosticSanitizer::class)->extract([
+                    'operation' => 'authentication',
+                    'http_status' => $response->status(),
+                    'response' => is_array($body) ? $body : ['message' => $response->body()],
+                ], [$settings]);
 
                 return $result;
             }
@@ -167,12 +177,61 @@ class PortoAuthentication
                 'access_token' => $token,
                 'expires_in' => $expiresIn,
             ]);
-        } catch (ConnectionException) {
-            $result['message'] = 'Falha de conexão, DNS, TLS ou tempo limite ao autenticar na Porto.';
-        } catch (Throwable) {
-            $result['message'] = 'Não foi possível concluir a autenticação na Porto.';
+        } catch (ConnectionException $exception) {
+            $errno = $this->curlErrorNumber($exception);
+            $result['message'] = $this->connectionMessage($errno);
+            $result['diagnostics'] = $this->diagnostics([
+                'type' => 'transport_error', 'operation' => 'authentication',
+                'code' => $errno, 'message' => $exception->getMessage(),
+            ], [$settings]);
+        } catch (Throwable $exception) {
+            $class = class_basename($exception);
+            $result['message'] = "Erro inesperado ao autenticar na Porto ({$class}).";
+            $result['diagnostics'] = $this->diagnostics([
+                'type' => 'unexpected_error', 'operation' => 'authentication',
+                'source' => $class, 'message' => $exception->getMessage(),
+            ], [$settings]);
         }
 
         return $result;
+    }
+
+    /**
+     * Código cURL da falha de transporte. O Laravel encapsula tanto a
+     * ConnectException (DNS, conexão, timeout) quanto a RequestException sem
+     * resposta (TLS, conexão interrompida); ambas expõem o contexto do handler.
+     */
+    private function curlErrorNumber(ConnectionException $exception): ?int
+    {
+        $previous = $exception->getPrevious();
+        $errno = $previous instanceof ConnectException || $previous instanceof RequestException
+            ? ($previous->getHandlerContext()['errno'] ?? null)
+            : null;
+        if (! is_int($errno) && preg_match('/cURL error (\d+)/', $exception->getMessage(), $match) === 1) {
+            $errno = (int) $match[1];
+        }
+
+        return is_int($errno) ? $errno : null;
+    }
+
+    /** Motivo legível e seguro para gravar na cotação; o texto completo vai sanitizado ao log. */
+    private function connectionMessage(?int $errno): string
+    {
+        $suffix = $errno !== null ? " (cURL {$errno})" : '';
+
+        return match (true) {
+            $errno === 6 => "Falha de DNS: o host de autenticação da Porto não foi resolvido{$suffix}.",
+            $errno === 7 => "Conexão recusada ou servidor de autenticação da Porto inacessível{$suffix}.",
+            $errno === 28 => "Tempo limite esgotado ao autenticar na Porto{$suffix}.",
+            in_array($errno, [35, 51, 53, 54, 58, 59, 60, 77, 80, 83, 90, 91], true) => "Falha de TLS/certificado ao autenticar na Porto{$suffix}.",
+            in_array($errno, [52, 55, 56], true) => "Conexão com o servidor de autenticação da Porto interrompida sem resposta{$suffix}.",
+            $errno !== null => "Falha de conexão ao autenticar na Porto{$suffix}.",
+            default => 'Falha de conexão, DNS, TLS ou tempo limite ao autenticar na Porto.',
+        };
+    }
+
+    private function diagnostics(array $error, array $sources = []): array
+    {
+        return app(InsuranceDiagnosticSanitizer::class)->extract(['errors' => $error], $sources);
     }
 }

@@ -15,8 +15,10 @@ beforeEach(function () {
     $this->withoutVite();
     Queue::fake();
     Http::preventStrayRequests();
-    config(['features.insurance_analysis.enabled' => true]);
+    config(['features.insurance_analysis.enabled' => true, 'services.pottencial.enabled' => true, 'services.porto.enabled' => true]);
     $this->service = $this->mock(LeadReanalysisService::class);
+    // A página calcula a revisão das despesas pelo service (mockado aqui).
+    $this->service->shouldReceive('expenseRevision')->andReturn(str_repeat('a', 64));
     $this->company = Imobiliaria::factory()->create();
     $this->user = User::factory()->create(['company_id' => $this->company->id]);
     $this->lead = Lead::query()->create(['nome' => 'Autorização', 'email' => 'authorization@example.test', 'company_id' => $this->company->id]);
@@ -42,7 +44,8 @@ it('rejects the former company on every analysis surface even when historical ow
     foreach (['retry', 'provider-reanalysis', 'sync-status'] as $action) {
         $this->postJson(route('insurance-analyses.'.$action, $this->analysis), ['nome' => 'Intruso'])->assertForbidden();
     }
-    $this->postJson(route('dashboard.leads.reanalyze', $this->lead))->assertForbidden();
+    // A reanálise geral do lead foi removida: a rota não existe mais.
+    $this->postJson('/Dashboard/leads/'.$this->lead->id.'/reanalisar')->assertNotFound();
     $this->putJson(route('dashboard.leads.update', $this->lead), ['nome' => 'Intruso'])->assertForbidden();
     expect($this->lead->fresh()->nome)->toBe('Autorização')
         ->and($this->analysis->fresh()->status)->toBe('failed')
@@ -64,17 +67,17 @@ it('allows the current company to read and act on analyses created before the tr
         $this->service->shouldReceive('startTechnicalRetry')->once()
             ->withArgs(fn (InsuranceAnalysis $analysis, string $requestedBy): bool => $analysis->is($this->analysis) && $requestedBy === 'imobiliaria');
     } elseif ($action === 'provider-reanalysis') {
-        $this->service->shouldReceive('updateLeadDataAndMaybeUnlock')->once()->andReturn(['changed' => true]);
+        // Reanálise por companhia: somente Porto/Tokio aceitam.
+        $this->analysis->update(['provider' => 'porto', 'status' => 'approved']);
+        $this->service->shouldReceive('ensureReanalysisAllowed')->once();
+        $this->service->shouldReceive('updateLeadData')->once()->andReturn(['changed' => true]);
         $this->service->shouldReceive('startProviderReanalysis')->once();
-    } elseif ($action === 'general') {
-        $this->service->shouldReceive('startGeneralReanalysis')->once()->andReturn(1);
     }
-    $url = $action === 'general' ? route('dashboard.leads.reanalyze', $this->lead) : route('insurance-analyses.'.$action, $this->analysis);
-    $this->from($pageUrl)->post($url, ['nome' => 'Atualizado'])->assertRedirect($pageUrl)->assertSessionHas('success');
+    $this->from($pageUrl)->post(route('insurance-analyses.'.$action, $this->analysis), ['nome' => 'Atualizado'])->assertRedirect($pageUrl)->assertSessionHas('success');
     if ($action === 'sync-status') {
         Queue::assertPushed(SyncProviderAnalysisStatusJob::class, fn ($job): bool => $job->analysisId === $this->analysis->id);
     }
-})->with(['retry', 'provider-reanalysis', 'sync-status', 'general']);
+})->with(['retry', 'provider-reanalysis', 'sync-status']);
 
 it('requires edit permission when a broker reanalysis changes lead data', function (bool $canEdit) {
     $permissions = [CorretorPermissions::VIEW_ANALYSIS, CorretorPermissions::CREATE_ANALYSIS];
@@ -85,12 +88,13 @@ it('requires edit permission when a broker reanalysis changes lead data', functi
         'name' => 'Corretor', 'email' => 'broker-authorization@example.test', 'password' => 'password',
         'role' => Corretor::ROLE_INTEGRANTE, 'active' => true, 'first_login_verified_at' => now(), 'permissions' => $permissions,
     ]);
-    $this->analysis->update(['status' => 'approved']);
+    $this->analysis->update(['provider' => 'porto', 'status' => 'approved']);
     $this->actingAs($broker, 'admin');
     $this->getJson(route('admin.insurance-analyses.data', $this->lead))->assertOk()
         ->assertJsonPath('data.analyses.0.actions.reanalysis.available', $canEdit);
     if ($canEdit) {
-        $this->service->shouldReceive('updateLeadDataAndMaybeUnlock')->once()->andReturn(['changed' => true]);
+        $this->service->shouldReceive('ensureReanalysisAllowed')->once();
+        $this->service->shouldReceive('updateLeadData')->once()->andReturn(['changed' => true]);
         $this->service->shouldReceive('startProviderReanalysis')->once();
         $this->post(route('admin.insurance-analyses.provider-reanalysis', $this->analysis), ['nome' => 'Atualizado'])
             ->assertRedirect()->assertSessionHas('success');
@@ -112,7 +116,7 @@ it('keeps readonly brokers from requesting analysis retries or reanalysis', func
     foreach (['retry', 'provider-reanalysis'] as $action) {
         $this->postJson(route('admin.insurance-analyses.'.$action, $this->analysis))->assertForbidden();
     }
-    $this->postJson(route('admin.leads.reanalyze', $this->lead))->assertForbidden();
+    $this->postJson('/Dashboard/Admin/leads/'.$this->lead->id.'/reanalisar')->assertNotFound();
     Queue::assertNothingPushed();
     $this->post(route('admin.insurance-analyses.sync-status', $this->analysis))->assertRedirect()->assertSessionHas('success');
     Queue::assertPushed(SyncProviderAnalysisStatusJob::class);

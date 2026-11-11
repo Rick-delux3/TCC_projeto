@@ -10,6 +10,7 @@ use App\Services\Insurance\InsuranceAnalysisFailure;
 use App\Services\Insurance\InsuranceStatusPolling;
 use App\Services\Insurance\ProviderAnalysisStatus;
 use App\Services\Insurance\Providers\InsuranceProviderResolver;
+use App\Services\Insurance\Providers\ReanalyzesInsuranceQuotes;
 use Illuminate\Bus\Batchable;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -117,6 +118,10 @@ class RunProviderAnalysisJob implements ShouldQueue
             if ($this->attempts() > 1 && ! $analysis->isTooProvider() && filled($analysis->quote_id)) {
                 $result = $provider->getStatus($analysis);
             } elseif ($this->isReanalysis) {
+                // Defesa para jobs já enfileirados: Pottencial e Too não aceitam reanálise.
+                if (! $provider instanceof ReanalyzesInsuranceQuotes || ! InsuranceProviderResolver::supportsReanalysis($analysis->provider)) {
+                    throw new \DomainException("A companhia {$analysis->provider} não permite reanálise.");
+                }
                 $result = $provider->requestReanalysis(
                     analysis: $analysis,
                     attemptId: $this->attemptId,

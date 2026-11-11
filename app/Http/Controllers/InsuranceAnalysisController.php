@@ -17,7 +17,6 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Gate;
-use Illuminate\Validation\ValidationException;
 
 class InsuranceAnalysisController extends Controller
 {
@@ -25,16 +24,6 @@ class InsuranceAnalysisController extends Controller
         private LeadReanalysisService $leadReanalysisService,
         private InsuranceAnalysisPageService $analysisPageService,
     ) {}
-
-    public function reanalyzeExpenses(\App\Http\Requests\ReanalyzeLeadExpensesRequest $request, Lead $lead): RedirectResponse
-    {
-        return $this->saveExpensesAndReanalyze($request, $lead, false);
-    }
-
-    public function adminReanalyzeExpenses(\App\Http\Requests\ReanalyzeLeadExpensesRequest $request, Lead $lead): RedirectResponse
-    {
-        return $this->saveExpensesAndReanalyze($request, $lead, true);
-    }
 
     public function saveExpenses(\App\Http\Requests\SaveLeadExpensesRequest $request, Lead $lead): JsonResponse
     {
@@ -47,21 +36,6 @@ class InsuranceAnalysisController extends Controller
             return response()->json(['message' => 'Despesas salvas. Escolha a companhia que deseja reanalisar.'] + $result);
         } catch (DomainException $exception) {
             return response()->json(['message' => $exception->getMessage()], 422);
-        }
-    }
-
-    private function saveExpensesAndReanalyze(\App\Http\Requests\ReanalyzeLeadExpensesRequest $request, Lead $lead, bool $admin): RedirectResponse
-    {
-        $route = $admin ? 'admin.insurance-analyses.lead' : 'insurance-analyses.lead';
-        try {
-            $total = $this->leadReanalysisService->reanalyzeExpenses(
-                $lead, $request->validated(), $admin ? 'admin' : 'imobiliaria',
-                $admin ? Auth::guard('admin')->user() : null,
-            );
-
-            return redirect()->route($route, $lead)->with('success', "Novas cotações solicitadas para {$total} companhia(s).");
-        } catch (DomainException $exception) {
-            return redirect()->route($route, $lead)->withErrors(['expenses' => $exception->getMessage()], 'expenseReanalysis')->withInput($request->validated());
         }
     }
 
@@ -269,16 +243,18 @@ class InsuranceAnalysisController extends Controller
             );
         }
 
-        $data = $this->validateProviderReanalysisRequest($request, $analysis);
-        $options = $this->reanalysisOptionsForProvider($analysis, $data);
+        $data = $this->validateProviderReanalysisRequest($request);
 
         try {
+            // Antes de salvar qualquer dado: Pottencial e Too não aceitam reanálise.
+            $this->leadReanalysisService->ensureReanalysisAllowed($analysis);
+
             $corretor = $requestedBy === 'admin'
                 ? Auth::guard('admin')->user()
                 : null;
 
             $updateResult = $this->leadReanalysisService
-                ->updateLeadDataAndMaybeUnlock(
+                ->updateLeadData(
                     lead: $analysis->lead,
                     data: $data,
                     corretor: $corretor instanceof Corretor
@@ -303,7 +279,6 @@ class InsuranceAnalysisController extends Controller
             $this->leadReanalysisService->startProviderReanalysis(
                 analysis: $analysis,
                 requestedBy: $requestedBy,
-                options: $options
             );
 
             return back()->with(
@@ -362,30 +337,11 @@ class InsuranceAnalysisController extends Controller
     }
 
     /**
-     * Monta opções específicas de reanálise por provider.
-     */
-    private function reanalysisOptionsForProvider(InsuranceAnalysis $analysis, array $data): array
-    {
-        if (! $analysis->isTooProvider()) {
-            return [];
-        }
-
-        $reason = (int) ($data['too_reanalysis_reason'] ?? 10);
-
-        return [
-            'motivosReanalise' => [$reason],
-            'observacoes' => filled($data['too_reanalysis_observations'] ?? null)
-                ? $data['too_reanalysis_observations']
-                : 'Reanálise solicitada após alteração dos dados do lead.',
-        ];
-    }
-
-    /**
      * Valida dados alteráveis na reanálise por companhia.
      */
-    private function validateProviderReanalysisRequest(Request $request, InsuranceAnalysis $analysis): array
+    private function validateProviderReanalysisRequest(Request $request): array
     {
-        $data = $request->validate([
+        return $request->validate([
             'nome' => ['nullable', 'string', 'max:255'],
             'email' => ['nullable', 'email', 'max:255'],
             'tel' => ['nullable', 'string', 'max:30'],
@@ -409,23 +365,7 @@ class InsuranceAnalysisController extends Controller
             'logradouro' => ['nullable', 'string', 'max:255'],
             'numero' => ['nullable', 'string', 'max:30'],
             'complemento' => ['nullable', 'string', 'max:255'],
-
-            'too_reanalysis_reason' => ['nullable', 'integer', 'between:1,10'],
-            'too_reanalysis_observations' => ['nullable', 'string', 'max:1000'],
         ]);
-
-        if ($analysis->isTooProvider()) {
-            $reason = (int) ($data['too_reanalysis_reason'] ?? 10);
-            $observations = $data['too_reanalysis_observations'] ?? null;
-
-            if (in_array($reason, [3, 7, 10], true) && blank($observations)) {
-                throw ValidationException::withMessages([
-                    'too_reanalysis_observations' => 'Informe as observações para este motivo de reanálise da Too.',
-                ]);
-            }
-        }
-
-        return $data;
     }
 
     /**

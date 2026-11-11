@@ -2,7 +2,7 @@
 
 namespace App\Services\Insurance\Providers;
 
-class TokioInsuranceProvider implements InsuranceProviderInterface
+class TokioInsuranceProvider implements ReanalyzesInsuranceQuotes
 {
     public function __construct(
         private \App\Services\Insurance\TokioService $service,

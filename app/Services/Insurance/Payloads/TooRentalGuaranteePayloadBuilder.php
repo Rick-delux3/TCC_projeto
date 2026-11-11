@@ -43,28 +43,6 @@ class TooRentalGuaranteePayloadBuilder
         ];
     }
 
-    public function buildBasicDataPayload(InsuranceExecution $analysis): array
-    {
-        $this->loadRelations($analysis);
-
-        $lead = $analysis->lead;
-
-        if (! $lead) {
-            throw new \App\Exceptions\InvalidInsuranceAnalysisPayload('Lead não encontrado para montar payload de atualização de dados básicos da Too.');
-        }
-
-        $this->validateBaseLeadData($lead);
-
-        return [
-
-            'pretendentes' => $this->quoteApplicants($analysis),
-
-            'locacao' => $this->locacaoPayload($lead),
-
-            'coberturas' => $this->coverages($lead),
-        ];
-    }
-
     /**
      * Monta o payload para:
      *

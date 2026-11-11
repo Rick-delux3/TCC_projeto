@@ -15,6 +15,11 @@ final class InsuranceQuoteCoordinator
 
     public function prepare(InsuranceAnalysis $analysis, string $attemptId, bool $isReanalysis): InsuranceProviderRun
     {
+        // Ponto único por onde passa toda rodada de reanálise.
+        if ($isReanalysis && ! Providers\InsuranceProviderResolver::supportsReanalysis((string) $analysis->provider)) {
+            throw new \DomainException('Esta companhia não permite reanálise.');
+        }
+
         return $analysis->getConnection()->transaction(function () use ($analysis, $attemptId, $isReanalysis): InsuranceProviderRun {
             $analysis = InsuranceAnalysis::query()->lockForUpdate()->findOrFail($analysis->id);
             InsuranceAnalysisAttempt::assertCurrent($analysis, $attemptId);

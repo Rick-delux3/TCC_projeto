@@ -55,20 +55,12 @@ Route::prefix('/Dashboard')->group(function () {
             ->middleware('throttle:5,1')
             ->name('dashboard.leads.leadlovers.correct');
 
-        Route::post('/leads/{lead}/reanalisar', [DashboardLeadController::class, 'reanalyze'])
-            ->middleware(['analysis.enabled', 'can:requestAnalysis,lead'])
-            ->name('dashboard.leads.reanalyze');
-
         Route::get('/analises', [InsuranceAnalysisController::class, 'index'])
             ->name('insurance-analyses.index');
 
         Route::get('/leads/{lead}/analises', [InsuranceAnalysisController::class, 'showLead'])
             ->whereNumber('lead')
             ->name('insurance-analyses.lead');
-
-        Route::put('/leads/{lead}/analises/despesas', [InsuranceAnalysisController::class, 'reanalyzeExpenses'])
-            ->middleware(['analysis.enabled', 'throttle:5,1'])->whereNumber('lead')
-            ->name('insurance-analyses.expense-reanalysis');
 
         Route::put('/leads/{lead}/analises/despesas/salvar', [InsuranceAnalysisController::class, 'saveExpenses'])
             ->middleware(['analysis.enabled', 'throttle:5,1'])->whereNumber('lead')
@@ -157,10 +149,6 @@ Route::prefix('/Dashboard')->group(function () {
             ->middleware(['can:edit-leads', 'throttle:5,1'])
             ->name('admin.leads.leadlovers.correct');
 
-        Route::post('/leads/{lead}/reanalisar', [DashboardLeadController::class, 'adminReanalyze'])
-            ->middleware(['can:create-analysis', 'analysis.enabled', 'can:requestAnalysis,lead'])
-            ->name('admin.leads.reanalyze');
-
         Route::get('/analises', [InsuranceAnalysisController::class, 'adminIndex'])
             ->middleware('can:view-analyses')
             ->name('admin.insurance-analyses.index');
@@ -169,10 +157,6 @@ Route::prefix('/Dashboard')->group(function () {
             ->middleware('can:view-analyses')
             ->whereNumber('lead')
             ->name('admin.insurance-analyses.lead');
-
-        Route::put('/leads/{lead}/analises/despesas', [InsuranceAnalysisController::class, 'adminReanalyzeExpenses'])
-            ->middleware(['analysis.enabled', 'throttle:5,1'])->whereNumber('lead')
-            ->name('admin.insurance-analyses.expense-reanalysis');
 
         Route::put('/leads/{lead}/analises/despesas/salvar', [InsuranceAnalysisController::class, 'saveExpenses'])
             ->middleware(['analysis.enabled', 'throttle:5,1'])->whereNumber('lead')

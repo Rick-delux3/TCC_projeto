@@ -206,17 +206,16 @@ it('resubmits failed credit without registering another Too proposal', function 
     expect($provider->requestAnalysis($analysis->fresh(), 'recovery')['success'])->toBeTrue();
 });
 
-it('consults an already submitted Too reanalysis instead of submitting it again', function () {
+it('keeps consulting a Too reanalysis submitted before its removal without submitting anything again', function () {
     $analysis = recoverableInsuranceAnalysis('too');
-    $analysis->update(['proposal_id' => '123', 'response_payload' => ['numeroFicha' => '456']]);
-    $this->mock(TooRentalGuaranteePayloadBuilder::class)->shouldReceive('buildBasicDataPayload')->once()->andReturn([]);
+    $analysis->update(['status' => 'processing', 'proposal_id' => '123', 'response_payload' => [
+        'numeroProposta' => '123', 'numeroFicha' => '456', 'too_is_reanalysis' => true, 'too_reanalysis_attempt_id' => 'recovery',
+    ]]);
     $service = $this->mock(TooService::class);
-    $service->shouldReceive('getProposalStatus')->twice()->andReturn(['success' => true, 'response' => ['proposta' => ['status' => 5]]]);
-    $service->shouldReceive('updateProposalBasicData')->once()->andReturn(['success' => true]);
-    $service->shouldReceive('submitReanalysis')->once()->andReturn(['success' => true]);
-    $provider = app(TooInsuranceProvider::class);
-    expect($provider->requestReanalysis($analysis, 'recovery')['success'])->toBeTrue()
-        ->and($provider->requestReanalysis($analysis->fresh(), 'recovery')['success'])->toBeTrue();
+    $service->shouldReceive('getProposalStatus')->once()->andReturn(['success' => true, 'response' => ['proposta' => ['status' => 5]]]);
+    $service->shouldNotReceive('registerProposalFicha', 'submitCreditAnalysis', 'requestQuote');
+
+    expect(app(TooInsuranceProvider::class)->getStatus($analysis->fresh())['success'])->toBeTrue();
 });
 
 it('resumes a persisted Pottencial quote through consultation on a worker retry', function () {
