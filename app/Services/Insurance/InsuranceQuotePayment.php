@@ -30,33 +30,12 @@ final class InsuranceQuotePayment
             app(InsuranceAnalysisLogger::class)->record($quote, $quote->executionAttemptId ?? '', $result, payment: true);
             throw new \RuntimeException('Resposta de pagamento inválida.');
         }
+        // Pottencial: primeira parcela da alternativa de 30 (ver PottencialQuoteResponse).
         $selection = $quote->provider === 'pottencial'
-            ? $this->pottencialSelection($response, $quote->payment_type)
+            ? app(PottencialQuoteResponse::class)->paymentSelection($response, $quote->payment_type)
             : $this->tooSelection($response, $quote->payment_type);
 
         return ['response' => $response, 'selection' => $selection];
-    }
-
-    private function pottencialSelection(array $response, string $paymentType): ?array
-    {
-        $options = array_is_list($response) ? $response : [$response];
-        foreach ($options as $option) {
-            if (($option['paymentType'] ?? null) !== $paymentType) {
-                continue;
-            }
-            foreach ($option['installments'] ?? [] as $plan) {
-                if ((int) ($plan['countInstallments'] ?? 0) !== 30) {
-                    continue;
-                }
-                $amounts = $plan['installments'] ?? [];
-                $amount = $amounts[0] ?? null;
-                if ($this->validAmount($amount) && collect($amounts)->every(fn ($value) => $this->validAmount($value) && round((float) $value, 2) === round((float) $amount, 2))) {
-                    return ['amount' => number_format((float) $amount, 2, '.', ''), 'count' => 30, 'payment_type' => $paymentType, 'with_entry' => false, 'details' => $plan];
-                }
-            }
-        }
-
-        return null;
     }
 
     private function tooSelection(array $response, string $paymentType): ?array

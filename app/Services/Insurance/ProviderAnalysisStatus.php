@@ -24,7 +24,8 @@ final class ProviderAnalysisStatus
 
     public static function isTerminal(?string $status): bool
     {
-        return in_array($status, ['approved', 'rejected', 'failed', 'manual_required'], true);
+        // plan_unavailable: plano da Pottencial descartado; terminal por cotação.
+        return in_array($status, ['approved', 'rejected', 'failed', 'manual_required', PottencialQuoteResponse::PLAN_UNAVAILABLE], true);
     }
 
     public static function errorMessage(string $status): ?string

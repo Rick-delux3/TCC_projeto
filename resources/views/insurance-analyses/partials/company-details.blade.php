@@ -17,15 +17,27 @@
             @foreach ($detailOffers as $detail)
                 <section class="card mb-3">
                     <div class="card-body">
-                        <h3 class="h6">{{ $planNames[$detail['plan_key']] ?? $detail['plan_key'] ?: 'Fiança locatícia' }}</h3>
+                        <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+                            <h3 class="h6 mb-0">{{ $planNames[$detail['plan_key']] ?? $detail['plan_key'] ?: 'Fiança locatícia' }}</h3>
+                            @if (($cardPlan['id'] ?? null) !== null && ($detail['id'] ?? null) === $cardPlan['id'] && $detailOffers->count() > 1)
+                                <span class="badge text-bg-success">Exibido no card</span>
+                            @endif
+                        </div>
                         @if (array_filter($detail['applicants']))
                             <p class="text-body-secondary">{{ implode(' e ', array_filter($detail['applicants'])) }}</p>
                         @endif
-                        @include('insurance-analyses.partials.offer-price', ['offerStatus' => $detail['status'], 'amount' => $detail['payment_status'] === 'ready' ? $detail['installment_amount'] : null, 'count' => $detail['installments'], 'manualMessage' => $analysis['manual_message'], 'displayState' => $detail['display_state'] ?? $analysis['display_state']])
+                        @include('insurance-analyses.partials.offer-price', ['offerStatus' => $detail['status'], 'amount' => $detail['payment_status'] === 'ready' ? $detail['installment_amount'] : null, 'count' => $detail['installments'], 'recurring' => $detail['recurring_installment'] ?? null, 'manualMessage' => $analysis['manual_message'], 'displayState' => $detail['display_state'] ?? $analysis['display_state']])
                         @if ($detail['status'] === 'approved')
                             @php($detailPrice = $detail['quote']['price'])
                             @if ((float) $detail['installment_amount'] > 0 && $detail['payment_status'] === 'ready')
-                                <p class="small mt-2">{{ $detail['installments'] }} parcelas de {{ $formatMoney($detail['installment_amount']) }}</p>
+                                @php($detailRecurring = $detail['recurring_installment'] ?? null)
+                                <p class="small mt-2 mb-0">
+                                    @if ($detailRecurring !== null && (int) $detail['installments'] > 1 && round((float) $detailRecurring, 2) !== round((float) $detail['installment_amount'], 2))
+                                        1ª parcela de {{ $formatMoney($detail['installment_amount']) }} e {{ (int) $detail['installments'] - 1 }} parcelas de {{ $formatMoney($detailRecurring) }}
+                                    @else
+                                        {{ $detail['installments'] }} parcelas de {{ $formatMoney($detail['installment_amount']) }}
+                                    @endif
+                                </p>
                             @endif
                             <dl class="row small mt-3 mb-0">
                                 <dt class="col-sm-5">Pagamento</dt><dd class="col-sm-7">{{ ['faturado' => 'Fatura', 'credito' => 'Cartão de crédito', 'Invoice' => 'Fatura', 'Boleto' => 'Boleto', 'CreditCard' => 'Cartão de crédito'][$detail['payment_type']] ?? 'Não informado' }}</dd>
@@ -36,7 +48,7 @@
                             <ul class="list-group list-group-flush">
                                 @forelse ($detail['quote']['coverages'] as $coverage)
                                     <li class="list-group-item px-0">
-                                        <strong>{{ ['basica' => 'Aluguel', 'condominio' => 'Condom?nio', 'iptu' => 'IPTU', 'gas' => 'G?s', 'agua' => '?gua', 'luz' => 'Energia el?trica', 'danos' => 'Danos ao im?vel', 'pintura' => 'Pintura', 'multa-rescisao' => 'Multa rescis?ria'][$coverage['name']] ?? ($coverage['name'] ?: 'Cobertura') }}</strong>
+                                        <strong>{{ ['basica' => 'Aluguel', 'condominio' => 'Condomínio', 'iptu' => 'IPTU', 'gas' => 'Gás', 'agua' => 'Água', 'luz' => 'Energia elétrica', 'danos' => 'Danos ao imóvel', 'pintura' => 'Pintura', 'multa-rescisao' => 'Multa rescisória'][$coverage['name']] ?? ($coverage['name'] ?: 'Cobertura') }}</strong>
                                         @if ($coverage['contracted'] !== null)
                                             <span class="small d-block">{{ $coverage['contracted'] ? 'Contratada' : 'Não contratada' }}</span>
                                         @endif

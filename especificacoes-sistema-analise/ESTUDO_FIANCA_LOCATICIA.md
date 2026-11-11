@@ -1,5 +1,55 @@
 # Estudo das APIs de Fiança Locatícia
 
+## Pottencial — somente Complete e Traditional, plano indisponível e menor parcela — 11/11/2026
+
+**Regra confirmada pelo usuário em 11/11/2026, ainda não implementada.** Escopo exclusivo da Pottencial; não altera Too, Tokio ou Porto. Esta seção prevalece sobre todas as orientações anteriores que mandam cotar Basic, Complete e Traditional e sobre a premissa de que as 30 parcelas da Pottencial são sempre iguais (ver "Trechos superados" abaixo).
+
+### Evidência que originou a regra — análise local 3, rodada de 11/11/2026
+
+Leitura dos dados salvos com `php artisan pottencial:test-api --analise=3` (sem chamada à API):
+
+| Plano | Resultado | Retorno |
+| --- | --- | --- |
+| `Basic` | Falha técnica | `cURL error 6: Could not resolve host: api-hml.pottencial.com.br` ao obter o token (`/oauth/v3/access-token`). Falha de DNS da máquina local, não resposta da Pottencial; os outros planos alcançaram a API segundos depois |
+| `Complete` | HTTP 400 | `The chosen plan is not available for this quote. Please try again by choosing between plans '' or 'Traditional'.` |
+| `Traditional` | Aprovado (HTTP 201), mas gravado como preço indisponível | Simulador Invoice, `countInstallments = 30`, `grossAmount = 5383.05`: **1ª parcela 179,58 e 2ª a 30ª 179,43** (179,58 + 29 × 179,43 = 5.383,05) |
+
+A Pottencial coloca o resíduo de arredondamento do prêmio (5.383,05 ÷ 30 = 179,435) na primeira parcela. O código atual (`InsuranceQuotePayment::pottencialSelection`) exige as 30 parcelas iguais e por isso descartou a seleção (`selection = null`, `payment_status = unavailable`). Esse comportamento tende a ocorrer sempre que o prêmio não for divisível por 30.
+
+### Regras confirmadas
+
+1. **Planos cotados:** o `Basic` deixa de ser utilizado. Cada cenário de pretendentes cota somente `Complete` e `Traditional`, mantendo as regras de payload por plano da seção de 09/11/2026 (Complete com `rentalProperty` e somente `basica`; Traditional com `FiancaLocaticia` e coberturas explícitas). Quantidade por rodada: 2 cotações por cenário — PF sem cônjuge 2; PF com cônjuge 4 iniciais e até 2 da conjunta (máximo 6); PJ 2.
+2. **Plano indisponível (descartado):** somente o HTTP 400 cuja mensagem informe que o plano não está disponível para a cotação (`The chosen plan is not available for this quote`) descarta o plano. O plano descartado não é oferta, não é falha técnica, não entra na comparação de preço e não gera simulação de pagamento. **Qualquer outro HTTP 400** (por exemplo, múltiplo ou cobertura inválidos) continua sendo falha técnica, para não esconder erro de payload.
+3. **Decisão do cenário com plano descartado:** vale o resultado do plano restante.
+
+   | Complete | Traditional | Resultado do cenário |
+   | --- | --- | --- |
+   | Indisponível | Aprovado | Aprovado; retorna somente o Traditional |
+   | Aprovado | Indisponível | Aprovado; retorna somente o Complete |
+   | Indisponível | Recusado | **Recusado** (com a carta de recusa do plano recusado) |
+   | Recusado | Indisponível | **Recusado** (com a carta de recusa do plano recusado) |
+   | Indisponível | Indisponível | **Tratado como recusa** do cenário |
+   | Indisponível | Falha técnica ou pendente | Segue o plano restante: falha ou pendência, nunca recusa |
+
+   Por contar como recusa, as linhas "Recusado" e "Indisponível + Indisponível" valem para a regra da conjunta: a análise conjunta continua sendo disparada somente quando as duas individuais forem recusadas na mesma rodada. O plano descartado não tem carta de recusa própria; quando ambos forem indisponíveis, a recusa fica sem carta.
+4. **Dois planos aprovados:** o sistema calcula internamente a diferença entre as parcelas dos dois planos e escolhe o **mais barato**. Somente esse plano aparece no card da Pottencial e é o preço da Pottencial na comparação entre companhias. O plano mais caro não aparece no card; fica visível somente ao clicar em **Visualizar**, junto com as demais informações da cotação. Um único plano aprovado (o outro recusado, indisponível ou com falha) é retornado diretamente, sem comparação.
+5. **Valor da parcela:** a comparação entre os planos, o card e a comparação entre companhias usam a **primeira parcela** da alternativa Invoice/Boleto de 30 parcelas (no exemplo, R$ 179,58), por ser o maior valor efetivamente cobrado. A primeira parcela diferente das demais por arredondamento não torna a alternativa inconsistente. Preservar a sequência completa das 30 parcelas, os totais (`commercialAmount`, `iofAmount`, `grossAmount`) e a parcela recorrente nos detalhes da cotação. Validação técnica proposta para a implementação: 30 valores positivos cuja soma confira com `grossAmount`; fora disso, preço indisponível.
+6. **Histórico:** cotações `Basic` de rodadas anteriores permanecem gravadas e legíveis; a regra vale para as novas rodadas.
+
+### Trechos superados por esta seção
+
+- "Três cotações independentes e um resultado da companhia" e "Downloads por plano e aprovação parcial" (26/10/2026): três planos por cenário e a tabela de 3 aprovados.
+- "Contrato do simulador e valor a comparar": a premissa de parcelas sempre iguais e de que divergência é inconsistência técnica.
+- "Seleção do menor preço e consequências para a futura refatoração", itens 1, 3 e 4: comparação entre três planos e recusa total exigindo três recusas.
+- "Composição com os três planos da Pottencial" (28/10/2026): seis/nove cotações por rodada com cônjuge e recusa da individual exigindo três planos recusados.
+- Menções a Basic/Complete/Traditional em "Regra geral — pessoa jurídica sem cônjuge", "Matriz definitiva do payload por formulário" e "Estado da implementação" (até três cotações PJ e total máximo 9).
+
+### Pendências para a implementação
+
+- **Empate de parcela entre Complete e Traditional — encerrado em 11/11/2026:** o usuário confirmou que não existe empate, porque cada plano tem um conjunto diferente de coberturas e, portanto, um preço diferente. Não criar regra de desempate entre os dois planos. A orientação anterior de registrar igualdade de preço continua valendo somente para a comparação entre companhias e entre cenários de pretendentes.
+- **Falha de DNS/conexão na autenticação (fora desta regra):** a falha ocorreu antes do envio da cotação, sem orçamento remoto. Avaliar em tarefa própria a repetição automática dessa etapa, sem permitir duas cotações para o mesmo plano.
+
+
 ## Pottencial — correção dos múltiplos após retorno real — 09/11/2026
 
 **Escopo exclusivo da Pottencial, confirmado pelo usuário:** os múltiplos 30, 6 e 3 por cobertura descritos nesta seção não são uma regra geral do seguro fiança. Não aplicar este mapeamento aos builders, payloads ou configurações da Too, Tokio ou Porto; cada companhia mantém suas próprias regras documentadas.
@@ -991,6 +1041,8 @@ A print de Solicitar cotação confirma `paymentConditions` com `paymentType` ob
 
 #### Três cotações independentes e um resultado da companhia
 
+> **Superado em 11/11/2026:** o Basic deixou de ser cotado; valem somente Complete e Traditional, com descarte do plano indisponível e primeira parcela como preço. Ver "Pottencial — somente Complete e Traditional, plano indisponível e menor parcela" no topo deste estudo.
+
 **Correção mais recente do usuário em 26/10/2026:** a Pottencial trabalha **sempre sem entrada**, como regra fixa da companhia. Não é necessário descobrir um indicador equivalente ao comEntrada da Too, nem criar um campo de entrada não documentado. A primeira parcela e seu meio/vencimento não devem ser tratados como entrada. Essa regra não autoriza reduzir 30 para 29 parcelas na Pottencial.
 
 **Planos e coberturas:** Basic, Complete e Traditional diferem em **coberturas e preço**; um plano pode oferecer mais coberturas que outro. Esta confirmação substitui expressamente a orientação anterior de que somente o preço mudava. Manter as três requisições variando planKey, sem atribuir artificialmente as mesmas coberturas aos retornos. Não inferir a hierarquia de cobertura ou preço apenas pelo nome: preservar os dados de cada plano. A regra de selecionar a menor parcela entre os aprovados elegíveis permanece; apresentar o plano e suas coberturas, sem afirmar que o mais barato oferece proteção equivalente ou superior.
@@ -1051,6 +1103,8 @@ GET `/insurance/v1/fianca-locaticia-mensalizado-pf/quotes/{quoteId}/payment-simu
 | `installments[].countInstallments` | Quantidade da alternativa; selecionar 30 conforme padrão Pottencial |
 | `installments[].installments[]` | Array numérico com os valores individuais das parcelas: fonte do preço a comparar |
 | `commercialAmount`, `iofAmount`, `grossAmount`, `additionalAmount`, `financialChargesAmount` na alternativa | Totais e discriminações; preservar separadamente |
+
+> **Superado em 11/11/2026:** o retorno real mostrou a primeira parcela diferente das demais por arredondamento; o preço passa a ser a primeira parcela. Ver a seção de 11/11/2026 no topo deste estudo.
 
 Conferir a forma de pagamento e a alternativa de 30 parcelas, validar quantidade e valores recebidos. As parcelas de cada alternativa são iguais conforme confirmação geral do usuário; usar esse valor final como preço principal. IOF, juros e demais encargos já estão incluídos conforme confirmação geral do usuário: não somá-los novamente, nem dividir grossAmount por 30. Preservar a sequência recebida e verificar sua consistência com a regra de parcelas iguais; divergência é inconsistência técnica, não uma modalidade a ser comparada por média ou menor elemento.
 
@@ -1470,6 +1524,8 @@ Na Tokio, a individual de cada pessoa contém somente ela como pretendente pesso
 Esses preenchimentos descrevem a montagem pretendida com base nas decisões e fragmentos recebidos; a aceitação do payload completo individual/conjunto será validada na integração. A ausência de suporte PJ na API Tokio permanece: não converter lead CNPJ em PF para executar essas tentativas.
 
 ### Composição com os três planos da Pottencial
+
+> **Superado em 11/11/2026:** cada cenário cota somente Complete e Traditional (até 6 cotações por rodada com cônjuge). Ver a seção de 11/11/2026 no topo deste estudo.
 
 A regra de Basic, Complete e Traditional permanece. **Cada cenário de pessoas** (solicitante sozinho, cônjuge sozinho e eventual casal) tem as suas cotações por plano. Assim, haverá seis cotações iniciais por rodada Pottencial com cônjuge (dois cenários × três planos) e até nove se a conjunta for necessária. São até três cenários de análise, não nove companhias ou nove rodadas.
 

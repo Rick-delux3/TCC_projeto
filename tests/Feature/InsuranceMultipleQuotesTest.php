@@ -65,9 +65,9 @@ it('plans independent quotes without duplicating the provider card or round', fu
     $coordinator->dispatchPending($run);
     $coordinator->dispatchPending($run);
     Queue::assertPushed(RunInsuranceQuoteJob::class, $expected);
-})->with([[true, 'pottencial', 6], [false, 'pottencial', 3], [true, 'too', 2], [false, 'too', 1]]);
+})->with([[true, 'pottencial', 4], [false, 'pottencial', 2], [true, 'too', 2], [false, 'too', 1]]);
 
-it('creates the joint attempt once only after all six individual plans are refused', function (): void {
+it('creates the joint attempt once only after all four individual plans are refused', function (): void {
     $analysis = multipleQuoteAnalysis();
     $coordinator = app(InsuranceQuoteCoordinator::class);
     $run = $coordinator->prepare($analysis, 'round-one', false);
@@ -76,16 +76,16 @@ it('creates the joint attempt once only after all six individual plans are refus
     }
     $coordinator->consolidate($run->id);
     $coordinator->consolidate($run->id);
-    expect(InsuranceQuote::count())->toBe(9)
+    expect(InsuranceQuote::count())->toBe(6)
         ->and($analysis->fresh()->status)->toBe('processing')
         ->and($run->scenarios()->where('kind', 'joint')->count())->toBe(1);
-    Queue::assertPushed(RunInsuranceQuoteJob::class, 3);
+    Queue::assertPushed(RunInsuranceQuoteJob::class, 2);
     Queue::assertNotPushed(CompleteInsuranceAnalysesBatchJob::class);
     foreach (InsuranceQuote::where('status', 'pending')->get() as $quote) {
         finishMultipleQuote($quote, 'rejected');
     }
     $coordinator->consolidate($run->id);
-    expect($analysis->fresh()->status)->toBe('rejected')->and(InsuranceQuote::count())->toBe(9);
+    expect($analysis->fresh()->status)->toBe('rejected')->and(InsuranceQuote::count())->toBe(6);
     Queue::assertPushed(CompleteInsuranceAnalysesBatchJob::class, 1);
 });
 
@@ -98,7 +98,7 @@ it('never treats an error or a pending decision as a refusal of both applicants'
     }
     finishMultipleQuote(InsuranceQuote::latest('id')->first(), $lastStatus, $lastStatus === 'approved' ? 90 : null);
     $coordinator->consolidate($run->id);
-    expect(InsuranceQuote::count())->toBe(6)
+    expect(InsuranceQuote::count())->toBe(4)
         ->and($run->scenarios()->where('kind', 'joint')->exists())->toBeFalse();
 })->with(['failed', 'processing', 'manual_review', 'approved']);
 
@@ -111,13 +111,13 @@ it('selects the cheapest approved installment and preserves all other quotes', f
         finishMultipleQuote($quote, 'rejected');
     }
     finishMultipleQuote($quotes[0], 'approved', 120);
-    finishMultipleQuote($quotes[4], 'approved', 80);
+    finishMultipleQuote($quotes[3], 'approved', 80);
     $coordinator->consolidate($run->id);
     $coordinator->consolidate($run->id);
-    expect($run->fresh()->selected_quote_id)->toBe($quotes[4]->id)
-        ->and($analysis->fresh()->quote_id)->toBe('external-'.$quotes[4]->id)
+    expect($run->fresh()->selected_quote_id)->toBe($quotes[3]->id)
+        ->and($analysis->fresh()->quote_id)->toBe('external-'.$quotes[3]->id)
         ->and($analysis->fresh()->status)->toBe('approved')
-        ->and(InsuranceQuote::count())->toBe(6)
+        ->and(InsuranceQuote::count())->toBe(4)
         ->and($analysis->events()->where('event_type', 'analysis_completed')->count())->toBe(1);
 });
 
@@ -166,14 +166,14 @@ it('discards stale quote writes after a newer round replaces the provider run', 
         ->toThrow(\App\Exceptions\ObsoleteInsuranceAnalysisAttempt::class);
     expect($first->id)->not->toBe($second->id)
         ->and($oldQuote->fresh()->status)->toBe('pending')
-        ->and(InsuranceQuote::count())->toBe(6);
+        ->and(InsuranceQuote::count())->toBe(4);
 });
 
 it('routes provider loader jobs to persisted quote jobs', function (): void {
     $analysis = multipleQuoteAnalysis(false);
     app(InsuranceQuoteCoordinator::class)->prepare($analysis, 'round-one', false);
     app()->call([new RunProviderAnalysisJob($analysis->id, 'round-one'), 'handle']);
-    Queue::assertPushed(RunInsuranceQuoteJob::class, 3);
+    Queue::assertPushed(RunInsuranceQuoteJob::class, 2);
     Http::assertNothingSent();
 });
 
@@ -186,7 +186,7 @@ it('executes and resumes an approved quote without creating it again', function 
     ]);
     $this->mock(PottencialService::class)->shouldReceive('getPaymentSimulations')->once()->with('remote-one')->andReturn([
         'success' => true, 'response' => [['paymentType' => 'Boleto', 'installments' => [
-            ['countInstallments' => 30, 'installments' => [100], 'grossAmount' => 3000],
+            ['countInstallments' => 30, 'installments' => array_fill(0, 30, 100), 'grossAmount' => 3000],
         ]]],
     ]);
     app()->call([new RunInsuranceQuoteJob($quote->id, 'round-one'), 'handle']);
@@ -318,7 +318,7 @@ it('retries payment retrieval without issuing another quote', function (): void 
         }
 
         return ['success' => true, 'response' => ['paymentType' => 'Boleto', 'installments' => [
-            ['countInstallments' => 30, 'installments' => [90]],
+            ['countInstallments' => 30, 'installments' => array_fill(0, 30, 90), 'grossAmount' => 2700],
         ]]];
     });
     expect(fn () => app()->call([new RunInsuranceQuoteJob($quote->id, 'round-one'), 'handle']))->toThrow(RuntimeException::class);
@@ -448,9 +448,9 @@ it('exposes quote scenarios through the authorized backend without raw payloads'
         ->getJson(route('insurance-analyses.data', $analysis->lead_id))
         ->assertOk()
         ->assertJsonCount(1, 'data.analyses')
-        ->assertJsonCount(6, 'data.analyses.0.quote_attempts')
+        ->assertJsonCount(4, 'data.analyses.0.quote_attempts')
         ->assertJsonPath('data.analyses.0.quote_attempts.0.applicants.0', 'Primeiro pretendente')
-        ->assertJsonPath('data.analyses.0.quote_attempts.3.applicants.0', 'Segundo pretendente')
+        ->assertJsonPath('data.analyses.0.quote_attempts.2.applicants.0', 'Segundo pretendente')
         ->assertDontSee('request-secret')->assertDontSee('response-secret');
     expect($run->fresh()->finished_at)->toBeNull();
 });

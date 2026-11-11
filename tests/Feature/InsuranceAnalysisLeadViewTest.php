@@ -486,38 +486,75 @@ it('keeps read-only broker actions separate from editing and analysis permission
         ->assertJsonPath('data.analyses.0.actions.retry.url', route('admin.insurance-analyses.retry', $analysis));
 });
 
-it('keeps every plan coverage inside details and shows only confirmed installments on cards', function () {
-    $batch = $this->lead->insuranceAnalysesBatches()->create(['status' => 'completed', 'total_providers' => 1, 'finished_at' => now()]);
+/** Pacote Pottencial concluído com os dois planos de um único cenário. */
+function pottencialViewQuotes($test, array $plans): \DOMXPath
+{
+    $batch = $test->lead->insuranceAnalysesBatches()->create(['status' => 'completed', 'total_providers' => 1, 'finished_at' => now()]);
     $analysis = $batch->analyses()->create([
-        'lead_id' => $this->lead->id, 'provider' => 'pottencial', 'product' => 'fianca_locaticia', 'status' => 'approved',
+        'lead_id' => $test->lead->id, 'provider' => 'pottencial', 'product' => 'fianca_locaticia', 'status' => 'approved',
     ]);
     $analysis->events()->create(['event_type' => 'analysis_started', 'payload' => ['attempt_id' => 'plans-display']]);
     $run = app(\App\Services\Insurance\InsuranceQuoteCoordinator::class)->prepare($analysis, 'plans-display', false);
-    $quotes = $run->scenarios()->first()->quotes()->orderBy('id')->get();
-    expect($quotes)->toHaveCount(3);
-    foreach ($quotes as $index => $quote) {
+    foreach ($run->scenarios()->first()->quotes()->get() as $quote) {
+        [$status, $amount, $recurring] = $plans[$quote->plan_key] + [null, null, null];
         $quote->update([
-            'status' => $index === 2 ? 'rejected' : 'approved',
-            'installment_amount' => 100 + $index * 20, 'installments' => 30,
-            'payment_status' => $index === 2 ? 'unavailable' : 'ready',
-            'response_payload' => ['private' => 'secret-response', 'coverages' => [[
-                'name' => 'Pintura interna plano '.$index, 'insuredAmount' => 4000 + $index, 'premiumAmount' => 50,
-            ]]],
+            'status' => $status, 'installment_amount' => $amount, 'installments' => 30,
+            'payment_status' => $amount ? 'ready' : 'unavailable',
+            'response_payload' => ['private' => 'secret-response',
+                'coverages' => [['name' => 'Pintura interna '.$quote->plan_key, 'insuredAmount' => 4000, 'premiumAmount' => 50]],
+                'payment' => ['selection' => ['amount' => $amount, 'recurring_installment' => $recurring]],
+            ],
         ]);
     }
-    $response = $this->actingAs($this->user)->withSession(['2fa_passed' => true])
-        ->get(route('insurance-analyses.lead', $this->lead))->assertOk()->assertDontSee('secret-response');
+    $response = $test->actingAs($test->user)->withSession(['2fa_passed' => true])
+        ->get(route('insurance-analyses.lead', $test->lead))->assertOk()->assertDontSee('secret-response');
     $document = new DOMDocument;
     @$document->loadHTML('<?xml encoding="UTF-8">'.$response->getContent());
-    $xpath = new DOMXPath($document);
+
+    return new DOMXPath($document);
+}
+
+it('shows only the cheaper approved Pottencial plan on the card and both plans in the details', function () {
+    $xpath = pottencialViewQuotes($this, [
+        'Complete' => ['approved', 179.58, '179.43'],
+        'Traditional' => ['approved', 210.00, '210.00'],
+    ]);
     $card = $xpath->query('//article[@data-provider="pottencial"]')->item(0);
-    expect($card->textContent)->toContain('Visualizar', 'Básico', 'Completo', 'Tradicional', 'R$ 100,00', 'R$ 120,00', 'Cotação recusada')
-        ->not->toContain('Pintura interna', 'R$ 140,00', 'Rodada', 'Retorno da companhia');
+    expect($card->textContent)->toContain('Visualizar', 'Completo', 'R$ 179,58', '1ª parcela · depois 29× de R$ 179,43')
+        ->not->toContain('Tradicional', 'R$ 210,00', 'Pintura interna', 'Exibido no card');
     expect($xpath->query('.//button[@data-analysis-dialog and not(@disabled)]', $card)->length)->toBe(1);
+
     $details = $xpath->query('//dialog[@id="details-pottencial"]')->item(0);
+    $plans = $xpath->query('.//section//h3', $details);
     expect($details->hasAttribute('open'))->toBeFalse()
-        ->and($details->textContent)->toContain('Pintura interna plano 0', 'Pintura interna plano 1', 'R$ 4.001,00')
-        ->not->toContain('Pintura interna plano 2');
+        ->and($plans->length)->toBe(2)
+        ->and($plans->item(0)->textContent)->toBe('Completo')
+        ->and($plans->item(1)->textContent)->toBe('Tradicional')
+        ->and($details->textContent)->toContain('Exibido no card', 'Pintura interna Complete', 'Pintura interna Traditional',
+            '1ª parcela de R$ 179,58 e 29 parcelas de R$ 179,43', 'R$ 210,00', '30 parcelas de R$ 210,00');
+});
+
+it('keeps a refused Pottencial plan out of the card and inside the details', function () {
+    $xpath = pottencialViewQuotes($this, ['Complete' => ['approved', 100.00, '100.00'], 'Traditional' => ['rejected']]);
+    $card = $xpath->query('//article[@data-provider="pottencial"]')->item(0);
+    expect($card->textContent)->toContain('Completo', 'R$ 100,00', 'Por parcela · 30 parcelas')
+        ->not->toContain('Tradicional', 'Cotação recusada', 'Pintura interna');
+
+    $details = $xpath->query('//dialog[@id="details-pottencial"]')->item(0);
+    expect($details->textContent)->toContain('Tradicional', 'Cotação recusada', 'Pintura interna Complete')
+        ->not->toContain('Pintura interna Traditional');
+});
+
+it('hides an unavailable Pottencial plan from the card and the details', function () {
+    $xpath = pottencialViewQuotes($this, [
+        'Complete' => [\App\Services\Insurance\PottencialQuoteResponse::PLAN_UNAVAILABLE],
+        'Traditional' => ['approved', 179.58, '179.43'],
+    ]);
+    $card = $xpath->query('//article[@data-provider="pottencial"]')->item(0);
+    $details = $xpath->query('//dialog[@id="details-pottencial"]')->item(0);
+    expect($card->textContent)->toContain('Tradicional', 'R$ 179,58')->not->toContain('Completo', 'indisponível')
+        ->and($xpath->query('.//section//h3', $details)->length)->toBe(1)
+        ->and($details->textContent)->toContain('Tradicional')->not->toContain('Completo', 'indisponível', 'Exibido no card');
 });
 
 it('places the cheapest confirmed offer between the next two prices', function () {

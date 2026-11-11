@@ -140,6 +140,8 @@ class InsuranceAnalysisPageService
                                 ? 'Não foi possível concluir esta cotação.'
                                 : ($quote->rejection_reason ?? $quote->provider_status)),
                             'installment_amount' => $quote->installment_amount, 'installments' => $quote->installments,
+                            // Pottencial: a 1ª parcela é o preço; as demais podem diferir pelo arredondamento.
+                            'recurring_installment' => data_get($quote->providerResponsePayload(), 'payment.selection.recurring_installment'),
                             'payment_status' => $quote->payment_status,
                             'payment_type' => $quote->payment_type,
                             'selected' => $analysis->currentProviderRun->selected_quote_id === $quote->id,
@@ -196,6 +198,7 @@ class InsuranceAnalysisPageService
             $status === 'rejected' => 'rejected',
             in_array($status, ['failed', 'error'], true) => 'failed',
             $status === 'manual_required' => 'manual_required',
+            $status === PottencialQuoteResponse::PLAN_UNAVAILABLE => 'plan_unavailable',
             $pollingStopped => 'awaiting_provider',
             default => 'processing',
         };
@@ -204,6 +207,7 @@ class InsuranceAnalysisPageService
             'pricing' => 'Consultando preço', 'approved' => 'Aprovada', 'rejected' => 'Cotação recusada',
             'failed' => 'Não foi possível concluir a cotação.', 'manual_required' => 'Cotação manual necessária',
             'price_unavailable' => 'Aprovada. Preço indisponível.',
+            'plan_unavailable' => 'Plano indisponível para este perfil.',
             'awaiting_provider' => 'Aguardando decisão da companhia. Consultas automáticas encerradas.',
             default => 'Processando análise',
         }];

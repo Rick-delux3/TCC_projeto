@@ -27,6 +27,19 @@
                             'manual_required' => 2, 'failed' => 3, default => 4,
                         })->first();
                 });
+                $cardPlan = null;
+                if ($provider === 'pottencial') {
+                    // Plano indisponível (400) é descartado do card e do Visualizar.
+                    $priced = fn ($item) => $item['status'] === 'approved' && $item['payment_status'] === 'ready' && (float) $item['installment_amount'] > 0;
+                    $attempts = $attempts->reject(fn ($item) => $item['status'] === \App\Services\Insurance\PottencialQuoteResponse::PLAN_UNAVAILABLE)
+                        ->sortBy(fn ($item) => $priced($item) ? (float) $item['installment_amount'] : PHP_FLOAT_MAX)->values();
+                    // O card mostra somente o plano mais barato (o selecionado na rodada);
+                    // os demais ficam no Visualizar. Sem aprovação, vale o estado da companhia.
+                    $cardPlan = $attempts->first(fn ($item) => $item['selected'] && $priced($item))
+                        ?? $attempts->first($priced)
+                        ?? $attempts->firstWhere('status', 'approved');
+                    $plans = collect($cardPlan ? [$cardPlan] : []);
+                }
             @endphp
             <div class="col-12 col-md-6 col-xl-3" data-analysis-component="provider-{{ $provider }}">
                 <article @class(['card h-100', 'bg-body-tertiary' => $blocked, 'border-success border-2' => ! $blocked && $reanalysisSupported]) data-provider-read-only="{{ $readOnly ? 'true' : 'false' }}" aria-labelledby="provider-{{ $provider }}" data-provider="{{ $provider }}" data-analysis-state="{{ $blocked ? 'blocked' : ($notIncluded ? 'not_included' : ($analysis['display_state']['state'] ?? 'processing')) }}" aria-busy="{{ ! $blocked && ! $notIncluded && ($analysis['display_state']['processing'] ?? true) ? 'true' : 'false' }}">
@@ -63,7 +76,7 @@
                                 @foreach ($plans as $plan)
                                     <li class="list-group-item px-0">
                                         <h4 class="h6">{{ $planNames[$plan['plan_key']] ?? $plan['plan_key'] ?: 'Fiança locatícia' }}</h4>
-                                        @include('insurance-analyses.partials.offer-price', ['offerStatus' => $plan['status'], 'amount' => $plan['payment_status'] === 'ready' ? $plan['installment_amount'] : null, 'count' => $plan['installments'], 'manualMessage' => $analysis['manual_message'], 'displayState' => $plan['display_state']])
+                                        @include('insurance-analyses.partials.offer-price', ['offerStatus' => $plan['status'], 'amount' => $plan['payment_status'] === 'ready' ? $plan['installment_amount'] : null, 'count' => $plan['installments'], 'recurring' => $plan['recurring_installment'] ?? null, 'manualMessage' => $analysis['manual_message'], 'displayState' => $plan['display_state']])
                                     </li>
                                 @endforeach
                             </ul>
