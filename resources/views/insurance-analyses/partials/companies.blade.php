@@ -15,6 +15,10 @@
                 $blocked = $analysis === null && ! in_array($provider, $activeProviders, true);
                 // Ligada depois que o pacote atual foi criado: entra na próxima análise.
                 $notIncluded = ! $blocked && $analysis === null && ! ($pageData['awaiting_batch'] ?? true);
+                // Porto e Tokio aceitam reanálise; Pottencial e Too não. Sem análise no
+                // pacote, a mesma regra vem direto do resolver.
+                $reanalysisSupported = (bool) ($analysis['reanalysis_supported']
+                    ?? \App\Services\Insurance\Providers\InsuranceProviderResolver::supportsReanalysis($provider));
                 $attempts = collect($analysis['quote_attempts'] ?? []);
                 $plans = $attempts->groupBy('plan_key')->map(function ($attempts) {
                     return $attempts->filter(fn ($item) => $item['status'] === 'approved' && $item['payment_status'] === 'ready' && (float) $item['installment_amount'] > 0)
@@ -25,7 +29,7 @@
                 });
             @endphp
             <div class="col-12 col-md-6 col-xl-3" data-analysis-component="provider-{{ $provider }}">
-                <article @class(['card h-100', 'bg-body-tertiary' => $blocked]) data-provider-read-only="{{ $readOnly ? 'true' : 'false' }}" aria-labelledby="provider-{{ $provider }}" data-provider="{{ $provider }}" data-analysis-state="{{ $blocked ? 'blocked' : ($notIncluded ? 'not_included' : ($analysis['display_state']['state'] ?? 'processing')) }}" aria-busy="{{ ! $blocked && ! $notIncluded && ($analysis['display_state']['processing'] ?? true) ? 'true' : 'false' }}">
+                <article @class(['card h-100', 'bg-body-tertiary' => $blocked, 'border-success border-2' => ! $blocked && $reanalysisSupported]) data-provider-read-only="{{ $readOnly ? 'true' : 'false' }}" aria-labelledby="provider-{{ $provider }}" data-provider="{{ $provider }}" data-analysis-state="{{ $blocked ? 'blocked' : ($notIncluded ? 'not_included' : ($analysis['display_state']['state'] ?? 'processing')) }}" aria-busy="{{ ! $blocked && ! $notIncluded && ($analysis['display_state']['processing'] ?? true) ? 'true' : 'false' }}">
                     <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
                         <h3 id="provider-{{ $provider }}" class="h6 mb-0">{{ $providerName }}</h3>
                         @if ($blocked)
@@ -34,7 +38,7 @@
                             <button type="button" class="btn btn-sm btn-outline-secondary" data-analysis-dialog="details-{{ $provider }}" aria-haspopup="dialog" aria-controls="details-{{ $provider }}" @disabled(! $analysis)>Visualizar</button>
                             @if ($readOnly)
                                 <span class="badge text-bg-secondary">Desativada</span>
-                            @elseif ($canEditExpenses)
+                            @elseif ($canEditExpenses && $reanalysisSupported)
                                 @php($providerReanalysis = $analysis['actions']['expense_reanalysis'] ?? ['available' => false, 'url' => null])
                                 <button type="button" class="btn btn-sm btn-primary"
                                     data-provider-reanalysis="{{ $provider }}" data-provider-name="{{ $providerName }}" data-url="{{ $providerReanalysis['url'] }}"
@@ -68,6 +72,19 @@
                             @include('insurance-analyses.partials.offer-price', ['offerStatus' => $analysis['status'], 'amount' => $price['installment_amount'] ?? null, 'count' => $price['installments'] ?? null, 'manualMessage' => $analysis['manual_message'], 'displayState' => $analysis['display_state']])
                         @endif
                     </div>
+                    @if ($blocked)
+                        {{-- Companhia desligada no .env: sem aviso de reanálise. --}}
+                    @elseif ($reanalysisSupported)
+                        <div class="card-footer bg-success-subtle border-success text-success-emphasis text-center small fw-semibold py-3" data-reanalysis-notice="supported">
+                            Esta companhia permite reanálise.
+                        </div>
+                    @else
+                        {{-- Faixa escura com o botão desfocado ao fundo; preço e resultado seguem nítidos. --}}
+                        <div class="card-footer position-relative overflow-hidden bg-dark border-dark text-center py-3" data-reanalysis-notice="unsupported">
+                            <span class="btn btn-sm btn-light w-100 pe-none user-select-none" style="filter: blur(3px); opacity: .35" aria-hidden="true">Reanalisar</span>
+                            <p class="position-absolute top-50 start-50 translate-middle w-100 px-3 mb-0 small fw-semibold text-white">Esta companhia não permite reanálise.</p>
+                        </div>
+                    @endif
                 </article>
             </div>
             <div data-analysis-component="details-{{ $provider }}" style="display: contents">

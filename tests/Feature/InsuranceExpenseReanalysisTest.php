@@ -133,6 +133,30 @@ it('marks only Porto and Tokio as reanalyzable on the analysis page', function (
         ->and($analyses['tokio']['actions']['reanalysis']['available'])->toBeTrue();
 });
 
+it('shows a fixed reanalysis notice on every insurer card', function () {
+    // Porto desligada e sem análise no pacote: card bloqueado, sem aviso.
+    $this->batch->analyses()->where('provider', 'porto')->delete();
+    config(['services.porto.enabled' => false]);
+    $this->actingAs($this->user)->withSession(['2fa_passed' => true]);
+
+    $document = new DOMDocument;
+    @$document->loadHTML('<?xml encoding="UTF-8">'.$this->get(route('insurance-analyses.lead', $this->lead))->assertOk()->getContent());
+    $xpath = new DOMXPath($document);
+    $card = fn (string $provider) => $xpath->query('//article[@data-provider="'.$provider.'"]')->item(0);
+
+    foreach (['pottencial' => 'unsupported', 'too' => 'unsupported', 'tokio' => 'supported'] as $provider => $notice) {
+        $footer = $xpath->query('.//*[@data-reanalysis-notice]', $card($provider));
+        expect($footer->length)->toBe(1)
+            ->and($footer->item(0)->getAttribute('data-reanalysis-notice'))->toBe($notice)
+            ->and(trim($footer->item(0)->textContent))->toContain($notice === 'supported'
+                ? 'Esta companhia permite reanálise.' : 'Esta companhia não permite reanálise.')
+            ->and($xpath->query('.//button[@data-provider-reanalysis]', $card($provider))->length)->toBe($notice === 'supported' ? 1 : 0)
+            ->and(str_contains($card($provider)->getAttribute('class'), 'border-success'))->toBe($notice === 'supported');
+    }
+    expect($card('porto')->getAttribute('data-analysis-state'))->toBe('blocked')
+        ->and($xpath->query('.//*[@data-reanalysis-notice]', $card('porto'))->length)->toBe(0);
+});
+
 it('renders an expense only modal that saves without starting quotes', function () {
     $this->actingAs($this->user)->withSession(['2fa_passed' => true]);
     $page = route('insurance-analyses.lead', $this->lead);
