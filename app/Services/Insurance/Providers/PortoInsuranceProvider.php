@@ -77,7 +77,10 @@ class PortoInsuranceProvider implements ReanalyzesInsuranceQuotes
      * a Fiança com o codComissao enviado; senão, do GET do orçamento atualizado,
      * que sempre reflete o ajuste (regra de 11/11/2026).
      *
-     * @return array{response: array, selection: array|null, alternatives: array, commission: array, source: string, unavailable_reason: string|null}
+     * "selection" é o plano mais barato entre a Fiança e o Essencial mais barato
+     * (ver PortoQuoteResponse::payment); "fianca" e "essential" alimentam o card.
+     *
+     * @return array{response: array, selection: array|null, fianca: array|null, essential: array|null, alternatives: array, commission: array, source: string, unavailable_reason: string|null, fianca_unavailable_reason: string|null}
      */
     public function payment(InsuranceQuote $quote): array
     {
@@ -129,8 +132,13 @@ class PortoInsuranceProvider implements ReanalyzesInsuranceQuotes
         }
 
         $payment = $this->responses->payment($response, (string) $quote->payment_type, $confirmed);
+        // O motivo específico da Fiança substitui o genérico; sem nenhum plano
+        // precificado, ele também explica a falta de preço da Porto.
         if ($reason !== null) {
-            $payment['unavailable_reason'] = $reason;
+            $payment['fianca_unavailable_reason'] = $reason;
+            if ($payment['selection'] === null) {
+                $payment['unavailable_reason'] = $reason;
+            }
         }
 
         return ['response' => $response, 'commission' => $commission, 'source' => $source] + $payment;
@@ -148,7 +156,8 @@ class PortoInsuranceProvider implements ReanalyzesInsuranceQuotes
             throw new \RuntimeException('PDF da cotação Porto disponível somente para orçamento aprovado com preço selecionado.');
         }
 
-        $alternative = collect(array_merge([$payment['selection'] ?? null], $payment['alternatives'] ?? []))
+        // Sem oferta informada, o PDF continua sendo o da Fiança quando ela tem preço.
+        $alternative = collect(array_merge([$payment['fianca'] ?? null, $payment['selection'] ?? null], $payment['alternatives'] ?? []))
             ->filter(fn ($item) => is_array($item))
             ->first(fn (array $item) => $offerCode === null || ($item['offer_code'] ?? null) === $offerCode);
         if (! $alternative) {
@@ -182,8 +191,8 @@ class PortoInsuranceProvider implements ReanalyzesInsuranceQuotes
     private function unavailable(string $reason, array $commission = []): array
     {
         return [
-            'response' => [], 'selection' => null, 'alternatives' => [],
-            'commission' => $commission, 'source' => 'none', 'unavailable_reason' => $reason,
+            'response' => [], 'selection' => null, 'fianca' => null, 'essential' => null, 'alternatives' => [],
+            'commission' => $commission, 'source' => 'none', 'unavailable_reason' => $reason, 'fianca_unavailable_reason' => $reason,
         ];
     }
 

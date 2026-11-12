@@ -1,5 +1,36 @@
 # Estudo das APIs de Fiança Locatícia
 
+## Porto — quantidade de parcelas por forma de pagamento e Fatura com entrada (BFT) — 12/11/2026
+
+**Decisão do usuário em 12/11/2026, implementada no mesmo dia** (`config('services.porto.installments')`, `PortoQuoteResponse::installmentsFor`/`payment` e `porto:test-api`). Escopo exclusivo da Porto. Encerra a pendência de como a Porto devolve a Fatura com entrada.
+
+- **Não existe campo no request para escolher a quantidade.** O POST `/orcamentos` não tem parâmetro de parcelas. O `cobranca.formaPagamento`/`condicaoPagamento` do PUT só escolhe, para emissão, uma condição já devolvida, e não foi usado. As condições são fixas por forma na base de 30 meses.
+- **Retorno real** (cotações locais 13, 14 e 15, GET de ofertas, todas as ofertas):
+
+  | Forma | Nome | Condição | Pagamentos |
+  | --- | --- | --- | --- |
+  | FAT | Fatura sem entrada | 029 | 29X |
+  | BFT | Fatura com entrada | 229 | 29X, com o **mesmo valor** da FAT |
+  | CC | Cartão de Crédito | 030 | 30X |
+  | CP | Cartão Porto - Outros | 030 | 30X |
+  | ADC / BCA | Débito / Boleto + carnê | 112 / 212 | 12X |
+
+- **Regra aplicada:** a seleção lê a quantidade da forma esperada, **FAT = 29** e **CC = 30**. O critério antigo exigia 29 parcelas em qualquer forma. Como o cartão só traz 30X, um lead sem código Porto (CC) aprovado ficaria sem preço. Nada foi alterado no POST nem no PUT de comissão.
+- **"30 para tudo" foi descartado:** a Porto não devolve fatura em 30X, então os leads FAT ficariam sem preço.
+- **BFT (implementado em 12/11/2026):** no Visualizar, cada plano precificado por FAT exibe sua parcela sem entrada e a condição BFT 229/29X da mesma oferta, com a descrição “1ª em boleto, demais em fatura”. Os valores são lidos da resposta persistida, sem novas chamadas ou cópia do preço FAT. BFT ausente/inválida aparece como condição não disponibilizada; ofertas sem preço confirmado e seleções CC não exibem essas opções de fatura. BFT não entra na seleção, comparação ou escolha do PDF. A apresentação é responsiva e mantém os valores de cada cenário separados.
+
+## Porto — Fiança e Essencial mais barato no card; plano mais barato na comparação — 11/11/2026
+
+**Regra solicitada pelo cliente e confirmada pelo usuário em 11/11/2026; estrutura de backend implementada no mesmo dia, views na etapa seguinte.** Escopo exclusivo da Porto. Esta seção substitui a regra "somente a oferta 0008 (Fiança) entra na comparação; os Essenciais ficam como alternativas".
+
+1. **Diferença interna entre os Essenciais:** entre 0001, 0005 e 0007 precificados na forma (FAT/CC) e em 29 pagamentos sem entrada, o de menor parcela é o "Essencial mais barato". Ele aparece no card da Porto ao lado da Fiança.
+2. **Diferença geral entre os planos aprovados:** o plano de menor parcela entre a Fiança (com comissão confirmada) e o Essencial mais barato é o preço da Porto. Ele vai para o card superior (melhor negócio) e concorre com as demais companhias. Com cônjuge, vale o mais barato entre os cenários, como já ocorria.
+3. **Fiança sem preço** (comissão não confirmada, oferta ausente ou sem condição de 29): a Porto entra na comparação com o Essencial mais barato; o card mostra a Fiança como preço indisponível ao lado dele.
+4. **Empate** entre a Fiança e o Essencial mais barato: prevalece a Fiança (decisão de implementação; preços iguais são improváveis).
+5. **Valor consolidado** da análise (`quote_selection`) é apenas indicativo do plano mais barato. O e-mail de resultado e o PDF passarão a listar todos os planos (etapa futura); até lá o PDF padrão continua sendo o da Fiança quando ela tem preço.
+
+**Estrutura gravada em `payment`:** `fianca` (Fiança precificada ou null), `essential` (Essencial mais barato), `selection` (o mais barato dos dois, preço da cotação), `alternatives` (todos os Essenciais), `fianca_unavailable_reason` e `unavailable_reason` (nenhum plano precificado). O resumo da análise expõe `card.fianca`, `card.essential`, `best_offer` e os marcadores `best`/`cheapest_essential` em cada oferta. Registros anteriores (sem `fianca`/`essential`) são lidos com a Fiança em `selection`.
+
 ## Porto — PUT de comissão somente da Fiança (0008) e confirmação pelo GET — 11/11/2026
 
 **Regra confirmada pelo usuário em 11/11/2026; backend implementado no mesmo dia** (`PortoService::updateCommission`, `PortoInsuranceProvider::payment`, `PortoQuoteResponse::commissionCode`/`payment` e `porto:test-api`). Escopo exclusivo da Porto; não altera Pottencial, Too ou Tokio. Esta seção prevalece sobre a decisão de 02/11/2026 de enviar um PUT de comissão por oferta, simultâneos, e sobre o critério de considerar a comissão confirmada apenas pelo HTTP 200 do PUT (ver "Trechos superados" abaixo).

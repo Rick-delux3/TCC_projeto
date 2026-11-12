@@ -102,12 +102,14 @@ function portoOffers(array $prices = ['0008' => 210.5, '0001' => 90.1, '0005' =>
                 'codComissao' => array_key_exists($code, $commissions) ? $commissions[$code] : ($code === '0008' ? 15 : 10),
                 'ranges' => [['codOperacaoMinimo' => 10, 'codOperacaoMaximo' => $code === '0008' ? 35 : 10]],
             ], fn ($value) => $value !== null),
+            // Formas e condições como no retorno real (12/11/2026): cartão só em 30X;
+            // fatura sem entrada (FAT) e com entrada (BFT) em 29X, com o mesmo valor.
             'formasPagamento' => [
-                $method('CC', '029', 29, $price),
-                // Com entrada (30 pagamentos) é mais barata, mas não é o padrão.
-                $method('CC', '030', 30, $price - 10),
-                $method('FAT', '129', 29, $price + 5),
-                $method('ADC', '010', 0, 172.8),
+                $method('CC', '030', 30, $price),
+                $method('CP', '030', 30, $price - 10),
+                $method('FAT', '029', 29, $price + 5),
+                $method('BFT', '229', 29, $price + 5),
+                $method('ADC', '112', 12, 172.8),
             ],
         ];
     }
@@ -159,7 +161,7 @@ function portoRequests(string $method): array
         ->map(fn (array $pair) => $pair[0])->values()->all();
 }
 
-it('creates the budget, adjusts only the Fiança commission and selects its price', function () {
+it('creates the budget, adjusts only the Fiança commission and prices the Porto by its cheapest plan', function () {
     portoFake();
     [$analysis, $run] = portoRun();
     $quote = portoQuote($run);
@@ -189,17 +191,21 @@ it('creates the budget, adjusts only the Fiança commission and selects its pric
     expect($operations)->toBe(['POST', 'POST', 'PUT', 'GET']);
     expect(portoRequests('GET')[0]->url())->toBe(PORTO_API.'/orcamentos/22/'.PORTO_BUDGET.'/ABC12J/ofertas');
 
-    // Fiança (0008), CC, 29 pagamentos Sem entrada — não a mais barata nem a de 30.
+    // CC na condição 030 (30X), a única do cartão. O card leva a Fiança e o
+    // Essencial mais barato; o preço da Porto é o mais barato dos dois.
     $quote->refresh();
     expect($quote->status)->toBe('approved');
     expect($quote->quote_id)->toBe(PORTO_BUDGET);
     expect($quote->payment_status)->toBe('ready');
-    expect($quote->installment_amount)->toBe('210.50');
-    expect($quote->installments)->toBe(29);
+    expect($quote->installment_amount)->toBe('90.10');
+    expect($quote->installments)->toBe(30);
     $payment = $quote->response_payload['payment'];
-    expect($payment['selection'])->toMatchArray([
-        'offer_code' => '0008', 'payment_method' => 'CC', 'condition_code' => '029', 'count' => 29, 'with_entry' => false,
+    expect($payment['fianca'])->toMatchArray([
+        'offer_code' => '0008', 'amount' => '210.50', 'payment_method' => 'CC', 'condition_code' => '030', 'count' => 30, 'with_entry' => false,
     ]);
+    expect($payment['essential'])->toMatchArray(['offer_code' => '0001', 'amount' => '90.10', 'condition_code' => '030']);
+    expect($payment['selection'])->toBe($payment['essential']);
+    expect($payment['fianca_unavailable_reason'])->toBeNull();
     expect(array_column($payment['alternatives'], 'amount', 'offer_code'))->toBe(['0001' => '90.10', '0005' => '150.25', '0007' => '120.00']);
     // Confirmada pelo PUT 200 e pelo codComissao 15 lido no GET.
     expect($payment['commission'])->toBe(['0008' => [
@@ -212,7 +218,7 @@ it('creates the budget, adjusts only the Fiança commission and selects its pric
     expect($analysis->quote_id)->toBe(PORTO_BUDGET);
     expect($analysis->request_payload)->toBeNull();
     expect(json_encode($analysis->response_payload))->not->toContain('09238037698')->not->toContain('porto-token');
-    expect($analysis->response_payload['quote_selection'])->toMatchArray(['installment_amount' => '210.50', 'installments' => 29, 'payment_type' => 'CC']);
+    expect($analysis->response_payload['quote_selection'])->toMatchArray(['installment_amount' => '90.10', 'installments' => 30, 'payment_type' => 'CC']);
     expect($run->fresh()->finished_at)->not->toBeNull();
 
     // Reexecutar o job não recria o orçamento nem repete chamadas.
@@ -220,7 +226,7 @@ it('creates the budget, adjusts only the Fiança commission and selects its pric
     Http::assertSentCount(4);
 });
 
-it('quotes invoice for a registered agency with a Porto code and credit card without one', function (?string $code, string $type, string $amount) {
+it('quotes invoice for a registered agency with a Porto code and credit card without one', function (?string $code, string $type, string $amount, int $count) {
     portoFake();
     $company = Imobiliaria::factory()->create(['porto_partner_code' => $code]);
     [, $run] = portoRun(company: $company);
@@ -232,10 +238,11 @@ it('quotes invoice for a registered agency with a Porto code and credit card wit
     expect(portoRequests('POST')[0]->data()['imobiliaria'] ?? null)->toBe($code);
     $quote->refresh();
     expect($quote->installment_amount)->toBe($amount);
-    expect($quote->response_payload['payment']['selection'])->toMatchArray(['payment_method' => $type, 'count' => 29]);
+    expect($quote->response_payload['payment']['selection'])->toMatchArray(['payment_method' => $type, 'count' => $count]);
 })->with([
-    'com código Porto' => ['000123', 'FAT', '215.50'],
-    'sem código Porto' => [null, 'CC', '210.50'],
+    // FAT lê a 029 (29X), nunca a BFT 229; CC lê a 030 (30X), nunca a CP.
+    'com código Porto' => ['000123', 'FAT', '95.10', 29],
+    'sem código Porto' => [null, 'CC', '90.10', 30],
 ]);
 
 it('stores the refused budget number and never adjusts commission or reads offers', function () {
@@ -337,7 +344,7 @@ it('runs the joint budget only after both individual budgets are refused', funct
     expect(array_column($joint, 'titular', 'cpfCnpj'))->toBe(['09238037698' => 'S', '38329560856' => 'N']);
     expect(array_unique(array_column($joint, 'email')))->toBe(['principal@example.test']);
     expect($analysis->fresh()->status)->toBe('approved');
-    expect(portoQuote($run, 'joint')->installment_amount)->toBe('210.50');
+    expect(portoQuote($run, 'joint')->installment_amount)->toBe('90.10');
 })->with(['ambos recusados' => [true], 'cônjuge aprovado' => [false]]);
 
 it('analyses a company alone under the commercial frame', function () {
@@ -358,7 +365,7 @@ it('analyses a company alone under the commercial frame', function () {
     expect(portoQuote($run)->fresh()->status)->toBe('approved');
 });
 
-it('keeps the approval without a comparable price when Fiança cannot be published', function (array $handlers, array $created, array $alternatives) {
+it('prices the Porto with the cheapest Essencial when the Fiança has no price', function (array $handlers, array $created, array $alternatives) {
     portoFake($handlers + ['create' => fn () => Http::response(portoCreated($created), 201)]);
     [$analysis, $run] = portoRun();
     $quote = portoQuote($run);
@@ -367,13 +374,16 @@ it('keeps the approval without a comparable price when Fiança cannot be publish
 
     $quote->refresh();
     expect($quote->status)->toBe('approved');
-    expect($quote->payment_status)->toBe('unavailable');
-    expect($quote->installment_amount)->toBeNull();
+    expect($quote->payment_status)->toBe('ready');
+    expect($quote->installment_amount)->toBe('90.10');
     $payment = $quote->response_payload['payment'];
-    expect($payment['selection'])->toBeNull();
-    expect($payment['unavailable_reason'])->not->toBeEmpty();
+    expect($payment['fianca'])->toBeNull();
+    expect($payment['fianca_unavailable_reason'])->not->toBeEmpty();
+    expect($payment['essential']['offer_code'])->toBe('0001');
+    expect($payment['selection'])->toBe($payment['essential']);
     expect(array_column($payment['alternatives'], 'offer_code'))->toBe($alternatives);
     expect($analysis->fresh()->status)->toBe('approved');
+    expect($run->fresh()->selected_quote_id)->toBe($quote->id);
 })->with([
     'Fiança não retornada' => [
         ['offers' => fn () => Http::response(portoOffers(['0001' => 90.1, '0005' => 150.25]), 200)],
@@ -385,7 +395,7 @@ it('keeps the approval without a comparable price when Fiança cannot be publish
             : Http::response(['status' => '1'], 200)],
         ['0008', '0001'], ['0001', '0005', '0007'],
     ],
-    'Fiança sem condição de 29 parcelas' => [
+    'Fiança sem condição na forma CC' => [
         ['offers' => function () {
             $offers = portoOffers(['0008' => 210.5, '0001' => 90.1]);
             $offers['ofertas'][0]['formasPagamento'] = [$offers['ofertas'][0]['formasPagamento'][1]];
@@ -394,8 +404,67 @@ it('keeps the approval without a comparable price when Fiança cannot be publish
         }],
         ['0008', '0001'], ['0001'],
     ],
-    'criação sem ofertas' => [[], [], []],
 ]);
+
+it('keeps the approval without a comparable price when no Porto plan is priced', function (array $handlers, array $created) {
+    portoFake($handlers + ['create' => fn () => Http::response(portoCreated($created), 201)]);
+    [$analysis, $run] = portoRun();
+    $quote = portoQuote($run);
+
+    runPortoQuote($quote);
+
+    $quote->refresh();
+    expect($quote->status)->toBe('approved');
+    expect($quote->payment_status)->toBe('unavailable');
+    expect($quote->installment_amount)->toBeNull();
+    $payment = $quote->response_payload['payment'];
+    expect($payment)->toMatchArray(['selection' => null, 'fianca' => null, 'essential' => null]);
+    expect($payment['unavailable_reason'])->not->toBeEmpty();
+    expect($analysis->fresh()->status)->toBe('approved');
+})->with([
+    'criação sem ofertas' => [[], []],
+    'nenhuma oferta na forma CC' => [
+        ['offers' => function () {
+            $offers = portoOffers(['0008' => 210.5, '0001' => 90.1]);
+            foreach ($offers['ofertas'] as $index => $offer) {
+                $offers['ofertas'][$index]['formasPagamento'] = [$offer['formasPagamento'][1]];
+            }
+
+            return Http::response($offers, 200);
+        }],
+        ['0008', '0001'],
+    ],
+]);
+
+it('keeps the Fiança as the Porto price when it is the cheapest plan or ties with an Essencial', function (float $fianca) {
+    portoFake(['offers' => fn () => Http::response(portoOffers(['0008' => $fianca, '0001' => 90.1, '0007' => 120.0]), 200)]);
+    [, $run] = portoRun();
+    $quote = portoQuote($run);
+
+    runPortoQuote($quote);
+
+    $payment = $quote->fresh()->response_payload['payment'];
+    expect($payment['selection'])->toBe($payment['fianca']);
+    expect($payment['selection']['offer_code'])->toBe('0008');
+    // O Essencial mais barato continua indicado para o card, ao lado da Fiança.
+    expect($payment['essential']['offer_code'])->toBe('0001');
+    expect($quote->fresh()->installment_amount)->toBe(number_format($fianca, 2, '.', ''));
+})->with(['Fiança mais barata' => [85.0], 'empate com o Essencial' => [90.1]]);
+
+it('picks the cheapest Porto plan across the individual scenarios', function () {
+    // Principal: Essencial 12 a 90,10. Cônjuge: Fiança a 70,00, mais barata que todos os Essenciais.
+    portoFake(['offers' => function (Request $request) {
+        static $calls = 0;
+
+        return Http::response(++$calls === 1 ? portoOffers() : portoOffers(['0008' => 70.0, '0001' => 90.1]), 200);
+    }]);
+    [$analysis, $run] = portoRun(spouse: ['nome' => 'Cônjuge de Teste', 'cpf' => '38329560856', 'data_nascimento' => '1991-02-03']);
+    runPortoQuote(portoQuote($run));
+    runPortoQuote(portoQuote($run, 'spouse'));
+
+    expect($run->fresh()->selected_quote_id)->toBe(portoQuote($run, 'spouse')->id);
+    expect($analysis->fresh()->response_payload['quote_selection'])->toMatchArray(['installment_amount' => '70.00']);
+});
 
 it('retries only the price stage when the offers query fails', function () {
     $fail = true;
@@ -415,7 +484,7 @@ it('retries only the price stage when the offers query fails', function () {
     runPortoQuote($quote);
 
     expect($quote->fresh()->payment_status)->toBe('ready');
-    expect($quote->fresh()->installment_amount)->toBe('210.50');
+    expect($quote->fresh()->installment_amount)->toBe('90.10');
     // O orçamento foi criado uma única vez; só o PUT da Fiança e o GET foram repetidos.
     expect(portoRequests('POST'))->toHaveCount(1);
     expect(portoRequests('PUT'))->toHaveCount(2);
@@ -496,7 +565,7 @@ it('reads the updated budget when the offers query does not reflect the commissi
         'ofertas' => [[
             'seguro' => '0008', 'nomeSeguro' => 'FIANCA',
             'formasPagamento' => [['formaPagamento' => 'CC', 'nomeFormaPagamento' => 'DEMAIS CARTOES', 'condicoesPagamento' => [
-                ['condicaoPagamento' => '029', 'quantidadeParcela' => 29, 'valorParcela' => 225.4],
+                ['condicaoPagamento' => '030', 'quantidadeParcela' => 30, 'valorParcela' => 225.4],
             ]]],
         ]],
     ];
@@ -547,10 +616,14 @@ it('sends no commission update when the budget has no Fiança offer', function (
     expect(portoRequests('PUT'))->toBeEmpty();
     $quote->refresh();
     expect($quote->status)->toBe('approved');
-    expect($quote->payment_status)->toBe('unavailable');
+    // Sem Fiança, a Porto entra com o Essencial mais barato.
+    expect($quote->payment_status)->toBe('ready');
+    expect($quote->installment_amount)->toBe('90.10');
     $payment = $quote->response_payload['payment'];
     expect($payment['commission'])->toBe([]);
-    expect($payment['unavailable_reason'])->toContain('não retornou a oferta 0008');
+    expect($payment['fianca'])->toBeNull();
+    expect($payment['fianca_unavailable_reason'])->toContain('não retornou a oferta 0008');
+    expect($payment['unavailable_reason'])->toBeNull();
     expect(array_column($payment['alternatives'], 'amount', 'offer_code'))->toBe(['0001' => '90.10', '0005' => '150.25', '0007' => '120.00']);
 });
 
@@ -563,8 +636,8 @@ it('reads prices from the updated budget when configured, without storing tenant
         'ofertas' => [[
             'seguro' => '0008', 'nomeSeguro' => 'FIANCA', 'comissao' => ['codComissao' => 15],
             'formasPagamento' => [['formaPagamento' => 'CC', 'nomeFormaPagamento' => 'DEMAIS CARTOES', 'condicoesPagamento' => [
-                ['condicaoPagamento' => '030', 'quantidadeParcela' => 30, 'valorParcela' => 180.0],
-                ['condicaoPagamento' => '029', 'quantidadeParcela' => 29, 'valorParcela' => 199.9],
+                ['condicaoPagamento' => '012', 'quantidadeParcela' => 12, 'valorParcela' => 180.0],
+                ['condicaoPagamento' => '030', 'quantidadeParcela' => 30, 'valorParcela' => 199.9],
             ]]],
         ]],
     ];

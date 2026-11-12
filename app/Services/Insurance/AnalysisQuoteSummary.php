@@ -128,34 +128,53 @@ class AnalysisQuoteSummary
 
     /**
      * Porto: preços, totais e coberturas vêm da consulta de preços gravada em
-     * payment (GET de ofertas ou do orçamento atualizado). A Fiança é a oferta
-     * comparada; os Essenciais são alternativas com os valores da mesma consulta.
-     * As chaves usadas na comparação entre companhias seguem a regra genérica.
+     * payment (GET de ofertas ou do orçamento atualizado).
+     *
+     * - "card": a Fiança e o Essencial mais barato, exibidos lado a lado no card;
+     * - "best_offer": o plano mais barato entre eles, que é o preço da Porto na
+     *   comparação entre companhias (installment_amount de quote_selection) e
+     *   cujos totais e coberturas resumem a análise;
+     * - "offers": todos os planos (Fiança e Essenciais) para os detalhes.
+     *
+     * Registros anteriores a 11/11/2026 guardavam a Fiança em "selection" e não
+     * tinham "fianca"/"essential": esses valores são derivados aqui.
      */
     private function porto(InsuranceExecution $analysis): array
     {
         $payload = $analysis->providerResponsePayload();
         $payment = is_array($payload['payment'] ?? null) ? $payload['payment'] : [];
         $approved = $analysis->isApprovedResult();
-        $selection = is_array($payment['selection'] ?? null) ? $payment['selection'] : null;
-        $quoteSelection = is_array($payload['quote_selection'] ?? null) ? $payload['quote_selection'] : null;
         $comparison = (string) config('services.porto.comparison_offer', '0008');
+        $selection = is_array($payment['selection'] ?? null) ? $payment['selection'] : null;
+        $fianca = array_key_exists('fianca', $payment)
+            ? (is_array($payment['fianca']) ? $payment['fianca'] : null)
+            : (($selection['offer_code'] ?? null) === $comparison ? $selection : null);
+        $alternatives = collect($payment['alternatives'] ?? [])
+            ->filter(fn ($item): bool => is_array($item) && is_string($item['offer_code'] ?? null))
+            ->sortBy(fn (array $item): float => (float) ($item['amount'] ?? 0))->values();
+        $essential = is_array($payment['essential'] ?? null) ? $payment['essential'] : $alternatives->first();
+        $quoteSelection = is_array($payload['quote_selection'] ?? null) ? $payload['quote_selection'] : null;
         $catalog = collect(data_get($payment, 'response.ofertas'))
             ->filter(fn ($offer): bool => is_array($offer) && is_string($offer['seguro'] ?? null))->keyBy('seguro');
 
         $offers = [];
         if ($approved) {
-            if ($selection !== null || $catalog->has($comparison)) {
-                $offers[] = $this->portoOffer($comparison, $catalog->get($comparison, []), $selection, 'comparison');
+            if ($fianca !== null || $catalog->has($comparison)) {
+                $offers[] = $this->portoOffer($comparison, $catalog->get($comparison, []), $fianca, 'comparison');
             }
-            collect($payment['alternatives'] ?? [])
-                ->filter(fn ($item): bool => is_array($item) && is_string($item['offer_code'] ?? null))
-                ->sortBy(fn (array $item): float => (float) ($item['amount'] ?? 0))
-                ->each(function (array $item) use (&$offers, $catalog): void {
-                    $offers[] = $this->portoOffer($item['offer_code'], $catalog->get($item['offer_code'], []), $item, 'alternative');
-                });
+            foreach ($alternatives as $item) {
+                $offers[] = $this->portoOffer($item['offer_code'], $catalog->get($item['offer_code'], []), $item, 'alternative');
+            }
         }
-        $main = ($offers[0]['role'] ?? null) === 'comparison' ? $offers[0] : null;
+        $find = fn (?array $item): ?array => $item === null ? null
+            : collect($offers)->first(fn (array $offer): bool => $offer['code'] === ($item['offer_code'] ?? null) && $offer['installment_amount'] !== null);
+        $bestOffer = $find($selection);
+        $cheapestEssential = $find($essential);
+        $offers = array_map(fn (array $offer): array => $offer + [
+            'cheapest_essential' => $offer['code'] === ($cheapestEssential['code'] ?? null),
+            'best' => $offer['code'] === ($bestOffer['code'] ?? null),
+        ], $offers);
+        $main = $bestOffer ?? collect($offers)->firstWhere('role', 'comparison');
         $total = $main['price']['total'] ?? null;
 
         return [
@@ -173,6 +192,13 @@ class AnalysisQuoteSummary
                 'payment_type' => $quoteSelection['payment_type'] ?? null,
             ] + Arr::except($main['price'] ?? [], ['total']),
             'payment_issue' => $payment['unavailable_reason'] ?? null,
+            'fianca_issue' => $approved && $fianca === null
+                ? ($payment['fianca_unavailable_reason'] ?? $payment['unavailable_reason'] ?? null) : null,
+            'best_offer' => $bestOffer === null ? null : Arr::only($bestOffer, ['code', 'name', 'role', 'installment_amount', 'installments']),
+            'card' => [
+                'fianca' => collect($offers)->firstWhere('role', 'comparison'),
+                'essential' => $cheapestEssential === null ? null : collect($offers)->firstWhere('code', $cheapestEssential['code']),
+            ],
             'coverages' => $main['coverages'] ?? [],
             'offers' => $offers,
         ];
@@ -197,6 +223,7 @@ class AnalysisQuoteSummary
             'role' => $role,
             'installment_amount' => $isPriced ? $this->money($priced['amount'] ?? null) : null,
             'installments' => $isPriced ? ($priced['count'] ?? null) : null,
+            'entry_options' => $this->portoEntryOptions($offer, $priced),
             'price' => [
                 'total' => $isPriced ? $this->money($condition['premioTotal'] ?? null) : null,
                 'net' => $isPriced ? $this->money($condition['premioLiquido'] ?? null) : null,
@@ -223,6 +250,32 @@ class AnalysisQuoteSummary
                 ->filter(fn ($title): bool => is_string($title) && trim($title) !== '')
                 ->map(fn (string $title): string => trim($title))->unique()->values()->all(),
         ];
+    }
+
+    /**
+     * Condições de fatura apenas para exibição, sem alterar a seleção ou o PDF.
+     *
+     * @return array<string, array{amount: string, count: int}|null>
+     */
+    private function portoEntryOptions(array $offer, ?array $priced): array
+    {
+        if ($priced === null || ($priced['payment_method'] ?? $priced['payment_type'] ?? null) !== 'FAT') {
+            return [];
+        }
+
+        $options = [
+            'without_entry' => ['amount' => $priced['amount'], 'count' => $priced['count']],
+            'with_entry' => null,
+        ];
+        foreach (app(PortoQuoteResponse::class)->alternatives(['ofertas' => [$offer]]) as $alternative) {
+            if ($alternative['payment_method'] === 'BFT' && $alternative['condition_code'] === '229'
+                && $alternative['count'] === PortoQuoteResponse::installmentsFor('FAT')) {
+                $options['with_entry'] = ['amount' => $alternative['amount'], 'count' => $alternative['count']];
+                break;
+            }
+        }
+
+        return $options;
     }
 
     /** Data da Porto em DD/MM/AAAA para Y-m-d; inválida vira null. */

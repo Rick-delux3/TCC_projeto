@@ -40,7 +40,11 @@
                         <div class="card-header text-bg-primary">Melhor preço</div>
                     @endif
                     <div class="card-body text-center">
-                        <h3 class="h6">{{ $providerNames[$offer['provider']] }}</h3>
+                        <h3 @class(['h6', 'mb-1' => filled($offer['quote']['best_offer']['name'] ?? null)])>{{ $providerNames[$offer['provider']] }}</h3>
+                        {{-- Porto: plano mais barato entre a Fiança e o Essencial, usado na comparação. --}}
+                        @if (filled($offer['quote']['best_offer']['name'] ?? null))
+                            <p class="small text-body-secondary mb-2" data-comparison-plan>{{ $offer['quote']['best_offer']['name'] }}</p>
+                        @endif
                         @if (($price['comparison_basis'] ?? null) === 'installment')
                             <p @class(['fw-semibold mb-1', 'display-6 text-primary' => $isBest, 'fs-4 text-body-secondary' => ! $isBest])>{{ $formatMoney($price['installment_amount'], $price['currency']) }}</p>
                             <p class="small text-body-secondary mb-1">Por parcela · {{ $price['installments'] }} parcelas</p>

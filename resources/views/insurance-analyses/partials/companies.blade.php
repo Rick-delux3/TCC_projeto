@@ -40,6 +40,18 @@
                         ?? $attempts->firstWhere('status', 'approved');
                     $plans = collect($cardPlan ? [$cardPlan] : []);
                 }
+                // Porto: o card mostra a Fiança e o Essencial mais barato do cenário
+                // escolhido na rodada. Sem cenário aprovado, vale o estado da companhia.
+                $portoAttempt = null;
+                $portoCard = [];
+                if ($provider === 'porto') {
+                    $portoAttempt = $attempts->first(fn ($item) => $item['selected'] && $item['status'] === 'approved')
+                        ?? $attempts->firstWhere('status', 'approved');
+                    $portoCard = array_values(array_filter([
+                        $portoAttempt['quote']['card']['fianca'] ?? null,
+                        $portoAttempt['quote']['card']['essential'] ?? null,
+                    ]));
+                }
             @endphp
             <div class="col-12 col-md-6 col-xl-3" data-analysis-component="provider-{{ $provider }}">
                 <article @class(['card h-100', 'bg-body-tertiary' => $blocked, 'border-success border-2' => ! $blocked && $reanalysisSupported]) data-provider-read-only="{{ $readOnly ? 'true' : 'false' }}" aria-labelledby="provider-{{ $provider }}" data-provider="{{ $provider }}" data-analysis-state="{{ $blocked ? 'blocked' : ($notIncluded ? 'not_included' : ($analysis['display_state']['state'] ?? 'processing')) }}" aria-busy="{{ ! $blocked && ! $notIncluded && ($analysis['display_state']['processing'] ?? true) ? 'true' : 'false' }}">
@@ -71,6 +83,24 @@
                             <p class="text-body-secondary mb-0">Esta companhia não participou deste pacote de análises.</p>
                         @elseif (! $analysis)
                             <p class="mb-0" role="status"><span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>Aguardando análise desta companhia.</p>
+                        @elseif ($portoCard !== [])
+                            <ul class="list-group list-group-flush">
+                                @foreach ($portoCard as $portoPlan)
+                                    <li class="list-group-item px-0" data-porto-plan="{{ $portoPlan['code'] }}">
+                                        <h4 class="h6 d-flex flex-wrap justify-content-center align-items-center gap-2">
+                                            {{ $portoPlan['name'] }}
+                                            @if ($portoPlan['best'] ?? false)
+                                                <span class="badge text-bg-success">Mais barato</span>
+                                            @endif
+                                        </h4>
+                                        @if ((float) $portoPlan['installment_amount'] > 0)
+                                            @include('insurance-analyses.partials.offer-price', ['offerStatus' => 'approved', 'amount' => $portoPlan['installment_amount'], 'count' => $portoPlan['installments'], 'manualMessage' => $analysis['manual_message'], 'displayState' => ['state' => 'approved', 'processing' => false]])
+                                        @else
+                                            <p class="text-body-secondary mb-0" role="status">Preço indisponível no momento.</p>
+                                        @endif
+                                    </li>
+                                @endforeach
+                            </ul>
                         @elseif ($plans->isNotEmpty())
                             <ul class="list-group list-group-flush">
                                 @foreach ($plans as $plan)

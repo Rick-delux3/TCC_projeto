@@ -76,7 +76,7 @@ it('prints complete saved Porto requests, responses and a per stage diagnosis wi
         'Oferta 0001: NÃO confirmada | HTTP 500 | registro anterior a 11/11/2026: confirmado só pelo HTTP do PUT | Falha na comissão',
         'mais de um PUT no mesmo orçamento', '"codComissao": 15',
         // Etapa 3: preço selecionado e todas as condições retornadas.
-        'GET /orcamentos/22/000000000000123/ABC12J/ofertas', 'Selecionada: 0008 Fiança | CC cond. 029 | 29x R$ 45,50', 'R$ 1.200,00',
+        'GET /orcamentos/22/000000000000123/ABC12J/ofertas', 'Selecionada (registro anterior a 11/11/2026: somente a Fiança): 0008 Fiança | CC cond. 029 | 29x R$ 45,50', 'R$ 1.200,00',
         // Documentos que podem ser obtidos para cada resultado.
         'pdf/cotacao/0008/CC/029', '/orcamentos/000000000000456/ABC12J/pdf/carta-recusa');
     expect($queries)->not->toBeEmpty();

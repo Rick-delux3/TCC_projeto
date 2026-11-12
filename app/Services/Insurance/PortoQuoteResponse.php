@@ -160,18 +160,35 @@ class PortoQuoteResponse
     }
 
     /**
+     * Quantidade de pagamentos lida do retorno para a forma de pagamento.
+     * A Porto não recebe a quantidade no request: devolve condições fixas por
+     * forma (FAT 029 = 29X; CC 030 = 30X). Forma desconhecida usa a base de 30.
+     */
+    public static function installmentsFor(string $paymentType): int
+    {
+        $counts = config('services.porto.installments', []);
+        $count = is_array($counts) ? ($counts[strtoupper(trim($paymentType))] ?? null) : null;
+
+        return is_int($count) && $count > 0 ? $count : 30;
+    }
+
+    /**
      * Escolhe, por oferta, a condição da forma de pagamento esperada com a
-     * quantidade de pagamentos Sem entrada.
+     * quantidade de pagamentos dessa forma (installmentsFor).
      *
-     * Somente a oferta de comparação (Fiança), com a comissão confirmada, vira
-     * "selection". As demais ficam em "alternatives" com a comissão padrão da
-     * Porto e nunca substituem o preço comparado.
+     * Duas diferenças internas (regra de 11/11/2026):
+     * - "essential": o Essencial mais barato, exibido ao lado da Fiança no card;
+     * - "selection": o plano mais barato entre a Fiança (com comissão confirmada)
+     *   e esse Essencial. É o preço da cotação: entra na escolha entre cenários e
+     *   na comparação entre companhias. Empate fica com a Fiança.
+     * "fianca" guarda a Fiança precificada; "alternatives", todos os Essenciais,
+     * com a comissão padrão da Porto.
      *
      * @param  bool  $commissionConfirmed  comissão da oferta de comparação confirmada pelo HTTP 200 do PUT
      */
     public function payment(array $response, string $paymentType, bool $commissionConfirmed): array
     {
-        $count = (int) config('services.porto.installments_without_entry', 29);
+        $count = self::installmentsFor($paymentType);
         $comparison = (string) config('services.porto.comparison_offer', '0008');
 
         $byOffer = [];
@@ -191,16 +208,32 @@ class PortoQuoteResponse
             'payment_type' => $paymentType, 'with_entry' => false,
         ] + $alternative;
 
-        $selection = $commissionConfirmed && isset($byOffer[$comparison]) ? $format($byOffer[$comparison]) : null;
+        $fianca = $commissionConfirmed && isset($byOffer[$comparison]) ? $format($byOffer[$comparison]) : null;
         unset($byOffer[$comparison]);
         ksort($byOffer, SORT_STRING);
+        $alternatives = array_values(array_map($format, $byOffer));
+
+        // 1) Diferença entre os Essenciais: o mais barato acompanha a Fiança.
+        $essential = null;
+        foreach ($alternatives as $alternative) {
+            if ($essential === null || (float) $alternative['amount'] < (float) $essential['amount']) {
+                $essential = $alternative;
+            }
+        }
+        // 2) Diferença geral entre os planos aprovados: o mais barato é o preço da Porto.
+        $selection = $essential !== null && ($fianca === null || (float) $essential['amount'] < (float) $fianca['amount'])
+            ? $essential : $fianca;
+        $fiancaReason = "Não foi identificada a oferta {$comparison} com comissão confirmada em {$count} parcelas na forma de pagamento {$paymentType}.";
 
         return [
             'selection' => $selection,
-            'alternatives' => array_values(array_map($format, $byOffer)),
+            'fianca' => $fianca,
+            'essential' => $essential,
+            'alternatives' => $alternatives,
             'unavailable_reason' => $selection === null
-                ? "Não foi identificada a oferta {$comparison} com comissão confirmada em {$count} parcelas na forma de pagamento {$paymentType}."
+                ? "Nenhum plano da Porto com {$count} parcelas na forma de pagamento {$paymentType}."
                 : null,
+            'fianca_unavailable_reason' => $fianca === null ? $fiancaReason : null,
         ];
     }
 

@@ -174,7 +174,7 @@ class TestPortoApiCommand extends Command
             $this->creationStage($request, $stored);
             $payment = is_array($stored['payment'] ?? null) ? $stored['payment'] : null;
             $this->commissionStage($payment, $budget, $susep, $stored);
-            $this->priceStage($payment, $budget, $susep);
+            $this->priceStage($payment, $budget, $susep, (string) $quote->payment_type);
             $this->documentStage($quote, $payment, $budget, $susep);
         } catch (Throwable $exception) {
             $this->warn('Diagnóstico incompleto ('.class_basename($exception).'). Os dados completos seguem abaixo.');
@@ -272,7 +272,7 @@ class TestPortoApiCommand extends Command
         }
     }
 
-    private function priceStage(?array $payment, ?string $budget, string $susep): void
+    private function priceStage(?array $payment, ?string $budget, string $susep, string $paymentType): void
     {
         $source = $payment['source'] ?? null;
         $origin = (string) config('services.porto.origin', '22');
@@ -287,17 +287,28 @@ class TestPortoApiCommand extends Command
         }
 
         $selection = is_array($payment['selection'] ?? null) ? $payment['selection'] : null;
-        $count = (int) config('services.porto.installments_without_entry', 29);
+        $count = PortoQuoteResponse::installmentsFor($paymentType);
         $fallback = $source === 'budget' && config('services.porto.price_source') !== 'budget';
         $this->field('Fonte', match (true) {
             $fallback => 'GET do orçamento atualizado (o GET de ofertas não trouxe a comissão enviada)',
             $source === 'budget' => 'GET do orçamento (PORTO_PRICE_SOURCE=budget)',
             default => 'GET de ofertas (já atualizado com a comissão enviada)',
         });
-        $this->field('Critério', 'oferta '.config('services.porto.comparison_offer', '0008').' com comissão confirmada, '.$count.' pagamentos sem entrada');
-        $this->field('Selecionada', $selection
-            ? $this->alternative($selection)
-            : 'nenhuma — '.($payment['unavailable_reason'] ?? 'preço indisponível'));
+        $this->field('Critério', $count.' pagamentos na forma '.($paymentType ?: 'não definida').'; Fiança somente com comissão confirmada');
+        if (array_key_exists('fianca', $payment)) {
+            // Desde 11/11/2026: card com Fiança + Essencial mais barato; preço da Porto = o mais barato dos dois.
+            $this->field('Fiança (card)', is_array($payment['fianca'])
+                ? $this->alternative($payment['fianca'])
+                : 'sem preço — '.($payment['fianca_unavailable_reason'] ?? 'preço indisponível'));
+            $this->field('Essencial mais barato (card)', is_array($payment['essential'] ?? null) ? $this->alternative($payment['essential']) : 'nenhum');
+            $this->field('Mais barato da Porto (comparação)', $selection
+                ? $this->alternative($selection)
+                : 'nenhum — '.($payment['unavailable_reason'] ?? 'preço indisponível'));
+        } else {
+            $this->field('Selecionada (registro anterior a 11/11/2026: somente a Fiança)', $selection
+                ? $this->alternative($selection)
+                : 'nenhuma — '.($payment['unavailable_reason'] ?? 'preço indisponível'));
+        }
         foreach (is_array($payment['alternatives'] ?? null) ? $payment['alternatives'] : [] as $alternative) {
             $this->field('Alternativa', $this->alternative($alternative));
         }

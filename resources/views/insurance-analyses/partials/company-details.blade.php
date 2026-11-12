@@ -13,18 +13,23 @@
                     'payment_type' => $analysis['quote']['price']['payment_type'] ?? null,
                     'payment_status' => 'ready',
                 ]]);
-                // Porto: cada orçamento aprovado traz a Fiança (preço do card e da
-                // comparação) e os Essenciais (alternativas), cada um com preço,
-                // totais e coberturas próprios. Cada oferta vira uma seção.
+                // Porto: cada orçamento aprovado traz a Fiança e os Essenciais, cada
+                // um com preço, totais e coberturas próprios. Cada oferta vira uma
+                // seção; os selos valem para o cenário exibido no card.
                 if ($provider === 'porto') {
                     $detailOffers = $detailOffers->flatMap(fn ($detail) => $detail['status'] === 'approved' && ! empty($detail['quote']['offers'])
                         ? collect($detail['quote']['offers'])->map(fn ($offer) => array_merge($detail, [
                             'title' => $offer['name'],
                             'offer_role' => $offer['role'],
+                            'porto_on_card' => ($detail['id'] ?? null) !== null && ($detail['id'] ?? null) === ($portoAttempt['id'] ?? null)
+                                && ($offer['role'] === 'comparison' || ($offer['cheapest_essential'] ?? false)),
+                            'porto_best' => ($detail['id'] ?? null) !== null && ($detail['id'] ?? null) === ($portoAttempt['id'] ?? null)
+                                && ($offer['best'] ?? false),
                             'installment_amount' => $offer['installment_amount'],
                             'installments' => $offer['installments'] ?? $detail['installments'],
                             'payment_status' => $offer['installment_amount'] !== null ? 'ready' : $detail['payment_status'],
                             'benefits' => $offer['benefits'],
+                            'entry_options' => $offer['entry_options'] ?? [],
                             'quote' => array_merge($detail['quote'], [
                                 'price' => array_merge($detail['quote']['price'], $offer['price']),
                                 'coverages' => $offer['coverages'],
@@ -42,11 +47,17 @@
                     <div class="card-body">
                         <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
                             <h3 class="h6 mb-0">{{ $detail['title'] ?? ($planNames[$detail['plan_key']] ?? $detail['plan_key'] ?: 'Fiança locatícia') }}</h3>
-                            @if ((($cardPlan['id'] ?? null) !== null && ($detail['id'] ?? null) === $cardPlan['id'] && $detailOffers->count() > 1)
-                                || (($detail['offer_role'] ?? null) === 'comparison' && ($detail['selected'] ?? true) && (float) $detail['installment_amount'] > 0 && $detailOffers->count() > 1))
+                            @if ($provider === 'porto')
+                                @if ($detail['porto_best'] ?? false)
+                                    <span class="badge text-bg-primary">Mais barato</span>
+                                @endif
+                                @if ($detail['porto_on_card'] ?? false)
+                                    <span class="badge text-bg-success">Exibido no card</span>
+                                @elseif (($detail['offer_role'] ?? null) === 'alternative')
+                                    <span class="badge text-bg-secondary">Alternativa</span>
+                                @endif
+                            @elseif (($cardPlan['id'] ?? null) !== null && ($detail['id'] ?? null) === $cardPlan['id'] && $detailOffers->count() > 1)
                                 <span class="badge text-bg-success">Exibido no card</span>
-                            @elseif (($detail['offer_role'] ?? null) === 'alternative')
-                                <span class="badge text-bg-secondary">Alternativa</span>
                             @endif
                         </div>
                         @if (array_filter($detail['applicants']))
@@ -54,6 +65,24 @@
                         @endif
                         @include('insurance-analyses.partials.offer-price', ['offerStatus' => $detail['status'], 'amount' => $detail['payment_status'] === 'ready' ? $detail['installment_amount'] : null, 'count' => $detail['installments'], 'recurring' => $detail['recurring_installment'] ?? null, 'manualMessage' => $analysis['manual_message'], 'displayState' => $detail['display_state'] ?? $analysis['display_state']])
                         @if ($detail['status'] === 'approved')
+                            @if ($provider === 'porto' && ! empty($detail['entry_options']))
+                                <div class="row g-2 mt-2" aria-label="Valores por condição de entrada" data-porto-entry-options>
+                                    @foreach (['without_entry' => 'Sem entrada', 'with_entry' => 'Com entrada'] as $entryKey => $entryLabel)
+                                        @php($entryOption = $detail['entry_options'][$entryKey] ?? null)
+                                        <div class="col-12 col-sm-6">
+                                            <div class="border rounded p-3 h-100" data-entry-option="{{ $entryKey }}">
+                                                <h4 class="h6 mb-2">{{ $entryLabel }}</h4>
+                                                @if ($entryOption !== null)
+                                                    <p class="fs-5 fw-semibold mb-1">{{ $formatMoney($entryOption['amount']) }} <span class="small fw-normal">por parcela</span></p>
+                                                    <p class="small text-body-secondary mb-0">{{ $entryOption['count'] }} parcelas · {{ $entryKey === 'with_entry' ? '1ª em boleto, demais em fatura' : 'Fatura sem entrada' }}</p>
+                                                @else
+                                                    <p class="small text-body-secondary mb-0">Condição não disponibilizada pela seguradora.</p>
+                                                @endif
+                                            </div>
+                                        </div>
+                                    @endforeach
+                                </div>
+                            @endif
                             @php($detailPrice = $detail['quote']['price'])
                             @if ((float) $detail['installment_amount'] > 0 && $detail['payment_status'] === 'ready')
                                 @php($detailRecurring = $detail['recurring_installment'] ?? null)

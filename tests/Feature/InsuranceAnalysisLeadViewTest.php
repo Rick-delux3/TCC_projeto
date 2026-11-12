@@ -697,10 +697,15 @@ function portoViewPayment(bool $fiancaPriced = true): array
     ];
 }
 
-/** Pacote Porto concluído com um cenário aprovado e a consulta de preços gravada. */
-function portoViewQuote($test, bool $fiancaPriced = true): \DOMXPath
+/**
+ * Pacote Porto concluído com um cenário aprovado e a consulta de preços gravada.
+ * $current usa o formato gravado desde 11/11/2026 (selection = plano mais barato).
+ */
+function portoViewQuote($test, bool $fiancaPriced = true, bool $current = false, ?array $paymentOverride = null): \DOMXPath
 {
     config(['services.porto.enabled' => true]);
+    $payment = $paymentOverride ?? ($current ? portoCurrentPayment($fiancaPriced) : portoViewPayment($fiancaPriced));
+    $amount = $payment['selection']['amount'] ?? null;
     $batch = $test->lead->insuranceAnalysesBatches()->create(['status' => 'completed', 'total_providers' => 1, 'finished_at' => now()]);
     $analysis = $batch->analyses()->create([
         'lead_id' => $test->lead->id, 'provider' => 'porto', 'product' => 'fianca_locaticia_residencial', 'status' => 'approved',
@@ -711,12 +716,18 @@ function portoViewQuote($test, bool $fiancaPriced = true): \DOMXPath
     $quote = $run->scenarios()->first()->quotes()->first();
     $quote->update([
         'status' => 'approved', 'quote_id' => '000000011912710', 'payment_type' => 'FAT',
-        'payment_status' => $fiancaPriced ? 'ready' : 'unavailable', 'installment_amount' => $fiancaPriced ? 617.46 : null, 'installments' => 29,
+        'payment_status' => $amount !== null ? 'ready' : 'unavailable', 'installment_amount' => $amount, 'installments' => 29,
         'lease_start_date' => '2026-11-11', 'lease_end_date' => '2029-05-11',
         'response_payload' => ['http_status' => 201, 'response' => ['orcamento' => '000000011912710', 'secret' => 'secret-response'],
-            'payment' => portoViewPayment($fiancaPriced)],
+            'payment' => $payment],
     ]);
-    $run->update(['status' => 'approved', 'selected_quote_id' => $fiancaPriced ? $quote->id : null]);
+    $run->update(['status' => 'approved', 'selected_quote_id' => $amount !== null ? $quote->id : null]);
+    if ($current) {
+        // O coordenador consolida na análise a consulta e a parcela escolhida.
+        $analysis->update(['response_payload' => ['payment' => $payment, 'quote_selection' => [
+            'provider_run_id' => $run->id, 'quote_id' => $quote->id, 'installment_amount' => $amount, 'installments' => 29, 'payment_type' => 'FAT',
+        ]]]);
+    }
     $response = $test->actingAs($test->user)->withSession(['2fa_passed' => true])
         ->get(route('insurance-analyses.lead', $test->lead))->assertOk()->assertDontSee('secret-response');
     $document = new DOMDocument;
@@ -725,12 +736,66 @@ function portoViewQuote($test, bool $fiancaPriced = true): \DOMXPath
     return new DOMXPath($document);
 }
 
-it('shows the Porto Fiança on the card and every offer with its values in the details', function () {
+it('shows real Porto entry prices for each offer without changing the selected price', function (bool $list) {
+    $payment = portoCurrentPayment();
+    foreach ($payment['response']['ofertas'] as &$offer) {
+        $condition = ['condicaoPagamento' => '229', 'quantidadeParcela' => 29, 'valorParcela' => 222.22];
+        $offer['formasPagamento'] = [['formaPagamento' => 'BFT', 'condicoesPagamento' => $list ? [$condition] : $condition]];
+    }
+    unset($offer);
+    $xpath = portoViewQuote($this, current: true, paymentOverride: $payment);
+    $options = $xpath->query('//dialog[@id="details-porto"]//*[@data-porto-entry-options]');
+    expect($options->length)->toBe(3);
+    foreach ($options as $option) {
+        expect($option->textContent)->toContain('Sem entrada', 'Com entrada', 'R$ 222,22', '29 parcelas', '1ª em boleto, demais em fatura');
+    }
+    $card = $xpath->query('//article[@data-provider="porto"]')->item(0);
+    expect($card->textContent)->toContain('R$ 144,83', 'R$ 617,46')->not->toContain('222,22');
+})->with([false, true]);
+
+it('does not invent Porto entry prices when BFT is missing or invalid', function (?float $amount) {
+    $payment = portoCurrentPayment();
+    foreach ($payment['response']['ofertas'] as &$offer) {
+        $offer['formasPagamento'] = $amount === null ? [] : [['formaPagamento' => 'BFT', 'condicoesPagamento' => [
+            'condicaoPagamento' => '229', 'quantidadeParcela' => 29, 'valorParcela' => $amount,
+        ]]];
+    }
+    unset($offer);
+    $xpath = portoViewQuote($this, current: true, paymentOverride: $payment);
+    $options = $xpath->query('//dialog[@id="details-porto"]//*[@data-entry-option="with_entry"]');
+    expect($options->length)->toBe(3);
+    foreach ($options as $option) {
+        expect($option->textContent)->toContain('Condição não disponibilizada pela seguradora.')->not->toContain('R$');
+    }
+})->with([null, 0.0, -1.0]);
+
+it('does not expose Porto invoice entry options for a credit card selection', function () {
+    $payment = portoCurrentPayment();
+    foreach (['selection', 'fianca', 'essential'] as $key) {
+        $payment[$key]['payment_method'] = 'CC';
+        $payment[$key]['payment_type'] = 'CC';
+    }
+    foreach ($payment['alternatives'] as &$alternative) {
+        $alternative['payment_method'] = 'CC';
+        $alternative['payment_type'] = 'CC';
+    }
+    unset($alternative);
+    $xpath = portoViewQuote($this, current: true, paymentOverride: $payment);
+    expect($xpath->query('//dialog[@id="details-porto"]//*[@data-porto-entry-options]')->length)->toBe(0);
+});
+
+it('shows the Porto Fiança and the cheapest Essencial on the card and every offer in the details', function () {
+    // Registro anterior à regra do mais barato: a Fiança é o plano comparado.
     $xpath = portoViewQuote($this);
 
     $card = $xpath->query('//article[@data-provider="porto"]')->item(0);
-    expect($card->textContent)->toContain('R$ 617,46', 'Por parcela · 29 parcelas')
-        ->not->toContain('Essencial', 'R$ 144,83', 'Alternativa');
+    $plans = $xpath->query('.//li[@data-porto-plan]', $card);
+    expect($plans->length)->toBe(2)
+        ->and($plans->item(0)->getAttribute('data-porto-plan'))->toBe('0008')
+        ->and($plans->item(0)->textContent)->toContain('Fiança', 'Mais barato', 'R$ 617,46', 'Por parcela · 29 parcelas')
+        ->and($plans->item(1)->getAttribute('data-porto-plan'))->toBe('0001')
+        ->and($plans->item(1)->textContent)->toContain('Essencial 12', 'R$ 144,83')->not->toContain('Mais barato');
+    expect($card->textContent)->not->toContain('Essencial 20', 'Fiança locatícia');
 
     $details = $xpath->query('//dialog[@id="details-porto"]')->item(0);
     $titles = $xpath->query('.//section//h3', $details);
@@ -741,30 +806,52 @@ it('shows the Porto Fiança on the card and every offer with its values in the d
 
     $sections = $xpath->query('.//section', $details);
     expect($sections->item(0)->textContent)->toContain(
-        'Exibido no card', '29 parcelas de R$ 617,46', 'Fatura sem entrada', 'Primeiro vencimento', '10/12/2026',
+        'Mais barato', 'Exibido no card', '29 parcelas de R$ 617,46', 'Fatura sem entrada', 'Primeiro vencimento', '10/12/2026',
         '11/11/2026 até 11/05/2029', 'R$ 17.906,48', 'Prêmio líquido', 'R$ 16.675,81', 'IOF', 'R$ 1.230,67',
         'Limite máximo de garantia', 'R$ 64.679,70', 'Aluguel', 'Limite de cobertura: R$ 42.000,00', 'Valor declarado: R$ 1.400,00',
         'Custo da cobertura: R$ 6.051,76', 'Multa rescisória', 'Benefícios', 'Serviços para residência',
     )->not->toContain('Alternativa', 'MULTA RESCISÓRIA', 'Não informado');
-    expect($sections->item(1)->textContent)->toContain('Alternativa', '29 parcelas de R$ 144,83', 'Fatura sem entrada',
+    expect($sections->item(1)->textContent)->toContain('Exibido no card', '29 parcelas de R$ 144,83', 'Fatura sem entrada',
         'R$ 4.200,00', 'R$ 3.911,34', 'R$ 288,66', 'R$ 16.800,00', 'Custo da cobertura: R$ 3.474,18')
-        ->not->toContain('Exibido no card', 'Benefícios');
-    expect($sections->item(2)->textContent)->toContain('Alternativa', 'R$ 173,79', 'R$ 5.040,00');
+        ->not->toContain('Alternativa', 'Mais barato', 'Benefícios');
+    expect($sections->item(2)->textContent)->toContain('Alternativa', 'R$ 173,79', 'R$ 5.040,00')
+        ->not->toContain('Exibido no card', 'Mais barato');
 });
 
-it('keeps the Porto alternatives priced when the Fiança has no confirmed price', function () {
+it('keeps the Porto Fiança on the card with a notice when it has no confirmed price', function () {
     $xpath = portoViewQuote($this, fiancaPriced: false);
 
     $card = $xpath->query('//article[@data-provider="porto"]')->item(0);
-    expect($card->textContent)->toContain('Aprovada. Preço indisponível.')->not->toContain('R$ 144,83');
+    $plans = $xpath->query('.//li[@data-porto-plan]', $card);
+    expect($plans->length)->toBe(2)
+        ->and($plans->item(0)->textContent)->toContain('Fiança', 'Preço indisponível no momento.')->not->toContain('R$', 'HTTP 400')
+        ->and($plans->item(1)->textContent)->toContain('Essencial 12', 'R$ 144,83');
 
     $sections = $xpath->query('//dialog[@id="details-porto"]//section');
     expect($sections->length)->toBe(3);
     // A Fiança aparece sem preço e sem custo das coberturas calculado com 10%.
-    expect($sections->item(0)->textContent)->toContain('Fiança', 'Aprovada. Preço indisponível.', 'Limite de cobertura: R$ 42.000,00')
-        ->not->toContain('Exibido no card', 'R$ 617,46', 'Custo da cobertura', 'Prêmio líquido');
-    expect($sections->item(1)->textContent)->toContain('Essencial 12', 'Alternativa', '29 parcelas de R$ 144,83');
+    expect($sections->item(0)->textContent)->toContain('Fiança', 'Exibido no card', 'Aprovada. Preço indisponível.', 'Limite de cobertura: R$ 42.000,00')
+        ->not->toContain('R$ 617,46', 'Custo da cobertura', 'Prêmio líquido');
+    expect($sections->item(1)->textContent)->toContain('Essencial 12', 'Exibido no card', '29 parcelas de R$ 144,83')->not->toContain('Alternativa');
 });
+
+it('marks the cheapest Porto plan on the card and names it in the best offers', function (bool $fiancaPriced) {
+    $xpath = portoViewQuote($this, $fiancaPriced, current: true);
+
+    $plans = $xpath->query('//article[@data-provider="porto"]//li[@data-porto-plan]');
+    expect($plans->length)->toBe(2)
+        ->and($plans->item(0)->textContent)->toContain('Fiança', $fiancaPriced ? 'R$ 617,46' : 'Preço indisponível no momento.')->not->toContain('Mais barato')
+        ->and($plans->item(1)->textContent)->toContain('Essencial 12', 'Mais barato', 'R$ 144,83');
+
+    // Card superior: a Porto entra na comparação pelo Essencial 12.
+    $comparison = $xpath->query('//section[@data-analysis-component="comparison"]')->item(0);
+    expect($xpath->query('.//*[@data-comparison-plan]', $comparison)->item(0)->textContent)->toBe('Essencial 12');
+    expect($comparison->textContent)->toContain('Porto Seguro', 'R$ 144,83')->not->toContain('R$ 617,46');
+
+    $sections = $xpath->query('//dialog[@id="details-porto"]//section');
+    expect($sections->item(0)->textContent)->toContain('Exibido no card')->not->toContain('Mais barato')
+        ->and($sections->item(1)->textContent)->toContain('Essencial 12', 'Mais barato', 'Exibido no card');
+})->with(['Fiança com preço' => true, 'Fiança sem preço' => false]);
 
 /** Análise Porto consolidada: o coordenador guarda payment e quote_selection. */
 function portoSummaryAnalysis($test, string $status, array $payload): \App\Models\InsuranceAnalysis
@@ -810,3 +897,65 @@ it('shows no Porto offer or price for a refused or technically failed analysis',
         ->and($summary['price']['total'])->toBeNull()
         ->and($summary['price']['comparison_basis'])->toBe('gross_total');
 })->with(['rejected', 'failed']);
+
+/**
+ * Formato gravado desde 11/11/2026: "fianca" e "essential" alimentam o card e
+ * "selection" é o mais barato dos dois (preço da Porto na comparação).
+ */
+function portoCurrentPayment(bool $fiancaPriced = true): array
+{
+    $payment = portoViewPayment($fiancaPriced);
+    $essential = collect($payment['alternatives'])->sortBy(fn (array $item): float => (float) $item['amount'])->first();
+
+    return array_merge($payment, [
+        'fianca' => $payment['selection'], 'essential' => $essential, 'selection' => $essential,
+        'unavailable_reason' => null, 'fianca_unavailable_reason' => $payment['unavailable_reason'],
+    ]);
+}
+
+it('summarizes the Porto card plans and the cheapest plan used in the comparison', function () {
+    $analysis = portoSummaryAnalysis($this, 'approved', [
+        'payment' => portoCurrentPayment(),
+        'quote_selection' => ['provider_run_id' => 1, 'quote_id' => 2, 'installment_amount' => '144.83', 'installments' => 29, 'payment_type' => 'FAT'],
+    ]);
+
+    $summary = app(\App\Services\Insurance\AnalysisQuoteSummary::class)->summarize($analysis);
+
+    // 1) Card: Fiança e o Essencial mais barato lado a lado.
+    expect($summary['card']['fianca'])->toMatchArray(['code' => '0008', 'name' => 'Fiança', 'installment_amount' => '617.46', 'best' => false]);
+    expect($summary['card']['essential'])->toMatchArray(['code' => '0001', 'name' => 'Essencial 12', 'installment_amount' => '144.83', 'cheapest_essential' => true, 'best' => true]);
+    // 2) Comparação: o mais barato entre todos os planos aprovados resume a análise.
+    expect($summary['best_offer'])->toBe(['code' => '0001', 'name' => 'Essencial 12', 'role' => 'alternative', 'installment_amount' => '144.83', 'installments' => 29]);
+    expect($summary['price'])->toMatchArray(['comparison_basis' => 'installment', 'installment_amount' => '144.83', 'total' => '4200.00', 'net' => '3911.34']);
+    expect($summary['fianca_issue'])->toBeNull();
+    expect(array_column($summary['offers'], 'best', 'code'))->toBe(['0008' => false, '0001' => true, '0007' => false]);
+    expect(array_column($summary['offers'], 'cheapest_essential', 'code'))->toBe(['0008' => false, '0001' => true, '0007' => false]);
+
+    $comparison = app(\App\Services\Insurance\AnalysisQuoteComparison::class)->compare(collect([$summary]));
+    expect($comparison['best_quote']['price']['installment_amount'])->toBe('144.83');
+});
+
+it('keeps the Fiança on the Porto card without price while the cheapest Essencial is compared', function () {
+    $summary = app(\App\Services\Insurance\AnalysisQuoteSummary::class)->summarize(portoSummaryAnalysis($this, 'approved', [
+        'payment' => portoCurrentPayment(fiancaPriced: false),
+        'quote_selection' => ['installment_amount' => '144.83', 'installments' => 29, 'payment_type' => 'FAT'],
+    ]));
+
+    expect($summary['card']['fianca'])->toMatchArray(['code' => '0008', 'installment_amount' => null, 'best' => false]);
+    expect($summary['card']['essential']['code'])->toBe('0001');
+    expect($summary['best_offer']['code'])->toBe('0001');
+    expect($summary['fianca_issue'])->toContain('0008');
+    expect($summary['price']['installment_amount'])->toBe('144.83');
+});
+
+it('derives the Porto card plans from records saved before the cheapest-plan rule', function () {
+    // Formato anterior: "selection" era a Fiança e não havia "fianca"/"essential".
+    $summary = app(\App\Services\Insurance\AnalysisQuoteSummary::class)->summarize(portoSummaryAnalysis($this, 'approved', [
+        'payment' => portoViewPayment(),
+        'quote_selection' => ['installment_amount' => '617.46', 'installments' => 29, 'payment_type' => 'FAT'],
+    ]));
+
+    expect($summary['card']['fianca']['installment_amount'])->toBe('617.46');
+    expect($summary['card']['essential']['code'])->toBe('0001');
+    expect($summary['best_offer']['code'])->toBe('0008');
+});

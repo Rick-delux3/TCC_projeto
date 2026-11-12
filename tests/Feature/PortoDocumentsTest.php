@@ -85,10 +85,10 @@ function portoDocsFake(?Closure $create = null, ?Closure $documents = null): voi
         return Http::response(['orcamento' => '000000010009512', 'ofertas' => [[
             // codComissao aplicado: Fiança 15 depois do PUT; Essencial no padrão 10.
             'seguro' => '0008', 'nomeSeguro' => 'FIANCA', 'comissao' => ['codComissao' => 15],
-            'formasPagamento' => [['formaPagamento' => 'CC', 'condicoesPagamento' => ['condicaoPagamento' => '029', 'quantidadeParcela' => 29, 'valorParcela' => 210.5]]],
+            'formasPagamento' => [['formaPagamento' => 'CC', 'condicoesPagamento' => ['condicaoPagamento' => '030', 'quantidadeParcela' => 30, 'valorParcela' => 210.5]]],
         ], [
             'seguro' => '0001', 'nomeSeguro' => 'ESSENCIAL 12', 'comissao' => ['codComissao' => 10],
-            'formasPagamento' => [['formaPagamento' => 'CC', 'condicoesPagamento' => ['condicaoPagamento' => '129', 'quantidadeParcela' => 29, 'valorParcela' => 90.1]]],
+            'formasPagamento' => [['formaPagamento' => 'CC', 'condicoesPagamento' => ['condicaoPagamento' => '030', 'quantidadeParcela' => 30, 'valorParcela' => 90.1]]],
         ]]], 200);
     });
 }
@@ -215,8 +215,8 @@ it('downloads the quote PDF for exactly the selected offer, payment method and c
     expect($provider->quotePdf($quote, '0001'))->toStartWith('%PDF-');
 
     expect(portoDocsPdfUrls())->toBe([
-        portoDocsApi().'/orcamentos/000000010009512/ABC12J/pdf/cotacao/0008/CC/029',
-        portoDocsApi().'/orcamentos/000000010009512/ABC12J/pdf/cotacao/0001/CC/129',
+        portoDocsApi().'/orcamentos/000000010009512/ABC12J/pdf/cotacao/0008/CC/030',
+        portoDocsApi().'/orcamentos/000000010009512/ABC12J/pdf/cotacao/0001/CC/030',
     ]);
     expect(fn () => $provider->quotePdf($quote, '0005'))->toThrow(RuntimeException::class, 'não encontrada');
 });
