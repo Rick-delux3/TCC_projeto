@@ -168,7 +168,9 @@ class AnalysisQuoteSummary
         }
         $find = fn (?array $item): ?array => $item === null ? null
             : collect($offers)->first(fn (array $offer): bool => $offer['code'] === ($item['offer_code'] ?? null) && $offer['installment_amount'] !== null);
-        $bestOffer = $find($selection);
+        $bestOffer = collect($offers)
+            ->filter(fn (array $offer): bool => (float) $offer['installment_amount'] > 0)
+            ->sortBy('installment_amount', SORT_NUMERIC)->first();
         $cheapestEssential = $find($essential);
         $offers = array_map(fn (array $offer): array => $offer + [
             'cheapest_essential' => $offer['code'] === ($cheapestEssential['code'] ?? null),
@@ -186,10 +188,10 @@ class AnalysisQuoteSummary
                 'currency' => 'BRL',
                 'period_start' => $analysis->lease_start_date?->format('Y-m-d'),
                 'period_end' => $analysis->lease_end_date?->format('Y-m-d'),
-                'comparison_basis' => $quoteSelection !== null ? 'installment' : 'gross_total',
-                'installment_amount' => $quoteSelection !== null ? $this->money($quoteSelection['installment_amount'] ?? null) : null,
-                'installments' => $quoteSelection['installments'] ?? null,
-                'payment_type' => $quoteSelection['payment_type'] ?? null,
+                'comparison_basis' => $bestOffer !== null || $quoteSelection !== null ? 'installment' : 'gross_total',
+                'installment_amount' => $bestOffer['installment_amount'] ?? null,
+                'installments' => $bestOffer['installments'] ?? null,
+                'payment_type' => $selection['payment_type'] ?? $quoteSelection['payment_type'] ?? null,
             ] + Arr::except($main['price'] ?? [], ['total']),
             'payment_issue' => $payment['unavailable_reason'] ?? null,
             'fianca_issue' => $approved && $fianca === null

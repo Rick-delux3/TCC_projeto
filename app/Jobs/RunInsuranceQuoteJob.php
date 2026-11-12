@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Exceptions\InsuranceProviderDisabled;
 use App\Exceptions\InvalidInsuranceAnalysisPayload;
 use App\Exceptions\ObsoleteInsuranceAnalysisAttempt;
 use App\Models\InsuranceQuote;
@@ -115,9 +116,18 @@ class RunInsuranceQuoteJob implements ShouldQueue
             }
         } catch (ObsoleteInsuranceAnalysisAttempt) {
             return;
-        } catch (InvalidInsuranceAnalysisPayload|\DomainException|\InvalidArgumentException $exception) {
+        } catch (InvalidInsuranceAnalysisPayload|InsuranceProviderDisabled|\DomainException|\InvalidArgumentException $exception) {
             $this->failed($exception);
         }
+    }
+
+    private function failureMessage(?Throwable $exception): string
+    {
+        return match (true) {
+            $exception instanceof InsuranceProviderDisabled => $exception->userMessage(),
+            $exception instanceof InvalidInsuranceAnalysisPayload => $exception->getMessage(),
+            default => 'Falha técnica ao executar a cotação.',
+        };
     }
 
     public function failed(?Throwable $exception): void
@@ -136,12 +146,12 @@ class RunInsuranceQuoteJob implements ShouldQueue
                 } elseif (! ProviderAnalysisStatus::isTerminal($quote->status)) {
                     $quote->forceFill([
                         'status' => 'failed', 'result' => null, 'finished_at' => now(),
-                        'error_message' => $exception instanceof InvalidInsuranceAnalysisPayload ? $exception->getMessage() : 'Falha técnica ao executar a cotação.',
+                        'error_message' => $this->failureMessage($exception),
                     ])->save();
                 }
                 $quote->events()->create([
                     'event_type' => 'execution_failed', 'status' => $quote->status,
-                    'message' => $exception instanceof InvalidInsuranceAnalysisPayload ? $exception->getMessage() : 'Falha técnica ao executar a cotação.',
+                    'message' => $this->failureMessage($exception),
                     'payload' => ['attempt_id' => $this->attemptId, 'exception' => $exception ? $exception::class : null],
                 ]);
                 app(\App\Services\Insurance\InsuranceAnalysisLogger::class)->record($quote, $this->attemptId, ['error' => $exception?->getMessage()], payment: $quote->status === 'approved');

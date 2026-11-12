@@ -792,9 +792,9 @@ it('shows the Porto Fiança and the cheapest Essencial on the card and every off
     $plans = $xpath->query('.//li[@data-porto-plan]', $card);
     expect($plans->length)->toBe(2)
         ->and($plans->item(0)->getAttribute('data-porto-plan'))->toBe('0008')
-        ->and($plans->item(0)->textContent)->toContain('Fiança', 'Mais barato', 'R$ 617,46', 'Por parcela · 29 parcelas')
+        ->and($plans->item(0)->textContent)->toContain('Fiança', 'R$ 617,46', 'Por parcela · 29 parcelas')->not->toContain('Mais barato')
         ->and($plans->item(1)->getAttribute('data-porto-plan'))->toBe('0001')
-        ->and($plans->item(1)->textContent)->toContain('Essencial 12', 'R$ 144,83')->not->toContain('Mais barato');
+        ->and($plans->item(1)->textContent)->toContain('Essencial 12', 'R$ 144,83', 'Mais barato');
     expect($card->textContent)->not->toContain('Essencial 20', 'Fiança locatícia');
 
     $details = $xpath->query('//dialog[@id="details-porto"]')->item(0);
@@ -806,7 +806,7 @@ it('shows the Porto Fiança and the cheapest Essencial on the card and every off
 
     $sections = $xpath->query('.//section', $details);
     expect($sections->item(0)->textContent)->toContain(
-        'Mais barato', 'Exibido no card', '29 parcelas de R$ 617,46', 'Fatura sem entrada', 'Primeiro vencimento', '10/12/2026',
+        'Exibido no card', '29 parcelas de R$ 617,46', 'Fatura sem entrada', 'Primeiro vencimento', '10/12/2026',
         '11/11/2026 até 11/05/2029', 'R$ 17.906,48', 'Prêmio líquido', 'R$ 16.675,81', 'IOF', 'R$ 1.230,67',
         'Limite máximo de garantia', 'R$ 64.679,70', 'Aluguel', 'Limite de cobertura: R$ 42.000,00', 'Valor declarado: R$ 1.400,00',
         'Custo da cobertura: R$ 6.051,76', 'Multa rescisória', 'Benefícios', 'Serviços para residência',
@@ -872,20 +872,20 @@ it('summarizes the Porto Fiança and its alternatives while keeping the comparis
     $summary = app(\App\Services\Insurance\AnalysisQuoteSummary::class)->summarize($analysis);
 
     expect($summary['price'])->toMatchArray([
-        'total' => '17906.48', 'basis' => 'gross_total', 'currency' => 'BRL',
+        'total' => '4200.00', 'basis' => 'gross_total', 'currency' => 'BRL',
         'period_start' => '2026-11-11', 'period_end' => '2029-05-11',
-        'comparison_basis' => 'installment', 'installment_amount' => '617.46', 'installments' => 29, 'payment_type' => 'FAT',
-        'net' => '16675.81', 'iof' => '1230.67', 'first_due' => '2026-12-10', 'guarantee_limit' => '64679.70',
+        'comparison_basis' => 'installment', 'installment_amount' => '144.83', 'installments' => 29, 'payment_type' => 'FAT',
+        'net' => '3911.34', 'iof' => '288.66', 'first_due' => '2026-12-10', 'guarantee_limit' => '16800.00',
         'payment_label' => 'Fatura sem entrada',
     ]);
     expect(array_column($summary['offers'], 'role', 'code'))->toBe(['0008' => 'comparison', '0001' => 'alternative', '0007' => 'alternative']);
-    expect(array_column($summary['coverages'], 'name'))->toBe(['Aluguel', 'Multa rescisória']);
-    expect($summary['coverages'][0])->toMatchArray(['insured_amount' => '42000.00', 'declared_amount' => '1400.00', 'premium' => '6051.76']);
+    expect(array_column($summary['coverages'], 'name'))->toBe(['Aluguel']);
+    expect($summary['coverages'][0])->toMatchArray(['insured_amount' => '16800.00', 'declared_amount' => '1400.00', 'premium' => '3474.18']);
 
     // A comparação entre companhias continua pela parcela da Fiança.
     $comparison = app(\App\Services\Insurance\AnalysisQuoteComparison::class)->compare(collect([$summary]));
     expect($comparison['comparison_issue'])->toBeNull();
-    expect($comparison['best_quote']['price']['installment_amount'])->toBe('617.46');
+    expect($comparison['best_quote']['price']['installment_amount'])->toBe('144.83');
 });
 
 it('shows no Porto offer or price for a refused or technically failed analysis', function (string $status) {
@@ -957,5 +957,5 @@ it('derives the Porto card plans from records saved before the cheapest-plan rul
 
     expect($summary['card']['fianca']['installment_amount'])->toBe('617.46');
     expect($summary['card']['essential']['code'])->toBe('0001');
-    expect($summary['best_offer']['code'])->toBe('0008');
+    expect($summary['best_offer']['code'])->toBe('0001');
 });

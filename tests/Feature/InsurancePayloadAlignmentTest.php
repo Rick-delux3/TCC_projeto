@@ -135,7 +135,7 @@ it('aligns both insurers with the document and rental purpose selected on the fo
         ->and($quote['coberturas'])->not->toHaveKey('valorAgua');
 
     $pottencial = app(RentalGuaranteeQuotePayloadBuilder::class)->build($analysis);
-    expect($pottencial['riskObjects'][0]['occupation'])->toBe($rentalType === 'residencial' ? 'Residencial' : 'Commercial')
+    expect($pottencial['riskObjects'][0]['occupation'])->toBe($rentalType === 'residencial' ? 'Residencial' : 'Comercial')
         ->and($pottencial['riskObjects'][0]['tenantDocumentNumber'])->toBe($company ? '11222333000181' : '07234828702')
         ->and($pottencial['participants'][0]['documentNumber'])->toBe($pottencial['riskObjects'][0]['tenantDocumentNumber'])
         ->and($pottencial['participants'][0]['contact'])->toBe(['email' => 'payload@example.test', 'cellPhoneNumber' => '11999998888'])

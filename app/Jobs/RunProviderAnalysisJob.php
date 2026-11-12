@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Exceptions\InsuranceProviderDisabled;
 use App\Exceptions\InvalidInsuranceAnalysisPayload;
 use App\Exceptions\ObsoleteInsuranceAnalysisAttempt;
 use App\Models\InsuranceAnalysis;
@@ -157,7 +158,7 @@ class RunProviderAnalysisJob implements ShouldQueue
             });
         } catch (ObsoleteInsuranceAnalysisAttempt $obsolete) {
             throw $obsolete;
-        } catch (InvalidInsuranceAnalysisPayload|\DomainException|\InvalidArgumentException $exception) {
+        } catch (InvalidInsuranceAnalysisPayload|InsuranceProviderDisabled|\DomainException|\InvalidArgumentException $exception) {
             $this->failed($exception);
         } catch (\Throwable $exception) {
             InsuranceAnalysisAttempt::run($analysis, $this->attemptId, function () use ($analysis, $exception): void {
