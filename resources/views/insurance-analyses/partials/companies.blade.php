@@ -3,7 +3,7 @@
     $canEditExpenses = ($pageData['permissions']['edit_lead'] ?? false) && ($pageData['permissions']['create_analysis'] ?? false);
     $planNames = ['Basic' => 'Básico', 'Complete' => 'Completo', 'Traditional' => 'Tradicional', 'Tradicional' => 'Tradicional', 'default' => 'Fiança locatícia'];
 @endphp
-<section class="border-top pt-4 mb-4" aria-labelledby="companies-title">
+<section class="ia-companies border-top pt-4 mb-4" aria-labelledby="companies-title">
     <h2 id="companies-title" class="h5 mb-3">Todas as companhias</h2>
     <div class="row g-3">
         @foreach ($providerNames as $provider => $providerName)
@@ -53,26 +53,17 @@
                     ]));
                 }
             @endphp
-            <div class="col-12 col-md-6 col-xl-3" data-analysis-component="provider-{{ $provider }}">
-                <article @class(['card h-100', 'bg-body-tertiary' => $blocked, 'border-success border-2' => ! $blocked && $reanalysisSupported]) data-provider-read-only="{{ $readOnly ? 'true' : 'false' }}" aria-labelledby="provider-{{ $provider }}" data-provider="{{ $provider }}" data-analysis-state="{{ $blocked ? 'blocked' : ($notIncluded ? 'not_included' : ($analysis['display_state']['state'] ?? 'processing')) }}" aria-busy="{{ ! $blocked && ! $notIncluded && ($analysis['display_state']['processing'] ?? true) ? 'true' : 'false' }}">
+            <div class="col-12 col-md-6 col-xl-3" data-analysis-component="provider-{{ $provider }}" style="--ia-i: {{ $loop->index }}">
+                <article @class(['ia-company card h-100', 'bg-body-tertiary' => $blocked, 'border-success border-2' => ! $blocked && $reanalysisSupported]) data-provider-read-only="{{ $readOnly ? 'true' : 'false' }}" aria-labelledby="provider-{{ $provider }}" data-provider="{{ $provider }}" data-analysis-state="{{ $blocked ? 'blocked' : ($notIncluded ? 'not_included' : ($analysis['display_state']['state'] ?? 'processing')) }}" aria-busy="{{ ! $blocked && ! $notIncluded && ($analysis['display_state']['processing'] ?? true) ? 'true' : 'false' }}">
                     <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
-                        <h3 id="provider-{{ $provider }}" class="h6 mb-0">{{ $providerName }}</h3>
+                        <h3 id="provider-{{ $provider }}" class="h6 mb-0">@if ($nvs)<span class="ia-mark" aria-hidden="true">{{ $providerMarks[$provider] }}</span>@endif{{ $providerName }}</h3>
                         @if ($blocked)
                             <span class="badge text-bg-secondary">Bloqueada</span>
                         @else
-                            <button type="button" class="btn btn-sm btn-outline-secondary" data-analysis-dialog="details-{{ $provider }}" aria-haspopup="dialog" aria-controls="details-{{ $provider }}" @disabled(! $analysis)>Visualizar</button>
                             @if ($readOnly)
                                 <span class="badge text-bg-secondary">Desativada</span>
-                            @elseif ($canEditExpenses && $reanalysisSupported)
-                                @php($providerReanalysis = $analysis['actions']['expense_reanalysis'] ?? ['available' => false, 'url' => null])
-                                <button type="button" class="btn btn-sm btn-primary"
-                                    data-provider-reanalysis="{{ $provider }}" data-provider-name="{{ $providerName }}" data-url="{{ $providerReanalysis['url'] }}"
-                                    @disabled(! $providerReanalysis['available'])
-                                    @unless ($providerReanalysis['available']) title="Disponível quando esta companhia concluir a análise atual." @endunless>
-                                    <span class="spinner-border spinner-border-sm me-1 d-none" aria-hidden="true" data-loading-indicator></span>
-                                    <span data-button-label>Reanalisar</span>
-                                </button>
                             @endif
+                            <button type="button" class="btn btn-sm btn-outline-secondary" data-analysis-dialog="details-{{ $provider }}" aria-haspopup="dialog" aria-controls="details-{{ $provider }}" @disabled(! $analysis)>Visualizar</button>
                         @endif
                     </div>
                     <div class="card-body d-flex flex-column justify-content-center text-center">
@@ -118,8 +109,19 @@
                     @if ($blocked)
                         {{-- Companhia desligada no .env: sem aviso de reanálise. --}}
                     @elseif ($reanalysisSupported)
-                        <div class="card-footer bg-success-subtle border-success text-success-emphasis text-center small fw-semibold py-3" data-reanalysis-notice="supported">
-                            Esta companhia permite reanálise.
+                        {{-- A ação fica junto do aviso: só aparece para quem pode editar as despesas. --}}
+                        <div class="card-footer bg-success-subtle border-success text-success-emphasis small fw-semibold py-3 d-flex flex-wrap justify-content-between align-items-center gap-2" data-reanalysis-notice="supported">
+                            <span>Esta companhia permite reanálise.</span>
+                            @if (! $readOnly && $canEditExpenses)
+                                @php($providerReanalysis = $analysis['actions']['expense_reanalysis'] ?? ['available' => false, 'url' => null])
+                                <button type="button" class="btn btn-sm btn-primary"
+                                    data-provider-reanalysis="{{ $provider }}" data-provider-name="{{ $providerName }}" data-url="{{ $providerReanalysis['url'] }}"
+                                    @disabled(! $providerReanalysis['available'])
+                                    @unless ($providerReanalysis['available']) title="Disponível quando esta companhia concluir a análise atual." @endunless>
+                                    <span class="spinner-border spinner-border-sm me-1 d-none" aria-hidden="true" data-loading-indicator></span>
+                                    <span data-button-label>Reanalisar</span>
+                                </button>
+                            @endif
                         </div>
                     @else
                         {{-- Faixa escura com o botão desfocado ao fundo; preço e resultado seguem nítidos. --}}

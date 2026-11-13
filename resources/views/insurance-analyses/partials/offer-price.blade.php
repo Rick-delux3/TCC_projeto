@@ -6,7 +6,7 @@
 @endphp
 <div data-analysis-state="{{ $displayState['state'] ?? $offerStatus }}" aria-busy="{{ ($displayState['processing'] ?? false) ? 'true' : 'false' }}">
 @if ($offerStatus === 'approved' && (float) $amount > 0)
-    <p class="fs-4 fw-bold mb-0">{{ $formatMoney($amount) }}</p>
+    <p class="ia-price fs-4 fw-bold mb-0">{{ $formatMoney($amount) }}</p>
     @if ($splitInstallments)
         <p class="small text-body-secondary mb-0">1ª parcela · depois {{ (int) $count - 1 }}× de {{ $formatMoney($recurring) }}</p>
     @else

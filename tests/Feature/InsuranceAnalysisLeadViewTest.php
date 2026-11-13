@@ -604,6 +604,7 @@ global.document = {
 global.CustomEvent = class {};
 function createAnalysisComponents() { return { update(html) { updates.push(html); }, flush() {} }; }
 function createReanalysisModes() { return { apply() {}, setMode() {} }; }
+function createAnalysisMotion() { return { intro() {}, replaced() {} }; }
 function createAnalysisRealtime(state, options) {
     onState = options.onState;
     return { start() { onState(state); }, destroy() {} };

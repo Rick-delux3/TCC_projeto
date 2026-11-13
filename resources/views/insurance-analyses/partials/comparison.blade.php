@@ -22,6 +22,10 @@
             $offers->splice(1, 0, [$best]);
         }
     }
+    // Diferença de cada oferta para a melhor, na mesma base de comparação (parcela ou total).
+    $comparisonValue = fn ($offer) => (($offer['quote']['price']['comparison_basis'] ?? null) === 'installment')
+        ? (float) $offer['quote']['price']['installment_amount'] : (float) $offer['quote']['price']['total'];
+    $bestOffer = $comparison['available'] ? $offers->firstWhere('id', $comparison['best_quote']['analysis_id']) : null;
 @endphp
 <section class="mb-4" aria-labelledby="comparison-title" data-analysis-component="comparison">
     <h2 id="comparison-title" class="h5">Melhores ofertas</h2>
@@ -34,8 +38,8 @@
                 $isBest = $comparison['available'] && $comparison['best_quote']['analysis_id'] === $offer['id'];
                 $price = $offer['quote']['price'];
             @endphp
-            <div @class(['col-12 col-md-6 col-lg-4', 'order-first order-lg-0' => $isBest])>
-                <article @class(['card h-100', 'border-primary shadow-sm' => $isBest])>
+            <div @class(['col-12 col-md-6 col-lg-4', 'order-first order-lg-0' => $isBest]) style="--ia-i: {{ $loop->index }}">
+                <article @class(['ia-offer card h-100', 'ia-offer--best border-primary shadow-sm' => $isBest])>
                     @if ($isBest)
                         <div class="card-header text-bg-primary">Melhor preço</div>
                     @endif
@@ -46,11 +50,15 @@
                             <p class="small text-body-secondary mb-2" data-comparison-plan>{{ $offer['quote']['best_offer']['name'] }}</p>
                         @endif
                         @if (($price['comparison_basis'] ?? null) === 'installment')
-                            <p @class(['fw-semibold mb-1', 'display-6 text-primary' => $isBest, 'fs-4 text-body-secondary' => ! $isBest])>{{ $formatMoney($price['installment_amount'], $price['currency']) }}</p>
+                            <p @class(['ia-offer__price fw-semibold mb-1', 'display-6 text-primary' => $isBest, 'fs-4 text-body-secondary' => ! $isBest])>{{ $formatMoney($price['installment_amount'], $price['currency']) }}</p>
                             <p class="small text-body-secondary mb-1">Por parcela · {{ $price['installments'] }} parcelas</p>
                         @else
-                            <p @class(['fw-semibold mb-1', 'display-6 text-primary' => $isBest, 'fs-4 text-body-secondary' => ! $isBest])>{{ $formatMoney($price['total'], $price['currency']) }}</p>
+                            <p @class(['ia-offer__price fw-semibold mb-1', 'display-6 text-primary' => $isBest, 'fs-4 text-body-secondary' => ! $isBest])>{{ $formatMoney($price['total'], $price['currency']) }}</p>
                             <p class="small text-body-secondary mb-1">Prêmio bruto total da vigência</p>
+                        @endif
+                        @php($difference = ($bestOffer && ! $isBest) ? round($comparisonValue($offer) - $comparisonValue($bestOffer), 2) : 0)
+                        @if ($difference > 0)
+                            <p class="ia-offer__diff small mb-0">{{ $formatMoney($difference, $price['currency']) }} a mais {{ ($price['comparison_basis'] ?? null) === 'installment' ? 'por parcela' : 'no total' }}</p>
                         @endif
                     </div>
                 </article>

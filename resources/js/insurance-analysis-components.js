@@ -1,4 +1,8 @@
-export function createAnalysisComponents({ root = document, onUpdated = () => {} } = {}) {
+/**
+ * onReplace(key, previous, next) roda depois de cada troca: `previous` já saiu do
+ * DOM, mas mantém atributos e estilos inline para comparar o antes e o depois.
+ */
+export function createAnalysisComponents({ root = document, onUpdated = () => {}, onReplace = () => {} } = {}) {
     const pending = new Map();
     const rendered = new Map();
     const allowed = /^(batch|comparison|actions|expense-form|(?:provider|details)-(?:pottencial|too|tokio|porto))$/;
@@ -16,6 +20,7 @@ export function createAnalysisComponents({ root = document, onUpdated = () => {}
         rendered.set(key, replacement.outerHTML);
         current.replaceWith(replacement);
         pending.delete(key);
+        onReplace(key, current, replacement);
     }
 
     function update(html) {

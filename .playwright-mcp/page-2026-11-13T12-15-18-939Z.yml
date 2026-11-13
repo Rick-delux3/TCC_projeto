@@ -1,0 +1,181 @@
+- main [ref=f8e2]:
+  - generic [ref=f8e3]:
+    - generic [ref=f8e4]:
+      - generic [ref=f8e5]:
+        - paragraph [ref=f8e6]: "Análise de fiança locatícia do lead #8"
+        - heading "Amauri Brito" [level=1] [ref=f8e7]
+        - generic [ref=f8e8]:
+          - generic [ref=f8e9]:
+            - generic [aria-hidden] [ref=f8e10]: 
+            - text: britofdao109209@gmail.com
+          - generic [ref=f8e11]:
+            - generic [aria-hidden] [ref=f8e12]: 
+            - text: "1439861337"
+      - generic [ref=f8e13]:
+        - term [ref=f8e14]: Entrada
+        - definition [ref=f8e15]: 12/11/2026 14:27
+        - term [ref=f8e16]: Vínculo
+        - definition [ref=f8e17]: "Imobiliária #10"
+      - link "Voltar" [ref=f8e19] [cursor=pointer]:
+        - /url: http://127.0.0.1:8000/Dashboard/Admin#leads-section
+        - generic [aria-hidden] [ref=f8e20]: 
+        - text: Voltar
+    - group [ref=f8e21]:
+      - generic "Dados do lead e da locação" [ref=f8e22] [cursor=pointer]
+  - region "Andamento do pacote" [ref=f8e23]:
+    - heading "Andamento do pacote" [level=2] [ref=f8e24]
+    - generic [ref=f8e26]:
+      - generic [ref=f8e27]:
+        - generic [ref=f8e28]: "Pacote #8 · Concluído"
+        - strong [ref=f8e29]: 1 de 1 análises finalizadas (100%)
+      - progressbar "Andamento do pacote" [ref=f8e30]
+      - generic [ref=f8e32]:
+        - generic [ref=f8e33]: 1 aprovadas
+        - generic [ref=f8e34]: 0 recusadas
+        - generic [ref=f8e35]: 0 com falha
+        - generic [ref=f8e36]: 0 aguardando finalização
+      - paragraph [ref=f8e37]:
+        - strong [ref=f8e38]: "Resultado consolidado:"
+        - text: Aprovado
+      - paragraph [ref=f8e39]: "Início: 12/11/2026 · Conclusão: 12/11/2026 · Última atualização: 12/11/2026"
+  - region "Melhores ofertas" [ref=f8e40]:
+    - heading "Melhores ofertas" [level=2] [ref=f8e41]
+    - article [ref=f8e44]:
+      - generic [ref=f8e45]: Melhor preço
+      - generic [ref=f8e46]:
+        - heading "Porto Seguro" [level=3] [ref=f8e47]
+        - paragraph [ref=f8e48]: EMPREENDEDOR
+        - paragraph [ref=f8e49]: R$ 372,60
+        - paragraph [ref=f8e50]: Por parcela · 29 parcelas
+  - region "Todas as companhias" [ref=f8e51]:
+    - heading "Todas as companhias" [level=2] [ref=f8e52]
+    - generic [ref=f8e53]:
+      - article [ref=f8e55]:
+        - generic [ref=f8e56]:
+          - heading "Pottencial" [level=3] [ref=f8e57]:
+            - generic [aria-hidden] [ref=f8e58]: PT
+            - text: Pottencial
+          - generic [ref=f8e59]: Bloqueada
+        - generic [ref=f8e60]:
+          - paragraph [ref=f8e61]: Aguardando testes e validação da integração.
+          - button "Indisponível" [disabled]
+      - article [ref=f8e63]:
+        - generic [ref=f8e64]:
+          - heading "Too Seguros" [level=3] [ref=f8e65]:
+            - generic [aria-hidden] [ref=f8e66]: TS
+            - text: Too Seguros
+          - button "Visualizar" [disabled]
+        - paragraph [ref=f8e68]: Esta companhia não participou deste pacote de análises.
+        - generic [ref=f8e69]:
+          - generic [aria-hidden]: Reanalisar
+          - paragraph [ref=f8e70]: Esta companhia não permite reanálise.
+      - article [ref=f8e72]:
+        - generic [ref=f8e73]:
+          - heading "Porto Seguro" [level=3] [ref=f8e74]:
+            - generic [aria-hidden] [ref=f8e75]: PS
+            - text: Porto Seguro
+          - generic [ref=f8e76]: Desativada
+          - button "Visualizar" [ref=f8e77] [cursor=pointer]
+        - list [ref=f8e79]:
+          - listitem [ref=f8e80]:
+            - heading "EMPREENDEDOR Mais barato" [level=4] [ref=f8e81]:
+              - text: EMPREENDEDOR
+              - generic [ref=f8e82]: Mais barato
+            - generic [ref=f8e83]:
+              - paragraph [ref=f8e84]: R$ 372,60
+              - paragraph [ref=f8e85]: Por parcela · 29 parcelas
+        - generic [ref=f8e86]: Esta companhia permite reanálise.
+      - dialog "Detalhes da cotação · Porto Seguro" [ref=f8e104]:
+        - generic [ref=f8e105]:
+          - generic [ref=f8e106]:
+            - heading "Detalhes da cotação · Porto Seguro" [level=2] [ref=f8e107]
+            - button "Fechar detalhes" [active] [ref=f8e108] [cursor=pointer]
+          - generic [ref=f8e111]:
+            - generic [ref=f8e112]:
+              - heading "EMPREENDEDOR" [level=3] [ref=f8e113]
+              - generic [ref=f8e114]: Mais barato
+              - generic [ref=f8e115]: Exibido no card
+            - paragraph [ref=f8e116]: Amauri Brito
+            - generic [ref=f8e117]:
+              - paragraph [ref=f8e118]: R$ 372,60
+              - paragraph [ref=f8e119]: Por parcela · 29 parcelas
+            - generic "Valores por condição de entrada" [ref=f8e120]:
+              - generic [ref=f8e122]:
+                - heading "Sem entrada" [level=4] [ref=f8e123]
+                - paragraph [ref=f8e124]: R$ 372,60 por parcela
+                - paragraph [ref=f8e125]: 29 parcelas · Fatura sem entrada
+              - generic [ref=f8e127]:
+                - heading "Com entrada" [level=4] [ref=f8e128]
+                - paragraph [ref=f8e129]: R$ 372,60 por parcela
+                - paragraph [ref=f8e130]: 29 parcelas · 1ª em boleto, demais em fatura
+            - paragraph [ref=f8e131]: 29 parcelas de R$ 372,60
+            - generic [ref=f8e132]:
+              - term [ref=f8e133]: Pagamento
+              - definition [ref=f8e134]: Fatura sem entrada
+              - term [ref=f8e135]: Primeiro vencimento
+              - definition [ref=f8e136]: 10/12/2026
+              - term [ref=f8e137]: Vigência
+              - definition [ref=f8e138]: 12/11/2026 até 12/05/2029
+              - term [ref=f8e139]: Custo total do seguro
+              - definition [ref=f8e140]: R$ 10.805,53
+              - term [ref=f8e141]: Prêmio líquido
+              - definition [ref=f8e142]: R$ 10.062,89
+              - term [ref=f8e143]: IOF
+              - definition [ref=f8e144]: R$ 742,64
+              - term [ref=f8e145]: Limite máximo de garantia
+              - definition [ref=f8e146]: R$ 73.919,82
+            - heading "Coberturas e valores" [level=4] [ref=f8e147]
+            - list [ref=f8e148]:
+              - listitem [ref=f8e149]:
+                - strong [ref=f8e150]: Aluguel
+                - generic [ref=f8e151]: "Limite de cobertura: R$ 48.000,00"
+                - generic [ref=f8e152]: "Valor declarado: R$ 1.600,00"
+                - generic [ref=f8e153]: "Custo da cobertura: R$ 6.837,60"
+              - listitem [ref=f8e154]:
+                - strong [ref=f8e155]: Água
+                - generic [ref=f8e156]: "Limite de cobertura: R$ 959,82"
+                - generic [ref=f8e157]: "Valor declarado: R$ 159,97"
+                - generic [ref=f8e158]: "Custo da cobertura: R$ 253,62"
+              - listitem [ref=f8e159]:
+                - strong [ref=f8e160]: Energia elétrica
+                - generic [ref=f8e161]: "Limite de cobertura: R$ 960,00"
+                - generic [ref=f8e162]: "Valor declarado: R$ 160,00"
+                - generic [ref=f8e163]: "Custo da cobertura: R$ 253,66"
+              - listitem [ref=f8e164]:
+                - strong [ref=f8e165]: Danos ao imóvel
+                - generic [ref=f8e166]: "Limite de cobertura: R$ 9.600,00"
+                - generic [ref=f8e167]: "Valor declarado: R$ 1.600,00"
+                - generic [ref=f8e168]: "Custo da cobertura: R$ 1.211,19"
+              - listitem [ref=f8e169]:
+                - strong [ref=f8e170]: Pintura interna
+                - generic [ref=f8e171]: "Limite de cobertura: R$ 4.800,00"
+                - generic [ref=f8e172]: "Valor declarado: R$ 1.600,00"
+                - generic [ref=f8e173]: "Custo da cobertura: R$ 480,17"
+              - listitem [ref=f8e174]:
+                - strong [ref=f8e175]: Pintura externa
+                - generic [ref=f8e176]: "Limite de cobertura: R$ 4.800,00"
+                - generic [ref=f8e177]: "Valor declarado: R$ 1.600,00"
+                - generic [ref=f8e178]: "Custo da cobertura: R$ 624,22"
+              - listitem [ref=f8e179]:
+                - strong [ref=f8e180]: Multa rescisória
+                - generic [ref=f8e181]: "Limite de cobertura: R$ 4.800,00"
+                - generic [ref=f8e182]: "Valor declarado: R$ 1.600,00"
+                - generic [ref=f8e183]: "Custo da cobertura: R$ 402,43"
+          - button "Fechar" [ref=f8e185] [cursor=pointer]
+      - article [ref=f8e89]:
+        - generic [ref=f8e90]:
+          - heading "Tokio Marine" [level=3] [ref=f8e91]:
+            - generic [aria-hidden] [ref=f8e92]: TM
+            - text: Tokio Marine
+          - generic [ref=f8e93]: Bloqueada
+        - generic [ref=f8e94]:
+          - paragraph [ref=f8e95]: Aguardando testes e validação da integração.
+          - button "Indisponível" [disabled]
+  - generic [ref=f8e96]:
+    - button "Editar despesas" [ref=f8e98] [cursor=pointer]:
+      - generic [aria-hidden] [ref=f8e99]: 
+      - text: Editar despesas
+    - paragraph [ref=f8e100]:
+      - text: "A reanálise é feita por companhia: salve as despesas e clique em"
+      - strong [ref=f8e101]: Reanalisar
+      - text: na companhia desejada. Companhias ainda em análise aguardam o resultado atual.

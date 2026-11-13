@@ -1,19 +1,19 @@
-<header class="border-bottom pb-4 mb-4">
-    <div class="row g-3 align-items-center">
-        <div class="col-md-7">
-            <p class="text-body-secondary mb-1">Análise de fiança locatícia · Lead #{{ $leadData['id'] }}</p>
+<header class="ia-lead border-bottom pb-4 mb-4">
+    <div class="row g-3 align-items-start">
+        <div class="col-md-7 min-w-0">
+            <p class="ia-lead__context text-body-secondary mb-1">Análise de fiança locatícia do lead #{{ $leadData['id'] }}</p>
             <h1 class="h3">{{ $leadData['nome'] }}</h1>
-            <div class="d-flex flex-wrap gap-3 text-break">
-                <span>{{ $leadData['email'] ?: 'E-mail não informado' }}</span>
-                <span>{{ $leadData['tel'] ?: 'Telefone não informado' }}</span>
+            <div class="ia-lead__contacts d-flex flex-wrap column-gap-4 row-gap-1 text-break">
+                <span>@if ($nvs)<i class="bi bi-envelope" aria-hidden="true"></i>@endif{{ $leadData['email'] ?: 'E-mail não informado' }}</span>
+                <span>@if ($nvs)<i class="bi bi-telephone" aria-hidden="true"></i>@endif{{ $leadData['tel'] ?: 'Telefone não informado' }}</span>
             </div>
         </div>
-        <div class="col-md-3">
-            <p class="mb-1"><strong>Entrada:</strong> {{ $lead->created_at?->format('d/m/Y H:i') ?? 'Não informada' }}</p>
-            <p class="mb-0"><strong>Vínculo:</strong> {{ $lead->company_id ? 'Imobiliária #'.$lead->company_id : 'Sem imobiliária vinculada' }}</p>
-        </div>
+        <dl class="ia-lead__meta col-md-3 mb-0">
+            <dt>Entrada</dt><dd>{{ $lead->created_at?->format('d/m/Y H:i') ?? 'Não informada' }}</dd>
+            <dt>Vínculo</dt><dd class="mb-0">{{ $lead->company_id ? 'Imobiliária #'.$lead->company_id : 'Sem imobiliária vinculada' }}</dd>
+        </dl>
         <div class="col-md-2 text-md-end">
-            <a href="{{ $navigation['return_url'] }}" class="btn btn-outline-secondary">Voltar</a>
+            <a href="{{ $navigation['return_url'] }}" class="btn btn-outline-secondary">@if ($nvs)<i class="bi bi-arrow-left me-2" aria-hidden="true"></i>@endif Voltar</a>
         </div>
     </div>
     <details class="mt-3">
