@@ -517,9 +517,6 @@
                     @endcan
                 @endif
 
-                <button type="button" class="btn btn-outline-secondary" id="dashboardThemeToggle">
-                    Modo escuro
-                </button>
             </div>
         </div>
 

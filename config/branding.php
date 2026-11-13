@@ -17,6 +17,8 @@ return [
             'short_name' => 'NVS',
             'logo' => 'imgs/Logo_NVS.png',
             'logo_header' => 'imgs/Logo_NVS.png',
+            'logo_header_transparent' => 'imgs/Logo_NVS-transparent.png',
+            'logo_header_light' => 'imgs/Logo_NVS-transparent-outline.png',
             'logo_email' => 'imgs/Logo_NVS.png',
             'favicon' => 'imgs/Logo_NVS.png',
             'favicon_type' => 'image/png',

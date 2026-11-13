@@ -5,6 +5,7 @@ use App\Models\Imobiliaria;
 use App\Models\User;
 use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\ViewErrorBag;
 
 beforeEach(function () {
     $this->withoutVite();
@@ -92,6 +93,8 @@ it('connects the tcc landing actions and serves local images with valid section 
     expect($xpath->query('//header//button')->length)->toBe(0)
         ->and($xpath->query('//header//nav')->length)->toBe(1)
         ->and($navigation->getAttribute('class'))->not->toContain('hidden')
+        ->and($navigation->getAttribute('class'))->toContain('lg:gap-8', 'xl:gap-16', '2xl:gap-20')
+        ->and($navigation->parentNode->getAttribute('class'))->toContain('w-full', 'max-w-none', 'lg:px-[4vw]')
         ->and($xpath->query('.//a[starts-with(@href, "#")]', $navigation)->length)->toBe(4)
         ->and($xpath->query('//*[@id="nvs-mobile-menu"]')->length)->toBe(0);
 });
@@ -389,7 +392,7 @@ it('uses the configured header logo in the shared authentication topbar', functi
         ->not->toContain($unexpectedLogo)
         ->toContain('object-fit: contain;');
 })->with([
-    'tcc topbar' => ['tcc', 'imgs/Logo_NVS.png', 'imgs/logo-header.jpg'],
+    'tcc topbar' => ['tcc', 'imgs/Logo_NVS.png', 'imgs/Logo_NVS-transparent-outline.png'],
     'client topbar' => ['client', 'imgs/logo-header.jpg', 'imgs/Logo_NVS.png'],
 ]);
 
@@ -424,7 +427,7 @@ it('keeps both web two-factor views isolated to the active brand', function (
 ) {
     config(['branding.active' => $profile]);
 
-    $viewData = ['errors' => new Illuminate\Support\ViewErrorBag];
+    $viewData = ['errors' => new ViewErrorBag];
     $companyHtml = view('auth.2fa', $viewData)->render();
     $adminHtml = view('auth.admin-2fa', $viewData)->render();
 
@@ -630,3 +633,18 @@ it('registers one coherent root route and keeps the original route name', functi
         ->and(Route::getRoutes()->getByName('index'))->not->toBeNull()
         ->and(Route::getRoutes()->getByName('index')->uri())->toBe('/');
 });
+
+it('shows the original NVS logo across company authentication pages', function (string $routeName): void {
+    config(['branding.active' => 'tcc']);
+    $response = $this->get(route($routeName))->assertOk();
+    $document = new DOMDocument;
+    $previous = libxml_use_internal_errors(true);
+    $document->loadHTML('<?xml encoding="UTF-8">'.$response->getContent());
+    libxml_clear_errors();
+    libxml_use_internal_errors($previous);
+    $xpath = new DOMXPath($document);
+
+    expect($xpath->query('//header//img[@src="'.asset('imgs/Logo_NVS.png').'"]')->length)->toBe(1);
+    $response->assertSee('background: #030133;', false)
+        ->assertDontSee('imgs/Logo_NVS-transparent-outline.png', false);
+})->with(['empresa.login', 'empresa.register.form', 'company.password.request']);

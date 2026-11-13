@@ -80,17 +80,13 @@
     $operationLabel = $brandProfile === 'client'
         ? 'Operação ativa'
         : 'Sistema operacional';
-    $currentSectionLabel = match (true) {
-        request()->routeIs('admin.imobiliarias.*') => 'Imobiliárias',
-        request()->routeIs('admin.insurance-analyses.*') => 'Propostas',
-        request()->routeIs('admin.config-equipe.*') => 'Equipe',
-        default => 'Central de leads',
-    };
 @endphp
 
 <header
     class="dashboard-client-header sticky-top"
     data-dashboard-header="{{ $brandProfile }}"
+    x-data="{ searchOpen: false }"
+    @keydown.escape.window="searchOpen = false"
 >
     <div class="dashboard-client-header__primary">
         <div class="dashboard-client-header__rail">
@@ -109,7 +105,7 @@
         <div class="navbar navbar-expand dashboard-client-navbar">
             <a class="navbar-brand dashboard-client-brand" href="{{ $dashboardRoute }}">
                 <span class="dashboard-client-brand__logo">
-                    <x-brand-logo variant="logo_header" />
+                    <x-brand-logo :variant="$brandProfile === 'tcc' ? 'logo_header_transparent' : 'logo_header'" />
                 </span>
 
                 <span class="dashboard-client-brand__text d-none d-sm-flex">
@@ -118,7 +114,60 @@
                 </span>
             </a>
 
+            @can('view-leads')
+                <form
+                    action="{{ $dashboardRoute }}#leads-section"
+                    method="GET"
+                    role="search"
+                    class="dashboard-header-search"
+                    :class="{ 'is-open': searchOpen }"
+                    id="adminHeaderSearch"
+                >
+                    <label class="visually-hidden" for="adminHeaderSearchInput">Buscar leads por nome, e-mail, CPF ou telefone</label>
+                    <i class="bi bi-search" aria-hidden="true"></i>
+                    <input
+                        id="adminHeaderSearchInput"
+                        x-ref="headerSearch"
+                        type="search"
+                        name="lead_name"
+                        maxlength="255"
+                        value="{{ request('lead_name') }}"
+                        placeholder="Buscar nome, e-mail, CPF ou telefone"
+                    >
+                    <button type="submit" class="btn" aria-label="Buscar leads" title="Buscar leads">
+                        <i class="bi bi-arrow-right" aria-hidden="true"></i>
+                    </button>
+                </form>
+            @endcan
+
             <div class="dashboard-header-actions">
+                @can('view-leads')
+                    <button
+                        type="button"
+                        class="btn dashboard-header-search-toggle"
+                        aria-label="Abrir busca de leads"
+                        aria-controls="adminHeaderSearch"
+                        :aria-expanded="searchOpen.toString()"
+                        @click="searchOpen = !searchOpen; if (searchOpen) $nextTick(() => $refs.headerSearch.focus())"
+                    >
+                        <i class="bi bi-search" aria-hidden="true"></i>
+                    </button>
+                @endcan
+
+                @can('access-simulation-forms')
+                    @if (request()->routeIs('Dashboard-Admin'))
+                        <button type="button" class="btn dashboard-header-new-lead" aria-label="Novo lead" title="Novo lead" data-bs-toggle="modal" data-bs-target="#adminSimulationModal">
+                            <i class="bi bi-plus-lg" aria-hidden="true"></i>
+                            <span>Novo lead</span>
+                        </button>
+                    @else
+                        <a href="{{ $dashboardRoute }}#new-lead-title" class="btn dashboard-header-new-lead" aria-label="Novo lead" title="Novo lead">
+                            <i class="bi bi-plus-lg" aria-hidden="true"></i>
+                            <span>Novo lead</span>
+                        </a>
+                    @endif
+                @endcan
+
                 <button
                     type="button"
                     class="btn dashboard-header-theme-toggle"
@@ -223,62 +272,6 @@
         </div>
     </div>
 
-    <div class="dashboard-client-header__secondary">
-        <div class="dashboard-header-secondary-inner">
-            <nav class="dashboard-header-nav" aria-label="Seções do painel">
-                <a class="dashboard-header-nav__link" href="{{ $dashboardRoute }}">
-                    Visão geral
-                </a>
-
-                @can('view-leads')
-                    <a
-                        class="dashboard-header-nav__link {{ request()->routeIs('Dashboard-Admin') || request()->routeIs('admin.leads.*') ? 'active' : '' }}"
-                        href="{{ $leadsRoute }}"
-                        @if (request()->routeIs('Dashboard-Admin') || request()->routeIs('admin.leads.*')) aria-current="page" @endif
-                    >
-                        Leads
-                    </a>
-                @endcan
-
-                @can('view-real-estate-companies')
-                    <a
-                        class="dashboard-header-nav__link {{ request()->routeIs('admin.imobiliarias.*') ? 'active' : '' }}"
-                        href="{{ $imobiliariasRoute }}"
-                        @if (request()->routeIs('admin.imobiliarias.*')) aria-current="page" @endif
-                    >
-                        Imobiliárias
-                    </a>
-                @endcan
-
-                @can('manage-organization')
-                    <a
-                        class="dashboard-header-nav__link {{ request()->routeIs('admin.config-equipe.*') ? 'active' : '' }}"
-                        href="{{ $equipeRoute }}"
-                        @if (request()->routeIs('admin.config-equipe.*')) aria-current="page" @endif
-                    >
-                        Equipe
-                    </a>
-                @endcan
-
-                @if ($insuranceAnalysisEnabled)
-                    @can('view-analyses')
-                        <a
-                            class="dashboard-header-nav__link {{ request()->routeIs('admin.insurance-analyses.*') ? 'active' : '' }}"
-                            href="{{ $analisesRoute }}"
-                            @if (request()->routeIs('admin.insurance-analyses.*')) aria-current="page" @endif
-                        >
-                            Propostas
-                        </a>
-                    @endcan
-                @endif
-            </nav>
-            <div class="dashboard-header-breadcrumb" aria-label="Localização atual">
-                <span>Dashboard</span>
-                <i class="bi bi-slash-lg" aria-hidden="true"></i>
-                <strong>{{ $currentSectionLabel }}</strong>
-            </div>
-        </div>
-    </div>
 </header>
 
 {{-- Menu lateral vertical --}}
@@ -291,7 +284,7 @@
     <div class="offcanvas-header border-bottom">
         <div class="d-flex align-items-center gap-3">
             <span class="dashboard-sidebar-logo">
-                <x-brand-logo variant="logo_header" />
+                <x-brand-logo :variant="$brandProfile === 'tcc' ? 'logo_header_transparent' : 'logo_header'" />
             </span>
 
             <div>

@@ -270,7 +270,7 @@
                 <div class="card-body p-4 p-lg-5">
                     <div class="team-form-brand-row d-flex align-items-center gap-3 mb-4 pe-5">
                         <span class="team-create-brand">
-                            <x-brand-logo />
+                            <x-brand-logo :variant="config('branding.active', 'tcc') === 'tcc' ? 'logo_header_transparent' : 'logo'" />
                         </span>
 
                         <div>
