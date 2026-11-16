@@ -22,7 +22,7 @@ use RuntimeException;
 class RefusalLetterDownloadService
 {
     /** Companhias com carta liberada na página. As demais entram aqui conforme forem validadas. */
-    public const PROVIDERS = ['too', 'pottencial'];
+    public const PROVIDERS = ['too', 'pottencial', 'porto'];
 
     private const DOCUMENT_KEY_PREFIX = 'page-refusal-';
 
@@ -40,10 +40,10 @@ class RefusalLetterDownloadService
 
         $scenarios = ($analysis->currentProviderRun?->scenarios ?? collect())->keyBy('kind');
         $scenario = $scenarios->get('joint') ?? $scenarios->get('primary');
+        if (in_array($analysis->provider, ['pottencial', 'porto'], true) && $scenarios->has('spouse') && ! $scenarios->has('joint')) {
+            return null;
+        }
         if ($analysis->provider === 'pottencial') {
-            if ($scenarios->has('spouse') && ! $scenarios->has('joint')) {
-                return null;
-            }
             $candidates = $scenario?->quotes->filter(fn (InsuranceQuote $quote): bool => $quote->status === 'rejected'
                 && filled($this->proposal($quote)));
             $quote = $candidates?->firstWhere('quote_id', $analysis->quote_id) ?? $candidates?->first();
@@ -125,6 +125,7 @@ class RefusalLetterDownloadService
         return match ($analysis->provider) {
             'too' => app(TooService::class)->getCreditOpinionPdf($this->tooCpf($analysis, $quote), $proposal),
             'pottencial' => app(PottencialService::class)->getRentalGuaranteeRefusalLetter($proposal),
+            'porto' => app(PortoService::class)->refusalLetter($proposal),
             default => throw new RefusalLetterUnavailable('Companhia sem carta de recusa disponível na página.'),
         };
     }
@@ -134,6 +135,7 @@ class RefusalLetterDownloadService
         return match ($quote->provider) {
             'too' => $quote->tooNumeroProposta(),
             'pottencial' => $quote->quote_id,
+            'porto' => PortoQuoteResponse::budgetNumber($quote->quote_id),
             default => null,
         };
     }

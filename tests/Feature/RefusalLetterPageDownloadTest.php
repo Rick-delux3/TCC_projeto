@@ -77,6 +77,99 @@ function tooLetterUrl(string $proposal): string
     return "https://too.test/fianca/credito/98940357876/{$proposal}/parecer";
 }
 
+function portoLetterFake(array $response): void
+{
+    config([
+        'services.porto.enabled' => true,
+        'services.porto.base_url' => 'https://portoapicloud-hml.portoseguro.com.br/fianca-locaticia',
+        'services.porto.susep' => 'ABC12J', 'services.porto.origin' => '22',
+    ]);
+    test()->mock(\App\Services\Insurance\PortoAuthentication::class)->shouldReceive('token')->andReturn([
+        'success' => true, 'access_token' => 'porto-test-token',
+    ]);
+    Http::fake(['https://portoapicloud-hml.portoseguro.com.br/*' => Http::response($response)]);
+}
+
+it('connects the Porto letter to the page and downloads its Base64 PDF only once', function (): void {
+    letterAnalysis('too', 'approved', ['primary' => ['approved', null]]);
+    $porto = letterAnalysis('porto', 'rejected', ['primary' => ['rejected', null]]);
+    $quote = letterQuote($porto, 'primary');
+    $quote->update(['quote_id' => '000000011900001']);
+    portoLetterFake(['status' => 200, 'data' => ['file' => base64_encode($this->pdf)]]);
+    $url = route('insurance-analyses.refusal-letter', ['analysis' => $porto->id, 'quote' => $quote->id]);
+    $this->actingAs($this->user)->withSession(['2fa_passed' => true]);
+    $this->getJson(route('insurance-analyses.data', $this->lead))->assertOk()
+        ->assertJsonPath('data.analyses.1.actions.refusal_letter.available', true)
+        ->assertJsonPath('data.analyses.1.actions.refusal_letter.url', $url);
+    foreach ([1, 2] as $download) {
+        $response = $this->get($url)->assertOk()->assertHeader('Content-Type', 'application/pdf')
+            ->assertHeader('X-Content-Type-Options', 'nosniff')
+            ->assertDownload('carta-recusa-porto-lead-'.$this->lead->id.'.pdf');
+        expect($response->getContent())->toBe($this->pdf)
+            ->and($response->headers->get('Cache-Control'))->toContain('no-store');
+    }
+    Http::assertSentCount(1);
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'GET'
+        && $request->url() === 'https://portoapicloud-hml.portoseguro.com.br/fianca-locaticia/emissao/aluguel-essencial/v1/orcamentos/000000011900001/ABC12J/pdf/carta-recusa'
+        && $request->hasHeader('Authorization', 'Bearer porto-test-token')
+        && $request->hasHeader('access_token', 'porto-test-token'));
+    $event = $porto->events()->where('event_type', 'document_generated')->sole();
+    expect(Storage::disk('local')->get($event->payload['path']))->toBe($this->pdf);
+});
+
+it('downloads only the Porto joint budget and blocks individual letters', function (): void {
+    letterAnalysis('too', 'approved', ['primary' => ['approved', null]]);
+    $porto = letterAnalysis('porto', 'rejected', [
+        'primary' => ['rejected', null], 'spouse' => ['rejected', null], 'joint' => ['rejected', null],
+    ]);
+    foreach (['primary' => '000000011900001', 'spouse' => '000000011900002', 'joint' => '000000011900003'] as $kind => $budget) {
+        letterQuote($porto, $kind)->update(['quote_id' => $budget]);
+    }
+    $porto->update(['quote_id' => '000000011900001']);
+    portoLetterFake(['data' => ['file' => base64_encode($this->pdf)]]);
+    $this->actingAs($this->user)->withSession(['2fa_passed' => true]);
+    foreach (['primary', 'spouse'] as $kind) {
+        $this->get(route('insurance-analyses.refusal-letter', ['analysis' => $porto->id, 'quote' => letterQuote($porto, $kind)->id]))->assertNotFound();
+    }
+    $this->get(route('insurance-analyses.refusal-letter', ['analysis' => $porto->id, 'quote' => letterQuote($porto, 'joint')->id]))->assertOk();
+    Http::assertSentCount(1);
+    Http::assertSent(fn (Request $request): bool => str_contains($request->url(), '/000000011900003/ABC12J/'));
+});
+
+it('blocks ineligible Porto page letters without calling the insurer', function (string $case): void {
+    $porto = letterAnalysis('porto', 'rejected', ['primary' => ['rejected', null]]);
+    $quote = letterQuote($porto, 'primary');
+    $quote->update(['quote_id' => match ($case) {
+        'missing-budget' => null, 'invalid-budget' => '123', default => '000000011900001'
+    }]);
+    if ($case !== 'all-refused') {
+        letterAnalysis('too', 'approved', ['primary' => ['approved', null]]);
+    }
+    $user = $case === 'other-company' ? User::factory()->create(['company_id' => Imobiliaria::factory()->create()->id]) : $this->user;
+    $response = $this->actingAs($user)->withSession(['2fa_passed' => true])
+        ->get(route('insurance-analyses.refusal-letter', ['analysis' => $porto->id, 'quote' => $quote->id]));
+    $case === 'other-company' ? $response->assertForbidden() : $response->assertNotFound();
+    Http::assertNothingSent();
+})->with(['missing-budget', 'invalid-budget', 'all-refused', 'other-company']);
+
+it('keeps Porto refused without saving an absent or invalid letter', function (array $response): void {
+    letterAnalysis('too', 'approved', ['primary' => ['approved', null]]);
+    $porto = letterAnalysis('porto', 'rejected', ['primary' => ['rejected', null]]);
+    $quote = letterQuote($porto, 'primary');
+    $quote->update(['quote_id' => '000000011900001']);
+    portoLetterFake($response);
+    $this->actingAs($this->user)->withSession(['2fa_passed' => true])
+        ->get(route('insurance-analyses.refusal-letter', ['analysis' => $porto->id, 'quote' => $quote->id]))
+        ->assertRedirect(route('insurance-analyses.lead', $this->lead))->assertSessionHas('error');
+    expect(Storage::disk('local')->allFiles())->toBe([])
+        ->and($porto->fresh()->status)->toBe('rejected');
+    Http::assertSentCount(1);
+})->with([
+    'missing file' => [['status' => 200, 'data' => null]],
+    'invalid Base64' => [['data' => ['file' => '***']]],
+    'not PDF' => [['data' => ['file' => base64_encode('<html>error</html>')]]],
+]);
+
 it('downloads and privately caches the Pottencial letter using the rejected quote id', function (): void {
     config(['services.pottencial.base_url' => 'https://pottencial.test', 'services.pottencial.client_id' => 'client-id']);
     Cache::put('pottencial_access_token', 'pottencial-token', now()->addMinutes(5));
