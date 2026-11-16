@@ -22,7 +22,7 @@ use RuntimeException;
 class RefusalLetterDownloadService
 {
     /** Companhias com carta liberada na página. As demais entram aqui conforme forem validadas. */
-    public const PROVIDERS = ['too'];
+    public const PROVIDERS = ['too', 'pottencial'];
 
     private const DOCUMENT_KEY_PREFIX = 'page-refusal-';
 
@@ -40,6 +40,16 @@ class RefusalLetterDownloadService
 
         $scenarios = ($analysis->currentProviderRun?->scenarios ?? collect())->keyBy('kind');
         $scenario = $scenarios->get('joint') ?? $scenarios->get('primary');
+        if ($analysis->provider === 'pottencial') {
+            if ($scenarios->has('spouse') && ! $scenarios->has('joint')) {
+                return null;
+            }
+            $candidates = $scenario?->quotes->filter(fn (InsuranceQuote $quote): bool => $quote->status === 'rejected'
+                && filled($this->proposal($quote)));
+            $quote = $candidates?->firstWhere('quote_id', $analysis->quote_id) ?? $candidates?->first();
+
+            return $quote?->setRelation('scenario', $scenario);
+        }
         $quote = $scenario?->quotes->firstWhere('status', 'rejected');
 
         return $quote && filled($this->proposal($quote)) ? $quote->setRelation('scenario', $scenario) : null;
@@ -114,6 +124,7 @@ class RefusalLetterDownloadService
     {
         return match ($analysis->provider) {
             'too' => app(TooService::class)->getCreditOpinionPdf($this->tooCpf($analysis, $quote), $proposal),
+            'pottencial' => app(PottencialService::class)->getRentalGuaranteeRefusalLetter($proposal),
             default => throw new RefusalLetterUnavailable('Companhia sem carta de recusa disponível na página.'),
         };
     }
@@ -122,6 +133,7 @@ class RefusalLetterDownloadService
     {
         return match ($quote->provider) {
             'too' => $quote->tooNumeroProposta(),
+            'pottencial' => $quote->quote_id,
             default => null,
         };
     }

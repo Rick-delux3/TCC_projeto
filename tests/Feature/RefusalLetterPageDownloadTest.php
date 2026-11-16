@@ -77,6 +77,81 @@ function tooLetterUrl(string $proposal): string
     return "https://too.test/fianca/credito/98940357876/{$proposal}/parecer";
 }
 
+it('downloads and privately caches the Pottencial letter using the rejected quote id', function (): void {
+    config(['services.pottencial.base_url' => 'https://pottencial.test', 'services.pottencial.client_id' => 'client-id']);
+    Cache::put('pottencial_access_token', 'pottencial-token', now()->addMinutes(5));
+    letterAnalysis('too', 'approved', ['primary' => ['approved', null]]);
+    $analysis = letterAnalysis('pottencial', 'rejected', ['primary' => ['rejected', null]]);
+    $first = letterQuote($analysis, 'primary');
+    $first->update(['plan_key' => 'Basic']);
+    $quote = $first->scenario->quotes()->create(array_merge($first->getAttributes(), [
+        'id' => null, 'plan_key' => 'Complete', 'quote_id' => '11111111-1111-4111-8111-111111111111',
+    ]));
+    $analysis->update(['quote_id' => $quote->quote_id]);
+    $endpoint = 'https://pottencial.test/insurance/v1/fianca-locaticia/quotes/'.$quote->quote_id.'/letters';
+    Http::fake([$endpoint => Http::response($this->pdf, 200, ['Content-Type' => 'application/pdf'])]);
+    $this->actingAs($this->user)->withSession(['2fa_passed' => true]);
+    $url = route('insurance-analyses.refusal-letter', ['analysis' => $analysis->id, 'quote' => $quote->id]);
+    $this->getJson(route('insurance-analyses.data', $this->lead))
+        ->assertJsonPath('data.analyses.1.actions.refusal_letter.url', $url);
+    foreach ([1, 2] as $download) {
+        $response = $this->get($url)->assertOk()->assertDownload('carta-recusa-pottencial-lead-'.$this->lead->id.'.pdf');
+        expect($response->getContent())->toBe($this->pdf);
+    }
+    Http::assertSentCount(1);
+    Http::assertSent(fn (Request $request): bool => $request->method() === 'GET' && $request->url() === $endpoint
+        && $request->hasHeader('access_token', 'pottencial-token'));
+});
+
+it('selects only a Pottencial joint refusal and falls back to a refused plan with an id', function (): void {
+    $analysis = letterAnalysis('pottencial', 'rejected', [
+        'primary' => ['rejected', null], 'spouse' => ['rejected', null], 'joint' => ['rejected', null],
+    ]);
+    $primary = letterQuote($analysis, 'primary');
+    $primary->update(['quote_id' => 'primary-id']);
+    $analysis->update(['quote_id' => 'primary-id']);
+    $joint = letterQuote($analysis, 'joint');
+    $joint->update(['quote_id' => 'joint-id']);
+    $selected = app(\App\Services\Insurance\RefusalLetterDownloadService::class)->letterQuote($analysis->fresh());
+    expect($selected->id)->toBe($joint->id)->and($selected->scenario->kind)->toBe('joint');
+    letterAnalysis('too', 'approved', ['primary' => ['approved', null]]);
+    $this->actingAs($this->user)->withSession(['2fa_passed' => true])
+        ->get(route('insurance-analyses.refusal-letter', ['analysis' => $analysis->id, 'quote' => $primary->id]))->assertNotFound();
+    Http::assertNothingSent();
+});
+
+it('keeps Pottencial letters unavailable without an eligible refused budget', function (string $case): void {
+    $analysis = letterAnalysis('pottencial', 'rejected', ['primary' => ['rejected', null]]);
+    $quote = letterQuote($analysis, 'primary');
+    if ($case !== 'missing-id') {
+        $quote->update(['quote_id' => 'refused-id']);
+    }
+    if ($case === 'other-company') {
+        letterAnalysis('too', 'approved', ['primary' => ['approved', null]]);
+        $user = User::factory()->create(['company_id' => Imobiliaria::factory()->create()->id]);
+    } else {
+        $user = $this->user;
+    }
+    $response = $this->actingAs($user)->withSession(['2fa_passed' => true])
+        ->get(route('insurance-analyses.refusal-letter', ['analysis' => $analysis->id, 'quote' => $quote->id]));
+    $case === 'other-company' ? $response->assertForbidden() : $response->assertNotFound();
+    Http::assertNothingSent();
+})->with(['missing-id', 'all-refused', 'other-company']);
+
+it('does not save a Pottencial response that is not a PDF', function (): void {
+    config(['services.pottencial.base_url' => 'https://pottencial.test']);
+    Cache::put('pottencial_access_token', 'test-token', now()->addMinutes(5));
+    letterAnalysis('too', 'approved', ['primary' => ['approved', null]]);
+    $analysis = letterAnalysis('pottencial', 'rejected', ['primary' => ['rejected', null]]);
+    $quote = letterQuote($analysis, 'primary');
+    $quote->update(['quote_id' => 'refused-id']);
+    Http::fake(['https://pottencial.test/*' => Http::response('<html>error</html>')]);
+    $this->actingAs($this->user)->withSession(['2fa_passed' => true])
+        ->get(route('insurance-analyses.refusal-letter', ['analysis' => $analysis->id, 'quote' => $quote->id]))
+        ->assertRedirect(route('insurance-analyses.lead', $this->lead))->assertSessionHas('error');
+    expect(Storage::disk('local')->allFiles())->toBe([]);
+});
+
 it('shows the Too letter link when another company approved and downloads the PDF once', function (): void {
     letterAnalysis('pottencial', 'approved', ['primary' => ['approved', null]]);
     $too = letterAnalysis('too', 'rejected', ['primary' => ['rejected', '261113346000013']]);
