@@ -77,6 +77,58 @@ function tooLetterUrl(string $proposal): string
     return "https://too.test/fianca/credito/98940357876/{$proposal}/parecer";
 }
 
+it('shows the Tokio document notice only for a refused analysis', function (string $status, bool $anotherApproved): void {
+    config(['services.tokio.enabled' => true]);
+    letterAnalysis('too', $anotherApproved ? 'approved' : 'rejected', ['primary' => [$anotherApproved ? 'approved' : 'rejected', null]]);
+    letterAnalysis('tokio', $status, ['primary' => [$status, null]]);
+    $this->actingAs($this->user)->withSession(['2fa_passed' => true]);
+    $response = $this->get(route('insurance-analyses.lead', $this->lead))->assertOk();
+    $notice = 'Carta de recusa não disponivel';
+    $refresh = $this->getJson(route('insurance-analyses.data', $this->lead), ['X-Analysis-Components' => '1'])->assertOk();
+    if ($status === 'rejected') {
+        $response->assertSee($notice)->assertSee('data-refusal-letter-unavailable="tokio"', false);
+        expect($refresh->json('data.components'))->toContain($notice);
+    } else {
+        $response->assertDontSee($notice);
+        expect($refresh->json('data.components'))->not->toContain($notice);
+    }
+    $response->assertDontSee('data-refusal-letter="tokio"', false);
+    Http::assertNothingSent();
+})->with([
+    ['rejected', true], ['rejected', false], ['approved', true], ['failed', true], ['processing', true], ['manual_required', true],
+]);
+
+it('renders an accessible refusal download inside each eligible insurer card', function (string $provider, string $profile): void {
+    config(['branding.active' => $profile, 'services.porto.enabled' => true]);
+    $approvedProvider = $provider === 'too' ? 'pottencial' : 'too';
+    letterAnalysis($approvedProvider, 'approved', ['primary' => ['approved', null]]);
+    $analysis = letterAnalysis($provider, 'rejected', ['primary' => ['rejected', '261113346000013']]);
+    $quote = letterQuote($analysis, 'primary');
+    if ($provider !== 'too') {
+        $quote->update(['quote_id' => $provider === 'porto' ? '000000011900001' : '11111111-1111-4111-8111-111111111111']);
+    }
+    $url = route('insurance-analyses.refusal-letter', ['analysis' => $analysis->id, 'quote' => $quote->id]);
+    $this->actingAs($this->user)->withSession(['2fa_passed' => true]);
+    $response = $this->get(route('insurance-analyses.lead', $this->lead))->assertOk();
+    $document = new DOMDocument;
+    @$document->loadHTML('<?xml encoding="UTF-8">'.$response->getContent());
+    $xpath = new DOMXPath($document);
+    $links = $xpath->query('//article[@data-provider="'.$provider.'"]//a[@data-refusal-letter]');
+    expect($links->length)->toBe(1);
+    $link = $links->item(0);
+    $name = ['too' => 'Too Seguros', 'pottencial' => 'Pottencial', 'porto' => 'Porto Seguro'][$provider];
+    expect($link->getAttribute('href'))->toBe($url)
+        ->and($link->getAttribute('aria-label'))->toBe('Baixar carta de recusa da '.$name.', em PDF')
+        ->and($link->getAttribute('type'))->toBe('application/pdf')
+        ->and($link->getAttribute('class'))->toContain('py-3', 'w-100')
+        ->and($xpath->query('//*[@id="'.$link->getAttribute('aria-describedby').'"]')->item(0)->textContent)->toBe('Documento em PDF.')
+        ->and($xpath->query('//article[@data-provider="tokio"]//a[@data-refusal-letter]')->length)->toBe(0)
+        ->and($xpath->query('//article[@data-provider="'.$approvedProvider.'"]//a[@data-refusal-letter]')->length)->toBe(0);
+    $refresh = $this->getJson(route('insurance-analyses.data', $this->lead), ['X-Analysis-Components' => '1'])->assertOk();
+    expect($refresh->json('data.components'))->toContain('data-refusal-letter="'.$provider.'"', 'aria-describedby="refusal-letter-description-'.$provider.'"');
+    Http::assertNothingSent();
+})->with(['too', 'pottencial', 'porto'])->with(['tcc', 'client']);
+
 function portoLetterFake(array $response): void
 {
     config([

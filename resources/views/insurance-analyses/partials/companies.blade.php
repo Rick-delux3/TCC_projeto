@@ -106,13 +106,27 @@
                             @include('insurance-analyses.partials.offer-price', ['offerStatus' => $analysis['status'], 'amount' => $price['installment_amount'] ?? null, 'count' => $price['installments'] ?? null, 'manualMessage' => $analysis['manual_message'], 'displayState' => $analysis['display_state']])
                         @endif
                         @php($refusalLetter = $analysis['actions']['refusal_letter'] ?? ['available' => false, 'url' => null])
-                        @if ($analysis && $refusalLetter['available'])
-                            {{-- Buscada na companhia no clique; com cônjuge é a carta da análise conjunta. --}}
-                            <a href="{{ $refusalLetter['url'] }}" class="btn btn-sm btn-outline-danger mt-3" data-refusal-letter="{{ $provider }}" rel="nofollow">
-                                <i class="bi bi-file-earmark-pdf me-1" aria-hidden="true"></i>Baixar carta de recusa
-                            </a>
-                        @endif
                     </div>
+                    @if ($provider !== 'tokio' && $analysis && $refusalLetter['available'] && filled($refusalLetter['url']))
+                        <div class="px-3 pb-3 d-flex flex-column gap-2">
+                            <a href="{{ $refusalLetter['url'] }}"
+                                class="ia-refusal-download btn btn-outline-primary d-flex align-items-center justify-content-center gap-2 px-3 py-3 w-100"
+                                data-refusal-letter="{{ $provider }}" rel="nofollow" type="application/pdf"
+                                aria-label="Baixar carta de recusa da {{ $providerName }}, em PDF"
+                                aria-describedby="refusal-letter-description-{{ $provider }}">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" focusable="false" class="flex-shrink-0">
+                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke-linejoin="round" />
+                                    <path d="M14 2v6h6M12 11v7m-3-3 3 3 3-3" stroke-linecap="round" stroke-linejoin="round" />
+                                </svg>
+                                <span>Baixar carta de recusa</span>
+                            </a>
+                            <p id="refusal-letter-description-{{ $provider }}" class="small text-body-secondary text-center mb-0">{{ ($refusalLetter['scenario'] ?? null) === 'joint' ? 'PDF da análise conjunta.' : 'Documento em PDF.' }}</p>
+                        </div>
+                    @elseif ($provider === 'tokio' && ($analysis['status'] ?? null) === 'rejected')
+                        <div class="px-3 pb-3" data-refusal-letter-unavailable="tokio">
+                            <p class="small text-body-secondary mb-0" role="status">Carta de recusa não disponivel</p>
+                        </div>
+                    @endif
                     @if ($blocked)
                         {{-- Companhia desligada no .env: sem aviso de reanálise. --}}
                     @elseif ($reanalysisSupported)
