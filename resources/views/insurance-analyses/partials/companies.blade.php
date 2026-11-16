@@ -105,6 +105,13 @@
                             @php($price = $analysis['quote']['price'])
                             @include('insurance-analyses.partials.offer-price', ['offerStatus' => $analysis['status'], 'amount' => $price['installment_amount'] ?? null, 'count' => $price['installments'] ?? null, 'manualMessage' => $analysis['manual_message'], 'displayState' => $analysis['display_state']])
                         @endif
+                        @php($refusalLetter = $analysis['actions']['refusal_letter'] ?? ['available' => false, 'url' => null])
+                        @if ($analysis && $refusalLetter['available'])
+                            {{-- Buscada na companhia no clique; com cônjuge é a carta da análise conjunta. --}}
+                            <a href="{{ $refusalLetter['url'] }}" class="btn btn-sm btn-outline-danger mt-3" data-refusal-letter="{{ $provider }}" rel="nofollow">
+                                <i class="bi bi-file-earmark-pdf me-1" aria-hidden="true"></i>Baixar carta de recusa
+                            </a>
+                        @endif
                     </div>
                     @if ($blocked)
                         {{-- Companhia desligada no .env: sem aviso de reanálise. --}}

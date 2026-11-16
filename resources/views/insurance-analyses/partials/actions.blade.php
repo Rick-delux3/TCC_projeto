@@ -2,6 +2,9 @@
     @if (session('success'))
         <div class="alert alert-success" role="status">{{ session('success') }}</div>
     @endif
+    @if (session('error'))
+        <div class="alert alert-warning" role="alert">{{ session('error') }}</div>
+    @endif
     @if ($permissions['edit_lead'] && $permissions['create_analysis'] && $actions['save_expenses']['available'])
         <div class="d-flex flex-wrap gap-2">
             <button type="button" class="btn btn-outline-primary" data-analysis-dialog="expense-reanalysis" aria-haspopup="dialog" aria-controls="expense-reanalysis">@if ($nvs)<i class="bi bi-pencil-square me-2" aria-hidden="true"></i>@endif Editar despesas</button>

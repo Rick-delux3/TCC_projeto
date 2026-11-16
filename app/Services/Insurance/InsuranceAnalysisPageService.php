@@ -16,6 +16,7 @@ class InsuranceAnalysisPageService
         private readonly InsuranceAnalysisReadService $reader,
         private readonly AnalysisQuoteSummary $quotes,
         private readonly AnalysisQuoteComparison $comparison,
+        private readonly RefusalLetterDownloadService $refusalLetters,
     ) {}
 
     /** @return array<string, mixed> */
@@ -92,8 +93,10 @@ class InsuranceAnalysisPageService
             ],
             'progress' => $progress,
             'result' => ['is_final' => $final, 'status' => $final ? InsuranceBatchResult::status($batch) : null],
-            'analyses' => $analyses->map(function (InsuranceAnalysis $analysis) use ($data, $quotes, $enabled, $permissions, $canReanalyzeWithChanges, $prefix, $admin): array {
+            'analyses' => $analyses->map(function (InsuranceAnalysis $analysis) use ($data, $quotes, $enabled, $permissions, $canReanalyzeWithChanges, $prefix, $admin, $analyses): array {
                 $attempt = $data['analysisAttempts'][$analysis->id];
+                // Carta pela página só com outra companhia aprovada; recusa unânime vai por e-mail.
+                $letterQuote = $analyses->contains('status', 'approved') ? $this->refusalLetters->letterQuote($analysis) : null;
                 $providerEnabled = InsuranceProviderResolver::providerEnabled((string) $analysis->provider);
                 $allowed = $enabled && $providerEnabled;
                 $activeQuotes = ($analysis->currentProviderRun?->scenarios->flatMap(fn ($scenario) => $scenario->quotes) ?? collect())
@@ -155,6 +158,12 @@ class InsuranceAnalysisPageService
                         'reanalysis' => $this->action($providerEnabled && $canReanalyzeWithChanges && $this->canReanalyze($analysis), $prefix.'provider-reanalysis', $analysis->id) + ['requires_data_changes' => true],
                         'expense_reanalysis' => $this->action($providerEnabled && $canReanalyzeWithChanges && $analysis->supportsProviderReanalysis() && ProviderAnalysisStatus::isTerminal($analysis->status), $prefix.'provider-expense-reanalysis', $analysis->id),
                         'sync' => $this->action($allowed && $attempt !== null && $this->canSync($analysis), $prefix.'sync-status', $analysis->id),
+                        'refusal_letter' => [
+                            'available' => $letterQuote !== null,
+                            'url' => $letterQuote ? route($prefix.'refusal-letter', ['analysis' => $analysis->id, 'quote' => $letterQuote->id]) : null,
+                            'method' => 'GET',
+                            'scenario' => $letterQuote?->scenario?->kind,
+                        ],
                     ],
                 ];
             })->all(),

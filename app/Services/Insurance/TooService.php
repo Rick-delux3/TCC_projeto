@@ -209,19 +209,35 @@ class TooService
         );
     }
 
+    /**
+     * Passo 4.1 — carta do parecer de crédito (inclusive de proposta recusada).
+     * GET /fianca/credito/{cpf}/{numeroProposta}/parecer, sem body.
+     * Retorno: JSON {"cartaParecerCreditoBase64": "<PDF em Base64>"}.
+     * Falha documental nunca altera a decisão de crédito; quem chama decide o efeito.
+     */
     public function getCreditOpinionPdf(string $cpf, string $numeroProposta): string
     {
         $this->ensureEnabled();
         $cpf = $this->onlyNumbers($cpf);
-        if (strlen($cpf) !== 11 || $numeroProposta === '') {
+        $numeroProposta = trim($numeroProposta);
+        if (strlen($cpf) !== 11 || preg_match('/^\d+$/D', $numeroProposta) !== 1) {
             throw new \RuntimeException('Identificação da proposta da Too incompleta.');
         }
 
-        return app(\App\Services\Insurance\ProviderDocumentDownload::class)->fetch(
-            $this->baseUrl.'/fianca/credito/'.$cpf.'/'.rawurlencode($numeroProposta).'/parecer',
-            $this->authHeaders(),
-            config('services.too.document_download_hosts', []),
-        );
+        $result = $this->getJson("/fianca/credito/{$cpf}/{$numeroProposta}/parecer");
+        if (! ($result['success'] ?? false)) {
+            throw new \RuntimeException(sprintf(
+                'A Too não disponibilizou a carta do parecer de crédito (HTTP %s).',
+                $result['http_status'] ?? 'sem resposta',
+            ));
+        }
+
+        $encoded = data_get($result, 'response.cartaParecerCreditoBase64');
+        if (! is_string($encoded)) {
+            throw new \RuntimeException('A Too respondeu sem a carta do parecer de crédito.');
+        }
+
+        return app(ProviderDocumentDownload::class)->decodeBase64Pdf($encoded, 'Too');
     }
 
     /**

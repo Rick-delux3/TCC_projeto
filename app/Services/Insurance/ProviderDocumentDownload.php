@@ -37,6 +37,31 @@ class ProviderDocumentDownload
         throw new RuntimeException('A companhia não retornou um documento PDF reconhecido.');
     }
 
+    /**
+     * Decodifica um PDF entregue como Base64 dentro de um JSON da companhia
+     * (Too: cartaParecerCreditoBase64). O tamanho é conferido antes de decodificar
+     * e a decodificação é estrita; o conteúdo nunca entra em mensagens de erro.
+     */
+    public function decodeBase64Pdf(string $encoded, string $provider): string
+    {
+        $encoded = preg_replace('/\s+/', '', preg_replace('#^data:application/pdf;base64,#', '', trim($encoded)));
+        $maxBytes = (int) config('analysis_documents.max_bytes');
+        if ($encoded === '') {
+            throw new RuntimeException("A {$provider} não disponibilizou o documento solicitado.");
+        }
+        // Base64 ocupa ~4/3 do binário: descarta antes de alocar algo acima do limite.
+        if (strlen($encoded) > intdiv($maxBytes * 4, 3) + 4) {
+            throw new RuntimeException("O documento da {$provider} está acima do limite permitido.");
+        }
+
+        $decoded = base64_decode($encoded, true);
+        if ($decoded === false) {
+            throw new RuntimeException("A {$provider} retornou um documento em Base64 inválido.");
+        }
+
+        return $this->validatePdf($decoded);
+    }
+
     public function validatePdf(string $contents): string
     {
         if (strlen($contents) > (int) config('analysis_documents.max_bytes')

@@ -1,5 +1,65 @@
 # Estudo das APIs de Fiança Locatícia
 
+## Regra geral — cartas de recusa na página e no e-mail — 13/11/2026
+
+**Decisão do usuário após a auditoria das quatro companhias.** Esta seção prevalece sobre trechos anteriores que tratavam a carta apenas como anexo da recusa unânime ou previam download de todas as cartas no painel.
+
+### Quando a carta é oferecida
+
+| Resultado do pacote (rodada atual) | Página de análises | E-mail de resultado |
+| --- | --- | --- |
+| Pelo menos uma companhia aprovou | Cada companhia **recusada** ganha link de download das suas cartas. Falha técnica, pendência ou companhia bloqueada de outra companhia **não** impedem o link | Sem cartas (o e-mail de aprovação segue o fluxo próprio) |
+| Todas as companhias recusaram | **Sem download na página** | Envia todas as cartas obtidas nos endpoints, em uma única mensagem (fluxo já existente de recusa unânime) |
+| Nenhuma aprovação e alguma falha/pendência | Sem download | Sem cartas (não é recusa unânime) |
+
+Uma companhia só é "recusada" pelo resultado consolidado dela; plano indisponível, falha técnica ou ausência de preço não são recusa.
+
+### Granularidade
+
+- **Cônjuges (PF com cônjuge):** a carta só existe quando a **análise conjunta recusa**, e é **somente a carta da conjunta**. Se um dos cônjuges for aprovado individualmente, a companhia está aprovada e não há carta para o cônjuge recusado. As cartas individuais do principal e do cônjuge nunca são oferecidas quando há cônjuge.
+- **Sem cônjuge e PJ:** carta do cenário `primary` recusado.
+- **Uma carta por orçamento, não por plano — correção do usuário em 13/11/2026:** a API devolve uma única carta para o ID do orçamento; não existe carta por plano (vale para Pottencial e Porto). Isso supera a orientação de 26/10 ("Downloads por plano e aprovação parcial") de consultar a carta de cada plano recusado.
+- **Pottencial:** **uma carta** para a companhia recusada, no cenário que vale (primary ou conjunta), usando o `quote_id` de um plano recusado desse cenário. Padrão adotado, sujeito a correção do usuário: o orçamento registrado na análise; se ele não for de um plano recusado (por exemplo, plano indisponível sem `quote_id`), o do outro plano recusado. Plano indisponível (HTTP 400 "plan not available") não tem orçamento; se os dois forem indisponíveis, a recusa fica sem carta.
+- **Porto:** uma carta por cenário que vale, desde que o 409 tenha trazido orçamento válido em `detailedMessage`; sem orçamento, recusa sem carta.
+- **Too:** parecer do cenário que vale, com o CPF e o número da proposta **desse cenário** (`insurance_quotes`), não os da análise.
+- **Tokio:** não há carta de recusa via API. A página mostra uma mensagem curta e direta no card, por exemplo: "A Tokio Marine não disponibiliza carta de recusa por aqui; consulte o portal da Tokio." No e-mail de recusa unânime a Tokio **não** entra como anexo, porque a própria Tokio envia a carta por e-mail; a mesma mensagem será exibida no e-mail (**desenvolvimento futuro**, após concluir a página).
+
+### Obtenção e entrega
+
+- **Busca no clique, com cache:** a carta é solicitada à companhia somente quando alguém clica em baixar e fica guardada em armazenamento privado, associada ao orçamento usado (cotação em `insurance_quotes`) e à rodada. Downloads seguintes servem o arquivo guardado. Falha da carta nunca altera a decisão de crédito.
+- **Padrões adotados, sujeitos a correção do usuário:** rota de download genérica por cotação e tipo de documento (nesta etapa só `refusal_letter`); somente a rodada atual aparece no card; companhia desligada no `.env` serve apenas carta já guardada, sem nova chamada; nome do arquivo sem nome ou CPF do pretendente (`carta-recusa-{companhia}-lead-{id}.pdf`); autorização pelo gate `viewAnalyses`; evento registrado a cada download; limite de tentativas na rota e opção de tentar de novo em caso de falha.
+- **Em aberto:** prazo de retenção dos PDFs guardados (contêm dados do pretendente).
+
+### Impacto no código existente
+
+- `ProviderRefusalLetterService::fetch` hoje exige recusa unânime e usa `quote_id`/`proposal_id` da análise. Para a página: liberar quando houver aprovação no pacote e buscar pelo orçamento do cenário que vale. O caminho do e-mail continua exigindo recusa unânime.
+- Pottencial: uma carta por companhia; garantir que o orçamento usado seja de plano recusado (no pacote 1, a carta do Complete, plano recusado, é o comportamento correto).
+- Cônjuges: usar o orçamento da **conjunta** (hoje o código usa o da análise, que é do principal).
+- Too: ler CPF e proposta da cotação do cenário que vale (conjunta, quando houver cônjuge).
+- `AnalysisDocumentService`: a chave de cache `refusal-{análise}` continua válida para uma carta por companhia; a Porto já acrescenta o orçamento.
+- Tokio no e-mail unânime: excluir dos anexos (desenvolvimento futuro, junto da mensagem).
+
+### Too — contrato da carta do parecer de crédito (passo 4.1) — 13/11/2026
+
+Documentação enviada pelo usuário: é este o endpoint da carta de recusa da Too.
+
+| Item | Contrato |
+| --- | --- |
+| Operação | `GET /fianca/credito/{CpfPretendente}/{NumeroProposta}/parecer`, sem body. Consulta o PDF da carta do parecer da análise de crédito, após o envio da ficha para análise |
+| Homologação | `https://openapi-uat.tooseguros.com.br/fianca/credito/{CpfPretendente}/{NumeroProposta}/parecer` |
+| Headers | `Authorization: Bearer <token>`, `ClientId`, `ClientSecret` (o `TooService::authHeaders()` já envia os três) |
+| `CpfPretendente` | CPF do pretendente do cenário que vale (somente dígitos) |
+| `NumeroProposta` | Número da proposta/ficha desse cenário |
+| Retorno | JSON `{"cartaParecerCreditoBase64": "<PDF em Base64>"}` |
+
+Regras: decodificar `cartaParecerCreditoBase64` com Base64 estrita e validar que o conteúdo é PDF; campo ausente, Base64 inválida ou conteúdo que não seja PDF é falha documental, sem alterar a recusa. Não confundir com o PDF da cotação (POST `/fianca/proposta/cotacao/{numeroCotacao}/pdf`, campo `result.pdfCotacao`). Respostas de erro não foram documentadas.
+
+**Impacto no código:** `TooService::getCreditOpinionPdf()` já chama a rota correta, mas delega a `ProviderDocumentDownload::fetch()`, que só reconhece PDF binário, `url`/`downloadUrl` ou `base64`/`pdf` no JSON. Com o campo `cartaParecerCreditoBase64`, o download falharia com "documento PDF não reconhecido". Na implementação, ler esse campo explicitamente (como a Porto faz com `data.file`). Continua sem verificação com recusa real.
+
+### Constatação técnica desta auditoria
+
+A carta da Pottencial (`GET /insurance/v1/fianca-locaticia/quotes/{quote_id}/letters`) foi obtida em recusa real no pacote local 1 e é PDF válido (`%PDF-1.4`, ~96 KB). A representação deixa de ser "indeterminada". Too (`/parecer` para recusados) e Porto (`/pdf/carta-recusa`) continuam sem verificação com recusa real.
+
 ## Porto — quantidade de parcelas por forma de pagamento e Fatura com entrada (BFT) — 12/11/2026
 
 **Decisão do usuário em 12/11/2026, implementada no mesmo dia** (`config('services.porto.installments')`, `PortoQuoteResponse::installmentsFor`/`payment` e `porto:test-api`). Escopo exclusivo da Porto. Encerra a pendência de como a Porto devolve a Fatura com entrada.
@@ -37,7 +97,7 @@
 
 ### Evidência que originou a regra — análise local 1, rodada de 11/11/2026
 
-Leitura dos dados salvos com `php artisan porto:test-api --analise=1` (sem chamada à API) e do `laravel.log`. Cotação #2, cenário `primary`, orçamento `000000011912710`, forma esperada FAT (imobiliária com código Porto). A rodada 1 (cotação #1) falhou por 401 de token, assunto da seção de autenticação, e não entra nesta regra.
+Leitura dos dados salvos com `php artisan porto:test-api --analise=1` (sem chamada à API) e do `laravel.log`. Cotação #2, cenário `primary`, orçamento `000000011912710`, forma esperada FAT (imobiliária com código Porto). A rodada 1 (cotação #1) falhou por 401 de token, assunto da seção de autenticação, e não entra nesta regra. 
 
 1. **POST /orcamentos:** HTTP 201, aprovado, com quatro ofertas: 0001 ESSENCIAL 12, 0007 ESSENCIAL 20, 0005 ESSENCIAL 30 e 0008 FIANÇA.
 2. **PUTs de comissão simultâneos** (um por oferta, `{"ofertas":[{"seguro":"<código>","comissao":{"codComissao":15}}]}`):
