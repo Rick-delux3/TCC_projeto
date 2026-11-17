@@ -34,9 +34,11 @@ class InsuranceAnalysisFailure
                 $analysis->update([
                     'status' => 'failed',
                     'result' => null,
-                    'error_message' => $exception instanceof \App\Exceptions\InvalidInsuranceAnalysisPayload
-                        ? $exception->getMessage()
-                        : 'Não foi possível concluir a análise após as tentativas de processamento.',
+                    'error_message' => match (true) {
+                        $exception instanceof \App\Exceptions\InsuranceProviderDisabled => $exception->userMessage(),
+                        $exception instanceof \App\Exceptions\InvalidInsuranceAnalysisPayload => $exception->getMessage(),
+                        default => 'Não foi possível concluir a análise após as tentativas de processamento.',
+                    },
                     'finished_at' => now(),
                 ]);
                 $analysis->events()->create([

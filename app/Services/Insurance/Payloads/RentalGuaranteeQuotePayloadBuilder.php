@@ -45,7 +45,7 @@ class RentalGuaranteeQuotePayloadBuilder
 
         $occupation = match ($lead->tipo_locacao) {
             TipoLocacao::RESIDENCIAL => 'Residencial',
-            TipoLocacao::COMERCIAL => 'Commercial',
+            TipoLocacao::COMERCIAL => 'Comercial',
             default => throw new \App\Exceptions\InvalidInsuranceAnalysisPayload('Informe a finalidade residencial ou comercial da locação para a Pottencial.'),
         };
 

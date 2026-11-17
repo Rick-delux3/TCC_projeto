@@ -108,7 +108,10 @@ final class InsuranceQuoteCoordinator
             $finished = ProviderAnalysisStatus::isTerminal($status);
             $winner = $quotes->where('status', 'approved')->filter(fn ($quote) => (float) $quote->installment_amount > 0)
                 ->sort(fn ($a, $b) => ((float) $a->installment_amount <=> (float) $b->installment_amount) ?: ($a->id <=> $b->id))->first();
-            $representative = $winner ?? $quotes->where('status', 'approved')->first() ?? ($finished ? $quotes->first() : null);
+            // Plano descartado não representa a análise: a carta de recusa da
+            // Pottencial usa o quote_id do representante.
+            $representative = $winner ?? $quotes->where('status', 'approved')->first()
+                ?? ($finished ? ($quotes->first(fn ($quote) => $quote->status !== PottencialQuoteResponse::PLAN_UNAVAILABLE) ?? $quotes->first()) : null);
             $run->update(['status' => $status, 'selected_quote_id' => $winner?->id, 'finished_at' => $finished ? now() : null]);
             $attributes = [
                 'status' => $status, 'result' => ProviderAnalysisStatus::result($status),
@@ -128,6 +131,7 @@ final class InsuranceQuoteCoordinator
                         'installment_amount' => $winner?->installment_amount,
                         'installments' => $winner?->installments,
                         'payment_type' => $winner?->payment_type,
+                        'plan_key' => $winner?->plan_key,
                     ],
                 ]);
                 if (in_array($analysis->provider, ['tokio', 'porto'], true)) {
@@ -158,7 +162,16 @@ final class InsuranceQuoteCoordinator
 
     private function status(Collection $quotes): string
     {
-        if ($quotes->isEmpty() || $quotes->contains(fn ($quote) => ! ProviderAnalysisStatus::isTerminal($quote->status)
+        if ($quotes->isEmpty()) {
+            return 'processing';
+        }
+        // Plano da Pottencial indisponível é descartado: a decisão fica com os
+        // demais planos. Todos indisponíveis contam como recusa (libera a conjunta).
+        $quotes = $quotes->reject(fn ($quote) => $quote->status === PottencialQuoteResponse::PLAN_UNAVAILABLE);
+        if ($quotes->isEmpty()) {
+            return 'rejected';
+        }
+        if ($quotes->contains(fn ($quote) => ! ProviderAnalysisStatus::isTerminal($quote->status)
             || ($quote->status === 'approved' && $quote->payment_status === 'pending'))) {
             return 'processing';
         }
@@ -184,7 +197,7 @@ final class InsuranceQuoteCoordinator
     {
         $scenario = $run->scenarios()->create(['kind' => $kind]);
         $analysis = $run->analysis;
-        $plans = $analysis->provider === 'pottencial' ? ['Basic', 'Complete', 'Traditional'] : ['default'];
+        $plans = $analysis->provider === 'pottencial' ? PottencialQuoteResponse::PLANS : ['default'];
         $registered = data_get($run->round->lead_snapshot, 'attributes.tipo_solicitante') === 'imobiliaria_cadastrada'
             && filled(data_get($run->round->lead_snapshot, 'attributes.company_id'));
         foreach ($plans as $plan) {

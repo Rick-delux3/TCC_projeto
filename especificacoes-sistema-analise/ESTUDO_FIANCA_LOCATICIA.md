@@ -1,5 +1,199 @@
 # Estudo das APIs de Fiança Locatícia
 
+## Regra geral — cartas de recusa na página e no e-mail — 13/11/2026
+
+**Decisão do usuário após a auditoria das quatro companhias.** Esta seção prevalece sobre trechos anteriores que tratavam a carta apenas como anexo da recusa unânime ou previam download de todas as cartas no painel.
+
+### Quando a carta é oferecida
+
+| Resultado do pacote (rodada atual) | Página de análises | E-mail de resultado |
+| --- | --- | --- |
+| Pelo menos uma companhia aprovou | Cada companhia **recusada** ganha link de download das suas cartas. Falha técnica, pendência ou companhia bloqueada de outra companhia **não** impedem o link | Sem cartas (o e-mail de aprovação segue o fluxo próprio) |
+| Todas as companhias recusaram | **Sem download na página** | Envia todas as cartas obtidas nos endpoints, em uma única mensagem (fluxo já existente de recusa unânime) |
+| Nenhuma aprovação e alguma falha/pendência | Sem download | Sem cartas (não é recusa unânime) |
+
+Uma companhia só é "recusada" pelo resultado consolidado dela; plano indisponível, falha técnica ou ausência de preço não são recusa.
+
+### Granularidade
+
+- **Cônjuges (PF com cônjuge):** a carta só existe quando a **análise conjunta recusa**, e é **somente a carta da conjunta**. Se um dos cônjuges for aprovado individualmente, a companhia está aprovada e não há carta para o cônjuge recusado. As cartas individuais do principal e do cônjuge nunca são oferecidas quando há cônjuge.
+- **Sem cônjuge e PJ:** carta do cenário `primary` recusado.
+- **Uma carta por orçamento, não por plano — correção do usuário em 13/11/2026:** a API devolve uma única carta para o ID do orçamento; não existe carta por plano (vale para Pottencial e Porto). Isso supera a orientação de 26/10 ("Downloads por plano e aprovação parcial") de consultar a carta de cada plano recusado.
+- **Pottencial:** **uma carta** para a companhia recusada, no cenário que vale (primary ou conjunta), usando o `quote_id` de um plano recusado desse cenário. Padrão adotado, sujeito a correção do usuário: o orçamento registrado na análise; se ele não for de um plano recusado (por exemplo, plano indisponível sem `quote_id`), o do outro plano recusado. Plano indisponível (HTTP 400 "plan not available") não tem orçamento; se os dois forem indisponíveis, a recusa fica sem carta.
+- **Porto:** uma carta por cenário que vale, desde que o 409 tenha trazido orçamento válido em `detailedMessage`; sem orçamento, recusa sem carta.
+- **Too:** parecer do cenário que vale, com o CPF e o número da proposta **desse cenário** (`insurance_quotes`), não os da análise.
+- **Tokio:** não há carta de recusa via API. A página mostra uma mensagem curta e direta no card, por exemplo: "A Tokio Marine não disponibiliza carta de recusa por aqui; consulte o portal da Tokio." No e-mail de recusa unânime a Tokio **não** entra como anexo, porque a própria Tokio envia a carta por e-mail; a mesma mensagem será exibida no e-mail (**desenvolvimento futuro**, após concluir a página).
+
+### Obtenção e entrega
+
+- **Busca no clique, com cache:** a carta é solicitada à companhia somente quando alguém clica em baixar e fica guardada em armazenamento privado, associada ao orçamento usado (cotação em `insurance_quotes`) e à rodada. Downloads seguintes servem o arquivo guardado. Falha da carta nunca altera a decisão de crédito.
+- **Padrões adotados, sujeitos a correção do usuário:** rota de download genérica por cotação e tipo de documento (nesta etapa só `refusal_letter`); somente a rodada atual aparece no card; companhia desligada no `.env` serve apenas carta já guardada, sem nova chamada; nome do arquivo sem nome ou CPF do pretendente (`carta-recusa-{companhia}-lead-{id}.pdf`); autorização pelo gate `viewAnalyses`; evento registrado a cada download; limite de tentativas na rota e opção de tentar de novo em caso de falha.
+- **Em aberto:** prazo de retenção dos PDFs guardados (contêm dados do pretendente).
+
+### Impacto no código existente
+
+- `ProviderRefusalLetterService::fetch` hoje exige recusa unânime e usa `quote_id`/`proposal_id` da análise. Para a página: liberar quando houver aprovação no pacote e buscar pelo orçamento do cenário que vale. O caminho do e-mail continua exigindo recusa unânime.
+- Pottencial: uma carta por companhia; garantir que o orçamento usado seja de plano recusado (no pacote 1, a carta do Complete, plano recusado, é o comportamento correto).
+- Cônjuges: usar o orçamento da **conjunta** (hoje o código usa o da análise, que é do principal).
+- Too: ler CPF e proposta da cotação do cenário que vale (conjunta, quando houver cônjuge).
+- `AnalysisDocumentService`: a chave de cache `refusal-{análise}` continua válida para uma carta por companhia; a Porto já acrescenta o orçamento.
+- Tokio no e-mail unânime: excluir dos anexos (desenvolvimento futuro, junto da mensagem).
+
+### Too — contrato da carta do parecer de crédito (passo 4.1) — 13/11/2026
+
+Documentação enviada pelo usuário: é este o endpoint da carta de recusa da Too.
+
+| Item | Contrato |
+| --- | --- |
+| Operação | `GET /fianca/credito/{CpfPretendente}/{NumeroProposta}/parecer`, sem body. Consulta o PDF da carta do parecer da análise de crédito, após o envio da ficha para análise |
+| Homologação | `https://openapi-uat.tooseguros.com.br/fianca/credito/{CpfPretendente}/{NumeroProposta}/parecer` |
+| Headers | `Authorization: Bearer <token>`, `ClientId`, `ClientSecret` (o `TooService::authHeaders()` já envia os três) |
+| `CpfPretendente` | CPF do pretendente do cenário que vale (somente dígitos) |
+| `NumeroProposta` | Número da proposta/ficha desse cenário |
+| Retorno | JSON `{"cartaParecerCreditoBase64": "<PDF em Base64>"}` |
+
+Regras: decodificar `cartaParecerCreditoBase64` com Base64 estrita e validar que o conteúdo é PDF; campo ausente, Base64 inválida ou conteúdo que não seja PDF é falha documental, sem alterar a recusa. Não confundir com o PDF da cotação (POST `/fianca/proposta/cotacao/{numeroCotacao}/pdf`, campo `result.pdfCotacao`). Respostas de erro não foram documentadas.
+
+**Impacto no código:** `TooService::getCreditOpinionPdf()` já chama a rota correta, mas delega a `ProviderDocumentDownload::fetch()`, que só reconhece PDF binário, `url`/`downloadUrl` ou `base64`/`pdf` no JSON. Com o campo `cartaParecerCreditoBase64`, o download falharia com "documento PDF não reconhecido". Na implementação, ler esse campo explicitamente (como a Porto faz com `data.file`). Continua sem verificação com recusa real.
+
+### Constatação técnica desta auditoria
+
+A carta da Pottencial (`GET /insurance/v1/fianca-locaticia/quotes/{quote_id}/letters`) foi obtida em recusa real no pacote local 1 e é PDF válido (`%PDF-1.4`, ~96 KB). A representação deixa de ser "indeterminada". Too (`/parecer` para recusados) e Porto (`/pdf/carta-recusa`) continuam sem verificação com recusa real.
+
+## Porto — quantidade de parcelas por forma de pagamento e Fatura com entrada (BFT) — 12/11/2026
+
+**Decisão do usuário em 12/11/2026, implementada no mesmo dia** (`config('services.porto.installments')`, `PortoQuoteResponse::installmentsFor`/`payment` e `porto:test-api`). Escopo exclusivo da Porto. Encerra a pendência de como a Porto devolve a Fatura com entrada.
+
+- **Não existe campo no request para escolher a quantidade.** O POST `/orcamentos` não tem parâmetro de parcelas. O `cobranca.formaPagamento`/`condicaoPagamento` do PUT só escolhe, para emissão, uma condição já devolvida, e não foi usado. As condições são fixas por forma na base de 30 meses.
+- **Retorno real** (cotações locais 13, 14 e 15, GET de ofertas, todas as ofertas):
+
+  | Forma | Nome | Condição | Pagamentos |
+  | --- | --- | --- | --- |
+  | FAT | Fatura sem entrada | 029 | 29X |
+  | BFT | Fatura com entrada | 229 | 29X, com o **mesmo valor** da FAT |
+  | CC | Cartão de Crédito | 030 | 30X |
+  | CP | Cartão Porto - Outros | 030 | 30X |
+  | ADC / BCA | Débito / Boleto + carnê | 112 / 212 | 12X |
+
+- **Regra aplicada:** a seleção lê a quantidade da forma esperada, **FAT = 29** e **CC = 30**. O critério antigo exigia 29 parcelas em qualquer forma. Como o cartão só traz 30X, um lead sem código Porto (CC) aprovado ficaria sem preço. Nada foi alterado no POST nem no PUT de comissão.
+- **"30 para tudo" foi descartado:** a Porto não devolve fatura em 30X, então os leads FAT ficariam sem preço.
+- **BFT (implementado em 12/11/2026):** no Visualizar, cada plano precificado por FAT exibe sua parcela sem entrada e a condição BFT 229/29X da mesma oferta, com a descrição “1ª em boleto, demais em fatura”. Os valores são lidos da resposta persistida, sem novas chamadas ou cópia do preço FAT. BFT ausente/inválida aparece como condição não disponibilizada; ofertas sem preço confirmado e seleções CC não exibem essas opções de fatura. BFT não entra na seleção, comparação ou escolha do PDF. A apresentação é responsiva e mantém os valores de cada cenário separados.
+
+## Porto — Fiança e Essencial mais barato no card; plano mais barato na comparação — 11/11/2026
+
+**Regra solicitada pelo cliente e confirmada pelo usuário em 11/11/2026; estrutura de backend implementada no mesmo dia, views na etapa seguinte.** Escopo exclusivo da Porto. Esta seção substitui a regra "somente a oferta 0008 (Fiança) entra na comparação; os Essenciais ficam como alternativas".
+
+1. **Diferença interna entre os Essenciais:** entre 0001, 0005 e 0007 precificados na forma (FAT/CC) e em 29 pagamentos sem entrada, o de menor parcela é o "Essencial mais barato". Ele aparece no card da Porto ao lado da Fiança.
+2. **Diferença geral entre os planos aprovados:** o plano de menor parcela entre a Fiança (com comissão confirmada) e o Essencial mais barato é o preço da Porto. Ele vai para o card superior (melhor negócio) e concorre com as demais companhias. Com cônjuge, vale o mais barato entre os cenários, como já ocorria.
+3. **Fiança sem preço** (comissão não confirmada, oferta ausente ou sem condição de 29): a Porto entra na comparação com o Essencial mais barato; o card mostra a Fiança como preço indisponível ao lado dele.
+4. **Empate** entre a Fiança e o Essencial mais barato: prevalece a Fiança (decisão de implementação; preços iguais são improváveis).
+5. **Valor consolidado** da análise (`quote_selection`) é apenas indicativo do plano mais barato. O e-mail de resultado e o PDF passarão a listar todos os planos (etapa futura); até lá o PDF padrão continua sendo o da Fiança quando ela tem preço.
+
+**Estrutura gravada em `payment`:** `fianca` (Fiança precificada ou null), `essential` (Essencial mais barato), `selection` (o mais barato dos dois, preço da cotação), `alternatives` (todos os Essenciais), `fianca_unavailable_reason` e `unavailable_reason` (nenhum plano precificado). O resumo da análise expõe `card.fianca`, `card.essential`, `best_offer` e os marcadores `best`/`cheapest_essential` em cada oferta. Registros anteriores (sem `fianca`/`essential`) são lidos com a Fiança em `selection`.
+
+## Porto — PUT de comissão somente da Fiança (0008) e confirmação pelo GET — 11/11/2026
+
+**Regra confirmada pelo usuário em 11/11/2026; backend implementado no mesmo dia** (`PortoService::updateCommission`, `PortoInsuranceProvider::payment`, `PortoQuoteResponse::commissionCode`/`payment` e `porto:test-api`). Escopo exclusivo da Porto; não altera Pottencial, Too ou Tokio. Esta seção prevalece sobre a decisão de 02/11/2026 de enviar um PUT de comissão por oferta, simultâneos, e sobre o critério de considerar a comissão confirmada apenas pelo HTTP 200 do PUT (ver "Trechos superados" abaixo).
+
+### Evidência que originou a regra — análise local 1, rodada de 11/11/2026
+
+Leitura dos dados salvos com `php artisan porto:test-api --analise=1` (sem chamada à API) e do `laravel.log`. Cotação #2, cenário `primary`, orçamento `000000011912710`, forma esperada FAT (imobiliária com código Porto). A rodada 1 (cotação #1) falhou por 401 de token, assunto da seção de autenticação, e não entra nesta regra. 
+
+1. **POST /orcamentos:** HTTP 201, aprovado, com quatro ofertas: 0001 ESSENCIAL 12, 0007 ESSENCIAL 20, 0005 ESSENCIAL 30 e 0008 FIANÇA.
+2. **PUTs de comissão simultâneos** (um por oferta, `{"ofertas":[{"seguro":"<código>","comissao":{"codComissao":15}}]}`):
+
+   | Oferta | HTTP do PUT | Faixa de comissão (`comissao.ranges`) | `codComissao` no GET seguinte |
+   | --- | --- | --- | --- |
+   | 0001 Essencial 12 | 501 | 10 a 10 | 10 |
+   | 0007 Essencial 20 | 200 | 10 a 10 | 10 |
+   | 0005 Essencial 30 | 200 | 10 a 10 | 10 |
+   | 0008 Fiança | 501 | 10 a 35 | 10 |
+
+   O corpo do 501 foi `"The server doesn't recognize the request method."`. Esse status não consta nas respostas documentadas do PUT (200, 400, 401, 409, 500 e 502). Em cada onda de PUTs paralelos passou exatamente um: 1 de 4 na primeira e 1 de 3 no retry automático. O URL, o método e o token eram os mesmos, e a oferta que passou não dependia de regra de negócio. Conclusão: o gateway da Porto não aceita escritas concorrentes no mesmo orçamento.
+3. **GET de ofertas:** HTTP 200 com preços em todas as ofertas, inclusive Fiança FAT 029 (29× R$ 583,16). Como a 0008 não teve a comissão confirmada, o sistema gravou "aprovado, preço indisponível". Esse preço estava calculado com a comissão padrão de 10%, não 15%.
+4. **Falso positivo do critério atual:** o PUT da 0007 e da 0005 voltou 200, mas o GET seguinte manteve `codComissao = 10`. Os Essenciais só aceitam comissão de 10 a 10, então os 15% nunca se aplicam a eles. O HTTP 200 sozinho não prova a aplicação.
+
+**Teste real em homologação, autorizado pelo usuário em 11/11/2026, no mesmo orçamento e sem gravação no banco:**
+- um único PUT, somente da 0008 com `codComissao = 15`, voltou HTTP 200 em cerca de 24 s, com `mensagem` "DADOS SALVOS COM SUCESSO" e `status` "5";
+- o GET de ofertas seguinte trouxe 0008 com `codComissao = 15` e FAT 029 de **29× R$ 617,46** (`premioTotal` 17.906,48), contra 29× R$ 583,16 com 10%;
+- os Essenciais permaneceram com 10% e seus preços não mudaram.
+
+O efeito colateral do teste é que esse orçamento de homologação ficou com 15% na Fiança.
+
+### Regras confirmadas
+
+1. **Um único PUT de comissão por orçamento, somente da Fiança:** para cada orçamento aprovado (um por cenário), enviar um só PUT com `{"ofertas":[{"seguro":"0008","comissao":{"codComissao":15}}]}`. Não enviar PUT para as ofertas Essenciais (0001, 0005 e 0007): elas não aceitam comissão diferente de 10% e permanecem com o padrão da Porto. Não há mais PUTs simultâneos no mesmo orçamento.
+2. **Sem Fiança na criação:** se o POST aprovado não retornar a oferta 0008, não enviar PUT. A aprovação continua aprovada, com preço indisponível e o motivo registrado; as Essenciais retornadas seguem como alternativas.
+3. **Confirmação da comissão e fonte do preço — corrigida pelo usuário em 11/11/2026:** o HTTP 200 do PUT da 0008 confirma que a comissão foi alterada. Os preços são lidos primeiro no GET de ofertas (`/orcamentos/{origem}/{orcamento}/{susep}/ofertas`). Se esse GET já trouxer a oferta 0008 com o `comissao.codComissao` enviado (15), ele está atualizado e o GET do orçamento não é chamado. Se trouxer outro valor ou não trouxer o campo, os preços passam a vir do GET do orçamento atualizado ([retorna-os-dados-atualizados.md](Porto_endpoitsMarkdown/retorna-os-dados-atualizados.md), `/orcamentos/{orcamento}/{susep}`), que sempre reflete o ajuste; esse retorno não exige `codComissao`. `PORTO_PRICE_SOURCE=budget` continua indo direto ao GET do orçamento. Falha em qualquer um dos GETs repete somente a etapa de preços. Não calcular localmente a diferença de prêmio para simular 15%. *Superado:* a versão inicial desta regra exigia `codComissao = 15` no GET para confirmar a comissão e deixava o preço indisponível na falta dele.
+4. **Preço para comparação:** continua sendo o `valorParcela` da oferta 0008, na forma FAT (com código Porto) ou CC (demais), na condição de 29 pagamentos sem entrada, lido do GET posterior ao PUT confirmado. Nunca apresentar preço calculado com 10% como resultado.
+5. **Essenciais como alternativas:** 0001, 0005 e 0007 continuam preservadas como alternativas do card, com os preços do mesmo GET e a comissão padrão de 10% informada pela própria Porto. Não entram na comparação entre companhias.
+6. **Falhas do PUT:** HTTP 501, 5xx, timeout ou falha de conexão no PUT da 0008 são falha técnica, nunca recusa, e não autorizam a análise conjunta. A repetição da etapa segue a regra vigente (sem recriar o orçamento). Como agora existe um único PUT, a repetição não concorre com outra escrita no mesmo orçamento.
+
+### Trechos superados por esta seção
+
+- "4.1. Pendências encerradas e limites da confirmação": o item "Preservado: uma chamada por oferta, simultâneas".
+- "4.2. Aplicação por oferta e efeitos a validar": um PUT por oferta retornada, execução concorrente e justificativa da concorrência. O isolamento local por oferta deixa de ser necessário, porque há um único PUT.
+- "4.3. Consulta do orçamento atualizado como alternativa": o parágrafo "Concorrência preservada".
+- "5. Fluxo proposto dentro da arquitetura existente", item 3 (PUT por oferta, simultâneos) e a menção a PUTs concorrentes no item 7.
+- "6. Pendências consolidadas", linha "Atualizações simultâneas — homologação": encerrada pela evidência acima (a Porto devolve 501 em PUTs concorrentes no mesmo orçamento).
+- Resumo do fluxo no CLAUDE.md ("PUTs simultâneos de comissão por oferta"): atualizado em 11/11/2026.
+
+### Pendências para a implementação
+
+- **Dados já gravados:** a análise local 1 continua "aprovada, preço indisponível". Depois da implementação, reprocessar a etapa de preços sem recriar o orçamento.
+- **Comando de diagnóstico — feito em 11/11/2026:** `porto:test-api --analise` exibe o `codComissao` enviado e o lido no GET, e avisa quando o registro é do fluxo anterior (mais de um PUT no mesmo orçamento).
+- **Too:** o usuário relatou o mesmo sintoma ("aprovada, valor indisponível"). Investigar em tarefa própria, sem estender esta regra à Too.
+
+## Pottencial — somente Complete e Traditional, plano indisponível e menor parcela — 11/11/2026
+
+**Regra confirmada pelo usuário em 11/11/2026, ainda não implementada.** Escopo exclusivo da Pottencial; não altera Too, Tokio ou Porto. Esta seção prevalece sobre todas as orientações anteriores que mandam cotar Basic, Complete e Traditional e sobre a premissa de que as 30 parcelas da Pottencial são sempre iguais (ver "Trechos superados" abaixo).
+
+### Evidência que originou a regra — análise local 3, rodada de 11/11/2026
+
+Leitura dos dados salvos com `php artisan pottencial:test-api --analise=3` (sem chamada à API):
+
+| Plano | Resultado | Retorno |
+| --- | --- | --- |
+| `Basic` | Falha técnica | `cURL error 6: Could not resolve host: api-hml.pottencial.com.br` ao obter o token (`/oauth/v3/access-token`). Falha de DNS da máquina local, não resposta da Pottencial; os outros planos alcançaram a API segundos depois |
+| `Complete` | HTTP 400 | `The chosen plan is not available for this quote. Please try again by choosing between plans '' or 'Traditional'.` |
+| `Traditional` | Aprovado (HTTP 201), mas gravado como preço indisponível | Simulador Invoice, `countInstallments = 30`, `grossAmount = 5383.05`: **1ª parcela 179,58 e 2ª a 30ª 179,43** (179,58 + 29 × 179,43 = 5.383,05) |
+
+A Pottencial coloca o resíduo de arredondamento do prêmio (5.383,05 ÷ 30 = 179,435) na primeira parcela. O código atual (`InsuranceQuotePayment::pottencialSelection`) exige as 30 parcelas iguais e por isso descartou a seleção (`selection = null`, `payment_status = unavailable`). Esse comportamento tende a ocorrer sempre que o prêmio não for divisível por 30.
+
+### Regras confirmadas
+
+1. **Planos cotados:** o `Basic` deixa de ser utilizado. Cada cenário de pretendentes cota somente `Complete` e `Traditional`, mantendo as regras de payload por plano da seção de 09/11/2026 (Complete com `rentalProperty` e somente `basica`; Traditional com `FiancaLocaticia` e coberturas explícitas). Quantidade por rodada: 2 cotações por cenário — PF sem cônjuge 2; PF com cônjuge 4 iniciais e até 2 da conjunta (máximo 6); PJ 2.
+2. **Plano indisponível (descartado):** somente o HTTP 400 cuja mensagem informe que o plano não está disponível para a cotação (`The chosen plan is not available for this quote`) descarta o plano. O plano descartado não é oferta, não é falha técnica, não entra na comparação de preço e não gera simulação de pagamento. **Qualquer outro HTTP 400** (por exemplo, múltiplo ou cobertura inválidos) continua sendo falha técnica, para não esconder erro de payload.
+3. **Decisão do cenário com plano descartado:** vale o resultado do plano restante.
+
+   | Complete | Traditional | Resultado do cenário |
+   | --- | --- | --- |
+   | Indisponível | Aprovado | Aprovado; retorna somente o Traditional |
+   | Aprovado | Indisponível | Aprovado; retorna somente o Complete |
+   | Indisponível | Recusado | **Recusado** (com a carta de recusa do plano recusado) |
+   | Recusado | Indisponível | **Recusado** (com a carta de recusa do plano recusado) |
+   | Indisponível | Indisponível | **Tratado como recusa** do cenário |
+   | Indisponível | Falha técnica ou pendente | Segue o plano restante: falha ou pendência, nunca recusa |
+
+   Por contar como recusa, as linhas "Recusado" e "Indisponível + Indisponível" valem para a regra da conjunta: a análise conjunta continua sendo disparada somente quando as duas individuais forem recusadas na mesma rodada. O plano descartado não tem carta de recusa própria; quando ambos forem indisponíveis, a recusa fica sem carta.
+4. **Dois planos aprovados:** o sistema calcula internamente a diferença entre as parcelas dos dois planos e escolhe o **mais barato**. Somente esse plano aparece no card da Pottencial e é o preço da Pottencial na comparação entre companhias. O plano mais caro não aparece no card; fica visível somente ao clicar em **Visualizar**, junto com as demais informações da cotação. Um único plano aprovado (o outro recusado, indisponível ou com falha) é retornado diretamente, sem comparação.
+5. **Valor da parcela:** a comparação entre os planos, o card e a comparação entre companhias usam a **primeira parcela** da alternativa Invoice/Boleto de 30 parcelas (no exemplo, R$ 179,58), por ser o maior valor efetivamente cobrado. A primeira parcela diferente das demais por arredondamento não torna a alternativa inconsistente. Preservar a sequência completa das 30 parcelas, os totais (`commercialAmount`, `iofAmount`, `grossAmount`) e a parcela recorrente nos detalhes da cotação. Validação técnica proposta para a implementação: 30 valores positivos cuja soma confira com `grossAmount`; fora disso, preço indisponível.
+6. **Histórico:** cotações `Basic` de rodadas anteriores permanecem gravadas e legíveis; a regra vale para as novas rodadas.
+
+### Trechos superados por esta seção
+
+- "Três cotações independentes e um resultado da companhia" e "Downloads por plano e aprovação parcial" (26/10/2026): três planos por cenário e a tabela de 3 aprovados.
+- "Contrato do simulador e valor a comparar": a premissa de parcelas sempre iguais e de que divergência é inconsistência técnica.
+- "Seleção do menor preço e consequências para a futura refatoração", itens 1, 3 e 4: comparação entre três planos e recusa total exigindo três recusas.
+- "Composição com os três planos da Pottencial" (28/10/2026): seis/nove cotações por rodada com cônjuge e recusa da individual exigindo três planos recusados.
+- Menções a Basic/Complete/Traditional em "Regra geral — pessoa jurídica sem cônjuge", "Matriz definitiva do payload por formulário" e "Estado da implementação" (até três cotações PJ e total máximo 9).
+
+### Pendências para a implementação
+
+- **Empate de parcela entre Complete e Traditional — encerrado em 11/11/2026:** o usuário confirmou que não existe empate, porque cada plano tem um conjunto diferente de coberturas e, portanto, um preço diferente. Não criar regra de desempate entre os dois planos. A orientação anterior de registrar igualdade de preço continua valendo somente para a comparação entre companhias e entre cenários de pretendentes.
+- **Falha de DNS/conexão na autenticação (fora desta regra):** a falha ocorreu antes do envio da cotação, sem orçamento remoto. Avaliar em tarefa própria a repetição automática dessa etapa, sem permitir duas cotações para o mesmo plano.
+
+
 ## Pottencial — correção dos múltiplos após retorno real — 09/11/2026
 
 **Escopo exclusivo da Pottencial, confirmado pelo usuário:** os múltiplos 30, 6 e 3 por cobertura descritos nesta seção não são uma regra geral do seguro fiança. Não aplicar este mapeamento aos builders, payloads ou configurações da Too, Tokio ou Porto; cada companhia mantém suas próprias regras documentadas.
@@ -253,10 +447,12 @@ Omitir `seguro` na raiz, `cobranca`, `locador`, `localRisco`, `locatarios` e `lo
 - **Fora do escopo atual:** escolher locador na conjunta, obter endereçoPrincipal/enderecoAtual e telefone comercial PJ para completar o PUT. Não ampliar formulários nem bloquear o ajuste por ausência desses complementos.
 - **Regra anterior superada para esta operação:** reutilizar dados dos locatários em locador. Uma eventual emissão futura exigirá estudo próprio dos dados reais e dos requisitos aplicáveis.
 - **Preservado:** POST de criação com seus próprios requisitos, comissão inteira 15, seleção de pagamento FAT/CC conforme origem e consulta posterior do preço real.
-- **Preservado:** uma chamada por oferta, simultâneas, conforme decisão anterior. O suporte mencionar “ofertas desejadas” não altera automaticamente essa decisão para um único PUT com todas as ofertas.
+- **Superado em 11/11/2026: um único PUT, somente da 0008, confirmado pelo GET (ver seção da Porto no topo).** ~~Preservado: uma chamada por oferta, simultâneas, conforme decisão anterior.~~ O suporte mencionar “ofertas desejadas” não altera automaticamente essa decisão para um único PUT com todas as ofertas.
 - **Validação técnica pendente:** executar o payload mínimo em homologação, conferir aplicação dos 15%, isolamento entre ofertas e atualização dos valores retornados. A resposta do suporte é confirmação contratual, não teste executado pelo projeto.
 
 ### 4.2. Aplicação por oferta e efeitos a validar
+
+**Superado em 11/11/2026: um único PUT, somente da 0008, confirmado pelo GET (ver seção da Porto no topo).** O texto abaixo fica como histórico.
 
 Criar orçamento → preparar um PUT mínimo por oferta retornada na criação, somente com ofertas[].seguro e comissão 15 → executar os PUTs simultaneamente → aguardar suas conclusões → consultar ofertas atualizadas para comparação. **Confirmação do usuário: realizar uma chamada de atualização para cada oferta disponível no orçamento, com execução concorrente, sem esperar uma terminar para iniciar outra.** Uma oferta resulta em um PUT; duas em dois; três em três; quatro em quatro. A quantidade vem das ofertas efetivamente retornadas pelo POST, não de uma lista fixa nem da quantidade de condições de pagamento. Não reunir produtos diferentes no mesmo PUT nem criar novo orçamento/análise por oferta apenas para ajustar comissão. Essa regra vale separadamente para cada orçamento/cenário aprovado; atualizar os Essenciais não os inclui automaticamente na comparação entre seguradoras. A orientação anterior de execução sequencial foi substituída por esta decisão.
 
@@ -296,7 +492,7 @@ Fonte lida integralmente: [retorna-os-dados-atualizados.md](Porto_endpoitsMarkdo
 
 **Limite da evidência:** o schema não declara `comissao.codComissao` aplicado, nem dentro de ofertas, nem na raiz. `cocorretagens.percentual` refere-se à cocorretagem e não deve ser interpretado como a comissão configurada pelo PUT. A palavra “atualizados” não comprova sozinha o percentual. Nos testes, correlacionar PUT com codComissao 15, sua resposta e a consulta posterior do mesmo orçamento/seguro/forma/condição; confirmar o efeito do ajuste com evidência do ambiente ou suporte, sem exigir uma variação arbitrária de preço nem calcular localmente a parcela.
 
-**Concorrência preservada:** aguardar todos os PUTs por oferta terminarem antes das leituras finais. Comparar ambas as consultas com todas as ofertas atualizadas, verificar se cada produto conserva sua alteração e registrar qual endpoint originou cada preço. O novo GET não recebe filtro `seguro`; se retornar apenas o último produto selecionado ou ofertas não recalculadas, não consegue comprovar sozinho todos os preços após atualizações concorrentes. Nesse caso, registrar a incompatibilidade para resolver com o usuário/suporte, sem serializar silenciosamente os PUTs ou criar novas cotações.
+**Superado em 11/11/2026: um único PUT, somente da 0008, confirmado pelo GET (ver seção da Porto no topo).** **Concorrência preservada (histórico):** aguardar todos os PUTs por oferta terminarem antes das leituras finais. Comparar ambas as consultas com todas as ofertas atualizadas, verificar se cada produto conserva sua alteração e registrar qual endpoint originou cada preço. O novo GET não recebe filtro `seguro`; se retornar apenas o último produto selecionado ou ofertas não recalculadas, não consegue comprovar sozinho todos os preços após atualizações concorrentes. Nesse caso, registrar a incompatibilidade para resolver com o usuário/suporte, sem serializar silenciosamente os PUTs ou criar novas cotações.
 
 **Respostas e inconsistências:** 400 usa `status`/`message` (incluindo orçamento não pertencente ao corretor), enquanto 500 usa errorCode/errorMessage; 401/502 podem ser strings. Falha de consulta não é recusa. O status de negócio 0/1/2/3/4/5/7/9/C/D/E/F/G/M é distinto do HTTP; campos apolice/renovacao/status 4 no exemplo não autorizam emissão. O exemplo contém ofertas vazias e formasPagamento null, logo não prova o fallback. Schema ainda possui integer para dinheiro, quantidadeParcela mínimo 100 incompatível com 30, CEP máximo 7, nomes/limites conflitantes e seguro 0008 com nome FIanca Essencial 12: manter regras confirmadas e validar respostas reais, sem copiar esses limites cegamente. `locatarios.cpfCnpj` com máximo 14 e tipoPessoa F/J reforçam o suporte já confirmado a CNPJ.
 
@@ -306,7 +502,7 @@ A consulta exige um orçamento conhecido, portanto **não resolve a obtenção d
 
 1. Coordenador prepara pacote/rodada/cenários; Porto terá uma criação por cenário, não quatro criações por produto. PF sem cônjuge: uma; PF com cônjuge: duas individuais e terceira conjunta somente se ambas forem recusadas. PJ: somente cenário empresarial primary, sem estado civil, cônjuge ou análise individual do responsável, conforme regra geral de 02/11/2026.
 2. Builder consome snapshot e datas da rodada e monta POST mínimo. Service autentica/transmite; provider interpreta 201/409 e grava o ID remoto na cotação correta. Falha após criação não autoriza recriar orçamento.
-3. Para aprovado, usar `ofertas[]` e suas formas/condições presentes na resposta do POST, sem GET preliminar no fluxo definido. Para cada oferta retornada, montar um PUT mínimo independente contendo somente ofertas, com um item identificado por seguro e comissao.codComissao = 15. Disparar as atualizações simultaneamente no mesmo orçamento, conforme decisão do usuário, com resultados isolados por oferta e proteção contra sobrescrita local. Se a resposta real do POST não fornecer códigos das ofertas suficientes, registrar a lacuna para homologação e revisar a integração com evidência; não inventar valores nem inserir silenciosamente outra etapa. Código de oferta ausente impede seu ajuste, sem transformar aprovação em recusa; complementos de emissão não são exigidos neste PUT. Não publicar preços calculados com padrão 10% como se fossem 15%.
+3. **Superado em 11/11/2026: um único PUT, somente da 0008, confirmado pelo GET (ver seção da Porto no topo).** Para aprovado, usar `ofertas[]` e suas formas/condições presentes na resposta do POST, sem GET preliminar no fluxo definido. Para cada oferta retornada, montar um PUT mínimo independente contendo somente ofertas, com um item identificado por seguro e comissao.codComissao = 15. Disparar as atualizações simultaneamente no mesmo orçamento, conforme decisão do usuário, com resultados isolados por oferta e proteção contra sobrescrita local. Se a resposta real do POST não fornecer códigos das ofertas suficientes, registrar a lacuna para homologação e revisar a integração com evidência; não inventar valores nem inserir silenciosamente outra etapa. Código de oferta ausente impede seu ajuste, sem transformar aprovação em recusa; complementos de emissão não são exigidos neste PUT. Não publicar preços calculados com padrão 10% como se fossem 15%.
 4. Após todas as atualizações disparadas concluírem, consultar preços finais: preferir o GET de ofertas; se a homologação mostrar que não reflete o recálculo, usar GET do orçamento atualizado conforme seção 4.3. Selecionar forma por origem e 29 parcelas Sem entrada na base de 30 meses, conforme confirmação geral de 05/11/2026, considerando o sucesso do ajuste de cada oferta. Persistir resposta completa, endpoint de origem e seleção (produto + forma + condição + parcela) associadas à cotação, com o estado da aplicação da comissão. O catálogo inicial não deve sobrescrever preços finais.
 5. `InsuranceQuotePayment` receberá tratamento Porto próprio. Hoje seu match só cobre Too/Pottencial, e o coordenador inicializa Invoice/Boleto: adaptar o pagamento para FAT/CC sem mudar as outras companhias. Manter uma cotação remota por cenário, preservando múltiplas ofertas nos dados da cotação; não alterar o `plan_key` de coordenação para cada produto retornado. A representação normalizada das ofertas será definida na implementação, sem prometer que a simples inclusão do provider já basta.
 6. Coordenador consolida somente parcela elegível. Aprovação sem ofertas utilizáveis continua aprovação com pagamento indisponível/falho; não autoriza conjunta. Painel/e-mail/PDF devem apontar a mesma oferta/condição final. Downloads preservam os IDs de cada alternativa e são autorizados localmente.
@@ -320,7 +516,7 @@ No service, diferenciar sucesso HTTP de resultado de negócio: GET/PUT 200 não 
 | --- | --- |
 | **Dados do PUT — resolvido pelo suporte em 04/11/2026** | Enviar somente ofertas com seguro e comissão 15. Demais campos obrigatórios do contrato completo são para emissão, fora desta versão; mapeamento de locador/endereço/telefone para esse PUT deixa de ser pendência |
 | **Fonte dos preços recalculados — validação** | Testar GET de ofertas após os PUTs com 15%; se não refletir, usar GET do orçamento atualizado. Confirmar atualização e isolamento por produto, pois o novo schema não expõe comissão aplicada e a consulta não filtra por seguro |
-| **Atualizações simultâneas — homologação** | Simultaneidade definida pelo usuário, uma requisição por oferta, resultados locais isolados. Verificar se a Porto preserva comissão/condições de todas as ofertas nos PUTs concorrentes sobre o mesmo orçamento e mantém seus PDFs coerentes; não presumir isolamento remoto. Vários produtos na mesma requisição continuam descartados |
+| **Atualizações simultâneas — encerrada em 11/11/2026** | A Porto devolve 501 em PUTs concorrentes no mesmo orçamento; ver seção da Porto no topo. Histórico: Simultaneidade definida pelo usuário, uma requisição por oferta, resultados locais isolados. Verificar se a Porto preserva comissão/condições de todas as ofertas nos PUTs concorrentes sobre o mesmo orçamento e mantém seus PDFs coerentes; não presumir isolamento remoto. Vários produtos na mesma requisição continuam descartados |
 | **Com/Sem entrada — regra resolvida em 05/11/2026** | Base 30: Com entrada = 30 pagamentos; Sem entrada = 29. Para Porto, selecionar a condição pela quantidade retornada, junto de seguro, FAT/CC e código da condição. Não há parâmetro específico a exigir; resta validar resposta real e PDF coerentes com essa seleção |
 | **Carta de recusa — encerrada em 06/11/2026** | O 409 do POST traz o orçamento em `detailedMessage`; `GET /orcamentos/{proposta}/{corretor}/pdf/carta-recusa` com proposta = orçamento e corretor = SUSEP; PDF em Base64 em `data.file`. Falha da carta não altera a recusa. Ver seção de 06/11/2026 no topo; resta só gerar com recusa real em homologação |
 | **CNPJ e cônjuge — resolvido** | Regra geral de 02/11/2026: analisar somente a empresa pelo CNPJ; desconsiderar estado civil e cônjuge; não analisar o responsável nem criar spouse/joint. Em 06/11/2026 o usuário confirmou que a Porto não exige CPF/nome do responsável: payload PJ só com dados da empresa. Aplicação no código ainda pendente |
@@ -841,7 +1037,7 @@ O endpoint de cotação é configurável por `services.pottencial.rental_endpoin
 
 ### Revisão Pottencial — contrato compartilhado por PF e PJ — 23/10/2026
 
-A decisão mais recente do usuário substitui a escolha anterior de uma API exclusiva PJ. Utilizar o contrato que aceita **CPF ou CNPJ** em `participants[].documentNumber` e `tenantDocumentNumber`, com `riskObjects[].occupation = Residencial` ou `Commercial`. Tipo de pessoa e finalidade da locação são independentes: atender PF/PJ residencial/comercial sem uma integração PJ separada.
+A decisão mais recente do usuário substitui a escolha anterior de uma API exclusiva PJ. Utilizar o contrato que aceita **CPF ou CNPJ** em `participants[].documentNumber` e `tenantDocumentNumber`, com `riskObjects[].occupation = Residencial` ou `Comercial`. Tipo de pessoa e finalidade da locação são independentes: atender PF/PJ residencial/comercial sem uma integração PJ separada.
 
 O arquivo exclusivo PJ foi removido do projeto por solicitação do usuário. Suas rotas, autenticação, payloads, callbacks e enums deixam de orientar a implementação. A coleção histórica permanece preservada.
 
@@ -887,7 +1083,7 @@ Erros PF: referências a `400`, `401`, `500`; consultas/documentos incluem `404`
 - Participantes exigem `documentNumber` e `role`; papéis `PolicyHolder`, `Insured`, `Beneficiary`. Documentos são strings de dígitos preservando zeros; retornos podem ofuscá-los. Beneficiários: participação entre 0.01 e 1.00, soma 1. O texto restringe `main` a Beneficiary, mas o exemplo usa no PolicyHolder: não copiar essa contradição sem confirmação.
 - Agentes: `Broker`, `PolicyOwner`, `InsuranceAgent`; documentos/papéis obrigatórios, comissão com até 3 casas decimais, participação de co-corretagem somando 1. O exemplo de comissão é 0.15; representação fracionária dos 15% definidos para este contrato compartilhado.
 - Raiz inclui vigências `date`, `paymentConditions`, desconto e agravo mutuamente exclusivos. O exemplo envia ambos zero; confirmar a interpretação de zero versus ausência.
-- Risco exige `startLeaseContract`, `endLeaseContract`, `tenantDocumentNumber`, `expenses`, `planKey`, `multiple`, `occupation`, `inhabited`, `riskLocation`. `planKey`: `Basic`, `Complete`, `Traditional`; `multiple`: 12, 15, 18, 24, 30, 45; `occupation`: **`Residencial` ou `Commercial`**, com essas grafias.
+- Risco exige `startLeaseContract`, `endLeaseContract`, `tenantDocumentNumber`, `expenses`, `planKey`, `multiple`, `occupation`, `inhabited`, `riskLocation`. `planKey`: `Basic`, `Complete`, `Traditional`; `multiple`: 12, 15, 18, 24, 30, 45; `occupation`: **`Residencial` ou `Comercial`**, com essas grafias. O OpenAPI declara `Commercial`, mas a homologação de 12/11/2026 rejeitou esse valor (HTTP 400, enum `OccupationType`) nos endpoints geral e mensalizado e aceitou `Comercial`; prevalece o comportamento validado.
 - `multiple` é múltiplo do aluguel para importância segurada, não número de parcelas nem duração automática do contrato. `Coverage.indemnityPeriod` é descrito em **dias**, não confundir com meses da Too.
 - Endereço requer street/number/district/city/state/zipCode; UF `state` com 2 caracteres. Despesas: aluguel, condomínio, IPTU, gás, água e luz, nos códigos `VALOR_*` já registrados no histórico. Cobertura exige `key`; limites e prêmios são campos separados.
 - `QuoteStatus`: `Creating`, `UnderAnalysis`, `Denied`, `Approved`. Apenas Approved comprova aprovação; Creating/UnderAnalysis devem permanecer não terminais. `commercialPremium` inclui comissão/pró-labore; `grossPremium` é total com IOF e encargos; não representar como parcela.
@@ -991,6 +1187,8 @@ A print de Solicitar cotação confirma `paymentConditions` com `paymentType` ob
 
 #### Três cotações independentes e um resultado da companhia
 
+> **Superado em 11/11/2026:** o Basic deixou de ser cotado; valem somente Complete e Traditional, com descarte do plano indisponível e primeira parcela como preço. Ver "Pottencial — somente Complete e Traditional, plano indisponível e menor parcela" no topo deste estudo.
+
 **Correção mais recente do usuário em 26/10/2026:** a Pottencial trabalha **sempre sem entrada**, como regra fixa da companhia. Não é necessário descobrir um indicador equivalente ao comEntrada da Too, nem criar um campo de entrada não documentado. A primeira parcela e seu meio/vencimento não devem ser tratados como entrada. Essa regra não autoriza reduzir 30 para 29 parcelas na Pottencial.
 
 **Planos e coberturas:** Basic, Complete e Traditional diferem em **coberturas e preço**; um plano pode oferecer mais coberturas que outro. Esta confirmação substitui expressamente a orientação anterior de que somente o preço mudava. Manter as três requisições variando planKey, sem atribuir artificialmente as mesmas coberturas aos retornos. Não inferir a hierarquia de cobertura ou preço apenas pelo nome: preservar os dados de cada plano. A regra de selecionar a menor parcela entre os aprovados elegíveis permanece; apresentar o plano e suas coberturas, sem afirmar que o mais barato oferece proteção equivalente ou superior.
@@ -1051,6 +1249,8 @@ GET `/insurance/v1/fianca-locaticia-mensalizado-pf/quotes/{quoteId}/payment-simu
 | `installments[].countInstallments` | Quantidade da alternativa; selecionar 30 conforme padrão Pottencial |
 | `installments[].installments[]` | Array numérico com os valores individuais das parcelas: fonte do preço a comparar |
 | `commercialAmount`, `iofAmount`, `grossAmount`, `additionalAmount`, `financialChargesAmount` na alternativa | Totais e discriminações; preservar separadamente |
+
+> **Superado em 11/11/2026:** o retorno real mostrou a primeira parcela diferente das demais por arredondamento; o preço passa a ser a primeira parcela. Ver a seção de 11/11/2026 no topo deste estudo.
 
 Conferir a forma de pagamento e a alternativa de 30 parcelas, validar quantidade e valores recebidos. As parcelas de cada alternativa são iguais conforme confirmação geral do usuário; usar esse valor final como preço principal. IOF, juros e demais encargos já estão incluídos conforme confirmação geral do usuário: não somá-los novamente, nem dividir grossAmount por 30. Preservar a sequência recebida e verificar sua consistência com a regra de parcelas iguais; divergência é inconsistência técnica, não uma modalidade a ser comparada por média ou menor elemento.
 
@@ -1470,6 +1670,8 @@ Na Tokio, a individual de cada pessoa contém somente ela como pretendente pesso
 Esses preenchimentos descrevem a montagem pretendida com base nas decisões e fragmentos recebidos; a aceitação do payload completo individual/conjunto será validada na integração. A ausência de suporte PJ na API Tokio permanece: não converter lead CNPJ em PF para executar essas tentativas.
 
 ### Composição com os três planos da Pottencial
+
+> **Superado em 11/11/2026:** cada cenário cota somente Complete e Traditional (até 6 cotações por rodada com cônjuge). Ver a seção de 11/11/2026 no topo deste estudo.
 
 A regra de Basic, Complete e Traditional permanece. **Cada cenário de pessoas** (solicitante sozinho, cônjuge sozinho e eventual casal) tem as suas cotações por plano. Assim, haverá seis cotações iniciais por rodada Pottencial com cônjuge (dois cenários × três planos) e até nove se a conjunta for necessária. São até três cenários de análise, não nove companhias ou nove rodadas.
 

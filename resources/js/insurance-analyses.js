@@ -1,6 +1,10 @@
 import { createAnalysisRealtime } from './insurance-analysis-realtime';
 import { createAnalysisComponents } from './insurance-analysis-components';
 import { createReanalysisModes } from './insurance-analysis-reanalysis';
+import { createAnalysisMotion } from './insurance-analysis-motion';
+
+const motion = createAnalysisMotion();
+motion.intro();
 
 const reanalysisModes = createReanalysisModes({
     onRequested: () => window.insuranceAnalysis?.refresh(),
@@ -51,6 +55,7 @@ async function startInsuranceAnalyses() {
         }
     }
     const components = createAnalysisComponents({
+        onReplace: motion.replaced,
         onUpdated: () => {
             initializeExpenseForms();
             reanalysisModes.apply();

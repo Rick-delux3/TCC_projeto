@@ -177,8 +177,10 @@ return [
         'token_cache_margin_seconds' => 60,
         // Produto que representa a Porto na comparação entre seguradoras (0008 = Fiança).
         'comparison_offer' => '0008',
-        // Sem entrada na base de 30 meses = 29 pagamentos.
-        'installments_without_entry' => 29,
+        // Pagamentos lidos do retorno, por forma (a Porto não aceita a quantidade
+        // no request; as condições são fixas por forma na base de 30 meses):
+        // FAT = Fatura sem entrada, condição 029 (29X); CC = cartão, condição 030 (30X).
+        'installments' => ['FAT' => 29, 'CC' => 30],
         // Fonte dos preços após o ajuste de comissão: "offers" (GET de ofertas)
         // ou "budget" (GET do orçamento atualizado), conforme a homologação.
         'price_source' => env('PORTO_PRICE_SOURCE', 'offers'),

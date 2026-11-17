@@ -1,10 +1,13 @@
-<footer data-analysis-component="actions" class="border-top pt-3">
+<footer data-analysis-component="actions" class="ia-actions border-top pt-3">
     @if (session('success'))
         <div class="alert alert-success" role="status">{{ session('success') }}</div>
     @endif
+    @if (session('error'))
+        <div class="alert alert-warning" role="alert">{{ session('error') }}</div>
+    @endif
     @if ($permissions['edit_lead'] && $permissions['create_analysis'] && $actions['save_expenses']['available'])
         <div class="d-flex flex-wrap gap-2">
-            <button type="button" class="btn btn-outline-primary" data-analysis-dialog="expense-reanalysis" aria-haspopup="dialog" aria-controls="expense-reanalysis">Editar despesas</button>
+            <button type="button" class="btn btn-outline-primary" data-analysis-dialog="expense-reanalysis" aria-haspopup="dialog" aria-controls="expense-reanalysis">@if ($nvs)<i class="bi bi-pencil-square me-2" aria-hidden="true"></i>@endif Editar despesas</button>
         </div>
     @endif
     <p class="small text-body-secondary mt-2 mb-0">A reanálise é feita por companhia: salve as despesas e clique em <strong>Reanalisar</strong> na companhia desejada. Companhias ainda em análise aguardam o resultado atual.</p>

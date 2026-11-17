@@ -1,13 +1,26 @@
+@php
+    // Tema NVS (escuro, cores do escudo) só no perfil tcc; o client segue com o Bootstrap puro.
+    $nvs = config('branding.active', 'tcc') === 'tcc';
+@endphp
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="pt-BR" @if ($nvs) data-bs-theme="dark" @endif>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>Análise de {{ $pageData['lead']['nome'] }}</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB" crossorigin="anonymous">
+    @if ($nvs)
+        <x-brand-favicon profile="tcc" />
+        <link rel="preconnect" href="https://fonts.googleapis.com">
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link href="https://fonts.googleapis.com/css2?family=Sansation:wght@300;400;700&display=swap" rel="stylesheet">
+        <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+        @vite('resources/css/insurance-analyses.css')
+    @endif
 </head>
-<body>
+{{-- data-ia-intro: sequência de entrada só no primeiro carregamento; o JS remove depois dela. --}}
+<body @if ($nvs) data-brand="tcc" data-ia-intro @endif>
     <main class="container py-4" data-reanalysis-root data-reanalysis-mode="separate">
         @include('insurance-analyses.partials.live-content', ['includeLead' => true])
     </main>

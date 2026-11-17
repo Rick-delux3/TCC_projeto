@@ -2,6 +2,7 @@
 
 namespace App\Actions\Companies;
 
+use App\Jobs\CreateCompanyLeadLoversTagJob;
 use App\Models\Corretor;
 use App\Models\CorretorActivityLog;
 use App\Models\Imobiliaria;
@@ -31,7 +32,7 @@ class RegisterCompany
             $ip,
             $userAgent,
         ): array {
-            $companyTag = $this->resolveCompanyTag($data);
+            $companyTag = $this->resolveCompanyTag($data, $registeredBy !== null);
             $companyName = $companyTag?->title ?? $data['company_name'];
             $password = Hash::make($data['password']);
 
@@ -86,6 +87,10 @@ class RegisterCompany
                 ]);
             }
 
+            if ($registeredBy === null && config('services.leadlovers.enabled', false)) {
+                CreateCompanyLeadLoversTagJob::dispatch($company->id)->afterCommit();
+            }
+
             return [
                 'company' => $company,
                 'user' => $user,
@@ -93,9 +98,12 @@ class RegisterCompany
         });
     }
 
-    private function resolveCompanyTag(array $data): ?LeadLoversTag
+    private function resolveCompanyTag(array $data, bool $allowTagSelection): ?LeadLoversTag
     {
         if (! empty($data['leadlovers_tag_id'])) {
+            if (! $allowTagSelection) {
+                throw ValidationException::withMessages(['leadlovers_tag_id' => 'Informe o nome da empresa para realizar o cadastro.']);
+            }
             $tagId = (int) $data['leadlovers_tag_id'];
 
             if (! $this->companyTags->isAvailable($tagId)) {
@@ -110,7 +118,7 @@ class RegisterCompany
                 ->firstOrFail();
         }
 
-        if ($this->companyTags->hasAvailableTags()) {
+        if ($allowTagSelection && $this->companyTags->hasAvailableTags()) {
             throw ValidationException::withMessages([
                 'company_name' => 'Uma imobiliária ficou disponível. Atualize a página e selecione-a.',
             ]);

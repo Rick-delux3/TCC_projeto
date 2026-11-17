@@ -4,7 +4,6 @@ namespace App\Services\Insurance;
 
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\PendingRequest;
-use Illuminate\Http\Client\Pool;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -108,65 +107,50 @@ class PortoService
     }
 
     /**
-     * PUT /orcamentos/{orcamento}/{susep} — um PUT por oferta, todos simultâneos.
+     * PUT /orcamentos/{orcamento}/{susep} — ajuste de comissão de uma oferta.
      *
-     * Cada oferta tem seu próprio payload e seu próprio resultado, correlacionados
-     * pelo código da oferta e não pela ordem de chegada das respostas. O ajuste é
-     * idempotente (define a comissão), então falhas transitórias são repetidas uma
-     * única vez, somente para as ofertas que falharam.
-     *
-     * @param  array<string, array>  $payloads  código da oferta => payload mínimo
-     * @return array<string, array> código da oferta => resultado
+     * Uma única escrita por vez no orçamento: em homologação (11/11/2026) a Porto
+     * devolveu 501 a PUTs concorrentes no mesmo orçamento. O ajuste é idempotente
+     * (define a comissão), então uma falha transitória é repetida uma única vez;
+     * o 401 renova o token antes da repetição.
      */
-    public function updateCommissions(string $budget, array $payloads): array
+    public function updateCommission(string $budget, array $payload): array
     {
-        $results = [];
         $context = $this->context($budget);
         if (isset($context['error'])) {
-            foreach (array_keys($payloads) as $offer) {
-                $results[(string) $offer] = $this->failure('update_commission', $context['error']);
-            }
-
-            return $results;
+            return $this->failure('update_commission', $context['error']);
         }
         $url = "{$context['base']}/orcamentos/{$budget}/{$context['susep']}";
 
-        $pending = $payloads;
-        for ($round = 0; $round < 2 && $pending !== []; $round++) {
+        $result = [];
+        for ($attempt = 0; $attempt < 2; $attempt++) {
             $token = $this->authentication->token();
             if (! $token['success']) {
-                foreach (array_keys($pending) as $offer) {
-                    $results[(string) $offer] = $this->authenticationFailure('update_commission', $token);
-                }
+                return $this->authenticationFailure('update_commission', $token);
+            }
+            try {
+                $response = $this->request(Http::asJson(), $token['access_token'], 40)->put($url, $payload);
+                $result = $this->result('update_commission', $response, [200], [$payload, $token]);
+            } catch (ConnectionException $exception) {
+                $result = $this->connectionFailure('update_commission', $exception, [$payload, $token]);
+            }
+
+            $status = $result['http_status'];
+            if ($status === 401) {
+                $this->authentication->forgetToken();
+            }
+            if ($result['success'] || ! self::transient($status)) {
                 break;
             }
-
-            $responses = Http::pool(function (Pool $pool) use ($pending, $token, $url): void {
-                foreach ($pending as $offer => $payload) {
-                    $this->request($pool->as('offer:'.$offer), $token['access_token'], 40)->put($url, $payload);
-                }
-            });
-
-            $retry = [];
-            foreach ($pending as $offer => $payload) {
-                $response = $responses['offer:'.$offer] ?? null;
-                $result = $response instanceof Response
-                    ? $this->result('update_commission', $response, [200], [$payload, $token])
-                    : $this->connectionFailure('update_commission', $response, [$payload, $token]);
-                $results[(string) $offer] = $result;
-
-                $status = $result['http_status'];
-                if ($status === 401) {
-                    $this->authentication->forgetToken();
-                }
-                if (! $result['success'] && ($status === null || in_array($status, [401, 408, 429], true) || $status >= 500)) {
-                    $retry[$offer] = $payload;
-                }
-            }
-            $pending = $retry;
         }
 
-        return $results;
+        return $result;
+    }
+
+    /** Falha que pode não se repetir: sem resposta, token, timeout, limite ou 5xx. */
+    public static function transient(?int $status): bool
+    {
+        return $status === null || in_array($status, [401, 408, 429], true) || $status >= 500;
     }
 
     private function send(string $operation, string $method, \Closure $path, ?array $payload, array $expected, int $timeout, ?string $budget = null): array

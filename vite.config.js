@@ -21,6 +21,7 @@ export default defineConfig({
                 'resources/js/imobiliarias-admin.js',
                 'resources/css/config-equipe.css',
                 'resources/js/config-equipe.js',
+                'resources/css/insurance-analyses.css',
                 'resources/js/insurance-analyses.js',
 
             ],

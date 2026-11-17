@@ -1,0 +1,1104 @@
+/*
+ * Página de análises do lead — perfil visual NVS (BRAND_PROFILE=tcc).
+ *
+ * Tudo fica sob [data-brand="tcc"]: o perfil client segue com o Bootstrap puro,
+ * e a marcação continua sendo a do Bootstrap (os componentes são trocados em
+ * tempo real pelo data-analysis-component). Aqui existe só a camada de tema.
+ *
+ * Direção: mesa de cotação. Fundo neutro derivado do navy da logo, superfícies
+ * planas, cantos quase retos, cores da marca dessaturadas e usadas como sinal.
+ * O único gesto de marca é o filete azul|rosa (corte seco, como o escudo) na
+ * oferta de melhor preço.
+ *
+ * Escalas (revisão ui-ux-pro-max): tipo 12/14/16/18/24/28 + display; espaço em
+ * múltiplos de 4px; alvos de 44px em telas de toque; texto nunca abaixo de 12px.
+ */
+[data-brand="tcc"] {
+    /* Primitivos: rampas tiradas do escudo da logo (azul #0b8be8, rosa #fd1e6e, navy #030133). */
+    --nvs-blue-300: #7cc4f8;
+    --nvs-blue-400: #4aa8f2;
+    --nvs-blue-500: #0b8be8;
+    --nvs-blue-600: #0a74c4;
+    --nvs-blue-700: #0969b3;
+    --nvs-blue-800: #085a9a;
+    --nvs-pink-300: #ff8fb4;
+    --nvs-pink-400: #ff5c93;
+    --nvs-pink-500: #fd1e6e;
+
+    /* Superfícies: o fundo fica neutro; os planos acima dele ganham o navy da logo. */
+    --ia-bg: #0b0b24;
+    --ia-surface: #111336;
+    --ia-surface-2: #181b4a;
+    --ia-line: #23285c;
+    --ia-line-strong: #353c7a;
+    --ia-scrim: rgba(4, 3, 26, 0.8);
+    --ia-shadow-float: 0 8px 24px rgba(3, 1, 30, 0.55);
+
+    /* Texto: todos acima de 4.5:1 sobre as superfícies (faint só em ícone/desabilitado). */
+    --ia-heading: #ffffff;
+    --ia-text: #e8eaf6;
+    --ia-muted: #a3a8cc;
+    --ia-faint: #6c72a3;
+
+    /* Papéis da marca. Azul = ação e progresso. Rosa = destaque do melhor.
+       Azul|rosa lado a lado (corte seco) = assinatura do escudo, usada só duas vezes. */
+    --ia-blue: var(--nvs-blue-400);
+    --ia-blue-soft: var(--nvs-blue-300);
+    --ia-blue-vivid: var(--nvs-blue-500);
+    --ia-blue-fill: var(--nvs-blue-600);
+    --ia-blue-fill-hover: var(--nvs-blue-700);
+    --ia-blue-fill-active: var(--nvs-blue-800);
+    --ia-blue-tint: rgba(11, 139, 232, 0.14);
+    --ia-on-blue: #ffffff;
+    --ia-rose: var(--nvs-pink-400);
+    --ia-pink: var(--nvs-pink-500);
+    --ia-pink-tint: rgba(253, 30, 110, 0.12);
+    --ia-shield: linear-gradient(90deg, var(--nvs-blue-500) 50%, var(--nvs-pink-500) 50%);
+
+    /* Estados: vivos o bastante para ler de relance, sempre acompanhados de texto. */
+    --ia-ok: #4fcf97;
+    --ia-bad: #ff7a70;
+    --ia-warn: #f0b955;
+    --ia-wait: #8189b8;
+
+    /* Tipo. */
+    --ia-fs-xs: 0.75rem;   /* 12 */
+    --ia-fs-sm: 0.875rem;  /* 14 */
+    --ia-fs-md: 1rem;      /* 16 */
+    --ia-fs-lg: 1.125rem;  /* 18 */
+    --ia-fs-xl: 1.5rem;    /* 24 */
+    --ia-fs-2xl: 1.75rem;  /* 28 */
+
+    /* Espaço (4px). */
+    --ia-sp-1: 0.25rem;
+    --ia-sp-2: 0.5rem;
+    --ia-sp-3: 0.75rem;
+    --ia-sp-4: 1rem;
+    --ia-sp-5: 1.25rem;
+    --ia-sp-6: 1.5rem;
+    --ia-sp-8: 2rem;
+    --ia-sp-10: 2.5rem;
+
+    --ia-radius: 3px;
+    --ia-radius-sm: 2px;
+    --ia-marker: 0.5rem;
+
+    /* Movimento: tokens únicos para a página inteira (motion-consistency).
+       power1.out = preset "subtle" da skill; draw = desaceleração longa para traços. */
+    --ia-duration: 160ms;
+    --ia-dur-press: 80ms;
+    --ia-dur-exit: 140ms;
+    --ia-dur-enter: 220ms;
+    --ia-dur-reveal: 320ms;
+    --ia-dur-draw: 560ms;
+    --ia-ease-out: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    --ia-ease-in: cubic-bezier(0.55, 0.06, 0.68, 0.19);
+    --ia-ease-draw: cubic-bezier(0.16, 1, 0.3, 1);
+    --ia-stagger: 40ms;
+
+    --bs-body-font-family: "Sansation", "Segoe UI", system-ui, sans-serif;
+    --bs-body-color: var(--ia-text);
+    --bs-body-color-rgb: 232, 234, 246;
+    --bs-body-bg: var(--ia-bg);
+    --bs-body-bg-rgb: 11, 11, 36;
+    --bs-secondary-color: var(--ia-muted);
+    --bs-secondary-color-rgb: 163, 168, 204;
+    --bs-tertiary-bg: var(--ia-surface);
+    --bs-border-color: var(--ia-line);
+    --bs-border-color-translucent: var(--ia-line);
+    --bs-border-radius: var(--ia-radius);
+    --bs-border-radius-sm: var(--ia-radius-sm);
+    --bs-border-radius-lg: var(--ia-radius);
+    --bs-emphasis-color: var(--ia-heading);
+    --bs-heading-color: var(--ia-text);
+    --bs-primary: var(--ia-blue);
+    --bs-primary-rgb: 74, 168, 242;
+    --bs-link-color: var(--ia-blue);
+    --bs-link-color-rgb: 74, 168, 242;
+    --bs-link-hover-color: var(--ia-heading);
+    --bs-link-hover-color-rgb: 255, 255, 255;
+    --bs-card-bg: var(--ia-surface);
+}
+
+body[data-brand="tcc"] {
+    min-height: 100vh;
+    min-height: 100dvh;
+    background: var(--ia-bg);
+    -webkit-font-smoothing: antialiased;
+    line-height: 1.5;
+}
+
+/* Assinatura 1/2: a costura do escudo abre a página. */
+body[data-brand="tcc"]::before {
+    content: "";
+    display: block;
+    height: 3px;
+    background: var(--ia-shield);
+}
+
+[data-brand="tcc"] main.container {
+    max-width: 1200px;
+    padding: var(--ia-sp-10) var(--ia-sp-4) 4rem !important;
+}
+
+[data-brand="tcc"] :focus-visible {
+    outline: 2px solid var(--ia-blue);
+    outline-offset: 2px;
+    box-shadow: none !important;
+}
+
+/* ---------- Tipografia e títulos de seção ---------- */
+
+[data-brand="tcc"] h1,
+[data-brand="tcc"] h2,
+[data-brand="tcc"] h3,
+[data-brand="tcc"] h4 {
+    font-weight: 700;
+    letter-spacing: -0.005em;
+    text-wrap: balance;
+}
+
+/* Título de seção seguido de uma linha que fecha a largura: separa sem caixa. */
+[data-brand="tcc"] section > h2.h5 {
+    display: flex;
+    align-items: center;
+    gap: var(--ia-sp-4);
+    font-size: var(--ia-fs-lg);
+    margin-bottom: var(--ia-sp-4) !important;
+}
+
+[data-brand="tcc"] section > h2.h5::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: var(--ia-line);
+}
+
+[data-brand="tcc"] .ia-companies,
+[data-brand="tcc"] .ia-actions,
+[data-brand="tcc"] .ia-lead {
+    border-color: var(--ia-line) !important;
+}
+
+[data-brand="tcc"] .ia-companies {
+    border-top: 0 !important;
+    padding-top: var(--ia-sp-2) !important;
+}
+
+/* ---------- Botões ---------- */
+
+[data-brand="tcc"] .btn {
+    --bs-btn-border-radius: var(--ia-radius-sm);
+    --bs-btn-font-weight: 700;
+    --bs-btn-focus-box-shadow: none;
+    letter-spacing: 0.005em;
+    touch-action: manipulation;
+}
+
+[data-brand="tcc"] .btn-primary {
+    --bs-btn-bg: var(--ia-blue-fill);
+    --bs-btn-border-color: var(--ia-blue-fill);
+    --bs-btn-color: var(--ia-on-blue);
+    --bs-btn-hover-bg: var(--ia-blue-fill-hover);
+    --bs-btn-hover-border-color: var(--ia-blue-fill-hover);
+    --bs-btn-hover-color: var(--ia-on-blue);
+    --bs-btn-active-bg: var(--ia-blue-fill-active);
+    --bs-btn-active-border-color: var(--ia-blue-fill-active);
+    --bs-btn-disabled-bg: var(--ia-surface-2);
+    --bs-btn-disabled-border-color: var(--ia-line-strong);
+    --bs-btn-disabled-color: var(--ia-muted);
+    --bs-btn-disabled-opacity: 1;
+}
+
+[data-brand="tcc"] .btn-outline-primary,
+[data-brand="tcc"] .ia-company [data-provider-reanalysis].btn-primary {
+    --bs-btn-bg: transparent;
+    --bs-btn-color: var(--ia-blue-soft);
+    --bs-btn-border-color: var(--ia-blue-vivid);
+    --bs-btn-hover-bg: var(--ia-blue-fill);
+    --bs-btn-hover-border-color: var(--ia-blue-fill);
+    --bs-btn-hover-color: var(--ia-on-blue);
+    --bs-btn-active-bg: var(--ia-blue-fill-active);
+    --bs-btn-active-border-color: var(--ia-blue-fill-active);
+    --bs-btn-active-color: var(--ia-on-blue);
+}
+
+[data-brand="tcc"] .btn-outline-secondary {
+    --bs-btn-color: var(--ia-text);
+    --bs-btn-border-color: var(--ia-line-strong);
+    --bs-btn-hover-bg: var(--ia-blue-tint);
+    --bs-btn-hover-border-color: var(--ia-blue);
+    --bs-btn-hover-color: var(--ia-heading);
+    --bs-btn-active-bg: var(--ia-blue-tint);
+    --bs-btn-active-border-color: var(--ia-blue);
+    --bs-btn-active-color: var(--ia-heading);
+    --bs-btn-disabled-color: var(--ia-faint);
+    --bs-btn-disabled-border-color: var(--ia-line);
+    --bs-btn-disabled-opacity: 1;
+}
+
+[data-brand="tcc"] .btn-sm {
+    --bs-btn-padding-y: var(--ia-sp-1);
+    --bs-btn-padding-x: var(--ia-sp-3);
+    --bs-btn-font-size: var(--ia-fs-sm);
+}
+
+/* ---------- Cabeçalho do lead ---------- */
+
+[data-brand="tcc"] .ia-lead {
+    padding-bottom: var(--ia-sp-8) !important;
+    margin-bottom: var(--ia-sp-8) !important;
+}
+
+[data-brand="tcc"] .ia-lead__context {
+    font-size: var(--ia-fs-sm);
+}
+
+[data-brand="tcc"] .ia-lead h1 {
+    font-size: clamp(var(--ia-fs-2xl), 1.2rem + 1.8vw, 2.5rem);
+    line-height: 1.1;
+    margin-bottom: var(--ia-sp-3);
+    color: var(--ia-heading);
+}
+
+[data-brand="tcc"] .ia-lead__contacts {
+    color: var(--ia-muted);
+}
+
+[data-brand="tcc"] .ia-lead__contacts > span {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+[data-brand="tcc"] .ia-lead__contacts .bi {
+    margin-right: var(--ia-sp-2);
+    color: var(--ia-blue);
+}
+
+/* Entrada e vínculo: rótulo discreto em cima, valor em baixo. */
+[data-brand="tcc"] .ia-lead__meta {
+    padding-left: var(--ia-sp-5);
+    border-left: 1px solid var(--ia-line);
+}
+
+[data-brand="tcc"] .ia-lead__meta dt {
+    font-size: var(--ia-fs-sm);
+    font-weight: 400;
+    color: var(--ia-muted);
+}
+
+[data-brand="tcc"] .ia-lead__meta dd {
+    margin-bottom: var(--ia-sp-3);
+}
+
+@media (max-width: 767.98px) {
+    [data-brand="tcc"] .ia-lead__meta {
+        padding-left: calc(var(--bs-gutter-x) * 0.5);
+        border-left: 0;
+        display: grid;
+        grid-template-columns: auto 1fr;
+        column-gap: var(--ia-sp-4);
+    }
+
+    [data-brand="tcc"] .ia-lead__meta dd {
+        margin-bottom: var(--ia-sp-1);
+    }
+}
+
+/* Dados completos: linha de abertura com seta que gira ao abrir. */
+[data-brand="tcc"] .ia-lead details {
+    margin-top: var(--ia-sp-6) !important;
+    border: 1px solid var(--ia-line);
+    border-radius: var(--ia-radius);
+    background: var(--ia-surface);
+}
+
+[data-brand="tcc"] .ia-lead summary {
+    display: flex;
+    align-items: center;
+    gap: var(--ia-sp-3);
+    min-height: 3rem;
+    padding: var(--ia-sp-3) var(--ia-sp-4);
+    color: var(--ia-text) !important;
+    font-weight: 700;
+    cursor: pointer;
+    list-style: none;
+    transition: background-color var(--ia-duration) ease;
+}
+
+[data-brand="tcc"] .ia-lead summary::-webkit-details-marker {
+    display: none;
+}
+
+[data-brand="tcc"] .ia-lead summary::before {
+    content: "";
+    width: var(--ia-marker);
+    height: var(--ia-marker);
+    border-right: 2px solid var(--ia-blue);
+    border-bottom: 2px solid var(--ia-blue);
+    transform: rotate(-45deg);
+    transition: transform var(--ia-duration) ease;
+}
+
+[data-brand="tcc"] .ia-lead details[open] {
+    border-color: var(--ia-line-strong);
+}
+
+[data-brand="tcc"] .ia-lead details[open] summary::before {
+    transform: rotate(45deg);
+}
+
+[data-brand="tcc"] .ia-lead summary:hover {
+    background: var(--ia-surface-2);
+}
+
+[data-brand="tcc"] .ia-lead details > .row {
+    margin: 0;
+    padding: var(--ia-sp-2) var(--ia-sp-4) var(--ia-sp-5) !important;
+    border-top: 1px solid var(--ia-line);
+}
+
+[data-brand="tcc"] .ia-lead details dt {
+    font-weight: 400;
+    color: var(--ia-muted);
+}
+
+[data-brand="tcc"] .ia-lead details dd:last-of-type {
+    font-weight: 700;
+}
+
+/* ---------- Andamento do pacote ---------- */
+
+[data-brand="tcc"] .ia-batch {
+    margin-bottom: var(--ia-sp-10) !important;
+}
+
+[data-brand="tcc"] .card {
+    --bs-card-bg: var(--ia-surface);
+    --bs-card-border-color: var(--ia-line);
+    --bs-card-border-radius: var(--ia-radius);
+    --bs-card-inner-border-radius: var(--ia-radius-sm);
+    --bs-card-cap-bg: transparent;
+    --bs-card-cap-padding-y: var(--ia-sp-3);
+    --bs-card-cap-padding-x: var(--ia-sp-4);
+    --bs-card-color: var(--ia-text);
+}
+
+[data-brand="tcc"] .ia-batch .card-body {
+    padding: var(--ia-sp-5);
+}
+
+[data-brand="tcc"] .ia-batch .card-body > .d-flex:first-child > strong {
+    font-weight: 400;
+    color: var(--ia-muted);
+}
+
+[data-brand="tcc"] .ia-batch .progress {
+    --bs-progress-height: 4px;
+    --bs-progress-border-radius: 0;
+    --bs-progress-bg: var(--ia-line);
+    --bs-progress-bar-bg: var(--ia-blue-vivid);
+    margin-bottom: var(--ia-sp-4);
+}
+
+/* Resultado consolidado: o veredito na cor do estado, com o mesmo marcador das contagens. */
+[data-brand="tcc"] .ia-result {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--ia-sp-2);
+    margin-left: var(--ia-sp-1);
+    font-weight: 700;
+    color: var(--ia-tone, var(--ia-text));
+}
+
+[data-brand="tcc"] .ia-result[data-result="approved"] { --ia-tone: var(--ia-ok); }
+[data-brand="tcc"] .ia-result[data-result="rejected"] { --ia-tone: var(--ia-bad); }
+[data-brand="tcc"] .ia-result[data-result="failed"] { --ia-tone: var(--ia-warn); }
+
+[data-brand="tcc"] .ia-result:is([data-result="approved"], [data-result="rejected"], [data-result="failed"])::before {
+    content: "";
+    width: var(--ia-marker);
+    height: var(--ia-marker);
+    background: currentColor;
+}
+
+/* Contagens: marcador quadrado na cor do estado + o texto, sem pílula. */
+[data-brand="tcc"] .ia-batch .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--ia-sp-2);
+    padding: 0;
+    margin-right: var(--ia-sp-5);
+    background: none !important;
+    color: var(--ia-text) !important;
+    font-size: var(--ia-fs-sm);
+    font-weight: 400;
+    border-radius: 0;
+}
+
+[data-brand="tcc"] .ia-batch .badge::before {
+    content: "";
+    width: var(--ia-marker);
+    height: var(--ia-marker);
+    background: var(--ia-wait);
+}
+
+[data-brand="tcc"] .ia-batch .badge.text-bg-success::before { background: var(--ia-ok); }
+[data-brand="tcc"] .ia-batch .badge.text-bg-danger::before { background: var(--ia-bad); }
+[data-brand="tcc"] .ia-batch .badge.text-bg-warning::before { background: var(--ia-warn); }
+
+[data-brand="tcc"] .ia-batch .card-body > p:not(.small) {
+    padding-top: var(--ia-sp-4);
+    border-top: 1px solid var(--ia-line);
+}
+
+[data-brand="tcc"] .ia-batch .card-body > p strong {
+    font-weight: 400;
+    color: var(--ia-muted);
+}
+
+/* ---------- Melhores ofertas (pódio) ---------- */
+
+[data-brand="tcc"] [data-analysis-component="comparison"] {
+    margin-bottom: var(--ia-sp-10) !important;
+}
+
+[data-brand="tcc"] .ia-offer {
+    position: relative;
+    background: var(--ia-surface);
+}
+
+[data-brand="tcc"] .ia-offer .card-body {
+    padding: var(--ia-sp-6) var(--ia-sp-5);
+}
+
+[data-brand="tcc"] .ia-offer h3 {
+    font-size: var(--ia-fs-md);
+}
+
+[data-brand="tcc"] .ia-offer__price {
+    font-size: var(--ia-fs-2xl) !important;
+    font-weight: 700 !important;
+    line-height: 1.15;
+    color: var(--ia-text) !important;
+}
+
+[data-brand="tcc"] .ia-offer__diff {
+    margin-top: var(--ia-sp-3);
+    padding-top: var(--ia-sp-3);
+    border-top: 1px solid var(--ia-line);
+    color: var(--ia-muted);
+}
+
+[data-brand="tcc"] .ia-offer [data-comparison-plan] {
+    color: var(--ia-blue-soft) !important;
+}
+
+/* A melhor: superfície mais clara, preço grande e o filete azul|rosa do escudo. */
+[data-brand="tcc"] .ia-offer--best {
+    --bs-card-border-color: var(--nvs-blue-800);
+    background: var(--ia-surface-2);
+    box-shadow: none !important;
+}
+
+[data-brand="tcc"] .ia-offer--best::before {
+    content: "";
+    position: absolute;
+    inset: -1px -1px auto;
+    height: 3px;
+    background: var(--ia-shield); /* Assinatura 2/2. */
+    border-radius: var(--ia-radius) var(--ia-radius) 0 0;
+}
+
+[data-brand="tcc"] .ia-offer--best > .card-header {
+    padding: var(--ia-sp-4) var(--ia-sp-5) 0;
+    background: none !important;
+    color: var(--ia-rose) !important;
+    border: 0;
+    font-size: var(--ia-fs-sm);
+    font-weight: 700;
+    text-align: center;
+}
+
+[data-brand="tcc"] .ia-offer--best .card-body {
+    padding: var(--ia-sp-2) var(--ia-sp-5) var(--ia-sp-8);
+}
+
+[data-brand="tcc"] .ia-offer--best h3 {
+    font-size: var(--ia-fs-lg);
+}
+
+[data-brand="tcc"] .ia-offer--best .ia-offer__price {
+    font-size: clamp(2.5rem, 2rem + 1.6vw, 3.25rem) !important;
+    line-height: 1.05;
+    letter-spacing: -0.02em;
+    color: var(--ia-heading) !important;
+    margin: var(--ia-sp-2) 0 !important;
+}
+
+/* ---------- Companhias ---------- */
+
+[data-brand="tcc"] .ia-company {
+    --ia-state: var(--ia-line);
+    border-color: var(--ia-line) !important;
+    border-width: 1px !important;
+    border-top: 2px solid var(--ia-state) !important;
+    background: var(--ia-surface);
+}
+
+/* A borda de cima reforça o estado; o texto do card continua dizendo qual é. */
+[data-brand="tcc"] .ia-company[data-analysis-state="approved"] { --ia-state: var(--ia-ok); }
+[data-brand="tcc"] .ia-company[data-analysis-state="rejected"] { --ia-state: var(--ia-bad); }
+[data-brand="tcc"] .ia-company[data-analysis-state="failed"] { --ia-state: var(--ia-warn); }
+[data-brand="tcc"] .ia-company[data-analysis-state="manual_required"] { --ia-state: var(--ia-warn); }
+[data-brand="tcc"] .ia-company[aria-busy="true"] { --ia-state: var(--nvs-blue-800); }
+
+/* Companhia sem integração ativa: contorno tracejado e conteúdo apagado. */
+[data-brand="tcc"] .ia-company[data-analysis-state="blocked"],
+[data-brand="tcc"] .ia-company[data-analysis-state="not_included"] {
+    border-style: dashed !important;
+    border-top-width: 1px !important;
+    border-top-color: var(--ia-line-strong) !important;
+    border-color: var(--ia-line-strong) !important;
+    background: transparent !important;
+}
+
+[data-brand="tcc"] .ia-company > .card-header {
+    flex-wrap: nowrap !important;
+    min-height: 3.5rem;
+    padding: var(--ia-sp-3) var(--ia-sp-4);
+    border-bottom: 1px solid var(--ia-line);
+    gap: var(--ia-sp-2) !important;
+}
+
+[data-brand="tcc"] .ia-company h3 {
+    display: flex;
+    align-items: center;
+    gap: var(--ia-sp-3);
+    min-width: 0;
+    font-size: var(--ia-fs-md);
+    margin-right: auto;
+}
+
+/* Monograma decorativo (aria-hidden); o nome da companhia vem logo ao lado. */
+[data-brand="tcc"] .ia-mark {
+    display: inline-grid;
+    place-items: center;
+    width: 1.75rem;
+    height: 1.75rem;
+    flex: none;
+    border-radius: var(--ia-radius-sm);
+    background: var(--ia-blue-tint);
+    color: var(--ia-blue-soft);
+    font-size: var(--ia-fs-xs);
+    letter-spacing: 0.04em;
+}
+
+/* Sem integração ativa, o monograma volta a ser neutro. */
+[data-brand="tcc"] .ia-company:is([data-analysis-state="blocked"], [data-analysis-state="not_included"]) .ia-mark {
+    background: transparent;
+    border: 1px solid var(--ia-line-strong);
+    color: var(--ia-muted);
+}
+
+/* Bloqueada/Desativada: selo encaixado na borda, como legenda; o cabeçalho não quebra. */
+[data-brand="tcc"] .ia-company > .card-header .badge {
+    position: absolute;
+    top: -1px;
+    right: var(--ia-sp-3);
+    transform: translateY(-50%);
+    padding: 0 var(--ia-sp-2);
+    border-radius: 0;
+    background: var(--ia-bg) !important;
+    color: var(--ia-muted) !important;
+    font-size: var(--ia-fs-xs);
+    font-weight: 400;
+    line-height: 1.5;
+    letter-spacing: 0.01em;
+}
+
+[data-brand="tcc"] .ia-company > .card-body {
+    justify-content: flex-start !important;
+    text-align: left !important;
+    padding: var(--ia-sp-4) var(--ia-sp-4) var(--ia-sp-5);
+}
+
+@media (min-width: 768px) {
+    [data-brand="tcc"] .ia-company > .card-body {
+        min-height: 8.5rem;
+    }
+}
+
+[data-brand="tcc"] .ia-company .list-group {
+    --bs-list-group-bg: transparent;
+    --bs-list-group-border-color: var(--ia-line);
+    --bs-list-group-color: var(--ia-text);
+}
+
+[data-brand="tcc"] .ia-company .list-group-item {
+    padding-top: 0;
+    padding-bottom: var(--ia-sp-4);
+}
+
+[data-brand="tcc"] .ia-company .list-group-item + .list-group-item {
+    padding-top: var(--ia-sp-4);
+}
+
+[data-brand="tcc"] .ia-company .list-group-item:last-child {
+    padding-bottom: 0;
+}
+
+/* Nome do plano em cima do preço, discreto. */
+[data-brand="tcc"] .ia-company h4 {
+    justify-content: flex-start !important;
+    font-size: var(--ia-fs-sm);
+    font-weight: 400;
+    color: var(--ia-muted);
+    margin-bottom: var(--ia-sp-1);
+}
+
+[data-brand="tcc"] .ia-company h4 .badge {
+    padding: var(--ia-sp-1) var(--ia-sp-2);
+    border-radius: var(--ia-radius-sm);
+    background: var(--ia-pink-tint) !important;
+    color: var(--nvs-pink-300) !important;
+    font-size: var(--ia-fs-xs);
+    font-weight: 700;
+}
+
+[data-brand="tcc"] .ia-price {
+    font-size: var(--ia-fs-2xl) !important;
+    line-height: 1.15;
+    color: var(--ia-heading);
+    margin-bottom: var(--ia-sp-1) !important;
+}
+
+[data-brand="tcc"] .ia-company .card-body > p:not([role]) {
+    color: var(--ia-muted) !important;
+}
+
+[data-brand="tcc"] .ia-company .card-body > .btn {
+    margin-top: auto;
+}
+
+/* Resultado sem preço (recusa, falha, em análise): marcador + texto, sem sublinhado. */
+[data-brand="tcc"] .ia-company [data-analysis-state] > p[role="status"],
+[data-brand="tcc"] dialog [data-analysis-state] > p[role="status"] {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--ia-sp-2);
+    text-decoration: none !important;
+    font-weight: 700;
+}
+
+[data-brand="tcc"] [data-analysis-state] > p[role="status"] > .spinner-border {
+    flex: none;
+    margin-top: 0.2em;
+}
+
+[data-brand="tcc"] [data-analysis-state="rejected"] > p[role="status"] { color: var(--ia-bad) !important; }
+[data-brand="tcc"] [data-analysis-state="failed"] > p[role="status"] { color: var(--ia-warn) !important; }
+
+[data-brand="tcc"] [data-analysis-state="rejected"] > p[role="status"]::before,
+[data-brand="tcc"] [data-analysis-state="failed"] > p[role="status"]::before {
+    content: "";
+    width: var(--ia-marker);
+    height: var(--ia-marker);
+    flex: none;
+    margin-top: 0.5em;
+    background: currentColor;
+}
+
+/* Rodapé de reanálise: informação em linha, sem faixa colorida. */
+[data-brand="tcc"] .ia-company > .card-footer {
+    padding: var(--ia-sp-3) var(--ia-sp-4) !important;
+    background: transparent !important;
+    border-top: 1px solid var(--ia-line) !important;
+    border-color: var(--ia-line) !important;
+    color: var(--ia-muted) !important;
+    font-size: var(--ia-fs-sm);
+    font-weight: 400 !important;
+}
+
+/* O .small do Bootstrap encolheria o aviso para ~12px; fica no mínimo legível. */
+[data-brand="tcc"] .ia-company > .card-footer .small,
+[data-brand="tcc"] .ia-company > .card-footer.small {
+    font-size: var(--ia-fs-sm) !important;
+}
+
+[data-brand="tcc"] [data-reanalysis-notice="supported"] > span::before {
+    content: "";
+    display: inline-block;
+    width: var(--ia-marker);
+    height: var(--ia-marker);
+    margin-right: var(--ia-sp-2);
+    background: var(--ia-ok);
+    vertical-align: 0.05em;
+}
+
+/* Não permite: o botão fica só como sombra apagada atrás do aviso (aria-hidden). */
+[data-brand="tcc"] [data-reanalysis-notice="unsupported"] > .btn {
+    opacity: 0.07 !important;
+    filter: blur(3px) !important;
+    background: var(--ia-muted);
+    border-color: transparent;
+}
+
+[data-brand="tcc"] [data-reanalysis-notice="unsupported"] > p {
+    color: var(--ia-muted) !important;
+    font-weight: 400 !important;
+}
+
+/* ---------- Ações ---------- */
+
+[data-brand="tcc"] .ia-actions {
+    margin-top: var(--ia-sp-2);
+    padding-top: var(--ia-sp-6) !important;
+}
+
+[data-brand="tcc"] .ia-actions > p {
+    max-width: 70ch;
+    margin-top: var(--ia-sp-3) !important;
+}
+
+/* ---------- Alertas e retorno ---------- */
+
+[data-brand="tcc"] .alert {
+    --bs-alert-bg: var(--ia-surface-2);
+    --bs-alert-color: var(--ia-text);
+    --bs-alert-border-color: var(--ia-line);
+    --bs-alert-border-radius: var(--ia-radius);
+    --bs-alert-link-color: var(--ia-blue);
+    border-left: 3px solid var(--ia-tone, var(--ia-blue-fill));
+}
+
+[data-brand="tcc"] .alert-success { --ia-tone: var(--ia-ok); }
+[data-brand="tcc"] .alert-danger { --ia-tone: var(--ia-bad); }
+[data-brand="tcc"] .alert-warning { --ia-tone: var(--ia-warn); }
+
+[data-brand="tcc"] [data-reanalysis-feedback] .alert {
+    box-shadow: var(--ia-shadow-float) !important;
+}
+
+[data-brand="tcc"] .spinner-border {
+    color: var(--ia-blue);
+}
+
+/* ---------- Diálogos (detalhes e despesas) ---------- */
+
+[data-brand="tcc"] dialog {
+    border: 1px solid var(--ia-line-strong) !important;
+    border-radius: var(--ia-radius) !important;
+    background: var(--ia-surface);
+    color: var(--ia-text);
+    scrollbar-color: var(--ia-line-strong) var(--ia-surface);
+}
+
+[data-brand="tcc"] dialog::backdrop {
+    background: var(--ia-scrim);
+}
+
+[data-brand="tcc"] dialog > .card {
+    border: 0;
+}
+
+[data-brand="tcc"] dialog > .card > .card-header {
+    padding: var(--ia-sp-4) var(--ia-sp-5);
+    border-bottom: 1px solid var(--ia-line);
+}
+
+[data-brand="tcc"] dialog > .card > .card-header h2 {
+    font-size: var(--ia-fs-lg);
+}
+
+[data-brand="tcc"] dialog > .card > .card-body {
+    padding: var(--ia-sp-5);
+}
+
+[data-brand="tcc"] dialog > .card > .card-footer {
+    padding: var(--ia-sp-3) var(--ia-sp-5);
+    border-top: 1px solid var(--ia-line);
+    background: transparent;
+}
+
+/* Cada oferta do Visualizar: bloco mais escuro dentro do diálogo. */
+[data-brand="tcc"] dialog .card-body > section.card {
+    --bs-card-bg: var(--ia-bg);
+}
+
+[data-brand="tcc"] dialog .card-body > section.card .badge {
+    padding: var(--ia-sp-1) var(--ia-sp-2);
+    border-radius: var(--ia-radius-sm);
+    background: none !important;
+    border: 1px solid var(--ia-line-strong);
+    color: var(--ia-muted) !important;
+    font-size: var(--ia-fs-xs);
+    font-weight: 400;
+}
+
+[data-brand="tcc"] dialog .card-body > section.card .badge.text-bg-primary {
+    border-color: transparent;
+    background: var(--ia-pink-tint) !important;
+    color: var(--nvs-pink-300) !important;
+}
+
+[data-brand="tcc"] dialog .card-body > section.card .badge.text-bg-success {
+    border-color: transparent;
+    background: var(--ia-blue-tint) !important;
+    color: var(--ia-blue-soft) !important;
+}
+
+[data-brand="tcc"] dialog [data-entry-option] .fs-5 {
+    color: var(--ia-heading);
+}
+
+[data-brand="tcc"] dialog .list-group {
+    --bs-list-group-bg: transparent;
+    --bs-list-group-border-color: var(--ia-line);
+    --bs-list-group-color: var(--ia-text);
+}
+
+[data-brand="tcc"] dialog dt {
+    font-weight: 400;
+    color: var(--ia-muted);
+}
+
+[data-brand="tcc"] dialog .ia-price {
+    font-size: var(--ia-fs-xl) !important;
+}
+
+[data-brand="tcc"] dialog [data-entry-option] {
+    border-color: var(--ia-line) !important;
+    border-radius: var(--ia-radius-sm) !important;
+    background: var(--ia-surface);
+}
+
+[data-brand="tcc"] .btn-close {
+    --bs-btn-close-focus-shadow: none;
+    border-radius: var(--ia-radius-sm);
+}
+
+[data-brand="tcc"] .form-control {
+    --bs-border-radius: var(--ia-radius-sm);
+    background-color: var(--ia-bg);
+    border-color: var(--ia-line-strong);
+    color: var(--ia-text);
+}
+
+[data-brand="tcc"] .form-control:focus {
+    background-color: var(--ia-bg);
+    border-color: var(--ia-blue-vivid);
+    color: var(--ia-heading);
+    box-shadow: 0 0 0 1px var(--ia-blue-vivid);
+}
+
+[data-brand="tcc"] .form-label {
+    font-size: var(--ia-fs-sm);
+    color: var(--ia-muted);
+}
+
+[data-brand="tcc"] [data-expense-total] {
+    color: var(--ia-blue-soft);
+    font-weight: 700;
+    font-size: var(--ia-fs-lg);
+}
+
+/* ---------- Telas de toque: alvos de 44px (botões pequenos, campos, fechar) ---------- */
+
+@media (pointer: coarse) {
+    [data-brand="tcc"] .btn,
+    [data-brand="tcc"] .form-control {
+        min-height: 2.75rem;
+    }
+
+    [data-brand="tcc"] .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    [data-brand="tcc"] .btn-close {
+        width: 2.75rem;
+        height: 2.75rem;
+        padding: 0;
+    }
+}
+
+/* ==========================================================================
+ * Movimento (revisão ui-ux-pro-max)
+ *
+ * Cada animação responde a uma pergunta do usuário:
+ *   - entrada: "o que tem nesta tela?" — uma única sequência, de cima para baixo;
+ *   - filete do melhor preço: "qual é a melhor oferta?" — o único gesto de marca;
+ *   - barra do pacote: "quanto já foi analisado?" — avança a partir do valor anterior;
+ *   - borda em movimento: "esta companhia ainda está em análise";
+ *   - pulso no card (JS): "este resultado acabou de mudar";
+ *   - diálogos, detalhes e avisos: de onde vieram e para onde foram.
+ * Só transform e opacity (exceto a borda de 2px e o pulso de contorno, que são
+ * pintura pequena). Saídas mais curtas que entradas. Nada disso existe com
+ * prefers-reduced-motion: reduce — a página fica idêntica, só sem movimento.
+ * ========================================================================== */
+
+@keyframes ia-rise {
+    from {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+}
+
+@keyframes ia-draw {
+    from {
+        transform: scaleX(0);
+    }
+}
+
+@keyframes ia-slide-in {
+    from {
+        opacity: 0;
+        transform: translateX(16px);
+    }
+}
+
+@keyframes ia-scan {
+    from {
+        background-position: -40% 0;
+    }
+
+    to {
+        background-position: 140% 0;
+    }
+}
+
+/* Âncoras de escala dos traços (sem efeito quando parado). */
+[data-brand="tcc"] .ia-batch .progress-bar {
+    transform-origin: left center;
+}
+
+[data-brand="tcc"] .ia-offer--best::before,
+body[data-brand="tcc"]::before {
+    transform-origin: center;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+    /* ---- Entrada: uma sequência, só no primeiro carregamento ---- */
+    [data-ia-intro] .ia-lead,
+    [data-ia-intro] .ia-batch,
+    [data-ia-intro] [data-analysis-component="comparison"] > :not(.row),
+    [data-ia-intro] [data-analysis-component="comparison"] > .row > [style*="--ia-i"],
+    [data-ia-intro] .ia-companies > h2,
+    [data-ia-intro] [data-analysis-component^="provider-"],
+    [data-ia-intro] .ia-actions {
+        animation: ia-rise var(--ia-dur-reveal) var(--ia-ease-out) both;
+    }
+
+    [data-ia-intro] .ia-batch { animation-delay: 60ms; }
+    [data-ia-intro] [data-analysis-component="comparison"] > :not(.row) { animation-delay: 120ms; }
+    [data-ia-intro] [data-analysis-component="comparison"] > .row > [style*="--ia-i"] {
+        animation-delay: calc(160ms + var(--ia-i, 0) * var(--ia-stagger) * 1.25);
+    }
+    [data-ia-intro] .ia-companies > h2 { animation-delay: 220ms; }
+    [data-ia-intro] [data-analysis-component^="provider-"] {
+        animation-delay: calc(260ms + var(--ia-i, 0) * var(--ia-stagger));
+    }
+    [data-ia-intro] .ia-actions { animation-delay: 420ms; }
+
+    /* A barra do pacote enche até o valor real. */
+    [data-ia-intro] .ia-batch .progress-bar {
+        animation: ia-draw var(--ia-dur-draw) var(--ia-ease-draw) 240ms both;
+    }
+
+    body[data-ia-intro]::before {
+        animation: ia-draw var(--ia-dur-draw) var(--ia-ease-draw) both;
+    }
+
+    /* O filete azul|rosa abre a partir da costura, como o escudo. */
+    [data-ia-intro] .ia-offer--best::before {
+        animation: ia-draw var(--ia-dur-draw) var(--ia-ease-draw) 460ms both;
+    }
+
+    /* ---- Companhia em análise: um traço percorre a borda de cima ---- */
+    [data-brand="tcc"] .ia-company[aria-busy="true"]::after {
+        content: "";
+        position: absolute;
+        inset: -2px 0 auto;
+        height: 2px;
+        background: linear-gradient(90deg, transparent, var(--ia-blue), transparent) no-repeat;
+        background-size: 40% 100%;
+        animation: ia-scan 1.6s linear infinite;
+        pointer-events: none;
+    }
+
+    /* ---- Botões: resposta ao toque/clique sem mover o layout ---- */
+    [data-brand="tcc"] .btn {
+        transition:
+            color var(--ia-duration) var(--ia-ease-out),
+            background-color var(--ia-duration) var(--ia-ease-out),
+            border-color var(--ia-duration) var(--ia-ease-out),
+            transform var(--ia-dur-press) var(--ia-ease-out);
+    }
+
+    [data-brand="tcc"] .btn:active:not(:disabled) {
+        transform: scale(0.97);
+    }
+
+    /* ---- Dados do lead: o conteúdo desce de onde a seta aponta ---- */
+    [data-brand="tcc"] .ia-lead details[open] > .row {
+        animation: ia-rise var(--ia-dur-enter) var(--ia-ease-out);
+    }
+
+    /* ---- Diálogos: entram em 220ms, saem em 140ms (saída mais rápida) ---- */
+    [data-brand="tcc"] dialog {
+        opacity: 0;
+        transform: translateY(8px) scale(0.98);
+        transition:
+            opacity var(--ia-dur-exit) var(--ia-ease-in),
+            transform var(--ia-dur-exit) var(--ia-ease-in),
+            overlay var(--ia-dur-exit) allow-discrete,
+            display var(--ia-dur-exit) allow-discrete;
+    }
+
+    [data-brand="tcc"] dialog[open] {
+        opacity: 1;
+        transform: none;
+        transition-duration: var(--ia-dur-enter);
+        transition-timing-function: var(--ia-ease-out);
+    }
+
+    [data-brand="tcc"] dialog::backdrop {
+        opacity: 0;
+        transition:
+            opacity var(--ia-dur-exit) var(--ia-ease-in),
+            overlay var(--ia-dur-exit) allow-discrete,
+            display var(--ia-dur-exit) allow-discrete;
+    }
+
+    [data-brand="tcc"] dialog[open]::backdrop {
+        opacity: 1;
+        transition-duration: var(--ia-dur-enter);
+    }
+
+    @starting-style {
+        [data-brand="tcc"] dialog[open] {
+            opacity: 0;
+            transform: translateY(8px) scale(0.98);
+        }
+
+        [data-brand="tcc"] dialog[open]::backdrop {
+            opacity: 0;
+        }
+    }
+
+    /* ---- Avisos de reanálise: chegam pela lateral onde ficam ---- */
+    [data-brand="tcc"] [data-reanalysis-feedback] .alert {
+        animation: ia-slide-in var(--ia-dur-enter) var(--ia-ease-out);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    [data-brand="tcc"] *,
+    [data-brand="tcc"] *::before,
+    [data-brand="tcc"] *::after {
+        transition: none !important;
+        animation: none !important;
+    }
+}

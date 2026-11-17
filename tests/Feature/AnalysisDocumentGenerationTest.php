@@ -110,7 +110,7 @@ it('blocks cached own PDFs when delivery is disabled or the view has no visible 
 it('reuses a successful refusal letter when the next company fails and retries only the missing document', function () {
     Http::fake([
         'https://pottencial.example.test/insurance/v1/fianca-locaticia/quotes/quote-123/letters' => Http::response(testLetterPdf(), 200),
-        'https://too.example.test/fianca/credito/52998224725/123/parecer' => Http::sequence()->push('', 503)->push(testLetterPdf(), 200),
+        'https://too.example.test/fianca/credito/52998224725/123/parecer' => Http::sequence()->push('', 503)->push(['cartaParecerCreditoBase64' => base64_encode(testLetterPdf())], 200),
     ]);
     $batch = documentBatch();
     $service = app(AnalysisDocumentService::class);
@@ -125,7 +125,7 @@ it('reuses a successful refusal letter when the next company fails and retries o
 it('sends all refusal letters through the job only after every document is available', function () {
     Http::fake([
         'pottencial.example.test/*' => Http::response(testLetterPdf()),
-        'too.example.test/*' => Http::sequence()->push('', 503)->push(testLetterPdf()),
+        'too.example.test/*' => Http::sequence()->push('', 503)->push(['cartaParecerCreditoBase64' => base64_encode(testLetterPdf())]),
     ]);
     $batch = documentBatch();
     $confirmation = Mockery::mock(\Illuminate\Mail\SentMessage::class);

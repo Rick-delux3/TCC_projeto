@@ -2,21 +2,30 @@
 
 namespace App\Http\Controllers;
 
+use App\Exceptions\InsuranceProviderDisabled;
+use App\Exceptions\RefusalLetterUnavailable;
 use App\Http\Resources\InsuranceAnalysisLeadResource;
 use App\Jobs\SyncProviderAnalysisStatusJob;
 use App\Models\Corretor;
 use App\Models\InsuranceAnalysis;
 use App\Models\InsuranceAnalysisBatch;
+use App\Models\InsuranceQuote;
 use App\Models\Lead;
 use App\Services\Insurance\InsuranceAnalysisPageService;
 use App\Services\Insurance\LeadReanalysisService;
+use App\Services\Insurance\RefusalLetterDownloadService;
 use DomainException;
+use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Log;
+use RuntimeException;
+use Symfony\Component\HttpFoundation\HeaderUtils;
 
 class InsuranceAnalysisController extends Controller
 {
@@ -141,6 +150,23 @@ class InsuranceAnalysisController extends Controller
         );
     }
 
+    /**
+     * Baixa a carta de recusa de uma companhia (pacote com ao menos uma aprovação).
+     */
+    public function refusalLetter(InsuranceAnalysis $analysis, InsuranceQuote $quote, RefusalLetterDownloadService $letters): Response|RedirectResponse
+    {
+        $this->authorizeAnalysis($analysis, 'web', 'viewAnalyses');
+
+        return $this->downloadRefusalLetter($analysis, $quote, $letters, 'insurance-analyses.lead');
+    }
+
+    public function adminRefusalLetter(InsuranceAnalysis $analysis, InsuranceQuote $quote, RefusalLetterDownloadService $letters): Response|RedirectResponse
+    {
+        $this->authorizeAnalysis($analysis, 'admin', 'viewAnalyses');
+
+        return $this->downloadRefusalLetter($analysis, $quote, $letters, 'admin.insurance-analyses.lead');
+    }
+
     public function adminIndex(): RedirectResponse
     {
         $this->authorizeAdminAbility('view-analyses');
@@ -218,6 +244,32 @@ class InsuranceAnalysisController extends Controller
             analysis: $analysis,
             requestedBy: 'admin'
         );
+    }
+
+    private function downloadRefusalLetter(InsuranceAnalysis $analysis, InsuranceQuote $quote, RefusalLetterDownloadService $letters, string $pageRoute): Response|RedirectResponse
+    {
+        try {
+            $letter = $letters->download($analysis, $quote);
+        } catch (RefusalLetterUnavailable) {
+            abort(404);
+        } catch (RuntimeException|LockTimeoutException|InsuranceProviderDisabled $exception) {
+            // Só a classe e a mensagem já sanitizada; nunca o corpo da companhia.
+            Log::warning('Carta de recusa indisponível para download.', [
+                'analysis_id' => $analysis->id, 'quote_id' => $quote->id,
+                'provider' => $analysis->provider, 'error' => $exception::class,
+            ]);
+
+            return redirect()->route($pageRoute, $analysis->lead_id)
+                ->with('error', 'A companhia não disponibilizou a carta de recusa agora. Tente novamente em alguns minutos.');
+        }
+
+        return response($letter['contents'], 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => HeaderUtils::makeDisposition(HeaderUtils::DISPOSITION_ATTACHMENT, $letter['name']),
+            'Content-Length' => (string) strlen($letter['contents']),
+            'Cache-Control' => 'private, no-store, max-age=0',
+            'X-Content-Type-Options' => 'nosniff',
+        ]);
     }
 
     /**

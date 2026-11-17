@@ -1,0 +1,97 @@
+- main [ref=f7e2]:
+  - generic [ref=f7e3]:
+    - generic [ref=f7e4]:
+      - generic [ref=f7e5]:
+        - paragraph [ref=f7e6]: "Análise de fiança locatícia do lead #4"
+        - heading "Carlos Prestes" [level=1] [ref=f7e7]
+        - generic [ref=f7e8]:
+          - generic [ref=f7e9]:
+            - generic [aria-hidden] [ref=f7e10]: 
+            - text: prestescalor093012@gmail.com
+          - generic [ref=f7e11]:
+            - generic [aria-hidden] [ref=f7e12]: 
+            - text: "1726738475"
+      - generic [ref=f7e13]:
+        - term [ref=f7e14]: Entrada
+        - definition [ref=f7e15]: 12/11/2026 13:28
+        - term [ref=f7e16]: Vínculo
+        - definition [ref=f7e17]: "Imobiliária #11"
+      - link "Voltar" [ref=f7e19] [cursor=pointer]:
+        - /url: http://127.0.0.1:8000/Dashboard/Admin#leads-section
+        - generic [aria-hidden] [ref=f7e20]: 
+        - text: Voltar
+    - group [ref=f7e21]:
+      - generic "Dados do lead e da locação" [ref=f7e22] [cursor=pointer]
+  - region "Andamento do pacote" [ref=f7e23]:
+    - heading "Andamento do pacote" [level=2] [ref=f7e24]
+    - generic [ref=f7e26]:
+      - generic [ref=f7e27]:
+        - generic [ref=f7e28]: "Pacote #4 · Concluído com falhas"
+        - strong [ref=f7e29]: 2 de 2 análises finalizadas (100%)
+      - progressbar "Andamento do pacote" [ref=f7e30]
+      - generic [ref=f7e32]:
+        - generic [ref=f7e33]: 0 aprovadas
+        - generic [ref=f7e34]: 0 recusadas
+        - generic [ref=f7e35]: 2 com falha
+        - generic [ref=f7e36]: 0 aguardando finalização
+      - paragraph [ref=f7e37]:
+        - strong [ref=f7e38]: "Resultado consolidado:"
+        - text: Falha na análise
+      - paragraph [ref=f7e39]: "Início: 12/11/2026 · Conclusão: 12/11/2026 · Última atualização: 12/11/2026"
+  - region "Melhores ofertas" [ref=f7e40]:
+    - heading "Melhores ofertas" [level=2] [ref=f7e41]
+    - status [ref=f7e42]: Não há propostas aprovadas neste pacote.
+    - paragraph [ref=f7e45]: Nenhuma oferta aprovada com preço confirmado disponível.
+  - region "Todas as companhias" [ref=f7e46]:
+    - heading "Todas as companhias" [level=2] [ref=f7e47]
+    - generic [ref=f7e48]:
+      - article [ref=f7e50]:
+        - generic [ref=f7e51]:
+          - heading "Pottencial" [level=3] [ref=f7e52]:
+            - generic [aria-hidden] [ref=f7e53]: PT
+            - text: Pottencial
+          - generic [ref=f7e54]: Desativada
+          - button "Visualizar" [ref=f7e55] [cursor=pointer]
+        - status [ref=f7e58]: Não foi possível concluir a cotação.
+        - generic [ref=f7e59]:
+          - generic [aria-hidden]: Reanalisar
+          - paragraph [ref=f7e60]: Esta companhia não permite reanálise.
+      - article [ref=f7e62]:
+        - generic [ref=f7e63]:
+          - heading "Too Seguros" [level=3] [ref=f7e64]:
+            - generic [aria-hidden] [ref=f7e65]: TS
+            - text: Too Seguros
+          - button "Visualizar" [ref=f7e66] [cursor=pointer]
+        - list [ref=f7e68]:
+          - listitem [ref=f7e69]:
+            - heading "Fiança locatícia" [level=4] [ref=f7e70]
+            - status [ref=f7e72]: Não foi possível concluir a cotação.
+        - generic [ref=f7e73]:
+          - generic [aria-hidden]: Reanalisar
+          - paragraph [ref=f7e74]: Esta companhia não permite reanálise.
+      - article [ref=f7e76]:
+        - generic [ref=f7e77]:
+          - heading "Porto Seguro" [level=3] [ref=f7e78]:
+            - generic [aria-hidden] [ref=f7e79]: PS
+            - text: Porto Seguro
+          - generic [ref=f7e80]: Bloqueada
+        - generic [ref=f7e81]:
+          - paragraph [ref=f7e82]: Aguardando testes e validação da integração.
+          - button "Indisponível" [disabled]
+      - article [ref=f7e84]:
+        - generic [ref=f7e85]:
+          - heading "Tokio Marine" [level=3] [ref=f7e86]:
+            - generic [aria-hidden] [ref=f7e87]: TM
+            - text: Tokio Marine
+          - generic [ref=f7e88]: Bloqueada
+        - generic [ref=f7e89]:
+          - paragraph [ref=f7e90]: Aguardando testes e validação da integração.
+          - button "Indisponível" [disabled]
+  - generic [ref=f7e91]:
+    - button "Editar despesas" [ref=f7e93] [cursor=pointer]:
+      - generic [aria-hidden] [ref=f7e94]: 
+      - text: Editar despesas
+    - paragraph [ref=f7e95]:
+      - text: "A reanálise é feita por companhia: salve as despesas e clique em"
+      - strong [ref=f7e96]: Reanalisar
+      - text: na companhia desejada. Companhias ainda em análise aguardam o resultado atual.

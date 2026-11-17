@@ -1,0 +1,104 @@
+- main [ref=f6e2]:
+  - generic [ref=f6e3]:
+    - generic [ref=f6e4]:
+      - generic [ref=f6e5]:
+        - paragraph [ref=f6e6]: "Análise de fiança locatícia do lead #8"
+        - heading "Amauri Brito" [level=1] [ref=f6e7]
+        - generic [ref=f6e8]:
+          - generic [ref=f6e9]:
+            - generic [aria-hidden] [ref=f6e10]: 
+            - text: britofdao109209@gmail.com
+          - generic [ref=f6e11]:
+            - generic [aria-hidden] [ref=f6e12]: 
+            - text: "1439861337"
+      - generic [ref=f6e13]:
+        - term [ref=f6e14]: Entrada
+        - definition [ref=f6e15]: 12/11/2026 14:27
+        - term [ref=f6e16]: Vínculo
+        - definition [ref=f6e17]: "Imobiliária #10"
+      - link "Voltar" [ref=f6e19] [cursor=pointer]:
+        - /url: http://127.0.0.1:8000/Dashboard/Admin#leads-section
+        - generic [aria-hidden] [ref=f6e20]: 
+        - text: Voltar
+    - group [ref=f6e21]:
+      - generic "Dados do lead e da locação" [ref=f6e22] [cursor=pointer]
+  - region "Andamento do pacote" [ref=f6e23]:
+    - heading "Andamento do pacote" [level=2] [ref=f6e24]
+    - generic [ref=f6e26]:
+      - generic [ref=f6e27]:
+        - generic [ref=f6e28]: "Pacote #8 · Concluído"
+        - strong [ref=f6e29]: 1 de 1 análises finalizadas (100%)
+      - progressbar "Andamento do pacote" [ref=f6e30]
+      - generic [ref=f6e32]:
+        - generic [ref=f6e33]: 1 aprovadas
+        - generic [ref=f6e34]: 0 recusadas
+        - generic [ref=f6e35]: 0 com falha
+        - generic [ref=f6e36]: 0 aguardando finalização
+      - paragraph [ref=f6e37]:
+        - strong [ref=f6e38]: "Resultado consolidado:"
+        - text: Aprovado
+      - paragraph [ref=f6e39]: "Início: 12/11/2026 · Conclusão: 12/11/2026 · Última atualização: 12/11/2026"
+  - region "Melhores ofertas" [ref=f6e40]:
+    - heading "Melhores ofertas" [level=2] [ref=f6e41]
+    - article [ref=f6e44]:
+      - generic [ref=f6e45]: Melhor preço
+      - generic [ref=f6e46]:
+        - heading "Porto Seguro" [level=3] [ref=f6e47]
+        - paragraph [ref=f6e48]: EMPREENDEDOR
+        - paragraph [ref=f6e49]: R$ 372,60
+        - paragraph [ref=f6e50]: Por parcela · 29 parcelas
+  - region "Todas as companhias" [ref=f6e51]:
+    - heading "Todas as companhias" [level=2] [ref=f6e52]
+    - generic [ref=f6e53]:
+      - article [ref=f6e55]:
+        - generic [ref=f6e56]:
+          - heading "Pottencial" [level=3] [ref=f6e57]:
+            - generic [aria-hidden] [ref=f6e58]: PT
+            - text: Pottencial
+          - generic [ref=f6e59]: Bloqueada
+        - generic [ref=f6e60]:
+          - paragraph [ref=f6e61]: Aguardando testes e validação da integração.
+          - button "Indisponível" [disabled]
+      - article [ref=f6e63]:
+        - generic [ref=f6e64]:
+          - heading "Too Seguros" [level=3] [ref=f6e65]:
+            - generic [aria-hidden] [ref=f6e66]: TS
+            - text: Too Seguros
+          - button "Visualizar" [disabled]
+        - paragraph [ref=f6e68]: Esta companhia não participou deste pacote de análises.
+        - generic [ref=f6e69]:
+          - generic [aria-hidden]: Reanalisar
+          - paragraph [ref=f6e70]: Esta companhia não permite reanálise.
+      - article [ref=f6e72]:
+        - generic [ref=f6e73]:
+          - heading "Porto Seguro" [level=3] [ref=f6e74]:
+            - generic [aria-hidden] [ref=f6e75]: PS
+            - text: Porto Seguro
+          - generic [ref=f6e76]: Desativada
+          - button "Visualizar" [ref=f6e77] [cursor=pointer]
+        - list [ref=f6e79]:
+          - listitem [ref=f6e80]:
+            - heading "EMPREENDEDOR Mais barato" [level=4] [ref=f6e81]:
+              - text: EMPREENDEDOR
+              - generic [ref=f6e82]: Mais barato
+            - generic [ref=f6e83]:
+              - paragraph [ref=f6e84]: R$ 372,60
+              - paragraph [ref=f6e85]: Por parcela · 29 parcelas
+        - generic [ref=f6e86]: Esta companhia permite reanálise.
+      - article [ref=f6e89]:
+        - generic [ref=f6e90]:
+          - heading "Tokio Marine" [level=3] [ref=f6e91]:
+            - generic [aria-hidden] [ref=f6e92]: TM
+            - text: Tokio Marine
+          - generic [ref=f6e93]: Bloqueada
+        - generic [ref=f6e94]:
+          - paragraph [ref=f6e95]: Aguardando testes e validação da integração.
+          - button "Indisponível" [disabled]
+  - generic [ref=f6e96]:
+    - button "Editar despesas" [ref=f6e98] [cursor=pointer]:
+      - generic [aria-hidden] [ref=f6e99]: 
+      - text: Editar despesas
+    - paragraph [ref=f6e100]:
+      - text: "A reanálise é feita por companhia: salve as despesas e clique em"
+      - strong [ref=f6e101]: Reanalisar
+      - text: na companhia desejada. Companhias ainda em análise aguardam o resultado atual.

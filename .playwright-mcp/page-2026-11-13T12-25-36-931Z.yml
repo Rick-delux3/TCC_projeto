@@ -1,0 +1,94 @@
+- main [ref=f11e2]:
+  - generic [ref=f11e3]:
+    - generic [ref=f11e4]:
+      - generic [ref=f11e5]:
+        - paragraph [ref=f11e6]: "Análise de fiança locatícia do lead #1"
+        - heading "João Pedro" [level=1] [ref=f11e7]
+        - generic [ref=f11e8]:
+          - generic [ref=f11e9]:
+            - generic [aria-hidden] [ref=f11e10]: 
+            - text: pedro019229joao0@gmail.com
+          - generic [ref=f11e11]:
+            - generic [aria-hidden] [ref=f11e12]: 
+            - text: "1626468439"
+      - generic [ref=f11e13]:
+        - term [ref=f11e14]: Entrada
+        - definition [ref=f11e15]: 12/11/2026 12:53
+        - term [ref=f11e16]: Vínculo
+        - definition [ref=f11e17]: "Imobiliária #23"
+      - link "Voltar" [ref=f11e19] [cursor=pointer]:
+        - /url: http://127.0.0.1:8000/Dashboard/User#leads-section
+        - generic [aria-hidden] [ref=f11e20]: 
+        - text: Voltar
+    - group [ref=f11e21]:
+      - generic "Dados do lead e da locação" [ref=f11e22] [cursor=pointer]
+  - region "Andamento do pacote" [ref=f11e23]:
+    - heading "Andamento do pacote" [level=2] [ref=f11e24]
+    - generic [ref=f11e26]:
+      - generic [ref=f11e27]:
+        - generic [ref=f11e28]: "Pacote #1 · Concluído"
+        - strong [ref=f11e29]: 1 de 1 análises finalizadas (100%)
+      - progressbar "Andamento do pacote" [ref=f11e30]
+      - generic [ref=f11e32]:
+        - generic [ref=f11e33]: 0 aprovadas
+        - generic [ref=f11e34]: 1 recusadas
+        - generic [ref=f11e35]: 0 com falha
+        - generic [ref=f11e36]: 0 aguardando finalização
+      - paragraph [ref=f11e37]:
+        - strong [ref=f11e38]: "Resultado consolidado:"
+        - text: Recusado
+      - paragraph [ref=f11e39]: "Início: 12/11/2026 · Conclusão: 12/11/2026 · Última atualização: 12/11/2026"
+  - region "Melhores ofertas" [ref=f11e40]:
+    - heading "Melhores ofertas" [level=2] [ref=f11e41]
+    - status [ref=f11e42]: Não há propostas aprovadas neste pacote.
+    - paragraph [ref=f11e45]: Nenhuma oferta aprovada com preço confirmado disponível.
+  - region "Todas as companhias" [ref=f11e46]:
+    - heading "Todas as companhias" [level=2] [ref=f11e47]
+    - generic [ref=f11e48]:
+      - article [ref=f11e50]:
+        - generic [ref=f11e51]:
+          - heading "Pottencial" [level=3] [ref=f11e52]:
+            - generic [aria-hidden] [ref=f11e53]: PT
+            - text: Pottencial
+          - generic [ref=f11e54]: Desativada
+          - button "Visualizar" [ref=f11e55] [cursor=pointer]
+        - status [ref=f11e58]: Cotação recusada
+        - generic [ref=f11e59]:
+          - generic [aria-hidden]: Reanalisar
+          - paragraph [ref=f11e60]: Esta companhia não permite reanálise.
+      - article [ref=f11e62]:
+        - generic [ref=f11e63]:
+          - heading "Too Seguros" [level=3] [ref=f11e64]:
+            - generic [aria-hidden] [ref=f11e65]: TS
+            - text: Too Seguros
+          - button "Visualizar" [disabled]
+        - paragraph [ref=f11e67]: Esta companhia não participou deste pacote de análises.
+        - generic [ref=f11e68]:
+          - generic [aria-hidden]: Reanalisar
+          - paragraph [ref=f11e69]: Esta companhia não permite reanálise.
+      - article [ref=f11e71]:
+        - generic [ref=f11e72]:
+          - heading "Porto Seguro" [level=3] [ref=f11e73]:
+            - generic [aria-hidden] [ref=f11e74]: PS
+            - text: Porto Seguro
+          - generic [ref=f11e75]: Bloqueada
+        - generic [ref=f11e76]:
+          - paragraph [ref=f11e77]: Aguardando testes e validação da integração.
+          - button "Indisponível" [disabled]
+      - article [ref=f11e79]:
+        - generic [ref=f11e80]:
+          - heading "Tokio Marine" [level=3] [ref=f11e81]:
+            - generic [aria-hidden] [ref=f11e82]: TM
+            - text: Tokio Marine
+          - generic [ref=f11e83]: Bloqueada
+        - generic [ref=f11e84]:
+          - paragraph [ref=f11e85]: Aguardando testes e validação da integração.
+          - button "Indisponível" [disabled]
+  - generic [ref=f11e86]:
+    - button "Editar despesas" [ref=f11e88] [cursor=pointer]:
+      - generic [aria-hidden] [ref=f11e89]: 
+      - text: Editar despesas
+    - paragraph [ref=f11e90]:
+      - text: "A reanálise é feita por companhia: salve as despesas e clique em"
+      - strong [ref=f11e91]: Reanalisar
+      - text: na companhia desejada. Companhias ainda em análise aguardam o resultado atual.

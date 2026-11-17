@@ -16,6 +16,7 @@ class InsuranceAnalysisPageService
         private readonly InsuranceAnalysisReadService $reader,
         private readonly AnalysisQuoteSummary $quotes,
         private readonly AnalysisQuoteComparison $comparison,
+        private readonly RefusalLetterDownloadService $refusalLetters,
     ) {}
 
     /** @return array<string, mixed> */
@@ -92,8 +93,10 @@ class InsuranceAnalysisPageService
             ],
             'progress' => $progress,
             'result' => ['is_final' => $final, 'status' => $final ? InsuranceBatchResult::status($batch) : null],
-            'analyses' => $analyses->map(function (InsuranceAnalysis $analysis) use ($data, $quotes, $enabled, $permissions, $canReanalyzeWithChanges, $prefix, $admin): array {
+            'analyses' => $analyses->map(function (InsuranceAnalysis $analysis) use ($data, $quotes, $enabled, $permissions, $canReanalyzeWithChanges, $prefix, $admin, $analyses): array {
                 $attempt = $data['analysisAttempts'][$analysis->id];
+                // Carta pela página só com outra companhia aprovada; recusa unânime vai por e-mail.
+                $letterQuote = $analyses->contains('status', 'approved') ? $this->refusalLetters->letterQuote($analysis) : null;
                 $providerEnabled = InsuranceProviderResolver::providerEnabled((string) $analysis->provider);
                 $allowed = $enabled && $providerEnabled;
                 $activeQuotes = ($analysis->currentProviderRun?->scenarios->flatMap(fn ($scenario) => $scenario->quotes) ?? collect())
@@ -140,6 +143,8 @@ class InsuranceAnalysisPageService
                                 ? 'Não foi possível concluir esta cotação.'
                                 : ($quote->rejection_reason ?? $quote->provider_status)),
                             'installment_amount' => $quote->installment_amount, 'installments' => $quote->installments,
+                            // Pottencial: a 1ª parcela é o preço; as demais podem diferir pelo arredondamento.
+                            'recurring_installment' => data_get($quote->providerResponsePayload(), 'payment.selection.recurring_installment'),
                             'payment_status' => $quote->payment_status,
                             'payment_type' => $quote->payment_type,
                             'selected' => $analysis->currentProviderRun->selected_quote_id === $quote->id,
@@ -153,6 +158,12 @@ class InsuranceAnalysisPageService
                         'reanalysis' => $this->action($providerEnabled && $canReanalyzeWithChanges && $this->canReanalyze($analysis), $prefix.'provider-reanalysis', $analysis->id) + ['requires_data_changes' => true],
                         'expense_reanalysis' => $this->action($providerEnabled && $canReanalyzeWithChanges && $analysis->supportsProviderReanalysis() && ProviderAnalysisStatus::isTerminal($analysis->status), $prefix.'provider-expense-reanalysis', $analysis->id),
                         'sync' => $this->action($allowed && $attempt !== null && $this->canSync($analysis), $prefix.'sync-status', $analysis->id),
+                        'refusal_letter' => [
+                            'available' => $letterQuote !== null,
+                            'url' => $letterQuote ? route($prefix.'refusal-letter', ['analysis' => $analysis->id, 'quote' => $letterQuote->id]) : null,
+                            'method' => 'GET',
+                            'scenario' => $letterQuote?->scenario?->kind,
+                        ],
                     ],
                 ];
             })->all(),
@@ -196,6 +207,7 @@ class InsuranceAnalysisPageService
             $status === 'rejected' => 'rejected',
             in_array($status, ['failed', 'error'], true) => 'failed',
             $status === 'manual_required' => 'manual_required',
+            $status === PottencialQuoteResponse::PLAN_UNAVAILABLE => 'plan_unavailable',
             $pollingStopped => 'awaiting_provider',
             default => 'processing',
         };
@@ -204,6 +216,7 @@ class InsuranceAnalysisPageService
             'pricing' => 'Consultando preço', 'approved' => 'Aprovada', 'rejected' => 'Cotação recusada',
             'failed' => 'Não foi possível concluir a cotação.', 'manual_required' => 'Cotação manual necessária',
             'price_unavailable' => 'Aprovada. Preço indisponível.',
+            'plan_unavailable' => 'Plano indisponível para este perfil.',
             'awaiting_provider' => 'Aguardando decisão da companhia. Consultas automáticas encerradas.',
             default => 'Processando análise',
         }];

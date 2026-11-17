@@ -1,0 +1,146 @@
+- generic [active] [ref=f2e1]:
+  - link "Ir para o conteúdo" [ref=f2e2] [cursor=pointer]:
+    - /url: "#inicio"
+  - banner [ref=f2e3]:
+    - generic [ref=f2e4]:
+      - link "NVS — início" [ref=f2e5] [cursor=pointer]:
+        - /url: http://127.0.0.1:8000
+        - img "NVS" [ref=f2e6]
+        - generic [ref=f2e7]:
+          - generic [ref=f2e8]: NVS
+          - generic [ref=f2e9]: CRM EMPRESARIAL
+      - navigation "Navegação principal" [ref=f2e10]:
+        - link "Início" [ref=f2e11] [cursor=pointer]:
+          - /url: "#inicio"
+        - link "Soluções" [ref=f2e12] [cursor=pointer]:
+          - /url: "#solucoes"
+        - link "Recursos" [ref=f2e13] [cursor=pointer]:
+          - /url: "#recursos"
+        - link "Suporte" [ref=f2e14] [cursor=pointer]:
+          - /url: "#suporte"
+      - generic [ref=f2e15]:
+        - link "Entrar (abre em nova guia)" [ref=f2e16] [cursor=pointer]:
+          - /url: http://127.0.0.1:8000/empresa/login
+          - text: Entrar
+        - link "Entrar como administrador (abre em nova guia)" [ref=f2e17] [cursor=pointer]:
+          - /url: http://127.0.0.1:8000/acesso/administrador
+          - generic [ref=f2e21]: Entrar como administrador
+  - main [ref=f2e22]:
+    - generic [ref=f2e25]:
+      - generic [ref=f2e26]:
+        - generic [ref=f2e27]: CRM empresarial
+        - heading "Empresas, beneficiários e relacionamentos em um só lugar." [level=1] [ref=f2e28]
+        - paragraph [ref=f2e29]: "A NVS é a concessionária responsável por esta plataforma: a empresa que conecta os CRMs das empresas à gestão de beneficiários, vínculos e equipe."
+        - link "Saber mais sobre a plataforma" [ref=f2e31] [cursor=pointer]:
+          - /url: "#solucoes"
+      - generic "Prévia ilustrativa do painel CRM" [ref=f2e32]:
+        - generic [ref=f2e36]:
+          - generic [ref=f2e37]:
+            - generic [ref=f2e38]:
+              - paragraph [ref=f2e39]: Fluxo ilustrativo
+              - heading "NVS CRM" [level=2] [ref=f2e40]
+            - generic [ref=f2e41]:
+              - generic [ref=f2e42]: Etapa
+              - generic [ref=f2e43]: CRM
+          - generic [ref=f2e45]:
+            - paragraph [ref=f2e46]: Solicitações
+            - paragraph [ref=f2e47]: CRM empresarial
+          - generic [ref=f2e53]:
+            - generic [ref=f2e54]:
+              - paragraph [ref=f2e55]: Empresas
+              - generic [ref=f2e56]:
+                - paragraph [ref=f2e57]: Vínculos
+                - paragraph [ref=f2e58]: e contatos
+            - generic [ref=f2e59]:
+              - paragraph [ref=f2e60]: Beneficiários
+              - generic [ref=f2e61]:
+                - paragraph [ref=f2e62]: Gestão
+                - paragraph [ref=f2e63]: do relacionamento
+          - generic [ref=f2e65]:
+            - paragraph [ref=f2e66]: Inteligência de Dados
+            - paragraph [ref=f2e67]: Cadastro, vínculo, status comercial e acompanhamento.
+    - generic [ref=f2e71]:
+      - generic [ref=f2e72]:
+        - heading "Escolha como deseja operar hoje" [level=2] [ref=f2e73]
+        - paragraph [ref=f2e74]: Acesse rapidamente os módulos principais da nossa plataforma e ganhe tempo nas suas negociações.
+      - generic [ref=f2e75]:
+        - generic [ref=f2e76]:
+          - img "Chaves de um novo lar nas mãos" [ref=f2e78]
+          - generic [ref=f2e79]:
+            - heading "Inicie sua Operação" [level=3] [ref=f2e80]
+            - paragraph [ref=f2e81]: Cadastre sua empresa para acessar o dashboard, gerenciar seus beneficiários e organizar seus contatos.
+            - link "Começar agora (abre em nova guia)" [ref=f2e82] [cursor=pointer]:
+              - /url: http://127.0.0.1:8000/empresa/form
+              - text: Começar agora
+        - generic [ref=f2e83]:
+          - img "Chaves e miniatura de uma casa protegida" [ref=f2e85]
+          - generic [ref=f2e86]:
+            - heading "Cadastro de beneficiário" [level=3] [ref=f2e87]
+            - paragraph [ref=f2e88]: Empresas, consumidores e beneficiários podem enviar seus dados para acompanhamento no CRM. O consumidor cadastra um beneficiário; o beneficiário também pode cadastrar a si próprio.
+            - link "Cadastrar beneficiário" [ref=f2e89] [cursor=pointer]:
+              - /url: http://127.0.0.1:8000/simulacao
+        - generic [ref=f2e90]:
+          - img "Sala de estar de um imóvel residencial" [ref=f2e92]
+          - generic [ref=f2e93]:
+            - heading "Acessar Painel" [level=3] [ref=f2e94]
+            - paragraph [ref=f2e95]: Acesse o dashboard da sua empresa para acompanhar os beneficiários vinculados e seus status comerciais.
+            - link "Ir para o painel (abre em nova guia)" [ref=f2e96] [cursor=pointer]:
+              - /url: http://127.0.0.1:8000/empresa/login
+              - text: Ir para o painel
+    - generic [ref=f2e98]:
+      - generic [ref=f2e99]:
+        - generic [ref=f2e100]: Arquitetura de Vendas
+        - heading "Um espaço para acompanhar cada solicitação." [level=2] [ref=f2e101]
+        - paragraph [ref=f2e102]: A concessionária gerencia empresas, beneficiários, vínculos e sua equipe. Cada empresa cadastrada acompanha no próprio dashboard apenas os beneficiários vinculados a ela.
+      - generic [ref=f2e103]:
+        - generic [ref=f2e104]:
+          - img "Entrega das chaves de uma casa" [ref=f2e106]
+          - generic [ref=f2e107]:
+            - heading "Solicitações centralizadas" [level=3] [ref=f2e108]
+            - paragraph [ref=f2e109]: Registre os dados do beneficiário para acompanhamento no CRM. Empresas sem cadastro e consumidores também podem enviar o formulário, sem dashboard.
+        - generic [ref=f2e110]:
+          - img "Busca de uma casa em uma plataforma imobiliária" [ref=f2e112]
+          - generic [ref=f2e113]:
+            - heading "Controle de Oportunidades" [level=3] [ref=f2e114]
+            - paragraph [ref=f2e115]: Consulte a origem dos leads, seus vínculos e os resultados comerciais para organizar o acompanhamento dos beneficiários.
+        - generic [ref=f2e116]:
+          - img "Planejamento e gestão de oportunidades imobiliárias" [ref=f2e118]
+          - generic [ref=f2e119]:
+            - heading "Performance Executiva" [level=3] [ref=f2e120]
+            - paragraph [ref=f2e121]: A equipe da concessionária gerencia empresas, beneficiários e vínculos, conforme suas permissões. Cada empresa acessa somente os beneficiários vinculados a ela.
+    - generic [ref=f2e124]:
+      - generic [ref=f2e125]:
+        - heading "Ainda tem dúvidas sobre como a NVS funciona?" [level=2] [ref=f2e126]
+        - paragraph [ref=f2e127]: Entenda quem solicita, quem é analisado e como os resultados são comunicados.
+        - generic [ref=f2e128]:
+          - generic [ref=f2e129]:
+            - heading "Quem pode cadastrar um beneficiário?" [level=4] [ref=f2e130]
+            - paragraph [ref=f2e131]: Uma empresa cadastrada ou não cadastrada pode enviar o formulário. O consumidor cadastra um beneficiário e não precisa ser essa pessoa. O beneficiário também pode cadastrar a si próprio.
+          - generic [ref=f2e132]:
+            - heading "As análises estão disponíveis nesta versão?" [level=4] [ref=f2e133]
+            - paragraph [ref=f2e134]: O módulo está habilitado. As empresas fornecedoras de serviços retornam aprovação ou recusa e o preço, quando disponível.
+      - generic [ref=f2e135]:
+        - generic [ref=f2e136]: 
+        - heading "Fale com nosso Suporte" [level=3] [ref=f2e138]
+        - paragraph [ref=f2e139]: Atendimento rápido, humano e especializado. Tire suas dúvidas comerciais ou técnicas agora mesmo.
+        - link " Chamar no WhatsApp" [ref=f2e140] [cursor=pointer]:
+          - /url: https://wa.me/5511999999999
+          - generic [ref=f2e141]: 
+          - text: Chamar no WhatsApp
+        - generic [ref=f2e142]: Segunda a Sexta, das 09h às 18h
+    - generic [ref=f2e144]:
+      - generic [ref=f2e145]:
+        - generic [ref=f2e146]:
+          - img "NVS" [ref=f2e147]
+          - generic [ref=f2e148]: NVS
+        - generic [ref=f2e149]:
+          - link "Soluções" [ref=f2e150] [cursor=pointer]:
+            - /url: "#solucoes"
+          - link "Suporte" [ref=f2e151] [cursor=pointer]:
+            - /url: "#suporte"
+          - link "Área do Cliente (abre em nova guia)" [ref=f2e152] [cursor=pointer]:
+            - /url: http://127.0.0.1:8000/empresa/login
+            - text: Área do Cliente
+      - generic [ref=f2e153]:
+        - paragraph [ref=f2e154]: NVS — concessionária responsável pela plataforma de CRM empresarial.
+        - paragraph [ref=f2e155]: © 2026 Todos os direitos reservados.

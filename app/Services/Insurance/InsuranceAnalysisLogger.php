@@ -11,7 +11,7 @@ final class InsuranceAnalysisLogger
 {
     private const CONTAINERS = ['response', 'result', 'too', 'data', 'selection', 'details', 'payment', 'quote', 'quote_latest', 'quote_summary', 'calculos', 'P', 'N', 'O', 'opcoesPagamento', 'credito', 'faturado', 'debito', 'vista', 'prazo', 'installments', 'paymentConditions', 'tipoPagamento', 'opcoesParcelamento', 'parcelas', 'ofertas', 'offers', 'coberturas', 'coverages'];
 
-    private const NUMBERS = ['http_status', 'amount', 'count', 'premium_amount', 'premiumAmount', 'installment_amount', 'commercialPremium', 'grossPremium', 'iof', 'insuredAmount', 'countInstallments', 'commercialAmount', 'iofAmount', 'grossAmount', 'additionalAmount', 'financialChargesAmount', 'tipo', 'tipoPagamento', 'tipoEntrada', 'tipoOpcaoParcelamento', 'quantidadeParcelas', 'numeroParcela', 'valor', 'valorTotal', 'desconto', 'qtd', 'vlPremPar', 'vlPremTot', 'vlPremLiquido', 'vlIOF', 'vlPremio', 'premioTotal', 'premioLiquido'];
+    private const NUMBERS = ['http_status', 'amount', 'count', 'first_installment', 'recurring_installment', 'premium_amount', 'premiumAmount', 'installment_amount', 'commercialPremium', 'grossPremium', 'iof', 'insuredAmount', 'countInstallments', 'commercialAmount', 'iofAmount', 'grossAmount', 'additionalAmount', 'financialChargesAmount', 'tipo', 'tipoPagamento', 'tipoEntrada', 'tipoOpcaoParcelamento', 'quantidadeParcelas', 'numeroParcela', 'valor', 'valorTotal', 'desconto', 'qtd', 'vlPremPar', 'vlPremTot', 'vlPremLiquido', 'vlIOF', 'vlPremio', 'premioTotal', 'premioLiquido'];
 
     private const ENUMS = ['paymentType' => ['Invoice', 'Boleto', 'AutomaticDebit'], 'payment_type' => ['Invoice', 'Boleto', 'AutomaticDebit', 'credito', 'faturado'], 'planKey' => ['Basic', 'Complete', 'Traditional'], 'modality' => ['prazo', 'vista']];
 
@@ -64,6 +64,7 @@ final class InsuranceAnalysisLogger
             'processing' => 'Análise em processamento.',
             'manual_review' => 'Análise aguardando decisão da companhia.',
             'manual_required' => 'Cotação manual necessária.',
+            PottencialQuoteResponse::PLAN_UNAVAILABLE => 'Plano indisponível para esta cotação; descartado da comparação.',
             'failed' => 'Falha técnica na análise.',
             default => 'Aguardando retorno da companhia.',
         };

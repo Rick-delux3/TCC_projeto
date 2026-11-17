@@ -698,6 +698,18 @@ company-index-create
     box-shadow: 0 24px 80px rgba(3, 12, 31, 0.3);
 }
 .company-edit-modal [data-company-edit-form] { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+.company-edit-modal [data-company-password-form] { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+.company-edit-modal [hidden] { display: none !important; }
+.company-password-access { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; }
+.company-password-access .form-control { min-width: 0; }
+.company-password-access .btn { white-space: nowrap; }
+.company-password-input { position: relative; }
+.real-estate-admin .company-password-input .form-control { padding-right: 54px; }
+.real-estate-admin .company-password-input .company-password-toggle { position: absolute; top: 1px; right: 1px; min-width: 44px; min-height: 44px; color: var(--edit-muted); border: 0; background: transparent; }
+.real-estate-admin .company-password-input .company-password-toggle:hover { color: var(--edit-accent); background: var(--edit-soft); }
+.company-password-modal .company-edit-icon { color: #167147; background: #edf8f1; }
+.real-estate-admin .company-password-modal .modal-header > .btn-close { margin-left: auto; min-width: 44px; min-height: 44px; }
+.real-estate-admin[data-dashboard-theme="dark"] .company-password-modal .company-edit-icon { color: #8cddb2; background: #16352e; }
 .real-estate-admin .company-edit-modal .modal-header { align-items: flex-start; gap: 16px; padding: 24px; background: var(--edit-surface); border-color: var(--edit-border); }
 .company-edit-heading { display: flex; align-items: center; gap: 14px; min-width: 0; }
 .company-edit-heading > div { min-width: 0; }
@@ -737,6 +749,7 @@ company-index-create
 .real-estate-admin .company-edit-modal .btn-outline-secondary:hover { color: var(--edit-ink); border-color: var(--edit-accent); }
 
 @media (max-width: 575.98px) {
+    .company-password-access { grid-template-columns: minmax(0, 1fr); }
     .real-estate-admin .company-edit-modal .modal-dialog { margin: 12px; }
     .real-estate-admin .company-edit-modal .modal-content { max-height: calc(100dvh - 24px); }
     .real-estate-admin .company-edit-modal .modal-header,

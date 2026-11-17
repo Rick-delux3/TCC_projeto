@@ -57,7 +57,7 @@ class InsuranceProviderResolver
         $this->ensureAnalysisEnabled();
 
         if (! self::providerEnabled($provider)) {
-            throw new \LogicException("O provider {$provider} está desativado.");
+            throw new \App\Exceptions\InsuranceProviderDisabled($provider);
         }
 
         return match ($provider) {

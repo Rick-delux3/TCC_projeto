@@ -1,5 +1,8 @@
 @php
-    $providerNames = ['pottencial' => 'Pottencial', 'too' => 'Too Seguros', 'porto' => 'Porto Seguro', 'tokio' => 'Tokio Marine'];
+    // Também vale para os componentes devolvidos pelo endpoint de atualização em tempo real.
+    $nvs = config('branding.active', 'tcc') === 'tcc';
+    $providerMarks = ['pottencial' => 'PT', 'too' => 'TS', 'porto' => 'PS', 'tokio' => 'TM'];
+    $providerNames =['pottencial' => 'Pottencial', 'too' => 'Too Seguros', 'porto' => 'Porto Seguro', 'tokio' => 'Tokio Marine'];
     $activeProviders = $pageData['providers']['enabled'] ?? [];
     $statusLabels = [
         'pending' => 'Aguardando análise', 'queued' => 'Na fila', 'processing' => 'Em análise',

@@ -43,6 +43,13 @@ class InsuranceProviderResultWriter
             'error' => $result['error'] ?? null,
         ];
 
+        if (! ($result['success'] ?? false) && $analysis->provider === 'pottencial'
+            && $analysis instanceof \App\Models\InsuranceQuote && PottencialQuoteResponse::isPlanUnavailable($result)) {
+            $this->applyPottencialPlanUnavailable($analysis, $debugPayload);
+
+            return;
+        }
+
         if (! ($result['success'] ?? false)) {
             $currentPayload = $this->payloadAsArray(
                 $analysis->response_payload
@@ -196,6 +203,34 @@ class InsuranceProviderResultWriter
             ],
         ]);
 
+    }
+
+    /**
+     * Pottencial informou que o plano não está disponível para esta cotação:
+     * o plano é descartado (sem oferta, sem simulação e sem comparação). Não é
+     * falha técnica nem recusa; a decisão do cenário fica com o outro plano.
+     */
+    private function applyPottencialPlanUnavailable(InsuranceExecution $analysis, array $debugPayload): void
+    {
+        $analysis->update([
+            'status' => PottencialQuoteResponse::PLAN_UNAVAILABLE,
+            'result' => null,
+            'provider_status' => 'PlanNotAvailable',
+            'payment_status' => 'unavailable',
+            'installment_amount' => null,
+            'response_payload' => $debugPayload,
+            'error_message' => null,
+            'rejection_reason' => null,
+            'finished_at' => now(),
+        ]);
+
+        $analysis->events()->create([
+            'event_type' => 'plan_unavailable',
+            'status' => PottencialQuoteResponse::PLAN_UNAVAILABLE,
+            'message' => "Plano {$analysis->plan_key} indisponível para esta cotação na Pottencial; descartado da comparação.",
+            'payload' => $this->analysisSnapshot($analysis),
+            'response' => $debugPayload,
+        ]);
     }
 
     private function applyTooResult(InsuranceExecution $analysis, array $result, array $debugPayload): void

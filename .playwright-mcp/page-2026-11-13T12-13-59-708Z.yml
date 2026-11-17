@@ -1,0 +1,115 @@
+- main [ref=f5e2]:
+  - generic [ref=f5e3]:
+    - generic [ref=f5e4]:
+      - generic [ref=f5e5]:
+        - paragraph [ref=f5e6]: "Análise de fiança locatícia do lead #3"
+        - heading "Luiz Prestes" [level=1] [ref=f5e7]
+        - generic [ref=f5e8]:
+          - generic [ref=f5e9]:
+            - generic [aria-hidden] [ref=f5e10]: 
+            - text: prestesluiz012029@gmail.com
+          - generic [ref=f5e11]:
+            - generic [aria-hidden] [ref=f5e12]: 
+            - text: "1123211523"
+      - generic [ref=f5e13]:
+        - term [ref=f5e14]: Entrada
+        - definition [ref=f5e15]: 12/11/2026 13:04
+        - term [ref=f5e16]: Vínculo
+        - definition [ref=f5e17]: "Imobiliária #23"
+      - link "Voltar" [ref=f5e19] [cursor=pointer]:
+        - /url: http://127.0.0.1:8000/Dashboard/User#leads-section
+        - generic [aria-hidden] [ref=f5e20]: 
+        - text: Voltar
+    - group [ref=f5e21]:
+      - generic "Dados do lead e da locação" [ref=f5e22] [cursor=pointer]
+  - region "Andamento do pacote" [ref=f5e23]:
+    - heading "Andamento do pacote" [level=2] [ref=f5e24]
+    - generic [ref=f5e26]:
+      - generic [ref=f5e27]:
+        - generic [ref=f5e28]: "Pacote #3 · Concluído"
+        - strong [ref=f5e29]: 2 de 2 análises finalizadas (100%)
+      - progressbar "Andamento do pacote" [ref=f5e30]
+      - generic [ref=f5e32]:
+        - generic [ref=f5e33]: 2 aprovadas
+        - generic [ref=f5e34]: 0 recusadas
+        - generic [ref=f5e35]: 0 com falha
+        - generic [ref=f5e36]: 0 aguardando finalização
+      - paragraph [ref=f5e37]:
+        - strong [ref=f5e38]: "Resultado consolidado:"
+        - text: Aprovado
+      - paragraph [ref=f5e39]: "Início: 12/11/2026 · Conclusão: 12/11/2026 · Última atualização: 12/11/2026"
+  - region "Melhores ofertas" [ref=f5e40]:
+    - heading "Melhores ofertas" [level=2] [ref=f5e41]
+    - generic [ref=f5e42]:
+      - article [ref=f5e44]:
+        - generic [ref=f5e45]:
+          - heading "Too Seguros" [level=3] [ref=f5e46]
+          - paragraph [ref=f5e47]: R$ 56,99
+          - paragraph [ref=f5e48]: Por parcela · 29 parcelas
+          - paragraph [ref=f5e49]: R$ 17,95 a mais por parcela
+      - article [ref=f5e51]:
+        - generic [ref=f5e52]: Melhor preço
+        - generic [ref=f5e53]:
+          - heading "Pottencial" [level=3] [ref=f5e54]
+          - paragraph [ref=f5e55]: R$ 39,04
+          - paragraph [ref=f5e56]: Por parcela · 30 parcelas
+  - region "Todas as companhias" [ref=f5e57]:
+    - heading "Todas as companhias" [level=2] [ref=f5e58]
+    - generic [ref=f5e59]:
+      - article [ref=f5e61]:
+        - generic [ref=f5e62]:
+          - heading "Pottencial" [level=3] [ref=f5e63]:
+            - generic [aria-hidden] [ref=f5e64]: PT
+            - text: Pottencial
+          - generic [ref=f5e65]: Desativada
+          - button "Visualizar" [ref=f5e66] [cursor=pointer]
+        - list [ref=f5e68]:
+          - listitem [ref=f5e69]:
+            - heading "Tradicional" [level=4] [ref=f5e70]
+            - generic [ref=f5e71]:
+              - paragraph [ref=f5e72]: R$ 39,04
+              - paragraph [ref=f5e73]: 1ª parcela · depois 29× de R$ 39,03
+        - generic [ref=f5e74]:
+          - generic [aria-hidden]: Reanalisar
+          - paragraph [ref=f5e75]: Esta companhia não permite reanálise.
+      - article [ref=f5e77]:
+        - generic [ref=f5e78]:
+          - heading "Too Seguros" [level=3] [ref=f5e79]:
+            - generic [aria-hidden] [ref=f5e80]: TS
+            - text: Too Seguros
+          - button "Visualizar" [ref=f5e81] [cursor=pointer]
+        - list [ref=f5e83]:
+          - listitem [ref=f5e84]:
+            - heading "Fiança locatícia" [level=4] [ref=f5e85]
+            - generic [ref=f5e86]:
+              - paragraph [ref=f5e87]: R$ 56,99
+              - paragraph [ref=f5e88]: Por parcela · 29 parcelas
+        - generic [ref=f5e89]:
+          - generic [aria-hidden]: Reanalisar
+          - paragraph [ref=f5e90]: Esta companhia não permite reanálise.
+      - article [ref=f5e92]:
+        - generic [ref=f5e93]:
+          - heading "Porto Seguro" [level=3] [ref=f5e94]:
+            - generic [aria-hidden] [ref=f5e95]: PS
+            - text: Porto Seguro
+          - generic [ref=f5e96]: Bloqueada
+        - generic [ref=f5e97]:
+          - paragraph [ref=f5e98]: Aguardando testes e validação da integração.
+          - button "Indisponível" [disabled]
+      - article [ref=f5e100]:
+        - generic [ref=f5e101]:
+          - heading "Tokio Marine" [level=3] [ref=f5e102]:
+            - generic [aria-hidden] [ref=f5e103]: TM
+            - text: Tokio Marine
+          - generic [ref=f5e104]: Bloqueada
+        - generic [ref=f5e105]:
+          - paragraph [ref=f5e106]: Aguardando testes e validação da integração.
+          - button "Indisponível" [disabled]
+  - generic [ref=f5e107]:
+    - button "Editar despesas" [ref=f5e109] [cursor=pointer]:
+      - generic [aria-hidden] [ref=f5e110]: 
+      - text: Editar despesas
+    - paragraph [ref=f5e111]:
+      - text: "A reanálise é feita por companhia: salve as despesas e clique em"
+      - strong [ref=f5e112]: Reanalisar
+      - text: na companhia desejada. Companhias ainda em análise aguardam o resultado atual.

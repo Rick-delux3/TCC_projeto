@@ -14,7 +14,7 @@ use Mockery\MockInterface;
 
 beforeEach(function () {
     Http::preventStrayRequests();
-    Http::fake();
+    Illuminate\Support\Facades\Bus::fake();
 
     $this->mock(CepService::class, function (MockInterface $mock) {
         $mock->shouldReceive('find')
@@ -41,50 +41,54 @@ function validImobiliariaRegistrationPayload(array $overrides = []): array
     ], $overrides);
 }
 
-it('registers an imobiliaria using an available local tag', function () {
+it('creates or reconciles the company tag and persists its association once', function (bool $alreadyRemote): void {
+    config(['services.leadlovers.enabled' => true, 'services.leadlovers.token' => 'test-token', 'services.leadlovers.api_url' => 'https://leadlovers.example.test']);
+    $company = Imobiliaria::factory()->create(['name' => 'Imobiliária Nova Parceira', 'leadlovers_tag_id' => null]);
+    $remote = ['id' => 888, 'name' => $company->name];
+    Http::fake(function ($request) use ($alreadyRemote, $remote) {
+        return $request->method() === 'GET'
+            ? Http::response($alreadyRemote ? [$remote + ['createdAt' => '2026-11-16T00:00:00Z']] : [])
+            : Http::response($remote);
+    });
+    $job = new App\Jobs\CreateCompanyLeadLoversTagJob($company->id);
+    app()->call([$job, 'handle']);
+    app()->call([$job, 'handle']);
+    expect($company->fresh()->leadlovers_tag_id)->toBe(888)
+        ->and($company->fresh()->leadlovers_tag_name)->toBe($company->name)
+        ->and(LeadLoversTag::query()->sole()->title)->toBe($company->name);
+    Http::assertSentCount($alreadyRemote ? 1 : 2);
+    if (! $alreadyRemote) {
+        Http::assertSent(fn ($request) => $request->method() === 'POST'
+            && $request->url() === 'https://leadlovers.example.test/tags/' && $request['name'] === $company->name);
+    }
+})->with([false, true]);
+
+it('requires a unique typed name without dispatching a company tag for invalid data', function (string $name): void {
+    LeadLoversTag::create(['leadlovers_tag_id' => 777, 'title' => 'Imobiliária Existente', 'active' => true]);
+    $this->post(route('empresa.register.post'), validImobiliariaRegistrationPayload(['company_name' => $name]))
+        ->assertSessionHasErrors('company_name');
+    $this->assertDatabaseCount('imobiliarias', 0);
+    Illuminate\Support\Facades\Bus::assertNotDispatched(App\Jobs\CreateCompanyLeadLoversTagJob::class);
+    Http::assertNothingSent();
+})->with(['', 'Existente']);
+
+it('accepts a typed company name even when unused tags remain available', function () {
     Notification::fake();
-
-    $tag = LeadLoversTag::create([
-        'leadlovers_tag_id' => 777,
-        'title' => 'Imobiliária Auditada',
-        'key' => 'imobiliaria_auditada',
-        'active' => true,
+    Illuminate\Support\Facades\Bus::fake();
+    config(['services.leadlovers.enabled' => true]);
+    LeadLoversTag::create([
+        'leadlovers_tag_id' => 777, 'title' => 'Imobiliária Disponível',
+        'key' => 'imobiliaria_disponivel', 'active' => true,
     ]);
-
-    $response = $this->post(
-        route('empresa.register.post'),
-        validImobiliariaRegistrationPayload([
-            'leadlovers_tag_id' => $tag->leadlovers_tag_id,
-        ])
-    );
-
-    $response->assertRedirect(route('2fa'));
-    $response->assertSessionHasNoErrors();
-
-    $company = Imobiliaria::query()
-        ->where('email', 'imobiliaria@example.test')
-        ->firstOrFail();
-
-    expect($company)
-        ->name->toBe('Imobiliária Auditada')
-        ->cep->toBe('01001000')
-        ->leadlovers_tag_id->toBe(777);
-
-    $user = User::query()
-        ->where('company_id', $company->id)
-        ->firstOrFail();
-
-    Notification::assertSentTo($user, VerifyEmail::class);
-
-    $this->assertAuthenticatedAs($user);
-    $this->get(route('company.dashboard'))->assertRedirect(route('2fa'));
-    $this->post(route('empresa.logout'))->assertRedirect(route('empresa.login'));
-
-    $this->get(route('empresa.register.form'))
-        ->assertOk()
-        ->assertSee('name="company_name"', false)
-        ->assertDontSee('name="leadlovers_tag_id"', false);
-
+    $this->get(route('empresa.register.form'))->assertOk()
+        ->assertSee('name="company_name"', false)->assertDontSee('name="leadlovers_tag_id"', false);
+    $this->post(route('empresa.register.post'), validImobiliariaRegistrationPayload(['company_name' => 'Nova Parceira']))
+        ->assertRedirect(route('2fa'))->assertSessionHasNoErrors();
+    $company = Imobiliaria::query()->sole();
+    expect($company->name)->toBe('Imobiliária Nova Parceira')->and($company->leadlovers_tag_id)->toBeNull();
+    Illuminate\Support\Facades\Bus::assertDispatched(App\Jobs\CreateCompanyLeadLoversTagJob::class,
+        fn ($job) => $job->companyId === $company->id && $job->afterCommit === true && $job->queue === 'leadlovers');
+    Notification::assertSentTo(User::query()->where('company_id', $company->id)->sole(), VerifyEmail::class);
     Http::assertNothingSent();
 });
 
@@ -123,7 +127,7 @@ it('registers a typed company name locally without creating a remote tag', funct
     Http::assertNothingSent();
 })->with([true, false]);
 
-it('rejects fields from the inactive registration mode', function () {
+it('rejects tag selection on public registration', function () {
     $tag = LeadLoversTag::create([
         'leadlovers_tag_id' => 999,
         'title' => 'Imobiliária Disponível',
@@ -140,7 +144,7 @@ it('rejects fields from the inactive registration mode', function () {
             ])
         )
         ->assertRedirect(route('empresa.register.form'))
-        ->assertSessionHasErrors('company_name');
+        ->assertSessionHasErrors('leadlovers_tag_id');
 });
 
 it('rejects registration when the honeypot field is filled', function () {
