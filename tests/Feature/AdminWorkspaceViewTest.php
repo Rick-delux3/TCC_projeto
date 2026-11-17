@@ -51,22 +51,34 @@ it('offers the shared theme control on every admin page for both brands', functi
     }
 })->with(['tcc', 'client']);
 
-it('keeps navigation in the sidebar without a duplicate header row', function (string $route, string $title, string $active): void {
+it('keeps header and sidebar navigation consistent for each brand', function (string $route, string $title, string $active, string $brand): void {
+    config(['branding.active' => $brand]);
+    if ($route === 'admin.imobiliarias.index' && $brand === 'tcc') {
+        $title = 'Empresas cadastradas';
+        $active = 'Empresas';
+    }
+
     $this->actingAs(workspaceAdmin(), 'admin');
     $response = $this->get(route($route))->assertOk()->assertSee($title);
     $xpath = workspaceDocument($response->getContent());
     $navigation = '//div[@id="dashboardAdminSidebar"]//nav';
+    $headerNavigation = '//header//nav[@aria-label="Seções do painel"]';
+    $activeHeaderRoute = $route === 'Dashboard-Admin' ? 'admin.leads.index' : $route;
 
-    expect($xpath->query('//header//div[contains(@class, "dashboard-client-header__secondary")]')->length)->toBe(0)
-        ->and($xpath->query('//header//div[contains(@class, "dashboard-header-breadcrumb")]')->length)->toBe(0)
+    expect($xpath->query('//header//div[contains(@class, "dashboard-client-header__secondary")]')->length)->toBe(1)
+        ->and($xpath->query('//header//div[contains(@class, "dashboard-header-breadcrumb")]')->length)->toBe(1)
         ->and($xpath->query('//header//button[@data-bs-target="#dashboardAdminSidebar"]')->length)->toBe(1)
+        ->and($xpath->query($headerNavigation)->length)->toBe(1)
         ->and($xpath->query($navigation)->length)->toBe(1);
 
     foreach (['Dashboard-Admin', 'admin.leads.index', 'admin.imobiliarias.index', 'admin.config-equipe.index'] as $destination) {
-        expect($xpath->query($navigation.'//a[@href="'.route($destination).'"]')->length)->toBe(1);
+        expect($xpath->query($navigation.'//a[@href="'.route($destination).'"]')->length)->toBe(1)
+            ->and($xpath->query($headerNavigation.'//a[@href="'.route($destination).'"]')->length)->toBe(1);
     }
 
     expect(trim($xpath->query($navigation.'//a[contains(concat(" ", normalize-space(@class), " "), " active ")]')->item(0)->textContent))->toBe($active)
+        ->and($xpath->query($headerNavigation.'//a[@href="'.route($activeHeaderRoute).'"][@aria-current="page"]')->length)->toBe(1)
+        ->and($xpath->query($headerNavigation.'//a[@aria-current="page"]')->length)->toBe(1)
         ->and($xpath->query('//header//a[@href="#"]')->length)->toBe(0)
         ->and($xpath->query('//form[@action="'.route('admin.logout').'"][@method="POST"]//input[@name="_token"]')->length)->toBe(2);
 
@@ -78,33 +90,20 @@ it('keeps navigation in the sidebar without a duplicate header row', function (s
     ['Dashboard-Admin', 'Central de leads', 'Dashboard'],
     ['admin.config-equipe.index', 'Gerenciar equipe', 'Equipe'],
     ['admin.imobiliarias.index', 'Imobiliárias cadastradas', 'Imobiliárias'],
-]);
+])->with(['tcc', 'client']);
 
-it('renders colored left-edge bars on the four dashboard statistic cards', function (): void {
+it('renders four labeled dashboard metrics with accessible status icons', function (): void {
     $this->actingAs(workspaceAdmin(), 'admin');
     $response = $this->get(route('Dashboard-Admin'))->assertOk();
     $xpath = workspaceDocument($response->getContent());
-    $stylesheet = file_get_contents(resource_path('css/dashboard-admin.css'));
-    $workspaceStylesheet = file_get_contents(resource_path('css/admin-workspace.css'));
 
-    foreach (['clients', 'approved', 'rejected', 'companies'] as $statistic) {
-        $cards = $xpath->query(
-            '//div[contains(concat(" ", normalize-space(@class), " "), " dashboard-stat-card--'.$statistic.' ")]',
-        );
-
-        expect($cards->length)->toBe(1)
-            ->and($cards->item(0)->textContent)->not->toContain('●');
+    expect($xpath->query('//*[@data-dashboard-metric]')->length)->toBe(4)
+        ->and($xpath->query('//*[@data-dashboard-metric]//i[@aria-hidden="true"]')->length)->toBe(4);
+    foreach (['Clientes', 'Aprovados', 'Recusados'] as $label) {
+        $response->assertSee($label);
     }
-
-    expect($stylesheet)
-        ->toMatch('/\.dashboard-stat-card--clients::before,[\s\S]*?\{[^}]*width:\s*5px;[^}]*border-top-left-radius:\s*inherit;[^}]*border-top-right-radius:\s*0;[^}]*border-bottom-right-radius:\s*0;[^}]*border-bottom-left-radius:\s*inherit;/')
-        ->toContain('--dashboard-stat-accent: var(--bs-primary);')
-        ->toContain('--dashboard-stat-accent: var(--bs-success);')
-        ->toContain('--dashboard-stat-accent: var(--bs-danger);')
-        ->toContain('--dashboard-stat-accent: var(--bs-info);')
-        ->and($workspaceStylesheet)
-        ->toMatch('/\.dashboard-admin-body \.admin-leads-page :is\(\.dashboard-stat-card--clients,[^}]*\{\s*border:\s*2px solid #cbd5e1 !important;/')
-        ->toContain('border-color: #64748b !important;');
+    expect($xpath->query('//*[contains(@class,"ops-metric--positive")]')->length)->toBe(1)
+        ->and($xpath->query('//*[contains(@class,"ops-metric--negative")]')->length)->toBe(1);
 });
 
 it('requires authentication for every redesigned page', function (string $route): void {

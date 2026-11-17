@@ -541,6 +541,7 @@ it('shows who requested lead data changes only while LeadLovers is synchronizing
 });
 
 it('lists approved leads first across pagination and keeps each group chronological', function () {
+    $this->freezeTime();
     $corretor = updateLeadDashboardAdmin();
     $baseTime = now()->startOfMinute();
 
@@ -884,7 +885,8 @@ it('shows safe initial failure reasons and keeps technical failures out of the c
         ->assertOk()
         ->assertSee('A LeadLovers recusou as credenciais da integração.')
         ->assertSee('não concluiu a operação dentro do tempo esperado')
-        ->assertSee('O limite de requisições da LeadLovers foi atingido.')
+        ->assertSee('O limite de requisições da LeadLovers foi atingido e este ciclo de tentativas foi encerrado.')
+        ->assertSee('A sincronização precisa ser revisada antes de retomar.')
         ->assertSee('A LeadLovers apresentou uma indisponibilidade interna.')
         ->assertDontSee('dashboard-raw-secret-token')
         ->assertDontSee('dashboard-remote-script-marker')
@@ -910,7 +912,7 @@ it('shows safe initial failure reasons and keeps technical failures out of the c
     }
 });
 
-it('shows a machine configuration reason for an HTTP 400 machine request without offering correction', function () {
+it('shows a machine association failure without assuming a configuration error or offering correction', function () {
     $admin = updateLeadDashboardAdmin();
     $lead = updateLeadDashboardFailedLead('MACHINE_REQUEST_FAILED', 400, [
         'leadlovers_response' => [
@@ -934,8 +936,10 @@ it('shows a machine configuration reason for an HTTP 400 machine request without
     );
 
     expect($detailsModal)
-        ->toContain('máquina')
-        ->toContain('configura')
+        ->toContain('A LeadLovers recusou a operação de associação à máquina.')
+        ->toContain('revisar a resposta da integração antes de retomar')
+        ->toContain('Não é necessário alterar os dados do lead.')
+        ->not->toContain('não está configurada corretamente')
         ->not->toContain('A correção ainda não está disponível')
         ->and(updateLeadDashboardTriggerHtml(
             $html,

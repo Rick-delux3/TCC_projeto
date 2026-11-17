@@ -458,7 +458,7 @@
     };
 @endphp
 
-<div id="dashboardThemeRoot" class="dashboard-shell admin-leads-page" data-dashboard-theme="light">
+<div id="dashboardThemeRoot" class="dashboard-shell admin-leads-page dashboard-overview" data-dashboard-theme="light">
     <div class="container-fluid px-3 px-lg-4 py-4">
         <x-dashboard-realtime-notice />
 
@@ -500,7 +500,7 @@
         {{-- Cabeçalho do conteúdo --}}
         <div class="admin-page-heading d-flex flex-column flex-xl-row justify-content-between align-items-xl-center gap-3 mb-4">
             <div>
-                <span class="badge text-bg-primary-subtle text-primary border border-primary-subtle mb-2">
+                <span class="ops-eyebrow"><i class="bi bi-grid-1x2" aria-hidden="true"></i>
                     {{ $isCeo ? 'Dashboard do CEO' : \App\Support\BrandingText::choose('Dashboard do corretor', 'Dashboard do integrante') }}
                 </span>
 
@@ -526,133 +526,46 @@
             </div>
         </div>
 
-        <div class="admin-overview-grid mb-4">
-            <section class="dashboard-hero-card admin-leads-overview" aria-labelledby="lead-overview-title">
+        <div class="ops-overview">
+            <section class="ops-intro" aria-labelledby="lead-overview-title">
                 <div>
-                    <span class="badge bg-white bg-opacity-10 mb-3">Visão geral</span>
-                    <h2 id="lead-overview-title" class="fw-bold mb-2">{{ \App\Support\BrandingText::choose('Base geral de clientes', 'Base geral de beneficiários') }}<br>{{ \App\Support\BrandingText::choose('da corretora.', 'da concessionária.') }}</h2>
-                    <p class="mb-0">{{ \App\Support\BrandingText::choose('Acompanhe os diferentes status comerciais dos leads e o histórico de simulações com as imobiliárias parceiras.', 'Acompanhe os status comerciais dos leads e o relacionamento com as empresas parceiras.') }}</p>
+                    <span class="ops-eyebrow"><i class="bi bi-people" aria-hidden="true"></i>Visão da operação</span>
+                    <h2 id="lead-overview-title">{{ \App\Support\BrandingText::choose('Carteira de clientes da corretora', 'Carteira de beneficiários') }}</h2>
+                    <p>{{ \App\Support\BrandingText::choose('Acompanhe cada solicitação, do primeiro contato ao resultado das seguradoras.', 'Acompanhe os cadastros e o andamento comercial das empresas parceiras.') }}</p>
                 </div>
-                <div class="admin-overview-footer">
-                    <div class="d-flex flex-wrap gap-2">
-                        <span class="badge bg-white bg-opacity-10 border border-white border-opacity-10 py-2 px-3">{{ $totalLeads }} clientes/leads</span>
-                        <span class="badge bg-white bg-opacity-10 border border-white border-opacity-10 py-2 px-3">{{ $totalImobiliarias }} {{ \App\Support\BrandingText::choose('imobiliárias', 'empresas') }}</span>
-                        <span class="badge bg-white bg-opacity-10 border border-white border-opacity-10 py-2 px-3">{{ $recentLeads }} recentes</span>
-                    </div>
-                    <div class="admin-latest-lead">
-                        <span>Última entrada</span>
-                        <strong>{{ $latestLeadAt ? $latestLeadAt->copy()->setTimezone('America/Sao_Paulo')->format('d/m/Y H:i') : 'Sem clientes cadastrados' }}</strong>
-                    </div>
+                <div class="ops-intro__footer">
+                    <dl class="ops-last-entry">
+                        <dt>Última entrada na base</dt>
+                        <dd>{{ $latestLeadAt ? $latestLeadAt->copy()->setTimezone('America/Sao_Paulo')->format('d/m/Y H:i') : 'Sem clientes cadastrados' }}</dd>
+                    </dl>
+                    <a href="#leads-section" class="ops-text-link">Ver lista de leads <i class="bi bi-arrow-down" aria-hidden="true"></i></a>
                 </div>
             </section>
             @if ($canAccessSimulationForms)
-                <section class="card dashboard-stat-card admin-new-lead" aria-labelledby="new-lead-title">
-                    <div class="card-body d-flex flex-column gap-3">
+                <section class="ops-action-panel" aria-labelledby="new-lead-title">
+                    <div class="ops-panel-heading">
                         <div>
-                            <span class="admin-eyebrow">Acesso rápido</span>
-                            <h2 id="new-lead-title" class="h5 fw-bold mt-1 mb-2">Novo lead</h2>
-                            <p class="text-muted mb-0">{{ \App\Support\BrandingText::choose('Escolha o vínculo e abra o formulário adequado para cadastrar um novo lead ou simular seguro fiança locatícia.', 'Escolha o vínculo e abra o formulário adequado para cadastrar um novo beneficiário.') }}</p>
+                            <h2 id="new-lead-title">Cadastrar uma solicitação</h2>
+                            <p>{{ \App\Support\BrandingText::choose('Selecione a origem do lead para iniciar uma nova simulação.', 'Selecione a origem para cadastrar um novo beneficiário.') }}</p>
                         </div>
-                        <div class="admin-new-lead-action mt-auto">
-                            <p class="small text-muted mb-3">
-                                <i class="bi bi-shield-check text-success me-1" aria-hidden="true"></i>
-                                {{ \App\Support\BrandingText::choose('O corretor não precisa digitar nem visualizar a chave de acesso da imobiliária.', 'O integrante não precisa digitar nem visualizar a chave de acesso da empresa.') }}
-                            </p>
-                            <button type="button" class="btn btn-primary w-100" data-bs-toggle="modal" data-bs-target="#adminSimulationModal" @disabled(! $adminSimulationRouteExists)>
-                                <i class="bi bi-clipboard-plus me-1" aria-hidden="true"></i>
-                                {{ $adminSimulationRouteExists ? 'Abrir formulário' : 'Formulário indisponível' }}
-                            </button>
-                            @unless ($adminSimulationRouteExists)
-                                <div class="form-text">Recurso temporariamente indisponível.</div>
-                            @endunless
-                        </div>
+                        <span class="ops-panel-icon" aria-hidden="true"><i class="bi bi-clipboard-plus"></i></span>
+                    </div>
+                    <p class="ops-action-note"><i class="bi bi-shield-check" aria-hidden="true"></i>{{ \App\Support\BrandingText::choose('O vínculo com a imobiliária é definido no formulário.', 'O vínculo com a empresa é definido no formulário.') }}</p>
+                    <div class="ops-action-panel__footer">
+                        <button type="button" class="btn btn-primary w-100" data-bs-toggle="modal" data-bs-target="#adminSimulationModal" @disabled(! $adminSimulationRouteExists)>
+                            <i class="bi bi-plus-lg me-2" aria-hidden="true"></i>{{ $adminSimulationRouteExists ? 'Abrir formulário' : 'Formulário indisponível' }}
+                        </button>
                     </div>
                 </section>
             @endif
         </div>
 
-        {{-- Métricas focadas somente em clientes --}}
-        <div class="row g-3 mb-4">
-            <div class="col-6 col-xl-3">
-                <div class="card border-0 shadow-sm rounded-4 dashboard-stat-card dashboard-stat-card--clients h-100">
-                    <div class="card-body">
-                        <div class="mb-3">
-                            <span class="badge text-bg-primary-subtle text-primary">
-                                Clientes
-                            </span>
-                        </div>
-
-                        <div class="h2 fw-bold mb-0">
-                            {{ $totalLeads }}
-                        </div>
-
-                        <div class="text-muted small">
-                            leads na base geral
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="col-6 col-xl-3">
-                <div class="card border-0 shadow-sm rounded-4 dashboard-stat-card dashboard-stat-card--approved h-100">
-                    <div class="card-body">
-                        <div class="mb-3">
-                            <span class="badge text-bg-success-subtle text-success">
-                                Aprovados
-                            </span>
-                        </div>
-
-                        <div class="h2 fw-bold mb-0">
-                            {{ $totalAprovados }}
-                        </div>
-
-                        <div class="text-muted small">
-                            clientes aprovados
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="col-6 col-xl-3">
-                <div class="card border-0 shadow-sm rounded-4 dashboard-stat-card dashboard-stat-card--rejected h-100">
-                    <div class="card-body">
-                        <div class="mb-3">
-                            <span class="badge text-bg-danger-subtle text-danger">
-                                Recusados
-                            </span>
-                        </div>
-
-                        <div class="h2 fw-bold mb-0">
-                            {{ $totalRecusados }}
-                        </div>
-
-                        <div class="text-muted small">
-                            recusados ou reprovados
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="col-6 col-xl-3">
-                <div class="card border-0 shadow-sm rounded-4 dashboard-stat-card dashboard-stat-card--companies h-100">
-                    <div class="card-body">
-                        <div class="mb-3">
-                            <span class="badge text-bg-info-subtle text-info">
-                                {{ \App\Support\BrandingText::choose('Imobiliárias', 'Empresas') }}
-                            </span>
-                        </div>
-
-                        <div class="h2 fw-bold mb-0">
-                            {{ $totalImobiliarias }}
-                        </div>
-
-                        <div class="text-muted small">
-                            parceiras cadastradas
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
+        <section class="ops-metrics" aria-label="Indicadores da carteira">
+            <x-dashboard-metric label="Clientes" :value="$totalLeads" detail="leads na base geral" icon="bi-people" />
+            <x-dashboard-metric label="Aprovados" :value="$totalAprovados" detail="clientes aprovados" icon="bi-check2-circle" tone="positive" />
+            <x-dashboard-metric label="Recusados" :value="$totalRecusados" detail="recusados ou reprovados" icon="bi-x-circle" tone="negative" />
+            <x-dashboard-metric :label="\App\Support\BrandingText::choose('Imobiliárias', 'Empresas')" :value="$totalImobiliarias" detail="parceiras cadastradas" icon="bi-buildings" />
+        </section>
 
         {{-- Filtros --}}
         <div class="admin-lead-directory">

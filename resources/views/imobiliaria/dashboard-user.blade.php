@@ -238,7 +238,7 @@
 @endphp
 
 
-<div id="dashboardThemeRoot" class="dashboard-shell company-leads-page" data-dashboard-theme="light">
+<div id="dashboardThemeRoot" class="dashboard-shell company-leads-page dashboard-overview" data-dashboard-theme="light">
     <div class="container-fluid px-3 px-lg-4 py-4 company-dashboard-content">
         <x-dashboard-realtime-notice />
         @if (session('success'))
@@ -273,7 +273,7 @@
         {{-- Cabeçalho moderno --}}
         <div class="company-page-heading d-flex flex-column flex-xl-row justify-content-between align-items-xl-center gap-3 mb-4">
             <div>
-                <span class="badge text-bg-primary-subtle text-primary border border-primary-subtle mb-2">
+                <span class="ops-eyebrow"><i class="bi bi-grid-1x2" aria-hidden="true"></i>
                     {{ \App\Support\BrandingText::choose('Dashboard da imobiliária', 'Dashboard da empresa') }}
                 </span>
 
@@ -304,255 +304,63 @@
         </div>
 
         {{-- Bloco principal superior --}}
-        <div class="row g-4 mb-4 company-overview-grid">
-
-            {{-- Hero principal --}}
-            <div class="col-12 col-xl-7">
-                <div class="card border-0 shadow-sm rounded-5 dashboard-hero-card h-100 text-white">
-                    <div class="card-body p-4 p-lg-5 position-relative">
-                        <div class="row g-4 align-items-end">
-                            <div class="col-12 col-lg-8">
-                                <span class="badge bg-white text-primary mb-3">
-                                    CRM operacional
-                                </span>
-
-                                <h2 class="display-6 fw-bold dashboard-hero-title mb-3">
-                                    Leads organizados para atendimento rápido.
-                                </h2>
-
-                                <p class="text-white-50 mb-4">
-                                    Use este painel para acompanhar entradas, filtrar origens e manter o processo comercial mais simples.
-                                </p>
-
-                                <div class="d-flex flex-wrap gap-2">
-                                    <span class="badge bg-white bg-opacity-10 border border-white border-opacity-25 py-2 px-3">
-                                        {{ $totalLeads }} leads totais
-                                    </span>
-
-                                    <span class="badge bg-white bg-opacity-10 border border-white border-opacity-25 py-2 px-3">
-                                        {{ $recentLeads }} recentes
-                                    </span>
-
-                                    <span class="badge bg-white bg-opacity-10 border border-white border-opacity-25 py-2 px-3">
-                                        {{ $withPhone }} com telefone
-                                    </span>
-                                </div>
-                            </div>
-
-                            <div class="col-12 col-lg-4">
-                                <div class="company-overview-details bg-white bg-opacity-10 rounded-4 p-3 border border-white border-opacity-25">
-                                    <div>
-                                        <div class="small text-white-50 mb-1">
-                                            Última entrada
-                                        </div>
-
-                                        <div class="fw-bold">
-                                            {{ $latestLeadAt ? $latestLeadAt->copy()->setTimezone('America/Sao_Paulo')->format('d/m/Y H:i') : 'Sem leads cadastrados' }}
-                                        </div>
-                                    </div>
-                                    <hr class="border-white border-opacity-25">
-
-                                    <div>
-                                        <div class="small text-white-50 mb-1">
-                                            Origem exibida
-                                        </div>
-
-                                        <span class="badge text-bg-success">
-                                            Formulários do sistema
-                                        </span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
+        <div class="ops-overview">
+            <section class="ops-intro" aria-labelledby="company-overview-title">
+                <div>
+                    <span class="ops-eyebrow"><i class="bi bi-building" aria-hidden="true"></i>{{ \App\Support\BrandingText::choose('Sua imobiliária', 'Sua empresa') }}</span>
+                    <h2 id="company-overview-title">{{ $company->name }}</h2>
+                    <p>Consulte as solicitações recebidas, acompanhe os resultados e mantenha os contatos da sua carteira em dia.</p>
+                </div>
+                <div class="ops-intro__footer">
+                    <dl class="ops-last-entry">
+                        <dt>Última solicitação recebida</dt>
+                        <dd>{{ $latestLeadAt ? $latestLeadAt->copy()->setTimezone('America/Sao_Paulo')->format('d/m/Y H:i') : 'Sem leads cadastrados' }}</dd>
+                    </dl>
+                    <a href="#leads-section" class="ops-text-link">Ver lista de leads <i class="bi bi-arrow-down" aria-hidden="true"></i></a>
+                </div>
+            </section>
+            <section class="ops-action-panel" aria-labelledby="company-access-title">
+                <div class="ops-panel-heading">
+                    <div>
+                        <h2 id="company-access-title">Compartilhar formulário</h2>
+                        <p>Envie o link e a chave para receber novas solicitações.</p>
+                    </div>
+                    <span class="ops-status {{ $leadFormAvailable && $leadAccessCodeAvailable ? '' : 'ops-status--unavailable' }}">
+                        <i class="bi {{ $leadFormAvailable && $leadAccessCodeAvailable ? 'bi-check-circle' : 'bi-dash-circle' }}" aria-hidden="true"></i>{{ $leadFormAvailable && $leadAccessCodeAvailable ? 'Ativa' : 'Indisponível' }}
+                    </span>
+                </div>
+                <div>
+                    <label for="dashboardLeadAccessCode" class="ops-field-label">Chave de acesso</label>
+                    <div class="input-group">
+                        <input type="text" class="form-control fw-bold text-uppercase access-code-box" value="{{ $leadAccessCode ?? '' }}" readonly id="dashboardLeadAccessCode" @disabled(! $leadAccessCodeAvailable)>
+                        <button class="btn btn-primary" type="button" id="dashboardLeadAccessCodeCopyButton" @disabled(! $leadAccessCodeAvailable)>Copiar</button>
                     </div>
                 </div>
-            </div>
-
-
-            {{-- Acesso rápido --}}
-            <div class="col-12 col-xl-5">
-                <div class="card border-0 shadow-sm rounded-5 h-100">
-                    <div class="card-body p-4 p-lg-5">
-                        <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
-                            <div>
-                                <span class="badge text-bg-dark mb-2">
-                                    Acesso rápido
-                                </span>
-
-                                <h2 class="h4 fw-bold mb-1">
-                                    {{ \App\Support\BrandingText::choose('Chave da imobiliária', 'Chave da empresa') }}
-                                </h2>
-
-                                <p class="text-muted small mb-0">
-                                    Compartilhe a chave junto com o link da página de simulação.
-                                </p>
-                            </div>
-
-                            <span class="badge {{ $leadAccessCodeAvailable ? 'text-bg-success' : 'text-bg-danger' }}">
-                                {{ $leadAccessCodeAvailable ? 'Ativa' : 'Indisponível' }}
-                            </span>
-                        </div>
-
-                        <label for="dashboardLeadAccessCode" class="form-label small text-muted">
-                            Chave de acesso
-                        </label>
-
-                        <div class="input-group input-group-lg mb-3">
-                            <input
-                                type="text"
-                                class="form-control fw-bold text-uppercase access-code-box"
-                                value="{{ $leadAccessCode ?? '' }}"
-                                readonly
-                                id="dashboardLeadAccessCode"
-                                @disabled(!$leadAccessCodeAvailable)
-                            >
-
-                            <button
-                                class="btn btn-primary"
-                                type="button"
-                                id="dashboardLeadAccessCodeCopyButton"
-                                @disabled(!$leadAccessCodeAvailable)
-                            >
-                                Copiar
-                            </button>
-                        </div>
-
-                        <label for="dashboardLeadFormLink" class="form-label small text-muted">
-                            Página de simulação
-                        </label>
-
-                        <div class="input-group mb-3">
-                            <input
-                                type="text"
-                                class="form-control"
-                                value="{{ $leadFormUrl ?? '' }}"
-                                readonly
-                                id="dashboardLeadFormLink"
-                                @disabled(!$leadFormAvailable)
-                            >
-
-                            <button
-                                class="btn btn-outline-primary"
-                                type="button"
-                                id="dashboardLeadFormCopyButton"
-                                @disabled(!$leadFormAvailable)
-                            >
-                                Copiar link
-                            </button>
-                        </div>
-
-                        <div class="d-flex flex-wrap gap-2 align-items-center">
-                            <a
-                                href="{{ $leadFormUrl ?? '#' }}"
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                class="btn btn-outline-dark {{ $leadFormAvailable ? '' : 'disabled' }}"
-                                id="dashboardLeadFormOpenButton"
-                                @if (!$leadFormAvailable) aria-disabled="true" tabindex="-1" @endif
-                            >
-                                Abrir página
-                            </a>
-
-                            <span id="dashboardLeadFormCopyStatus" role="status" class="small {{ $leadFormAvailable ? 'text-muted' : 'text-danger' }}">
-                                {{ $leadFormAvailable ? 'Envie o link e a chave para quem for preencher.' : 'Página indisponível.' }}
-                            </span>
-                        </div>
+                <div>
+                    <label for="dashboardLeadFormLink" class="ops-field-label">Página de simulação</label>
+                    <div class="input-group">
+                        <input type="text" class="form-control" value="{{ $leadFormUrl ?? '' }}" readonly id="dashboardLeadFormLink" @disabled(! $leadFormAvailable)>
+                        <button class="btn btn-outline-primary" type="button" id="dashboardLeadFormCopyButton" @disabled(! $leadFormAvailable)>Copiar link</button>
                     </div>
                 </div>
-            </div>
-
+                <div class="ops-action-panel__footer">
+                    <a href="{{ $leadFormUrl ?? '#' }}" target="_blank" rel="noopener noreferrer" class="btn btn-outline-primary {{ $leadFormAvailable ? '' : 'disabled' }}" id="dashboardLeadFormOpenButton" @if (! $leadFormAvailable) aria-disabled="true" tabindex="-1" @endif>
+                        Abrir página <i class="bi bi-arrow-up-right ms-1" aria-hidden="true"></i>
+                    </a>
+                    <span id="dashboardLeadFormCopyStatus" role="status" class="small {{ $leadFormAvailable ? 'text-muted' : 'text-danger' }}">{{ $leadFormAvailable ? 'Envie o link e a chave para quem for preencher.' : 'Página indisponível.' }}</span>
+                </div>
+            </section>
         </div>
 
+        <section class="ops-metrics company-metrics" aria-label="Indicadores da carteira">
+            <x-dashboard-metric label="Leads na base" :value="$totalLeads" detail="leads disponíveis" icon="bi-people" />
+            <x-dashboard-metric label="Novos" :value="$newLeads" detail="em fase inicial" icon="bi-inbox" />
+            <x-dashboard-metric label="Com telefone" :value="$withPhone" detail="contatos informados" icon="bi-telephone" tone="positive" />
+            <x-dashboard-metric label="Recentes" :value="$recentLeads" detail="últimos 7 dias" icon="bi-calendar3" />
+        </section>
 
-
-        {{-- Métricas --}}
-        <div class="row g-3 mb-4 company-metrics">
-            <div class="col-6 col-xl-3">
-                <div class="card border-0 shadow-sm rounded-4 dashboard-stat-card h-100">
-                    <div class="card-body">
-                        <div class="d-flex justify-content-between align-items-start mb-3">
-                            <span class="badge text-bg-primary-subtle text-primary">
-                                Base
-                            </span>
-                            <span class="text-primary fw-bold">●</span>
-                        </div>
-
-                        <div class="h2 fw-bold mb-0">
-                            {{ $totalLeads }}
-                        </div>
-
-                        <div class="text-muted small">
-                            leads disponíveis
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="col-6 col-xl-3">
-                <div class="card border-0 shadow-sm rounded-4 dashboard-stat-card h-100">
-                    <div class="card-body">
-                        <div class="d-flex justify-content-between align-items-start mb-3">
-                            <span class="badge text-bg-success-subtle text-success">
-                                Novos
-                            </span>
-                            <span class="text-success fw-bold">●</span>
-                        </div>
-
-                        <div class="h2 fw-bold mb-0">
-                            {{ $newLeads }}
-                        </div>
-
-                        <div class="text-muted small">
-                            em fase inicial
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="col-6 col-xl-3">
-                <div class="card border-0 shadow-sm rounded-4 dashboard-stat-card h-100">
-                    <div class="card-body">
-                        <div class="d-flex justify-content-between align-items-start mb-3">
-                            <span class="badge text-bg-info-subtle text-info">
-                                Contato
-                            </span>
-                            <span class="text-info fw-bold">●</span>
-                        </div>
-
-                        <div class="h2 fw-bold mb-0">
-                            {{ $withPhone }}
-                        </div>
-
-                        <div class="text-muted small">
-                            com telefone
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="col-6 col-xl-3">
-                <div class="card border-0 shadow-sm rounded-4 dashboard-stat-card h-100">
-                    <div class="card-body">
-                        <div class="d-flex justify-content-between align-items-start mb-3">
-                            <span class="badge text-bg-warning-subtle text-warning">
-                                Recentes
-                            </span>
-                            <span class="text-warning fw-bold">●</span>
-                        </div>
-
-                        <div class="h2 fw-bold mb-0">
-                            {{ $recentLeads }}
-                        </div>
-
-                        <div class="text-muted small">
-                            últimos 7 dias
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-
+        <details class="ops-secondary">
+            <summary><i class="bi bi-bar-chart-line" aria-hidden="true"></i>Resumo e tags da base <span>Contatos, segmentação e guia rápido</span></summary>
         {{-- Cards operacionais superiores --}}
         <div class="row g-4 mb-4 company-operations">
 
@@ -686,6 +494,8 @@
 
 
         {{-- Área principal da lista de leads --}}
+        </details>
+
         <div class="row g-4 company-directory">
             <div class="col-12">
 

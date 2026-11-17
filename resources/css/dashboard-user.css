@@ -1,3 +1,5 @@
+@import './dashboard-overview.css';
+
 :root{
     --primary-color: #030133;
     --secundary-color: #146FB6;

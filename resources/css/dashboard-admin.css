@@ -1,4 +1,5 @@
 @import './admin-lead-company.css';
+@import './dashboard-overview.css';
 
 [data-admin-lead-fields] [hidden] { display: none !important; }
 [data-admin-lead-fields] .card { min-width: 0; }
