@@ -51,19 +51,22 @@ it('offers the shared theme control on every admin page for both brands', functi
     }
 })->with(['tcc', 'client']);
 
-it('renders real navigation and the active section on each redesigned page', function (string $route, string $title, string $active): void {
+it('keeps navigation in the sidebar without a duplicate header row', function (string $route, string $title, string $active): void {
     $this->actingAs(workspaceAdmin(), 'admin');
     $response = $this->get(route($route))->assertOk()->assertSee($title);
     $xpath = workspaceDocument($response->getContent());
-    $navigation = '//div[contains(@class, "dashboard-client-header__secondary")]//nav[@aria-label="Seções do painel"]';
+    $navigation = '//div[@id="dashboardAdminSidebar"]//nav';
 
-    expect($xpath->query($navigation)->length)->toBe(1);
+    expect($xpath->query('//header//div[contains(@class, "dashboard-client-header__secondary")]')->length)->toBe(0)
+        ->and($xpath->query('//header//div[contains(@class, "dashboard-header-breadcrumb")]')->length)->toBe(0)
+        ->and($xpath->query('//header//button[@data-bs-target="#dashboardAdminSidebar"]')->length)->toBe(1)
+        ->and($xpath->query($navigation)->length)->toBe(1);
 
     foreach (['Dashboard-Admin', 'admin.leads.index', 'admin.imobiliarias.index', 'admin.config-equipe.index'] as $destination) {
         expect($xpath->query($navigation.'//a[@href="'.route($destination).'"]')->length)->toBe(1);
     }
 
-    expect(trim($xpath->query($navigation.'//a[@aria-current="page"]')->item(0)->textContent))->toBe($active)
+    expect(trim($xpath->query($navigation.'//a[contains(concat(" ", normalize-space(@class), " "), " active ")]')->item(0)->textContent))->toBe($active)
         ->and($xpath->query('//header//a[@href="#"]')->length)->toBe(0)
         ->and($xpath->query('//form[@action="'.route('admin.logout').'"][@method="POST"]//input[@name="_token"]')->length)->toBe(2);
 
@@ -72,7 +75,7 @@ it('renders real navigation and the active section on each redesigned page', fun
         ->assertDontSee('5511999999999')
         ->assertDontSee('cdn.tailwindcss.com', false);
 })->with([
-    ['Dashboard-Admin', 'Central de leads', 'Leads'],
+    ['Dashboard-Admin', 'Central de leads', 'Dashboard'],
     ['admin.config-equipe.index', 'Gerenciar equipe', 'Equipe'],
     ['admin.imobiliarias.index', 'Imobiliárias cadastradas', 'Imobiliárias'],
 ]);
@@ -208,3 +211,54 @@ it('rejects state changes without CSRF tokens on all redesigned page flows', fun
     expect($member->fresh()->active)->toBeTrue()
         ->and($company->fresh()->name)->toBe($company->name);
 });
+
+it('offers a real header search and a shortcut to the lead form', function (): void {
+    $this->actingAs(workspaceAdmin(), 'admin');
+    $response = $this->get(route('Dashboard-Admin', ['lead_name' => 'Anthony']))->assertOk();
+    $xpath = workspaceDocument($response->getContent());
+
+    expect($xpath->query('//header//form[@role="search"][@method="GET"][@action="'.route('Dashboard-Admin').'#leads-section"]//input[@name="lead_name"][@value="Anthony"]')->length)->toBe(1)
+        ->and($xpath->query('//header//button[@data-bs-target="#adminSimulationModal"]')->length)->toBe(1)
+        ->and($xpath->query('//div[@id="adminSimulationModal"]')->length)->toBe(1)
+        ->and($xpath->query('//button[@id="dashboardThemeToggle"]')->length)->toBe(0);
+
+    $response = $this->get(route('admin.config-equipe.index'))->assertOk();
+    expect(workspaceDocument($response->getContent())->query('//header//a[@href="'.route('Dashboard-Admin').'#new-lead-title"]')->length)->toBe(1);
+});
+
+it('uses the transparent NVS logo in the admin header and sidebar', function (): void {
+    config(['branding.active' => 'tcc']);
+    $this->actingAs(workspaceAdmin(), 'admin');
+    $response = $this->get(route('Dashboard-Admin'))->assertOk();
+    $xpath = workspaceDocument($response->getContent());
+    $logoUrl = asset('imgs/Logo_NVS-transparent.png');
+
+    expect($xpath->query('//header//img[@src="'.$logoUrl.'"]')->length)->toBe(1)
+        ->and($xpath->query('//div[@id="dashboardAdminSidebar"]//img[@src="'.$logoUrl.'"]')->length)->toBe(1);
+
+    expect(file_get_contents(resource_path('css/admin-workspace.css')))
+        ->toMatch('/#dashboardAdminSidebar \.dashboard-sidebar-logo,[^{]*\{[^}]*border:\s*0;[^}]*background:\s*transparent;/');
+
+    $logo = file_get_contents(public_path('imgs/Logo_NVS-transparent.png'));
+    $dimensions = getimagesize(public_path('imgs/Logo_NVS-transparent.png'));
+
+    expect(substr($logo, 0, 8))->toBe("\x89PNG\r\n\x1a\n")
+        ->and(ord($logo[25]))->toBe(6)
+        ->and($dimensions[0])->toBe(633)
+        ->and($dimensions[1])->toBe(610);
+});
+
+it('uses the transparent NVS logo on team member forms', function (string $routeName): void {
+    config(['branding.active' => 'tcc']);
+    $this->actingAs(workspaceAdmin(), 'admin');
+    $parameters = $routeName === 'admin.config-equipe.edit'
+        ? [workspaceAdmin(['role' => Corretor::ROLE_INTEGRANTE])]
+        : [];
+    $response = $this->get(route($routeName, $parameters))->assertOk();
+    $xpath = workspaceDocument($response->getContent());
+
+    expect($xpath->query('//span[@class="team-create-brand"]//img[@src="'.asset('imgs/Logo_NVS-transparent.png').'"]')->length)->toBe(1);
+
+    expect(file_get_contents(resource_path('css/admin-workspace.css')))
+        ->toMatch('/\.dashboard-admin-body \.team-create-brand img\s*\{\s*width: 56px;\s*height: 56px;\s*object-fit: contain;/');
+})->with(['admin.config-equipe.create', 'admin.config-equipe.edit']);

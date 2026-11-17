@@ -91,6 +91,8 @@
 <header
     class="dashboard-client-header sticky-top"
     data-dashboard-header="{{ $brandProfile }}"
+    x-data="{ searchOpen: false }"
+    @keydown.escape.window="searchOpen = false"
 >
     <div class="dashboard-client-header__primary">
         <div class="dashboard-client-header__rail">
@@ -109,7 +111,7 @@
         <div class="navbar navbar-expand dashboard-client-navbar">
             <a class="navbar-brand dashboard-client-brand" href="{{ $dashboardRoute }}">
                 <span class="dashboard-client-brand__logo">
-                    <x-brand-logo variant="logo_header" />
+                    <x-brand-logo :variant="$brandProfile === 'tcc' ? 'logo_header_transparent' : 'logo_header'" />
                 </span>
 
                 <span class="dashboard-client-brand__text d-none d-sm-flex">
@@ -118,7 +120,60 @@
                 </span>
             </a>
 
+            @can('view-leads')
+                <form
+                    action="{{ $dashboardRoute }}#leads-section"
+                    method="GET"
+                    role="search"
+                    class="dashboard-header-search"
+                    :class="{ 'is-open': searchOpen }"
+                    id="adminHeaderSearch"
+                >
+                    <label class="visually-hidden" for="adminHeaderSearchInput">Buscar leads por nome, e-mail, CPF ou telefone</label>
+                    <i class="bi bi-search" aria-hidden="true"></i>
+                    <input
+                        id="adminHeaderSearchInput"
+                        x-ref="headerSearch"
+                        type="search"
+                        name="lead_name"
+                        maxlength="255"
+                        value="{{ request('lead_name') }}"
+                        placeholder="Buscar nome, e-mail, CPF ou telefone"
+                    >
+                    <button type="submit" class="btn" aria-label="Buscar leads" title="Buscar leads">
+                        <i class="bi bi-arrow-right" aria-hidden="true"></i>
+                    </button>
+                </form>
+            @endcan
+
             <div class="dashboard-header-actions">
+                @can('view-leads')
+                    <button
+                        type="button"
+                        class="btn dashboard-header-search-toggle"
+                        aria-label="Abrir busca de leads"
+                        aria-controls="adminHeaderSearch"
+                        :aria-expanded="searchOpen.toString()"
+                        @click="searchOpen = !searchOpen; if (searchOpen) $nextTick(() => $refs.headerSearch.focus())"
+                    >
+                        <i class="bi bi-search" aria-hidden="true"></i>
+                    </button>
+                @endcan
+
+                @can('access-simulation-forms')
+                    @if (request()->routeIs('Dashboard-Admin'))
+                        <button type="button" class="btn dashboard-header-new-lead" aria-label="Novo lead" title="Novo lead" data-bs-toggle="modal" data-bs-target="#adminSimulationModal">
+                            <i class="bi bi-plus-lg" aria-hidden="true"></i>
+                            <span>Novo lead</span>
+                        </button>
+                    @else
+                        <a href="{{ $dashboardRoute }}#new-lead-title" class="btn dashboard-header-new-lead" aria-label="Novo lead" title="Novo lead">
+                            <i class="bi bi-plus-lg" aria-hidden="true"></i>
+                            <span>Novo lead</span>
+                        </a>
+                    @endif
+                @endcan
+
                 <button
                     type="button"
                     class="btn dashboard-header-theme-toggle"
@@ -291,7 +346,7 @@
     <div class="offcanvas-header border-bottom">
         <div class="d-flex align-items-center gap-3">
             <span class="dashboard-sidebar-logo">
-                <x-brand-logo variant="logo_header" />
+                <x-brand-logo :variant="$brandProfile === 'tcc' ? 'logo_header_transparent' : 'logo_header'" />
             </span>
 
             <div>
