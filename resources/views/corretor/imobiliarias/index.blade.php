@@ -360,6 +360,8 @@
                                                             data-company-edit
                                                             data-company-id="{{ $company->id }}"
                                                             data-company-update-url="{{ route('admin.imobiliarias.update', ['company' => $company]) }}"
+                                                            data-company-password-url="{{ route('admin.imobiliarias.password.update', ['company' => $company]) }}"
+                                                            data-company-has-password="{{ $company->has_password ? 'true' : 'false' }}"
                                                             data-company-name="{{ $company->name }}"
                                                             data-company-email="{{ $company->email }}"
                                                             data-company-phone="{{ $company->phone }}"
@@ -481,6 +483,8 @@
                                                 data-company-edit
                                                 data-company-id="{{ $company->id }}"
                                                 data-company-update-url="{{ route('admin.imobiliarias.update', ['company' => $company]) }}"
+                                                data-company-password-url="{{ route('admin.imobiliarias.password.update', ['company' => $company]) }}"
+                                                data-company-has-password="{{ $company->has_password ? 'true' : 'false' }}"
                                                 data-company-name="{{ $company->name }}"
                                                 data-company-email="{{ $company->email }}"
                                                 data-company-phone="{{ $company->phone }}"
@@ -537,6 +541,7 @@
         'editingCompany' => $editingCompany,
         'hasEditErrors' => $hasEditErrors,
     ])
+    @include('corretor.imobiliarias.partials.password-modal')
     @can('delete-real-estate-company')
         <div
             class="modal fade company-delete-modal"

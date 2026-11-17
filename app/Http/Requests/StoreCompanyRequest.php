@@ -60,10 +60,6 @@ class StoreCompanyRequest extends FormRequest
 
     public function rules(): array
     {
-        $companyTags = app(CompanyTagService::class);
-
-        $hasAvailableTags = $companyTags->hasAvailableTags();
-
         $rules = [
             'website' => ['nullable', 'size:0'],
 
@@ -132,35 +128,15 @@ class StoreCompanyRequest extends FormRequest
             ],
         ];
 
-        if ($hasAvailableTags) {
-            $rules['leadlovers_tag_id'] = [
-                'bail',
-                'required',
-                'integer',
-                Rule::exists('lead_lovers_tags', 'leadlovers_tag_id')
-                    ->where('active', true),
-                Rule::unique('imobiliarias', 'leadlovers_tag_id'),
-
-                function (string $attribute, mixed $value, \Closure $fail) use ($companyTags) {
-                    if (! $companyTags->isAvailable((int) $value)) {
-                        $fail(\App\Support\BrandingText::choose('A imobiliária selecionada não está mais disponível.', 'A empresa selecionada não está mais disponível.'));
-                    }
-                },
-            ];
-
-            $rules['company_name'] = ['prohibited'];
-        } else {
-            $rules['leadlovers_tag_id'] = ['prohibited'];
-
-            $rules['company_name'] = [
-                'bail',
-                'required',
-                'string',
-                'max:100',
-                Rule::unique('imobiliarias', 'name'),
-                Rule::unique('lead_lovers_tags', 'title'),
-            ];
-        }
+        $rules['leadlovers_tag_id'] = ['prohibited'];
+        $rules['company_name'] = [
+            'bail',
+            'required',
+            'string',
+            'max:100',
+            Rule::unique('imobiliarias', 'name'),
+            Rule::unique('lead_lovers_tags', 'title'),
+        ];
 
         return $rules;
     }
@@ -198,7 +174,7 @@ class StoreCompanyRequest extends FormRequest
             'leadlovers_tag_id.integer' => \App\Support\BrandingText::choose('A imobiliária selecionada é inválida.', 'A empresa selecionada é inválida.'),
             'leadlovers_tag_id.exists' => \App\Support\BrandingText::choose('A imobiliária selecionada não foi encontrada ou não está disponível.', 'A empresa selecionada não foi encontrada ou não está disponível.'),
             'leadlovers_tag_id.unique' => \App\Support\BrandingText::choose('Esta imobiliária já possui cadastro no sistema.', 'Esta empresa já possui cadastro no sistema.'),
-            'leadlovers_tag_id.prohibited' => 'Não é possível utilizar uma tag neste momento. Atualize a página.',
+            'leadlovers_tag_id.prohibited' => 'Informe o nome para cadastrar uma nova empresa. A seleção de tags é exclusiva do painel administrativo.',
 
             'company_name.required' => \App\Support\BrandingText::choose('Informe o nome da imobiliária.', 'Informe o nome da empresa.'),
 

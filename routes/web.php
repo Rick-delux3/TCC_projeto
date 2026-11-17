@@ -236,6 +236,11 @@ Route::prefix('/Dashboard')->group(function () {
                     ->whereNumber('company')
                     ->name('update');
 
+                Route::put('/{company}/senha', [ImobiliariaController::class, 'updatePassword'])
+                    ->middleware(['can:update-real-estate-company', 'throttle:5,1'])
+                    ->whereNumber('company')
+                    ->name('password.update');
+
                 Route::delete('/{company}', [ImobiliariaController::class, 'destroy'])
                     ->middleware(['can:delete-real-estate-company', 'throttle:5,1'])
                     ->whereNumber('company')

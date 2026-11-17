@@ -42,6 +42,10 @@
                             <span>{{ \App\Support\BrandingText::choose('Imobiliária selecionada', 'Empresa selecionada') }}</span>
                             <strong data-edit-company-title>{{ $editingCompany?->name }}</strong>
                         </div>
+                        <div class="alert alert-success mb-0" role="status" data-company-password-success hidden>
+                            <i class="bi bi-check-circle me-2" aria-hidden="true"></i>
+                            Senha de acesso alterada com sucesso.
+                        </div>
                         @if ($hasEditErrors)
                             <div class="alert alert-danger company-modal-validation" role="alert">
                                 <i class="bi bi-exclamation-triangle-fill" aria-hidden="true"></i>
@@ -115,6 +119,27 @@
                                 @error('phone')
                                     <div id="edit-company-phone-error" class="invalid-feedback">{{ $message }}</div>
                                 @enderror
+                            </div>
+
+                            <div class="col-12">
+                                <label for="edit-company-password-status" class="form-label fw-semibold">Senha de acesso</label>
+                                <div class="company-password-access">
+                                    <input
+                                        type="text"
+                                        id="edit-company-password-status"
+                                        class="form-control"
+                                        value="{{ $editingCompany?->has_password ? '••••••••' : 'Senha indisponível ou inexistente' }}"
+                                        aria-describedby="edit-company-password-help"
+                                        autocomplete="off"
+                                        readonly
+                                        data-company-password-status
+                                    >
+                                    <button type="button" class="btn btn-outline-primary" data-company-password-open disabled>
+                                        <i class="bi bi-key me-1" aria-hidden="true"></i>
+                                        Alterar senha
+                                    </button>
+                                </div>
+                                <p id="edit-company-password-help" class="form-text mb-0">Por segurança, a senha atual não pode ser exibida. Você pode definir uma nova senha.</p>
                             </div>
 
                             <div class="col-12 col-md-6">

@@ -5,7 +5,6 @@ namespace App\Http\Controllers;
 use App\Actions\Companies\RegisterCompany;
 use App\Actions\Companies\StartCompanyTwoFactorChallenge;
 use App\Http\Requests\StoreCompanyRequest;
-use App\Services\LeadLovers\CompanyTagService;
 use Illuminate\Auth\Events\Registered;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Log;
@@ -15,11 +14,9 @@ use Throwable;
 
 class ImobiliariaRegistrationController extends Controller
 {
-    public function showRegistrationForm(CompanyTagService $companyTags): View
+    public function showRegistrationForm(): View
     {
-        $tagsOficiais = $companyTags->availableTags();
-
-        return view('imobiliaria.register-company', compact('tagsOficiais'));
+        return view('imobiliaria.register-company');
     }
 
     public function store(

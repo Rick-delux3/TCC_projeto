@@ -4,8 +4,10 @@ namespace App\Http\Controllers\Admin;
 
 use App\Actions\Companies\RegisterCompany;
 use App\Actions\Companies\SyncCompanyDepartments;
+use App\Actions\Companies\UpdateCompanyPassword;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\StoreCompanyRequest as StoreAdminCompanyRequest;
+use App\Http\Requests\Admin\UpdateCompanyPasswordRequest;
 use App\Http\Requests\Admin\UpdateCompanyRequest;
 use App\Models\Corretor;
 use App\Models\CorretorActivityLog;
@@ -15,6 +17,7 @@ use App\Services\LeadLovers\CompanyTagService;
 use DomainException;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -57,6 +60,8 @@ class ImobiliariaController extends Controller
                 'porto_partner_code',
                 'created_at',
             ])
+            ->selectRaw("CASE WHEN password IS NOT NULL AND password <> '' THEN 1 ELSE 0 END AS has_password")
+            ->withCasts(['has_password' => 'boolean'])
             ->when($search !== '', function (Builder $query) use ($search, $cnpjSearch): void {
                 $query->where(function (Builder $query) use ($search, $cnpjSearch): void {
                     $query->where('name', 'like', "%{$search}%")
@@ -89,6 +94,37 @@ class ImobiliariaController extends Controller
                 'inactive' => Imobiliaria::query()->where('lead_form_active', false)->count(),
             ],
         ]);
+    }
+
+    public function updatePassword(UpdateCompanyPasswordRequest $request, Imobiliaria $company, UpdateCompanyPassword $updatePassword): JsonResponse|RedirectResponse
+    {
+        $corretor = $request->user('admin');
+        abort_unless($corretor instanceof Corretor, 403);
+        try {
+            $updatePassword->execute($company, $corretor, $request->validated('password'), $request->ip());
+        } catch (DomainException $exception) {
+            if ($request->expectsJson()) {
+                return response()->json(['message' => $exception->getMessage()], 409)->header('Cache-Control', 'no-store');
+            }
+
+            return redirect()->route('admin.imobiliarias.index')->with('error', $exception->getMessage());
+        } catch (Throwable $exception) {
+            Log::error('Falha ao alterar a senha de acesso da imobiliária.', [
+                'company_id' => $company->id, 'corretor_id' => $corretor->id, 'exception' => $exception::class,
+            ]);
+            if ($request->expectsJson()) {
+                return response()->json(['message' => 'Não foi possível alterar a senha. Tente novamente.'], 500)->header('Cache-Control', 'no-store');
+            }
+
+            return redirect()->route('admin.imobiliarias.index')->with('error', 'Não foi possível alterar a senha. Tente novamente.');
+        }
+        $message = 'Senha de acesso alterada com sucesso.';
+        if ($request->expectsJson()) {
+            return response()->json(['message' => $message, 'company_id' => $company->id, 'has_password' => true])
+                ->header('Cache-Control', 'no-store');
+        }
+
+        return redirect()->route('admin.imobiliarias.index')->with('success', $message);
     }
 
     public function create(CompanyTagService $companyTags): View

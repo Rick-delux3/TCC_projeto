@@ -1,5 +1,6 @@
 import { buildDepartmentPayload } from './company-departments';
 import { initializeEditDepartments } from './company-edit-departments.js';
+import { initializeCompanyPasswordModal } from './company-password-modal.js';
 
 const onlyNumbers = (value, limit) => String(value ?? '')
     .replace(/\D/g, '')
@@ -268,6 +269,8 @@ if (editModalElement) {
     const validationSummary = editModalElement.querySelector('.company-modal-validation');
     const departmentsByCompany = JSON.parse(document.querySelector('#edit-company-department-data')?.textContent ?? '{}');
     const populateDepartments = initializeEditDepartments(editForm);
+    const editButtons = [...document.querySelectorAll('[data-company-edit]')];
+    const selectPasswordCompany = initializeCompanyPasswordModal(editModalElement, editButtons);
 
     const clearServerValidation = () => {
         validationSummary?.setAttribute('hidden', '');
@@ -283,6 +286,7 @@ if (editModalElement) {
         }
 
         editForm.action = button.dataset.companyUpdateUrl;
+        selectPasswordCompany(button);
 
         if (editCompanyId) {
             editCompanyId.value = button.dataset.companyId;
@@ -339,8 +343,6 @@ if (editModalElement) {
             editStatus.value = button.dataset.companyStatus === '0' ? '0' : '1';
         }
     };
-
-    const editButtons = [...document.querySelectorAll('[data-company-edit]')];
 
     editButtons.forEach((button) => {
         button.addEventListener('click', () => populateEditForm(button));

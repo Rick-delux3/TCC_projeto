@@ -55,72 +55,32 @@
                 </div>
 
                 <div class="client-field">
-                    <label
-                        for="{{ $tagsOficiais->isNotEmpty() ? 'leadlovers_tag_id' : 'company_name' }}"
-                        class="client-label"
-                    >
+                    <label for="company_name" class="client-label">
                         {{ \App\Support\BrandingText::choose('Nome da imobiliária', 'Nome da empresa') }}
                     </label>
+                    <div class="client-input-wrap">
+                        <span class="client-input-icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                <path d="M3 21h18M5 21V5l7-3 7 3v16M9 9h.01M9 13h.01M9 17h.01M15 9h.01M15 13h.01M15 17h.01"/>
+                            </svg>
+                        </span>
+                        <input
+                            type="text"
+                            name="company_name"
+                            id="company_name"
+                            class="client-input client-input--with-icon @error('company_name') is-invalid @enderror"
+                            value="{{ old('company_name') }}"
+                            maxlength="100"
+                            placeholder="{{ \App\Support\BrandingText::choose('Digite o nome da imobiliária', 'Digite o nome da empresa') }}"
+                            autocomplete="organization"
+                            @error('company_name') aria-describedby="company-name-error" @enderror
+                            required
+                        >
+                    </div>
 
-                    @if($tagsOficiais->isNotEmpty())
-                        <div class="client-input-wrap">
-                            <span class="client-input-icon" aria-hidden="true">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                                    <path d="M3 21h18M5 21V5l7-3 7 3v16M9 9h.01M9 13h.01M9 17h.01M15 9h.01M15 13h.01M15 17h.01"/>
-                                </svg>
-                            </span>
-                            <select
-                                name="leadlovers_tag_id"
-                                id="leadlovers_tag_id"
-                                class="client-input client-input--with-icon client-select @error('leadlovers_tag_id') is-invalid @enderror"
-                                @error('leadlovers_tag_id') aria-describedby="leadlovers-tag-error" @enderror
-                                required
-                            >
-                                <option value="" disabled @selected(! old('leadlovers_tag_id'))>
-                                    {{ \App\Support\BrandingText::choose('Selecione sua imobiliária...', 'Selecione sua empresa...') }}
-                                </option>
-
-                                @foreach($tagsOficiais as $tagNome)
-                                    <option
-                                        value="{{ $tagNome->leadlovers_tag_id }}"
-                                        @selected(
-                                            old('leadlovers_tag_id') == $tagNome->leadlovers_tag_id
-                                        )
-                                    >
-                                        {{ $tagNome->title }}
-                                    </option>
-                                @endforeach
-                            </select>
-                        </div>
-
-                        @error('leadlovers_tag_id')
-                            <span id="leadlovers-tag-error" class="client-field-error">{{ $message }}</span>
-                        @enderror
-                    @else
-                        <div class="client-input-wrap">
-                            <span class="client-input-icon" aria-hidden="true">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                                    <path d="M3 21h18M5 21V5l7-3 7 3v16M9 9h.01M9 13h.01M9 17h.01M15 9h.01M15 13h.01M15 17h.01"/>
-                                </svg>
-                            </span>
-                            <input
-                                type="text"
-                                name="company_name"
-                                id="company_name"
-                                class="client-input client-input--with-icon @error('company_name') is-invalid @enderror"
-                                value="{{ old('company_name') }}"
-                                maxlength="255"
-                                placeholder="{{ \App\Support\BrandingText::choose('Digite o nome da imobiliária', 'Digite o nome da empresa') }}"
-                                autocomplete="organization"
-                                @error('company_name') aria-describedby="company-name-error" @enderror
-                                required
-                            >
-                        </div>
-
-                        @error('company_name')
-                            <span id="company-name-error" class="client-field-error">{{ $message }}</span>
-                        @enderror
-                    @endif
+                    @error('company_name')
+                        <span id="company-name-error" class="client-field-error">{{ $message }}</span>
+                    @enderror
                 </div>
 
                 <div class="client-field">
