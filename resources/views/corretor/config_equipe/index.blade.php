@@ -101,7 +101,7 @@
     };
 @endphp
 
-<div class="dashboard-shell team-motion-page team-management-page">
+<div class="dashboard-shell team-motion-page team-management-page management-workspace">
     <div class="container-fluid px-3 px-lg-4 py-4">
 
         {{-- Alertas --}}
@@ -140,155 +140,27 @@
             </div>
         @endif
 
-        {{-- Cabeçalho da página --}}
-        <div class="team-page-header d-flex flex-column flex-xl-row justify-content-between align-items-xl-center gap-3 mb-4" data-team-reveal>
-            <div>
-                <nav aria-label="breadcrumb" class="mb-2">
-                    <ol class="breadcrumb mb-0">
-                        <li class="breadcrumb-item">
-                            <a href="{{ $dashboardRoute }}" class="text-decoration-none">
-                                Dashboard
-                            </a>
-                        </li>
+        <x-management-page-header title="Gerenciar equipe" eyebrow="Configurações de acesso"
+            description="Acompanhe integrantes, convites e permissões de acesso à plataforma.">
+            <a href="{{ $createRoute }}" class="btn btn-primary {{ $createRoute === '#' ? 'disabled' : '' }}">
+                <i class="bi bi-person-plus me-1" aria-hidden="true"></i>Convidar novo integrante
+            </a>
+        </x-management-page-header>
 
-                        <li class="breadcrumb-item active" aria-current="page">
-                            Equipe
-                        </li>
-                    </ol>
-                </nav>
-
-                <span class="badge text-bg-primary-subtle text-primary border border-primary-subtle mb-2">
-                    Configurações de equipe
-                </span>
-
-                <h1 class="h2 fw-bold mb-1">
-                    Gerenciar equipe
-                </h1>
-
-                <p class="text-muted mb-0">
-                    {{ \App\Support\BrandingText::choose('Visualize o CEO e os integrantes da corretora. O CEO não pode ser editado nesta área.', 'Visualize o CEO e os integrantes da concessionária. O CEO não pode ser editado nesta área.') }}
-                </p>
-            </div>
-
-            <div class="d-flex flex-column flex-sm-row gap-2">
-                <a href="{{ $dashboardRoute }}" class="btn btn-outline-secondary">
-                    <i class="bi bi-arrow-left me-1"></i>
-                    Voltar ao dashboard
-                </a>
-
-                <a href="{{ $createRoute }}" class="btn btn-outline-primary {{ $createRoute === '#' ? 'disabled' : '' }}">
-                    <i class="bi bi-person-plus me-1"></i>
-                    Convidar novo integrante
-                </a>
-            </div>
-        </div>
-
-        {{-- Resumo superior --}}
-        <div class="row g-3 mb-4">
-            <div class="col-6 col-xl-3" data-team-reveal style="--team-reveal-delay: 70ms">
-                <div class="card team-stat-card border-0 shadow-sm rounded-4 h-100">
-                    <div class="card-body">
-                        <div class="d-flex justify-content-between align-items-start mb-3">
-                            <span class="badge text-bg-primary-subtle text-primary">
-                                Equipe
-                            </span>
-
-                            <i class="bi bi-people text-primary"></i>
-                        </div>
-
-                        <div class="h2 fw-bold mb-0" data-team-count="{{ $totalCorretores }}">
-                            {{ $totalCorretores }}
-                        </div>
-
-                        <div class="text-muted small">
-                            membros cadastrados
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="col-6 col-xl-3" data-team-reveal style="--team-reveal-delay: 120ms">
-                <div class="card team-stat-card border-0 shadow-sm rounded-4 h-100">
-                    <div class="card-body">
-                        <div class="d-flex justify-content-between align-items-start mb-3">
-                            <span class="badge text-bg-secondary">
-                                Integrantes
-                            </span>
-
-                            <i class="bi bi-person-badge text-secondary"></i>
-                        </div>
-
-                        <div class="h2 fw-bold mb-0" data-team-count="{{ $totalIntegrantes }}">
-                            {{ $totalIntegrantes }}
-                        </div>
-
-                        <div class="text-muted small">
-                            integrantes da equipe
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="col-6 col-xl-3" data-team-reveal style="--team-reveal-delay: 170ms">
-                <div class="card team-stat-card border-0 shadow-sm rounded-4 h-100">
-                    <div class="card-body">
-                        <div class="d-flex justify-content-between align-items-start mb-3">
-                            <span class="badge text-bg-success-subtle text-success">
-                                Ativos
-                            </span>
-
-                            <i class="bi bi-check-circle text-success"></i>
-                        </div>
-
-                        <div class="h2 fw-bold mb-0" data-team-count="{{ $totalAtivos }}">
-                            {{ $totalAtivos }}
-                        </div>
-
-                        <div class="text-muted small">
-                            acessos habilitados
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="col-6 col-xl-3" data-team-reveal style="--team-reveal-delay: 220ms">
-                <div class="card team-stat-card border-0 shadow-sm rounded-4 h-100">
-                    <div class="card-body">
-                        <div class="d-flex justify-content-between align-items-start mb-3">
-                            <span class="badge text-bg-warning-subtle text-warning">
-                                Convites
-                            </span>
-
-                            <i class="bi bi-envelope text-warning"></i>
-                        </div>
-
-                        <div class="h2 fw-bold mb-0" data-team-count="{{ $convitesPendentes }}">
-                            {{ $convitesPendentes }}
-                        </div>
-
-                        <div class="text-muted small">
-                            aguardando aceite
-                        </div>
-
-                        <div class="small {{ $convitesExpirados > 0 ? 'text-danger' : 'text-muted' }}">
-                            {{ $convitesExpirados > 0
-                                ? $convitesExpirados . ' ' . ($convitesExpirados === 1 ? 'convite expirado' : 'convites expirados')
-                                : 'nenhum convite expirado' }}
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
+        <section class="management-metrics" aria-label="Resumo da equipe">
+            <x-dashboard-metric label="Equipe" :value="$totalCorretores" detail="Membros cadastrados" icon="bi-people" />
+            <x-dashboard-metric label="Integrantes" :value="$totalIntegrantes" detail="Acessos sob gestão do CEO" icon="bi-person-badge" />
+            <x-dashboard-metric label="Ativos" :value="$totalAtivos" detail="Acessos habilitados" icon="bi-check-circle" tone="positive" />
+            <x-dashboard-metric label="Convites pendentes" :value="$convitesPendentes"
+                :detail="$convitesExpirados > 0 ? $convitesExpirados.' convite(s) expirado(s)' : 'Aguardando aceite'" icon="bi-envelope" />
+        </section>
 
         {{-- Bloco principal --}}
-        <div class="card team-list-card border-0 shadow-sm rounded-5 mb-4" data-team-reveal style="--team-reveal-delay: 140ms">
+        <div class="card team-list-card border-0 shadow-sm rounded-5 mb-4">
             <div class="card-body p-4">
 
                 <div class="d-flex flex-column flex-xl-row justify-content-between align-items-xl-center gap-3 mb-4">
                     <div>
-                        <span class="badge text-bg-dark mb-2">
-                            Integrantes
-                        </span>
 
                         <h2 class="h4 fw-bold mb-1">
                             Lista da equipe
@@ -299,15 +171,17 @@
                         </p>
                     </div>
 
-                    <form method="GET" action="{{ $indexRoute }}" class="team-search-form d-flex flex-column flex-sm-row gap-2">
-                        <div class="input-group">
+                    <form method="GET" action="{{ $indexRoute }}" class="team-search-form">
+                        <div class="team-search-field">
+                            <label for="team-search" class="form-label">Buscar integrante</label>
+                            <div class="input-group">
                             <span class="input-group-text bg-white">
-                                <i class="bi bi-search"></i>
+                                <i class="bi bi-search" aria-hidden="true"></i>
                             </span>
 
                             <input
                                 type="text"
-                                aria-label="Buscar integrante"
+                                id="team-search"
                                 maxlength="255"
                                 name="search"
                                 value="{{ $search }}"
@@ -317,6 +191,7 @@
                             >
                         </div>
 
+                        </div>
                         <button type="submit" class="btn btn-outline-primary">
                             Buscar
                         </button>
@@ -331,16 +206,16 @@
 
                 {{-- Tabela --}}
                 <div class="table-responsive">
-                    <table class="table table-hover align-middle mb-0">
+                    <table class="table team-table table-hover align-middle mb-0" role="table">
                         <thead class="table-light">
                             <tr>
-                                <th>Membro</th>
-                                <th>E-mail</th>
-                                <th>Cargo</th>
-                                <th>Convite</th>
-                                <th>Desde</th>
-                                <th>Status</th>
-                                <th class="text-end">Ações</th>
+                                <th scope="col">Membro</th>
+                                <th scope="col">E-mail</th>
+                                <th scope="col">Cargo</th>
+                                <th scope="col">Convite</th>
+                                <th scope="col">Desde</th>
+                                <th scope="col">Status</th>
+                                <th scope="col" class="text-end">Ações</th>
                             </tr>
                         </thead>
 
@@ -392,9 +267,9 @@
                                         : 'Não informado';
                                 @endphp
 
-                                <tr class="team-member-row">
+                                <tr class="team-member-row" role="row">
                                     {{-- Membro --}}
-                                    <td>
+                                    <td role="cell" data-label="Membro">
                                         <div class="d-flex align-items-center gap-3">
                                             <span class="team-member-avatar rounded-4 bg-primary-subtle text-primary d-flex align-items-center justify-content-center fw-bold" style="width: 42px; height: 42px;">
                                                 {{ $corretorInitials ?: 'CO' }}
@@ -413,21 +288,22 @@
                                     </td>
 
                                     {{-- E-mail --}}
-                                    <td>
+                                    <td role="cell" data-label="E-mail">
                                         <a href="mailto:{{ $corretorEmail }}" class="text-decoration-none fw-semibold">
                                             {{ $corretorEmail }}
                                         </a>
                                     </td>
 
                                     {{-- Cargo --}}
-                                    <td>
+                                    <td role="cell" data-label="Cargo">
                                         <span class="badge {{ $roleBadge($corretor->role ?? null) }}">
                                             {{ $roleLabel($corretor->role ?? null) }}
                                         </span>
                                     </td>
 
                                     {{-- Convite --}}
-                                    <td>
+                                    <td role="cell" data-label="Convite">
+                                        <div class="team-invitation-state">
                                         @if ($isCorretorCeo)
                                             <span class="badge text-bg-light border text-muted">
                                                 Não se aplica
@@ -460,17 +336,18 @@
                                         @else
                                             <span class="badge text-bg-secondary">Não enviado</span>
                                         @endif
+                                                                            </div>
                                     </td>
 
                                     {{-- Desde --}}
-                                    <td>
+                                    <td role="cell" data-label="Desde">
                                         <span class="text-muted">
                                             {{ $dataEntrada }}
                                         </span>
                                     </td>
 
                                     {{-- Status --}}
-                                    <td>
+                                    <td role="cell" data-label="Status">
                                         @if ($isCorretorCeo)
                                             <span class="badge text-bg-primary">
                                                 Sempre ativo
@@ -512,7 +389,7 @@
                                     </td>
 
                                     {{-- Ações --}}
-                                    <td class="text-end">
+                                    <td role="cell" data-label="Ações" class="text-end">
                                         @if ($isCorretorCeo)
                                             <button type="button" class="btn btn-sm btn-outline-secondary" disabled>
                                                 CEO não editável
@@ -523,7 +400,7 @@
                                                     href="{{ $editRoute }}"
                                                     class="btn btn-sm btn-outline-primary {{ $editRoute === '#' ? 'disabled' : '' }}"
                                                 >
-                                                    <i class="bi bi-pencil-square me-1"></i>
+                                                    <i class="bi bi-pencil-square me-1" aria-hidden="true"></i>
                                                     Editar
                                                 </a>
 
@@ -541,7 +418,7 @@
                                                             title="{{ ! $isActive ? 'Ative o integrante antes de enviar um convite.' : 'Gera um novo convite e invalida o link anterior.' }}"
                                                             @disabled(! $isActive || $resendInvitationRoute === '#')
                                                         >
-                                                            <i class="bi bi-envelope-arrow-up me-1"></i>
+                                                            <i class="bi bi-envelope-arrow-up me-1" aria-hidden="true"></i>
                                                             {{ $conviteExpirado || $conviteNaoEnviado ? 'Novo convite' : 'Reenviar convite' }}
                                                         </button>
                                                     </form>
@@ -554,7 +431,7 @@
                                 <tr>
                                     <td colspan="7" class="text-center py-5">
                                         <div class="mb-3">
-                                            <i class="bi bi-people text-muted fs-1 team-empty-icon"></i>
+                                            <i class="bi bi-people text-muted fs-1 team-empty-icon" aria-hidden="true"></i>
                                         </div>
 
                                         <h3 class="h5 fw-bold">
@@ -566,7 +443,7 @@
                                         </p>
 
                                         <a href="{{ $createRoute }}" class="btn btn-primary {{ $createRoute === '#' ? 'disabled' : '' }}">
-                                            <i class="bi bi-person-plus me-1"></i>
+                                            <i class="bi bi-person-plus me-1" aria-hidden="true"></i>
                                             Convidar integrante
                                         </a>
                                     </td>
@@ -579,11 +456,11 @@
         </div>
 
         {{-- Observações --}}
-        <div class="card team-rules-card border-0 shadow-sm rounded-5" data-team-reveal style="--team-reveal-delay: 180ms">
+        <div class="card team-rules-card border-0 shadow-sm rounded-5">
             <div class="card-body p-4">
                 <div class="d-flex gap-3 align-items-start">
                     <span class="badge rounded-circle text-bg-primary d-flex align-items-center justify-content-center" style="width: 32px; height: 32px;">
-                        <i class="bi bi-info-lg"></i>
+                        <i class="bi bi-info-lg" aria-hidden="true"></i>
                     </span>
 
                     <div>

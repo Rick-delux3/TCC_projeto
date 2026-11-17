@@ -45,7 +45,7 @@
     $formSteps = ['identification' => 'Identificação', 'contact' => 'Empresa e contato', 'departments' => 'Emails por setor', 'address' => 'Localização', 'access' => 'Acesso e disponibilidade'];
 @endphp
 
-<div class="dashboard-shell real-estate-admin real-estate-create-page">
+<div class="dashboard-shell real-estate-admin real-estate-create-page management-workspace">
     <div class="container-fluid px-3 px-lg-4 py-4">
         <div class="company-form-container">
             <nav aria-label="Navegação estrutural" class="mb-3">
@@ -56,22 +56,11 @@
                 </ol>
             </nav>
 
-            <header class="company-create-header mb-4" data-reveal>
-                <a href="{{ $indexRoute }}" class="company-back-link">
-                    <i class="bi bi-arrow-left" aria-hidden="true"></i>
-                    Voltar para a listagem
-                </a>
-
-                <div class="mt-3">
-                    <div>
-                        <span class="company-eyebrow company-eyebrow--light">Novo parceiro</span>
-                        <h1 class="fw-bold mb-1">{{ \App\Support\BrandingText::choose('Cadastrar imobiliária', 'Cadastrar empresa') }}</h1>
-                        <p class="mb-0">
-                            Informe os dados da empresa e defina as credenciais que serão entregues ao responsável.
-                        </p>
-                    </div>
-                </div>
-            </header>
+            <x-management-page-header
+                :title="\App\Support\BrandingText::choose('Cadastrar imobiliária', 'Cadastrar empresa')"
+                eyebrow="Novo parceiro" :back-url="$indexRoute"
+                description="Preencha os dados da empresa e defina o acesso ao formulário e ao painel."
+            />
 
             @if ($errors->any())
                 <div class="alert alert-danger company-validation-summary mb-4" role="alert" aria-labelledby="validation-summary-title" data-reveal>

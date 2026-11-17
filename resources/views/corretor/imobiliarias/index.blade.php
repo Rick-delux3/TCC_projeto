@@ -56,7 +56,7 @@
     };
 @endphp
 
-<div class="dashboard-shell real-estate-admin real-estate-index-page">
+<div class="dashboard-shell real-estate-admin real-estate-index-page management-workspace">
     <div class="container-fluid company-index-container px-3 px-lg-4 py-4">
         @if (session('error'))
             <div class="alert alert-danger border-0 rounded-4 shadow-sm mb-4" role="alert" aria-live="assertive">
@@ -88,84 +88,24 @@
             </div>
         @endif
 
-        <header class="company-index-header mb-4" aria-labelledby="companies-page-title" data-reveal>
-            <div>
-                <nav aria-label="Navegação estrutural" class="mb-3">
-                    <ol class="breadcrumb mb-0">
-                        <li class="breadcrumb-item">
-                            <a href="{{ route('Dashboard-Admin') }}">Dashboard</a>
-                        </li>
-                        <li class="breadcrumb-item active" aria-current="page">{{ \App\Support\BrandingText::choose('Imobiliárias', 'Empresas') }}</li>
-                    </ol>
-                </nav>
+        <x-management-page-header
+            :title="\App\Support\BrandingText::choose('Imobiliárias cadastradas', 'Empresas cadastradas')"
+            eyebrow="Gestão de parceiros" heading-id="companies-page-title"
+            description="Consulte contatos, códigos de acesso e a disponibilidade dos formulários.">
+            @can('create-real-estate-company')
+                <a href="{{ route('admin.imobiliarias.create') }}" class="btn btn-primary">
+                    <i class="bi bi-plus-lg me-1" aria-hidden="true"></i>{{ \App\Support\BrandingText::choose('Cadastrar imobiliária', 'Cadastrar empresa') }}
+                </a>
+            @endcan
+        </x-management-page-header>
 
-                <div class="d-flex flex-column flex-xl-row align-items-xl-center justify-content-between gap-3">
-                    <div class="company-page-hero__copy">
-                        <span class="company-eyebrow">
-                            <i class="bi bi-buildings" aria-hidden="true"></i>
-                            Gestão de parceiros
-                        </span>
-                        <h1 id="companies-page-title" class="display-6 fw-bold mb-2">{{ \App\Support\BrandingText::choose('Imobiliárias cadastradas', 'Empresas cadastradas') }}</h1>
-                        <p class="mb-0">
-                            {{ \App\Support\BrandingText::choose('Consulte os dados de acesso, acompanhe a disponibilidade dos formulários e encontre rapidamente uma imobiliária.', 'Consulte os dados de acesso, acompanhe a disponibilidade dos formulários e encontre rapidamente uma empresa.') }}
-                        </p>
-                    </div>
-
-                    @can('create-real-estate-company')
-                        <a href="{{ route('admin.imobiliarias.create') }}" class="btn btn-primary text-white company-index-create">
-                            <i class="bi bi-plus-lg" aria-hidden="true"></i>
-                            {{ \App\Support\BrandingText::choose('Cadastrar imobiliária', 'Cadastrar empresa') }}
-                        </a>
-                    @endcan
-                </div>
-            </div>
-        </header>
-
-        <section class="company-overview-strip mb-4" aria-label="{{ \App\Support\BrandingText::choose('Resumo das imobiliárias', 'Resumo das empresas') }}" data-reveal data-reveal-delay="40">
-            <div class="company-overview-item">
-                <article class="company-summary-card company-summary-card--total h-100">
-                    <div class="card-body">
-                        <div class="company-summary-card__icon" aria-hidden="true">
-                            <i class="bi bi-buildings"></i>
-                        </div>
-                        <div>
-                            <p class="company-summary-card__label">{{ \App\Support\BrandingText::choose('Total de imobiliárias', 'Total de empresas') }}</p>
-                            <p class="company-summary-card__value" data-count-up="{{ $summary['total'] ?? 0 }}">{{ number_format($summary['total'] ?? 0, 0, ',', '.') }}</p>
-                            <p class="company-summary-card__hint mb-0">parceiros cadastrados</p>
-                        </div>
-                    </div>
-                </article>
-            </div>
-
-            <div class="company-overview-item">
-                <article class="company-summary-card company-summary-card--active h-100">
-                    <div class="card-body">
-                        <div class="company-summary-card__icon" aria-hidden="true">
-                            <i class="bi bi-check-circle"></i>
-                        </div>
-                        <div>
-                            <p class="company-summary-card__label">Formulários ativos</p>
-                            <p class="company-summary-card__value" data-count-up="{{ $summary['active'] ?? 0 }}">{{ number_format($summary['active'] ?? 0, 0, ',', '.') }}</p>
-                            <p class="company-summary-card__hint mb-0">prontos para receber leads</p>
-                        </div>
-                    </div>
-                </article>
-            </div>
-
-            <div class="company-overview-item">
-                <article class="company-summary-card company-summary-card--inactive h-100">
-                    <div class="card-body">
-                        <div class="company-summary-card__icon" aria-hidden="true">
-                            <i class="bi bi-pause-circle"></i>
-                        </div>
-                        <div>
-                            <p class="company-summary-card__label">Formulários inativos</p>
-                            <p class="company-summary-card__value" data-count-up="{{ $summary['inactive'] ?? 0 }}">{{ number_format($summary['inactive'] ?? 0, 0, ',', '.') }}</p>
-                            <p class="company-summary-card__hint mb-0">temporariamente pausados</p>
-                        </div>
-                    </div>
-                </article>
-            </div>
+        <section class="management-metrics management-metrics--three" aria-label="Resumo dos parceiros">
+            <x-dashboard-metric :label="\App\Support\BrandingText::choose('Total de imobiliárias', 'Total de empresas')"
+                :value="$summary['total'] ?? 0" detail="Parceiros cadastrados" icon="bi-buildings" />
+            <x-dashboard-metric label="Formulários ativos" :value="$summary['active'] ?? 0"
+                detail="Disponíveis para receber leads" icon="bi-check-circle" tone="positive" />
+            <x-dashboard-metric label="Formulários inativos" :value="$summary['inactive'] ?? 0"
+                detail="Recebimento de leads pausado" icon="bi-pause-circle" />
         </section>
 
         <div class="company-directory" data-reveal data-reveal-delay="80">

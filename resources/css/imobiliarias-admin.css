@@ -1,3 +1,5 @@
+@import "./management-workspace.css";
+
 .real-estate-admin {
     --company-navy: #030133;
     --company-blue: #146fb6;
@@ -12,8 +14,6 @@
     --company-radius-md: 1rem;
     min-height: calc(100vh - 106px);
 }
-
-.company-back-link
 
 .real-estate-admin .min-w-0 {
     min-width: 0;

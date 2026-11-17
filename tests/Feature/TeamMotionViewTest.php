@@ -6,7 +6,7 @@ beforeEach(function () {
     $this->withoutVite();
 });
 
-it('renders the motion hooks across every team management page', function () {
+it('renders the management components and access controls across every team page', function () {
     $ceo = Corretor::query()->create([
         'name' => 'CEO da Equipe',
         'email' => 'ceo-equipe@example.test',
@@ -32,8 +32,8 @@ it('renders the motion hooks across every team management page', function () {
     $this->get(route('admin.config-equipe.index'))
         ->assertOk()
         ->assertSee('team-motion-page', false)
-        ->assertSee('data-team-reveal', false)
-        ->assertSee('data-team-count', false)
+        ->assertSee('management-page-header', false)
+        ->assertSee('data-dashboard-metric', false)
         ->assertSee('team-member-row', false)
         ->assertSee('data-team-auto-submit', false);
 
@@ -56,18 +56,19 @@ it('renders the motion hooks across every team management page', function () {
         ->assertSee('data-team-submit', false);
 });
 
-it('keeps team motion accessible and compatible with both brand profiles', function () {
+it('keeps team selection states and reduced motion accessible', function () {
     $css = file_get_contents(resource_path('css/config-equipe.css'));
+    $sharedCss = file_get_contents(resource_path('css/management-workspace.css'));
     $javascript = file_get_contents(resource_path('js/config-equipe.js'));
 
     expect($css)
-        ->toContain('[data-brand="client"] .team-motion-page')
-        ->toContain('--team-primary-rgb: 0, 40, 143;')
-        ->toContain('--team-dark-rgb: 0, 22, 80;')
-        ->toContain('--team-accent-rgb: 230, 0, 11;')
+        ->toContain('@import "./management-workspace.css";')
         ->toContain('@media (prefers-reduced-motion: reduce)')
         ->toContain('.team-permission-option.is-selected')
         ->toContain('.team-permission-select-all:focus-within')
+        ->not->toContain('infinite', 'linear-gradient')
+        ->and($sharedCss)
+        ->toContain('[data-dashboard-theme="dark"]', ':focus-visible', '--mg-border')
         ->and($javascript)
         ->toContain("matchMedia('(prefers-reduced-motion: reduce)')")
         ->toContain('IntersectionObserver')
