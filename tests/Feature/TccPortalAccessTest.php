@@ -39,7 +39,10 @@ it('keeps company entry routes isolated from the admin session on tcc', function
         $response->assertRedirect(route('company.dashboard'));
         $this->get(route('company.dashboard'))->assertRedirect(route('2fa'));
         $this->withSession(['2fa_passed' => true])
-            ->get(route('company.dashboard'))->assertOk()->assertViewIs('imobiliaria.dashboard-user');
+            ->get(route('company.dashboard'))->assertOk()->assertViewIs('imobiliaria.dashboard-user')
+            ->assertDontSee('dashboard-client-header__secondary', false)
+            ->assertSee('data-bs-target="#dashboardClientSidebar"', false)
+            ->assertSee('id="dashboardClientSidebar"', false);
     } else {
         $response->assertOk()->assertViewIs(
             $routeName === 'empresa.login' ? 'imobiliaria.company-login' : 'imobiliaria.register-company'

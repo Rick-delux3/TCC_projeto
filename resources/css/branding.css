@@ -847,8 +847,7 @@
     background: #ffffff;
 }
 
-[data-brand="client"] .dashboard-profile-avatar,
-[data-brand="client"] .profile-company-avatar {
+[data-brand="client"] .dashboard-profile-avatar {
     border-color: rgba(255, 255, 255, 0.64);
     background: #00288f;
     box-shadow: inset 0 -4px 0 #e6000b;

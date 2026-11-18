@@ -76,7 +76,7 @@
     --dash-bg: #0f172a; --dash-surface: #172338; --dash-surface-soft: #1e293b;
     --dash-border: #475569; --dash-text: #f1f5f9; --dash-muted: #cbd5e1;
 }
-.company-workspace:has([data-dashboard-theme="dark"]) .dashboard-client-header__secondary { background: #1e293b; border-color: #475569; }
+.company-workspace:has([data-dashboard-theme="dark"]) .dashboard-client-header[data-dashboard-header] .dashboard-client-header__secondary { background: #1e293b; border-color: #475569; }
 .company-workspace:has([data-dashboard-theme="dark"]) .dashboard-client-header :is(.dashboard-header-nav__link, .dashboard-header-breadcrumb) { color: #e2e8f0; }
 .company-workspace .company-leads-page > .container-fluid { max-width: 1280px; margin-inline: auto; padding: 32px !important; }
 .company-workspace .company-dashboard-content { @apply grid gap-6; }

@@ -1,48 +1,49 @@
-<section>
-    <header>
-        <h2 class="text-lg font-medium text-gray-900">
-            {{ __('Update Password') }}
-        </h2>
+@php
+    $passwordFields = [
+        'current_password' => ['label' => 'Senha atual', 'autocomplete' => 'current-password'],
+        'password' => ['label' => 'Nova senha', 'autocomplete' => 'new-password'],
+        'password_confirmation' => ['label' => 'Confirmar nova senha', 'autocomplete' => 'new-password'],
+    ];
+    $firstPasswordError = collect(array_keys($passwordFields))
+        ->first(fn ($field) => $errors->updatePassword->has($field));
+@endphp
 
-        <p class="mt-1 text-sm text-gray-600">
-            {{ __('Ensure your account is using a long, random password to stay secure.') }}
-        </p>
+<section class="profile-section" aria-labelledby="profile-password-title">
+    <header class="profile-section__heading">
+        <span class="profile-section__icon" aria-hidden="true"><i class="bi bi-shield-lock"></i></span>
+        <div>
+            <h2 id="profile-password-title">Alterar senha</h2>
+            <p>Escolha uma senha longa e exclusiva para esta conta.</p>
+        </div>
     </header>
 
-    <form method="post" action="{{ route('password.update') }}" class="mt-6 space-y-6">
+    <form method="POST" action="{{ route('password.update') }}" class="profile-form profile-form--password">
         @csrf
-        @method('put')
+        @method('PUT')
 
-        <div>
-            <x-input-label for="update_password_current_password" :value="__('Current Password')" />
-            <x-text-input id="update_password_current_password" name="current_password" type="password" class="mt-1 block w-full" autocomplete="current-password" />
-            <x-input-error :messages="$errors->updatePassword->get('current_password')" class="mt-2" />
-        </div>
+        @foreach ($passwordFields as $field => $settings)
+            <div class="profile-field">
+                <label for="{{ $field }}">{{ $settings['label'] }}</label>
+                <input
+                    type="password"
+                    id="{{ $field }}"
+                    name="{{ $field }}"
+                    class="profile-input"
+                    autocomplete="{{ $settings['autocomplete'] }}"
+                    required
+                    @error($field, 'updatePassword')
+                        aria-invalid="true" aria-describedby="{{ $field }}-error"
+                        @if ($field === $firstPasswordError) autofocus @endif
+                    @enderror
+                >
+                @error($field, 'updatePassword')
+                    <p id="{{ $field }}-error" class="profile-error">{{ $message }}</p>
+                @enderror
+            </div>
+        @endforeach
 
-        <div>
-            <x-input-label for="update_password_password" :value="__('New Password')" />
-            <x-text-input id="update_password_password" name="password" type="password" class="mt-1 block w-full" autocomplete="new-password" />
-            <x-input-error :messages="$errors->updatePassword->get('password')" class="mt-2" />
-        </div>
-
-        <div>
-            <x-input-label for="update_password_password_confirmation" :value="__('Confirm Password')" />
-            <x-text-input id="update_password_password_confirmation" name="password_confirmation" type="password" class="mt-1 block w-full" autocomplete="new-password" />
-            <x-input-error :messages="$errors->updatePassword->get('password_confirmation')" class="mt-2" />
-        </div>
-
-        <div class="flex items-center gap-4">
-            <x-primary-button>{{ __('Save') }}</x-primary-button>
-
-            @if (session('status') === 'password-updated')
-                <p
-                    x-data="{ show: true }"
-                    x-show="show"
-                    x-transition
-                    x-init="setTimeout(() => show = false, 2000)"
-                    class="text-sm text-gray-600"
-                >{{ __('Saved.') }}</p>
-            @endif
+        <div class="profile-actions">
+            <button type="submit" class="profile-button profile-button--secondary">Atualizar senha</button>
         </div>
     </form>
 </section>

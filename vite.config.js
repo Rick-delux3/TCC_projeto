@@ -10,7 +10,7 @@ export default defineConfig({
                 'resources/css/header-dashboard-admin.css',
                 'resources/css/admin-workspace.css',
                 'resources/css/company-workspace.css',
-                'resources/css/dashboard-user.css',
+                'resources/css/dashboard-user.css', 'resources/css/profile.css',
                 'resources/css/dashboard-admin.css',
                 'resources/css/lead-filters.css',
                 'resources/css/leadlovers-correction.css',

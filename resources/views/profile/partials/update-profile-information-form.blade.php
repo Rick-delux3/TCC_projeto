@@ -1,64 +1,55 @@
-<section>
-    <header>
-        <h2 class="text-lg font-medium text-gray-900">
-            {{ __('Profile Information') }}
-        </h2>
-
-        <p class="mt-1 text-sm text-gray-600">
-            {{ __("Update your account's profile information and email address.") }}
-        </p>
+<section class="profile-section" aria-labelledby="profile-details-title">
+    <header class="profile-section__heading">
+        <span class="profile-section__icon" aria-hidden="true"><i class="bi bi-person-vcard"></i></span>
+        <div>
+            <h2 id="profile-details-title">Dados da conta</h2>
+            <p>Edite o nome e o e-mail do usuário vinculado ao painel.</p>
+        </div>
     </header>
 
-    <form id="send-verification" method="post" action="{{ route('verification.send') }}">
+    <form method="POST" action="{{ route('profile.update') }}" class="profile-form">
         @csrf
-    </form>
+        @method('PATCH')
 
-    <form method="post" action="{{ route('profile.update') }}" class="mt-6 space-y-6">
-        @csrf
-        @method('patch')
-
-        <div>
-            <x-input-label for="name" :value="__('Name')" />
-            <x-text-input id="name" name="name" type="text" class="mt-1 block w-full" :value="old('name', $user->name)" required autofocus autocomplete="name" />
-            <x-input-error class="mt-2" :messages="$errors->get('name')" />
+        <div class="profile-field">
+            <label for="name">Nome</label>
+            <input
+                type="text"
+                id="name"
+                name="name"
+                class="profile-input"
+                value="{{ old('name', $user->name) }}"
+                autocomplete="name"
+                required
+                @error('name') aria-invalid="true" aria-describedby="profile-name-error" autofocus @enderror
+            >
+            @error('name')
+                <p id="profile-name-error" class="profile-error">{{ $message }}</p>
+            @enderror
         </div>
 
-        <div>
-            <x-input-label for="email" :value="__('Email')" />
-            <x-text-input id="email" name="email" type="email" class="mt-1 block w-full" :value="old('email', $user->email)" required autocomplete="username" />
-            <x-input-error class="mt-2" :messages="$errors->get('email')" />
-
-            @if ($user instanceof \Illuminate\Contracts\Auth\MustVerifyEmail && ! $user->hasVerifiedEmail())
-                <div>
-                    <p class="text-sm mt-2 text-gray-800">
-                        {{ __('Your email address is unverified.') }}
-
-                        <button form="send-verification" class="underline text-sm text-gray-600 hover:text-gray-900 rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
-                            {{ __('Click here to re-send the verification email.') }}
-                        </button>
-                    </p>
-
-                    @if (session('status') === 'verification-link-sent')
-                        <p class="mt-2 font-medium text-sm text-green-600">
-                            {{ __('A new verification link has been sent to your email address.') }}
-                        </p>
-                    @endif
-                </div>
-            @endif
+        <div class="profile-field">
+            <label for="email">E-mail</label>
+            <input
+                type="email"
+                id="email"
+                name="email"
+                class="profile-input"
+                value="{{ old('email', $user->email) }}"
+                autocomplete="username"
+                required
+                @error('email')
+                    aria-invalid="true" aria-describedby="profile-email-error"
+                    @if (! $errors->has('name')) autofocus @endif
+                @enderror
+            >
+            @error('email')
+                <p id="profile-email-error" class="profile-error">{{ $message }}</p>
+            @enderror
         </div>
 
-        <div class="flex items-center gap-4">
-            <x-primary-button>{{ __('Save') }}</x-primary-button>
-
-            @if (session('status') === 'profile-updated')
-                <p
-                    x-data="{ show: true }"
-                    x-show="show"
-                    x-transition
-                    x-init="setTimeout(() => show = false, 2000)"
-                    class="text-sm text-gray-600"
-                >{{ __('Saved.') }}</p>
-            @endif
+        <div class="profile-actions">
+            <button type="submit" class="profile-button profile-button--primary">Salvar dados</button>
         </div>
     </form>
 </section>

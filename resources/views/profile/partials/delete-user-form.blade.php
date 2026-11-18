@@ -1,55 +1,74 @@
-<section class="space-y-6">
-    <header>
-        <h2 class="text-lg font-medium text-gray-900">
-            Excluir conta
-        </h2>
-
-        <p class="mt-1 text-sm text-gray-600">
-            Ao excluir sua conta, todos os recursos e dados serao removidos permanentemente. Antes de excluir, salve as informacoes que deseja manter.
-        </p>
+<section
+    class="profile-delete"
+    aria-labelledby="profile-delete-title"
+    x-data
+    @if ($errors->userDeletion->any())
+        x-init="$nextTick(() => $refs.dialog.showModal())"
+    @endif
+>
+    <header class="profile-section__heading">
+        <span class="profile-section__icon profile-section__icon--danger" aria-hidden="true">
+            <i class="bi bi-trash3" aria-hidden="true"></i>
+        </span>
+        <div>
+            <h2 id="profile-delete-title">Excluir conta</h2>
+            <p>O acesso desta conta ao painel será removido permanentemente.</p>
+        </div>
     </header>
 
-    <x-danger-button
-        x-data=""
-        x-on:click.prevent="$dispatch('open-modal', 'confirm-user-deletion')"
-    >Excluir conta</x-danger-button>
+    <button
+        type="button"
+        class="profile-button profile-button--danger-outline"
+        x-ref="trigger"
+        x-on:click="$refs.dialog.showModal()"
+        aria-haspopup="dialog"
+        aria-controls="deleteAccountModal"
+    >Excluir minha conta</button>
 
-    <x-modal name="confirm-user-deletion" :show="$errors->userDeletion->isNotEmpty()" focusable>
-        <form method="post" action="{{ route('profile.destroy') }}" class="p-6">
-            @csrf
-            @method('delete')
+    <dialog
+        id="deleteAccountModal"
+        class="profile-dialog"
+        aria-labelledby="deleteAccountModalLabel"
+        aria-describedby="deleteAccountModalDescription"
+        x-ref="dialog"
+        x-on:close="$refs.password.value = ''; $refs.trigger.focus()"
+    >
+        <div class="profile-dialog__inner">
+            <header class="profile-section__heading">
+                <span class="profile-section__icon profile-section__icon--danger" aria-hidden="true"><i class="bi bi-trash3"></i></span>
+                <div>
+                    <h2 id="deleteAccountModalLabel">Confirmar exclusão</h2>
+                    <p id="deleteAccountModalDescription">Informe sua senha atual para excluir a conta. A exclusão é permanente.</p>
+                </div>
+            </header>
 
-            <h2 class="text-lg font-medium text-gray-900">
-                Tem certeza que deseja excluir sua conta?
-            </h2>
+            <form method="POST" action="{{ route('profile.destroy') }}" class="profile-form">
+                @csrf
+                @method('DELETE')
 
-            <p class="mt-1 text-sm text-gray-600">
-                Esta acao e permanente. Digite sua senha para confirmar a exclusao da conta.
-            </p>
+                <div class="profile-field">
+                    <label for="delete_password">Senha atual</label>
+                    <input
+                        type="password"
+                        id="delete_password"
+                        name="password"
+                        class="profile-input"
+                        autocomplete="current-password"
+                        x-ref="password"
+                        required
+                        autofocus
+                        @error('password', 'userDeletion') aria-invalid="true" aria-describedby="delete-password-error" @enderror
+                    >
+                    @error('password', 'userDeletion')
+                        <p id="delete-password-error" class="profile-error">{{ $message }}</p>
+                    @enderror
+                </div>
 
-            <div class="mt-6">
-                <x-input-label for="password" value="Senha" class="sr-only" />
-
-                <x-text-input
-                    id="password"
-                    name="password"
-                    type="password"
-                    class="mt-1 block w-3/4"
-                    placeholder="Senha"
-                />
-
-                <x-input-error :messages="$errors->userDeletion->get('password')" class="mt-2" />
-            </div>
-
-            <div class="mt-6 flex justify-end">
-                <x-secondary-button x-on:click="$dispatch('close')">
-                    Cancelar
-                </x-secondary-button>
-
-                <x-danger-button class="ms-3">
-                    Excluir conta
-                </x-danger-button>
-            </div>
-        </form>
-    </x-modal>
+                <div class="profile-actions profile-actions--dialog">
+                    <button type="button" class="profile-button profile-button--secondary" x-on:click="$refs.dialog.close()">Cancelar</button>
+                    <button type="submit" class="profile-button profile-button--danger">Excluir conta</button>
+                </div>
+            </form>
+        </div>
+    </dialog>
 </section>

@@ -58,9 +58,12 @@
     $operationLabel = $brandProfile === 'client'
         ? 'Operação ativa'
         : 'Sistema operacional';
-    $currentSectionLabel = request()->routeIs('insurance-analyses.*')
-        ? 'Análises'
-        : 'Central de leads';
+    $isProfilePage = request()->routeIs('profile.edit');
+    $currentSectionLabel = match (true) {
+        $isProfilePage => 'Minha conta',
+        request()->routeIs('insurance-analyses.*') => 'Análises',
+        default => 'Central de leads',
+    };
 @endphp
 
 <header
@@ -101,7 +104,7 @@
             @endunless
 
             <div class="dashboard-header-actions">
-                @if ($companyWorkspace ?? false)
+                @if (($companyWorkspace ?? false) || $isProfilePage)
                     <button type="button" class="btn company-theme-toggle" data-dashboard-theme-toggle
                         aria-label="Modo escuro" aria-pressed="false" title="Modo escuro">
                         <i class="bi bi-moon" data-dashboard-theme-icon aria-hidden="true"></i>
@@ -161,7 +164,7 @@
                         </li>
 
                         <li>
-                            <a class="dropdown-item py-2" href="{{ route('profile.edit') }}">
+                            <a class="dropdown-item py-2" href="{{ route('profile.edit') }}" @if ($isProfilePage) aria-current="page" @endif>
                                 <i class="bi bi-gear me-2" aria-hidden="true"></i>
                                 Gerenciar conta
                             </a>
@@ -196,6 +199,7 @@
         </div>
     </div>
 
+    @unless (request()->routeIs('company.dashboard'))
     <div class="dashboard-client-header__secondary">
         @if ($companyWorkspace ?? false)
         <div class="company-header-secondary-inner">
@@ -210,6 +214,7 @@
         </div>
         @endif
     </div>
+    @endunless
 </header>
 
 {{-- Menu lateral vertical --}}

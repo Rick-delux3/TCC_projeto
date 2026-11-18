@@ -1,6 +1,13 @@
 <?php
 
 use App\Models\User;
+use Illuminate\Support\MessageBag;
+use Illuminate\Support\ViewErrorBag;
+
+beforeEach(function (): void {
+    $this->withSession(['2fa_passed' => true]);
+    $this->withoutVite();
+});
 
 test('profile page is displayed', function () {
     $user = User::factory()->create();
@@ -9,7 +16,31 @@ test('profile page is displayed', function () {
         ->actingAs($user)
         ->get('/profile');
 
-    $response->assertOk();
+    $response->assertOk()
+        ->assertSee('Minha conta')
+        ->assertSee('action="'.route('profile.update').'"', false)
+        ->assertSee('action="'.route('password.update').'"', false)
+        ->assertSee('action="'.route('profile.destroy').'"', false)
+        ->assertSee('<dialog', false);
+});
+
+test('profile links the account deletion error to the password in the confirmation dialog', function () {
+    $errors = new ViewErrorBag;
+    $errors->put('userDeletion', new MessageBag(['password' => 'A senha atual está incorreta.']));
+
+    $response = $this->actingAs(User::factory()->create())
+        ->withSession(['errors' => $errors])
+        ->get(route('profile.edit'))
+        ->assertOk();
+
+    $document = new DOMDocument;
+    @$document->loadHTML('<?xml encoding="UTF-8">'.$response->getContent());
+    $xpath = new DOMXPath($document);
+    $dialog = '//dialog[@id="deleteAccountModal"]';
+
+    expect($xpath->query($dialog.'//input[@name="password" and @type="password" and @aria-invalid="true" and @aria-describedby="delete-password-error"]')->length)->toBe(1)
+        ->and($xpath->query($dialog.'//*[@id="delete-password-error"]')->item(0)->textContent)->toBe('A senha atual está incorreta.')
+        ->and($xpath->query('//input[@id="password" and @aria-invalid]')->length)->toBe(0);
 });
 
 test('profile information can be updated', function () {
