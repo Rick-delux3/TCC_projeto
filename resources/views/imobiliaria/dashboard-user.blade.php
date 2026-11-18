@@ -991,45 +991,35 @@
         && $leadLoversCorrectionContextId === (string) $lead->id;
 @endphp
 <div
-    class="modal fade lead-details-modal"
+    class="modal fade lead-details-modal dashboard-modal dashboard-modal--lead"
     id="leadModal{{ $lead->id }}"
     tabindex="-1"
     aria-labelledby="leadModalLabel{{ $lead->id }}"
+    aria-describedby="leadModalDescription{{ $lead->id }}"
     aria-hidden="true"
 >
     <div class="modal-dialog modal-xl modal-dialog-scrollable modal-dialog-centered">
-        <div class="modal-content rounded-5 border-0 shadow-lg">
+        <div class="modal-content">
 
-            <div class="modal-header border-0 pb-0">
-                <div>
-                    <div class="d-flex flex-wrap gap-2 mb-2">
-                        <span class="badge {{ $statusBadge }}">
-                            {{ $statusLabel }}
-                        </span>
-                        @include('partials.leadlovers-sync-status', [
-                            'lead' => $lead,
-                            'failure' => $leadLoversFailure,
-                        ])
-                    </div>
+            <x-dashboard-modal-heading :title="$leadName" :title-id="'leadModalLabel'.$lead->id"
+                :description-id="'leadModalDescription'.$lead->id" eyebrow="Dados do lead">
+                <x-slot:description>Entrada em {{ $lead->created_at ? $lead->created_at->copy()->setTimezone('America/Sao_Paulo')->format('d/m/Y H:i') : 'data não informada' }}</x-slot:description>
+                <span class="badge {{ $statusBadge }}">
+                    {{ $statusLabel }}
+                </span>
+                @include('partials.leadlovers-sync-status', [
+                    'lead' => $lead,
+                    'failure' => $leadLoversFailure,
+                    'showLeadLoversFailureMessage' => false,
+                ])
+            </x-dashboard-modal-heading>
 
-                    <h5 class="modal-title fw-bold" id="leadModalLabel{{ $lead->id }}">
-                        {{ $leadName }}
-                    </h5>
-
-                    <p class="text-muted small mb-0">
-                        Entrada em {{ $lead->created_at ? $lead->created_at->copy()->setTimezone('America/Sao_Paulo')->format('d/m/Y H:i') : 'data não informada' }}
-                    </p>
-                </div>
-
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
-            </div>
-
-            <div class="modal-body p-4">
-
-                <ul class="nav nav-pills mb-4" role="tablist">
+            <div class="dashboard-modal-tabs">
+                <ul class="nav nav-pills mb-4" role="tablist" aria-label="Seções do lead">
                     <li class="nav-item" role="presentation">
                         <button
                             id="lead-data-tab-{{ $lead->id }}"
+                            data-dashboard-editor-tab
                             class="nav-link active"
                             data-bs-toggle="pill"
                             data-bs-target="#lead-data-pane-{{ $lead->id }}"
@@ -1058,7 +1048,9 @@
                     </li>
 
                 </ul>
+            </div>
 
+            <div class="modal-body">
                 <div class="tab-content">
 
                     {{-- Aba 1: dados editáveis --}}
@@ -1115,13 +1107,13 @@
                         role="tabpanel"
                         aria-labelledby="lead-tags-tab-{{ $lead->id }}"
                     >
-                        <div class="card border rounded-4">
+                        <div class="card dashboard-modal-section">
                             <div class="card-body">
                                 <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
                                     <div>
-                                        <h6 class="fw-bold mb-1">
+                                        <h3 class="mb-1">
                                             Tags do lead
-                                        </h6>
+                                        </h3>
 
                                         <p class="text-muted small mb-0">
                                             {{ \App\Support\BrandingText::choose('As tags são exibidas apenas para consulta. A alteração de tags será feita pelo corretor no painel administrativo.', 'As tags são exibidas apenas para consulta. A alteração será feita pela equipe da concessionária no painel administrativo.') }}
@@ -1152,7 +1144,10 @@
             </div>
             
 
-            <div class="modal-footer border-0 pt-0">
+            <div class="modal-footer dashboard-modal-footer">
+                @if (! $leadLoversFailureIsCorrectable)
+                    <p class="dashboard-modal-footer__hint"><i class="bi bi-pencil-square" aria-hidden="true"></i>Revise os dados antes de salvar.</p>
+                @endif
                 @if (! $leadLoversFailureIsCorrectable)
                     <button
                         type="submit"

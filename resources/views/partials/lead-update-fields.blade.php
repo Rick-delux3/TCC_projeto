@@ -111,14 +111,15 @@
     Altere pelo menos um dado do lead antes de salvar.
 </div>
 
-<div class="row g-4" @if ($isAdminLeadEditor) data-admin-lead-fields @endif>
+<div class="row g-4 dashboard-modal-fields" @if ($isAdminLeadEditor) data-admin-lead-fields @endif>
     @foreach ($leadUpdateSections as $section)
         <div class="col-12" @if (isset($section['condition'])) data-admin-condition="{{ $section['condition'] }}" @if (! $visibleConditions[$section['condition']]) hidden @endif @endif>
-            <div class="card border rounded-4">
+            <div class="card dashboard-modal-section" aria-labelledby="{{ $leadUpdateIdPrefix }}-{{ $lead->id }}-section-{{ $loop->index }}">
                 <div class="card-body">
-                    <h6 class="fw-bold mb-3">
-                        {{ $section['title'] }}
-                    </h6>
+                    <div class="dashboard-modal-section__heading">
+                        <i class="bi {{ match ($section['title']) { 'Endereço do imóvel' => 'bi-geo-alt', 'Valores da locação' => 'bi-cash-stack', 'Responsável pela solicitação' => 'bi-person-badge', default => 'bi-person-vcard' } }}" aria-hidden="true"></i>
+                        <h3 id="{{ $leadUpdateIdPrefix }}-{{ $lead->id }}-section-{{ $loop->index }}">{{ $section['title'] }}</h3>
+                    </div>
 
                     <div class="row g-3">
                         @foreach ($section['fields'] as $field)
@@ -145,6 +146,9 @@
                                     class="form-label small text-muted"
                                 >
                                     {{ $field['label'] }}
+                                    @if (($field['readonly'] ?? false) || ($field['disabled'] ?? false))
+                                        <span class="dashboard-field-access">Somente leitura</span>
+                                    @endif
                                     @if (isset($field['condition']))<span class="text-danger" data-required-marker @if (! $fieldRequired) hidden @endif>*</span>@endif
                                 </label>
 
@@ -198,8 +202,8 @@
         </div>
     @endforeach
     @if ($isAdminLeadEditor)
-        <div class="col-12"><div class="card border rounded-4"><div class="card-body">
-            <h6 class="fw-bold mb-3">Vínculo e autorização</h6>
+        <div class="col-12"><div class="card dashboard-modal-section dashboard-modal-readonly"><div class="card-body">
+            <div class="dashboard-modal-section__heading"><i class="bi bi-shield-check" aria-hidden="true"></i><h3>Vínculo e autorização</h3></div>
             <dl class="row mb-0 small">
                 <dt class="col-sm-4">{{ \App\Support\BrandingText::choose('Imobiliária vinculada', 'Empresa vinculada') }}</dt><dd class="col-sm-8">{{ $lead->imobiliariaVinculada?->name ?? \App\Support\BrandingText::choose('Sem imobiliária vinculada', 'Sem empresa vinculada') }}</dd>
                 <dt class="col-sm-4">Aceite dos termos</dt><dd class="col-sm-8 mb-0">{{ $lead->aceite_termos ? 'Registrado no cadastro' : 'Não registrado' }}</dd>

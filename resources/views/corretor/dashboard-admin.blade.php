@@ -1337,14 +1337,15 @@
 @if ($canAccessSimulationForms)
     {{-- Seleção global do formulário de novo lead --}}
     <div
-        class="modal fade"
+        class="modal fade dashboard-modal dashboard-modal--chooser"
         id="adminSimulationModal"
         tabindex="-1"
         aria-labelledby="adminSimulationModalLabel"
+        aria-describedby="adminSimulationModalDescription"
         aria-hidden="true"
     >
-        <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content rounded-5 border-0 shadow-lg">
+        <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content">
                 <form
                     method="GET"
                     action="{{ $adminSimulationOpenRoute }}"
@@ -1357,27 +1358,15 @@
                         id="adminSimulationChannel"
                     >
 
-                    <div class="modal-header border-0 pb-0">
-                        <div>
-                            <h2 class="modal-title h5 fw-bold" id="adminSimulationModalLabel">
-                                Escolha o formulário
-                            </h2>
-                            <p class="text-muted small mb-0 mt-2">
-                                {{ \App\Support\BrandingText::choose('Defina se a solicitação será vinculada a uma imobiliária. O formulário será aberto em uma nova aba.', 'Defina se o beneficiário será vinculado a uma empresa. O formulário será aberto em uma nova aba.') }}
-                            </p>
-                        </div>
+                    <x-dashboard-modal-heading title="Escolha o formulário" title-id="adminSimulationModalLabel"
+                        description-id="adminSimulationModalDescription" eyebrow="Nova solicitação" icon="bi-ui-checks-grid">
+                        <x-slot:description>Defina o vínculo e a origem para abrir o formulário adequado.</x-slot:description>
+                    </x-dashboard-modal-heading>
 
-                        <button
-                            type="button"
-                            class="btn-close"
-                            data-bs-dismiss="modal"
-                            aria-label="Fechar"
-                        ></button>
-                    </div>
-
-                    <div class="modal-body p-4">
+                    <div class="modal-body">
+                        <div class="dashboard-modal-notice"><i class="bi bi-box-arrow-up-right" aria-hidden="true"></i><span>O formulário será aberto em uma nova aba.</span></div>
                         @if ($errors->adminSimulation->any())
-                            <div class="alert alert-danger rounded-4">
+                            <div class="alert alert-danger mb-0" role="alert">
                                 <ul class="mb-0">
                                     @foreach ($errors->adminSimulation->all() as $message)
                                         <li>{{ $message }}</li>
@@ -1386,14 +1375,15 @@
                             </div>
                         @endif
 
-                        <div class="mb-3">
+                        <div class="dashboard-modal-choice">
                             <label for="adminSimulationLinkType" class="form-label fw-semibold">
-                                Vínculo
+                                <span class="dashboard-modal-choice__step" aria-hidden="true">1</span>Vínculo
                             </label>
                             <select
                                 name="vinculo"
                                 id="adminSimulationLinkType"
-                                class="form-select"
+                                class="form-select @error('vinculo', 'adminSimulation') is-invalid @enderror"
+                                @error('vinculo', 'adminSimulation') aria-invalid="true" aria-describedby="adminSimulationLinkTypeError" @enderror
                                 required
                             >
                                 <option value="">Selecione</option>
@@ -1411,16 +1401,20 @@
                                     {{ \App\Support\BrandingText::choose('Não vincular a uma imobiliária', 'Não vincular a uma empresa') }}
                                 </option>
                             </select>
+                            @error('vinculo', 'adminSimulation')
+                                <div id="adminSimulationLinkTypeError" class="invalid-feedback">{{ $message }}</div>
+                            @enderror
                         </div>
 
-                        <div id="adminSimulationCompanyGroup" class="mb-3 d-none">
+                        <div id="adminSimulationCompanyGroup" class="dashboard-modal-choice d-none">
                             <label for="adminSimulationCompany" class="form-label fw-semibold">
-                                {{ \App\Support\BrandingText::choose('Imobiliária', 'Empresa') }}
+                                <span class="dashboard-modal-choice__step" aria-hidden="true">2</span>{{ \App\Support\BrandingText::choose('Imobiliária', 'Empresa') }}
                             </label>
                             <select
                                 name="company_id"
                                 id="adminSimulationCompany"
-                                class="form-select"
+                                class="form-select @error('company_id', 'adminSimulation') is-invalid @enderror"
+                                @error('company_id', 'adminSimulation') aria-invalid="true" aria-describedby="adminSimulationCompanyError" @enderror
                                 disabled
                             >
                                 <option value="">Selecione</option>
@@ -1442,19 +1436,23 @@
                                     </option>
                                 @endforeach
                             </select>
+                            @error('company_id', 'adminSimulation')
+                                <div id="adminSimulationCompanyError" class="invalid-feedback">{{ $message }}</div>
+                            @enderror
                             <div class="form-text">
                                 {{ \App\Support\BrandingText::choose('O tipo será registrado automaticamente como imobiliária cadastrada.', 'O tipo será registrado automaticamente como empresa cadastrada.') }}
                             </div>
                         </div>
 
-                        <div id="adminSimulationTypeGroup" class="mb-3 d-none">
+                        <div id="adminSimulationTypeGroup" class="dashboard-modal-choice d-none">
                             <label for="adminSimulationType" class="form-label fw-semibold">
-                                Tipo do solicitante
+                                <span class="dashboard-modal-choice__step" aria-hidden="true">2</span>Tipo do solicitante
                             </label>
                             <select
                                 name="tipo_solicitante"
                                 id="adminSimulationType"
-                                class="form-select"
+                                class="form-select @error('tipo_solicitante', 'adminSimulation') is-invalid @enderror"
+                                @error('tipo_solicitante', 'adminSimulation') aria-invalid="true" aria-describedby="adminSimulationTypeError" @enderror
                                 disabled
                             >
                                 <option value="">Selecione</option>
@@ -1471,10 +1469,13 @@
                                     {{ \App\Support\BrandingText::choose('Proprietário / locador', 'Consumidor') }}
                                 </option>
                             </select>
+                            @error('tipo_solicitante', 'adminSimulation')
+                                <div id="adminSimulationTypeError" class="invalid-feedback">{{ $message }}</div>
+                            @enderror
                         </div>
                     </div>
 
-                    <div class="modal-footer border-0 pt-0">
+                    <div class="modal-footer">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
                             Cancelar
                         </button>
@@ -1739,51 +1740,41 @@
         @endphp
 
         <div
-            class="modal fade lead-details-modal"
+            class="modal fade lead-details-modal dashboard-modal dashboard-modal--lead"
             id="adminLeadModal{{ $lead->id }}"
             tabindex="-1"
             aria-labelledby="adminLeadModalLabel{{ $lead->id }}"
+            aria-describedby="adminLeadModalDescription{{ $lead->id }}"
             aria-hidden="true"
         >
             <div class="modal-dialog modal-xl modal-dialog-scrollable modal-dialog-centered">
-                <div class="modal-content rounded-5 border-0 shadow-lg">
+                <div class="modal-content">
 
-                    <div class="modal-header border-0 pb-0">
-                        <div>
-                            <div class="d-flex flex-wrap gap-2 mb-2">
-                                <span class="badge {{ $resultTone['badge'] }}">
-                                    <i class="bi {{ $resultTone['icon'] }} me-1" aria-hidden="true"></i>
-                                    {{ $resultTone['label'] }}
-                                </span>
+                    <x-dashboard-modal-heading :title="$leadName" :title-id="'adminLeadModalLabel'.$lead->id"
+                        :description-id="'adminLeadModalDescription'.$lead->id" eyebrow="Dados do lead">
+                        <x-slot:description>Vínculo/origem: {{ $imobiliariaName }}</x-slot:description>
+                        <span class="badge {{ $resultTone['badge'] }}">
+                            <i class="bi {{ $resultTone['icon'] }} me-1" aria-hidden="true"></i>
+                            {{ $resultTone['label'] }}
+                        </span>
 
-                                <span class="badge text-bg-info">
-                                    {{ $tipoSolicitanteLabel }}
-                                </span>
+                        <span class="badge text-bg-info">
+                            {{ $tipoSolicitanteLabel }}
+                        </span>
 
-                                @include('partials.leadlovers-sync-status', [
-                                    'lead' => $lead,
-                                    'failure' => $leadLoversFailure,
-                                ])
-                            </div>
+                        @include('partials.leadlovers-sync-status', [
+                            'lead' => $lead,
+                            'failure' => $leadLoversFailure,
+                            'showLeadLoversFailureMessage' => false,
+                        ])
+                    </x-dashboard-modal-heading>
 
-                            <h5 class="modal-title fw-bold" id="adminLeadModalLabel{{ $lead->id }}">
-                                {{ $leadName }}
-                            </h5>
-
-                            <p class="text-muted small mb-0">
-                                Vínculo/origem: {{ $imobiliariaName }}
-                            </p>
-                        </div>
-
-                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
-                    </div>
-
-                    <div class="modal-body p-4">
-
-                        <ul class="nav nav-pills mb-4" role="tablist">
+                    <div class="dashboard-modal-tabs">
+                        <ul class="nav nav-pills mb-4" role="tablist" aria-label="Seções do lead">
                             <li class="nav-item" role="presentation">
                                 <button
                                     id="admin-lead-data-tab-{{ $lead->id }}"
+                                    data-dashboard-editor-tab
                                     class="nav-link active"
                                     data-bs-toggle="pill"
                                     data-bs-target="#admin-lead-data-pane-{{ $lead->id }}"
@@ -1831,7 +1822,9 @@
                             @endcan
 
                         </ul>
+                    </div>
 
+                    <div class="modal-body">
                         <div class="tab-content">
 
 
@@ -1895,11 +1888,11 @@
                                     role="tabpanel"
                                     aria-labelledby="admin-lead-tags-tab-{{ $lead->id }}"
                                 >
-                                    <div class="card border rounded-4">
+                                    <div class="card dashboard-modal-section">
                                         <div class="card-body">
-                                            <h6 class="fw-bold mb-1">
+                                            <h3 class="mb-1">
                                                 Tags do cliente
-                                            </h6>
+                                            </h3>
 
                                             <p class="text-muted small">
                                                 Tags usadas para identificar resultado, origem e segmentação.
@@ -1928,13 +1921,13 @@
                                     role="tabpanel"
                                     aria-labelledby="admin-lead-result-tab-{{ $lead->id }}"
                                 >
-                                    <div class="card border rounded-4">
+                                    <div class="card dashboard-modal-section">
                                         <div class="card-body">
                                             <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-start gap-3 mb-3">
                                                 <div>
-                                                    <h6 class="fw-bold mb-1">
+                                                    <h3 class="mb-1">
                                                         Status comercial
-                                                    </h6>
+                                                    </h3>
                                                     <p class="text-muted small mb-0">
                                                         A alteração será enviada para a fila e somente será refletida no sistema depois da confirmação da LeadLovers.
                                                     </p>
@@ -2075,7 +2068,10 @@
                         </div>
                     </div>
 
-                    <div class="modal-footer border-0 pt-0">
+                    <div class="modal-footer dashboard-modal-footer">
+                        @if ($leadCanBeGenerallyEdited)
+                            <p class="dashboard-modal-footer__hint"><i class="bi bi-pencil-square" aria-hidden="true"></i>Revise os dados antes de salvar.</p>
+                        @endif
                         @if ($leadCanBeGenerallyEdited)
                             <button
                                 type="submit"
