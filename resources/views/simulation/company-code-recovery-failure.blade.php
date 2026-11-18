@@ -1,7 +1,12 @@
-<svg class="access-icon" viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="32" cy="32" r="26"/><path d="M32 15v18l12 7"/><path class="accent" d="M49 7h10v10M59 7l-8 8"/></svg>
-<div class="flex flex-col gap-3" role="alert" data-recovery-state="limited">
+@php($retryMinutes = max(1, (int) ceil(session('company_code_retry_after') / 60)))
+
+<div class="registered-access__intro" role="alert" data-recovery-state="limited">
+    <p class="registered-access__context">Recuperação de código</p>
     <h1 id="recovery-title">Aguarde para solicitar novamente</h1>
-    <p>Você atingiu o limite de solicitações. Tente novamente em aproximadamente {{ max(1, (int) ceil(session('company_code_retry_after') / 60)) }} minuto(s).</p>
+    <p>Você atingiu o limite de solicitações. Tente novamente em cerca de {{ $retryMinutes }} {{ $retryMinutes === 1 ? 'minuto' : 'minutos' }}.</p>
+    <p class="registered-access__notice">Se você já solicitou o código, confira a caixa de entrada e a pasta de spam enquanto aguarda.</p>
 </div>
-<p>Se você já solicitou o código, confira sua caixa de entrada e a pasta de spam enquanto aguarda.</p>
-<a class="access-button" href="{{ route('simulation.registered-company.access') }}">Voltar e informar meu código</a>
+
+<a class="registered-access__submit" href="{{ route('simulation.registered-company.access') }}">
+    Voltar para o acesso
+</a>

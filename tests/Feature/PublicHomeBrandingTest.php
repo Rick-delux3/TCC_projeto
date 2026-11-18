@@ -292,7 +292,7 @@ it('renders the public simulation gateway with the reference composition', funct
         ->and(substr_count($html, 'name="tipo_solicitante"'))->toBe(3);
 })->with(['tcc', 'client']);
 
-it('shares public simulation forms between brands with the correct header identity', function (string $routeName, array $session) {
+it('shares public simulation forms between brands with the correct brand identity', function (string $routeName, array $session) {
     if ($routeName === 'simulation.registered-company.form') {
         $company = Imobiliaria::factory()->create(['lead_access_code' => 'BRAND1']);
         $this->post(route('simulation.registered-company.verify'), ['lead_access_code' => $company->lead_access_code])
@@ -312,7 +312,12 @@ it('shares public simulation forms between brands with the correct header identi
         $document = new DOMDocument;
         @$document->loadHTML('<?xml encoding="UTF-8">'.$response->getContent());
         $xpath = new DOMXPath($document);
-        $logo = $xpath->query('//header//img[@data-brand-logo]')->item(0);
+        if (in_array($routeName, ['simulation.registered-company.access', 'simulation.registered-company.code.request'], true)) {
+            expect($xpath->query('//header')->length)->toBe(0);
+            $logo = $xpath->query('//main//img[@data-brand-logo]')->item(0);
+        } else {
+            $logo = $xpath->query('//header//img[@data-brand-logo]')->item(0);
+        }
 
         expect($logo)->not->toBeNull()
             ->and($logo->getAttribute('data-brand-logo'))->toBe($profile)

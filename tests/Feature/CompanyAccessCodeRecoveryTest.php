@@ -38,15 +38,18 @@ it('renders the access and recovery forms for each brand', function (string $bra
     $this->get(route('simulation.registered-company.access'))
         ->assertOk()
         ->assertSee('Esqueci meu código')
-        ->assertSee('company-access-layout', false)
-        ->assertSee('imgs/acesso-chave.png', false)
+        ->assertSee('registered-access__visual', false)
+        ->assertSee('imgs/seguro-aluguel-acesso.webp', false)
+        ->assertDontSee('class="auth-topbar', false)
         ->assertSee(route('simulation.registered-company.code.request'), false);
     $this->get(route('simulation.registered-company.code.request'))
         ->assertOk()
         ->assertSee('data-brand="'.$brand.'"', false)
-        ->assertSee('Receba seu código por email')
-        ->assertSee('company-access-layout', false)
-        ->assertSee('imgs/recuperar-codigo.png', false)
+        ->assertSee('Recuperar código de acesso')
+        ->assertSee('registered-access__visual', false)
+        ->assertSee('imgs/seguro-aluguel-recuperacao.webp', false)
+        ->assertDontSee('class="auth-topbar', false)
+        ->assertSee(route('simulation.registered-company.access'), false)
         ->assertSee('name="email"', false)
         ->assertSee('name="_token"', false)
         ->assertSee(route('simulation.registered-company.code.email'), false);
@@ -59,6 +62,7 @@ it('renders the success screen after requesting a code for each brand', function
         ->assertOk()
         ->assertSee('Solicitação recebida')
         ->assertSee('data-recovery-state="success"', false)
+        ->assertSee(route('simulation.registered-company.access'), false)
         ->assertDontSee('name="email"', false);
 })->with(['tcc', 'client']);
 
@@ -72,6 +76,7 @@ it('renders the rate limit screen for each brand', function (string $brand) {
         ->assertOk()
         ->assertSee('Aguarde para solicitar novamente')
         ->assertSee('data-recovery-state="limited"', false)
+        ->assertSee(route('simulation.registered-company.access'), false)
         ->assertDontSee('name="email"', false)
         ->assertDontSee('id="modalErrors"', false);
 })->with(['tcc', 'client']);

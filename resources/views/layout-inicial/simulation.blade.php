@@ -30,9 +30,11 @@
 
 <body class="auth-layout-body{{ request()->routeIs('simulation.*') ? ' simulation-public' : '' }}" data-brand="{{ config('branding.active', 'tcc') }}">
 
-    @include('layout-inicial.partials.header_simulation')
+    @unless (View::hasSection('hide-header'))
+        @include('layout-inicial.partials.header_simulation')
+    @endunless
 
-    <main class="auth-layout-main">
+    <main class="auth-layout-main @yield('main-class')">
         @yield('content')
     </main>
 

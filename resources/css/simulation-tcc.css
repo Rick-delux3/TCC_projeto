@@ -6,7 +6,7 @@ body.simulation-public[data-brand="tcc"] {
     --simulation-red: var(--brand-accent);
 }
 
-body.auth-layout-body.simulation-public[data-brand="tcc"] .auth-layout-main:has(.simulation-start, .simulation-wizard, .company-access-page) {
+body.auth-layout-body.simulation-public[data-brand="tcc"] .auth-layout-main:has(.simulation-start, .simulation-wizard) {
     background: var(--brand-background);
 }
 
@@ -93,47 +93,6 @@ body.simulation-public[data-brand="tcc"] .simulation-wizard .simulation-button-p
 body.simulation-public[data-brand="tcc"] .simulation-wizard .simulation-button-back {
     color: var(--brand-text-muted);
     border-color: var(--brand-border);
-}
-
-body.simulation-public[data-brand="tcc"] .company-access-page {
-    --access-blue: var(--brand-primary-hover);
-    --access-accent: var(--brand-accent);
-    color: var(--brand-primary);
-}
-
-body.simulation-public[data-brand="tcc"] :is(.company-access-layout, .company-access-card, .company-access-card input, .access-divider) {
-    border-color: var(--brand-border);
-}
-
-body.simulation-public[data-brand="tcc"] :is(.company-access-card h1, .company-access-card input) {
-    color: var(--brand-primary);
-}
-
-body.simulation-public[data-brand="tcc"] .company-access-card p:not(.access-error),
-body.simulation-public[data-brand="tcc"] .company-access-card input::placeholder {
-    color: var(--brand-text-muted);
-}
-
-body.simulation-public[data-brand="tcc"] .company-access-card input:focus {
-    border-color: var(--access-blue);
-    box-shadow: 0 0 0 3px var(--brand-focus-ring);
-}
-
-body.simulation-public[data-brand="tcc"] .company-access-card input[aria-invalid="true"] {
-    border-color: #b42335;
-}
-
-body.simulation-public[data-brand="tcc"] .company-access-card .access-button {
-    background: var(--brand-accent);
-}
-
-body.simulation-public[data-brand="tcc"] .company-access-card .access-button:hover {
-    background: var(--brand-accent-hover);
-    filter: none;
-}
-
-body.simulation-public[data-brand="tcc"] .access-icon {
-    align-self: center;
 }
 
 @media (hover: hover) and (pointer: fine) {

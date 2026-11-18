@@ -1,0 +1,154 @@
+body[data-brand] .auth-layout-main.registered-access-main {
+    @apply grid place-items-center px-3 py-5 sm:px-6 sm:py-10;
+    min-height: 100dvh;
+    background: #f4f7f9;
+}
+
+.registered-access {
+    --access-action: var(--brand-primary, #030133);
+    --access-action-hover: var(--brand-primary-hover, #146fb6);
+    --access-art-focus: 94%;
+    @apply grid w-full max-w-[1100px] overflow-hidden bg-white;
+    box-shadow: 0 25px 48px rgb(15 23 42 / 20%);
+    color: var(--brand-primary-dark, #030133);
+    font-family: "Sansation", system-ui, sans-serif;
+}
+
+.registered-access--recovery {
+    --access-art-focus: 49%;
+}
+
+.registered-access__visual {
+    @apply relative aspect-[2.3] overflow-hidden;
+    background: #0b1d42;
+}
+
+.registered-access__visual img {
+    @apply absolute inset-0 h-full w-full object-cover;
+    object-position: center var(--access-art-focus);
+}
+
+.registered-access__content {
+    @apply flex min-w-0 flex-col justify-center gap-6 px-6 py-8 sm:p-10 lg:p-14;
+}
+
+.registered-access .registered-access__logo {
+    @apply h-11 w-auto max-w-[160px] self-start rounded-md object-contain;
+}
+
+.registered-access .registered-access__logo[data-brand-logo="client"] {
+    @apply h-auto w-40;
+}
+
+.registered-access__intro {
+    @apply grid gap-2.5;
+}
+
+.registered-access__intro h1 {
+    @apply m-0 text-3xl font-bold leading-tight tracking-tight sm:text-4xl lg:text-[2.625rem];
+}
+
+.registered-access--recovery .registered-access__intro h1 {
+    text-wrap: balance;
+}
+
+.registered-access__intro p {
+    @apply m-0 text-base leading-relaxed;
+    color: #4a5b76;
+}
+
+.registered-access__intro .registered-access__context {
+    @apply justify-self-start px-3 py-1.5 text-sm font-bold;
+    background: var(--brand-accent-soft, #fff0f6);
+    color: var(--brand-accent-dark, #a80f45);
+}
+
+.registered-access__intro .registered-access__notice {
+    @apply mt-2 border-0 border-l-2 border-solid px-4 py-3 text-sm;
+    border-color: #7aa5dd;
+    background: #f1f6fd;
+}
+
+.registered-access__intro[data-recovery-state="limited"] .registered-access__notice {
+    border-color: #a26822;
+    background: #fdf7ee;
+    color: #694923;
+}
+
+.registered-access__form {
+    @apply m-0 grid gap-4;
+}
+
+.registered-access__form label {
+    @apply text-base font-bold;
+}
+
+.registered-access__form input {
+    @apply min-h-14 w-full min-w-0 rounded-none border-2 border-solid px-4 py-3 text-base;
+    color: inherit;
+    border-color: #8993a4;
+    background: #f9fafb;
+}
+
+.registered-access__form input[name="lead_access_code"] {
+    @apply uppercase tracking-wider;
+}
+
+.registered-access__form input::placeholder {
+    color: #566782;
+    text-transform: none;
+    letter-spacing: normal;
+}
+
+.registered-access__form input[aria-invalid="true"] {
+    border-color: #ad2638;
+}
+
+.registered-access__error {
+    @apply m-0 text-sm leading-relaxed;
+    color: #a11e30;
+}
+
+.registered-access__submit {
+    @apply inline-flex min-h-14 w-full items-center justify-center px-4 py-3 text-center text-base font-bold text-white no-underline transition-colors motion-reduce:transition-none;
+    background: var(--access-action);
+}
+
+.registered-access__submit:hover:not(:disabled) {
+    background: var(--access-action-hover);
+    color: #fff;
+}
+
+.registered-access__submit:disabled {
+    @apply cursor-wait opacity-70;
+}
+
+.registered-access__footer a {
+    @apply flex min-h-14 w-full items-center justify-center border-2 border-solid px-4 py-3 text-center text-sm font-bold no-underline transition-colors motion-reduce:transition-none;
+    border-color: #d7dde6;
+    color: var(--access-action);
+}
+
+.registered-access__footer a:hover {
+    border-color: var(--access-action);
+    background: #f9fafb;
+}
+
+.registered-access :is(a, button, input):focus-visible {
+    outline: 2px solid var(--access-action);
+    outline-offset: 3px;
+}
+
+@media (min-width: 768px) {
+    .registered-access {
+        @apply min-h-[600px] grid-cols-2;
+    }
+
+    .registered-access__visual {
+        aspect-ratio: auto;
+    }
+
+    .registered-access__visual img {
+        object-position: center;
+    }
+}
