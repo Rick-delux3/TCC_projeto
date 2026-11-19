@@ -80,12 +80,6 @@
     $operationLabel = $brandProfile === 'client'
         ? 'Operação ativa'
         : 'Sistema operacional';
-    $currentSectionLabel = match (true) {
-        request()->routeIs('admin.imobiliarias.*') => \App\Support\BrandingText::choose('Imobiliárias', 'Empresas'),
-        request()->routeIs('admin.insurance-analyses.*') => 'Propostas',
-        request()->routeIs('admin.config-equipe.*') => 'Equipe',
-        default => 'Central de leads',
-    };
 @endphp
 
 <header
@@ -277,63 +271,6 @@
             </div>
         </div>
     </div>
-
-    <div class="dashboard-client-header__secondary">
-        <div class="dashboard-header-secondary-inner">
-            <nav class="dashboard-header-nav" aria-label="Seções do painel">
-                <a class="dashboard-header-nav__link" href="{{ $dashboardRoute }}">
-                    Visão geral
-                </a>
-
-                @can('view-leads')
-                    <a
-                        class="dashboard-header-nav__link {{ request()->routeIs('Dashboard-Admin') || request()->routeIs('admin.leads.*') ? 'active' : '' }}"
-                        href="{{ $leadsRoute }}"
-                        @if (request()->routeIs('Dashboard-Admin') || request()->routeIs('admin.leads.*')) aria-current="page" @endif
-                    >
-                        Leads
-                    </a>
-                @endcan
-
-                @can('view-real-estate-companies')
-                    <a
-                        class="dashboard-header-nav__link {{ request()->routeIs('admin.imobiliarias.*') ? 'active' : '' }}"
-                        href="{{ $imobiliariasRoute }}"
-                        @if (request()->routeIs('admin.imobiliarias.*')) aria-current="page" @endif
-                    >
-                        {{ \App\Support\BrandingText::choose('Imobiliárias', 'Empresas') }}
-                    </a>
-                @endcan
-
-                @can('manage-organization')
-                    <a
-                        class="dashboard-header-nav__link {{ request()->routeIs('admin.config-equipe.*') ? 'active' : '' }}"
-                        href="{{ $equipeRoute }}"
-                        @if (request()->routeIs('admin.config-equipe.*')) aria-current="page" @endif
-                    >
-                        Equipe
-                    </a>
-                @endcan
-
-                @if ($insuranceAnalysisEnabled)
-                    @can('view-analyses')
-                        <a
-                            class="dashboard-header-nav__link {{ request()->routeIs('admin.insurance-analyses.*') ? 'active' : '' }}"
-                            href="{{ $analisesRoute }}"
-                            @if (request()->routeIs('admin.insurance-analyses.*')) aria-current="page" @endif
-                        >
-                            Propostas
-                        </a>
-                    @endcan
-                @endif
-            </nav>
-            <div class="dashboard-header-breadcrumb" aria-label="Localização atual">
-                <span>Dashboard</span>
-                <i class="bi bi-slash-lg" aria-hidden="true"></i>
-                <strong>{{ $currentSectionLabel }}</strong>
-            </div>
-        </div>
-    </div>
 </header>
 
 {{-- Menu lateral vertical --}}
@@ -406,19 +343,6 @@
                     <span>Dashboard</span>
                 </a>
             @endcan
-
-            {{-- Visualizar análises --}}
-            @if ($insuranceAnalysisEnabled)
-                @can('view-analyses')
-                    <a
-                        href="{{ $analisesRoute }}"
-                        class="dashboard-sidebar-link {{ request()->routeIs('admin.insurance-analyses.*') || request()->routeIs('insurance-analyses.*') ? 'active' : '' }}"
-                    >
-                        <i class="bi bi-clipboard2-data" aria-hidden="true"></i>
-                        <span>Visualizar análises</span>
-                    </a>
-                @endcan
-            @endif
 
             {{-- Equipe: somente CEO --}}
             @can('manage-organization')

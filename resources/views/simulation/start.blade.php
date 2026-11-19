@@ -28,12 +28,11 @@
             <aside class="simulation-journey__aside">
                 <div class="simulation-journey__intro">
                     @if($simulationBrandProfile === 'tcc')
-                        <span class="simulation-eyebrow">Cadastro de beneficiário</span>
-                        <h1 id="simulation-title" class="simulation-title">É Online, é Simples, é Rápido</h1>
+                        <span class="simulation-eyebrow">Seguro Aluguel</span>
                     @else
                         <span class="simulation-eyebrow">Seguro Fiança</span>
-                        <h1 id="simulation-title" class="simulation-title">É Online, é Simples, é Seguro</h1>
                     @endif
+                    <h1 id="simulation-title" class="simulation-title">É Online, é Simples, é Seguro</h1>
                     <p>Escolha o perfil que melhor representa esta solicitação.</p>
                 </div>
 
@@ -104,7 +103,7 @@
 
                                     <span class="simulation-option__copy">
                                         @if($simulationBrandProfile === 'tcc')
-                                            <strong>Empresa já cadastrada</strong>
+                                            <strong>Imobiliária já cadastrada</strong>
                                             <span>Tenho a chave de acesso para cadastrar um beneficiário.</span>
                                         @else
                                             <strong>Imobiliária cadastrada</strong>
@@ -136,8 +135,8 @@
 
                                     <span class="simulation-option__copy">
                                         @if($simulationBrandProfile === 'tcc')
-                                            <strong>Empresa ou consumidor</strong>
-                                            <span>Empresa sem cadastro ou consumidor: cadastre um beneficiário, sem dashboard.</span>
+                                            <strong>Imobiliária ou consumidor</strong>
+                                            <span>Imobiliária sem cadastro ou consumidor: cadastre um beneficiário, sem dashboard.</span>
                                         @else
                                             <strong>Imobiliária ou proprietário</strong>
                                             <span>Vou solicitar uma análise sem uma chave de acesso.</span>
@@ -169,7 +168,7 @@
                                     <span class="simulation-option__copy">
                                         @if($simulationBrandProfile === 'tcc')
                                             <strong>Beneficiário</strong>
-                                            <span>Quero cadastrar meus próprios dados, sem vínculo obrigatório com uma empresa.</span>
+                                            <span>Quero contratar um seguro aluguel sem vinculo com uma imobiliária.</span>
                                             @else
                                             <strong>Locatário</strong>
                                             <span>Quero alugar um imóvel e solicitar meu seguro fiança.</span>

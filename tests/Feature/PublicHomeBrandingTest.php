@@ -37,6 +37,10 @@ it('renders the reference landing page only for the tcc index', function (string
 
     if ($profile === 'tcc') {
         $response->assertSee('nvs-index', false)
+            ->assertSee('<meta name="theme-color" content="'.config('branding.profiles.tcc.colors.primary').'">', false)
+            ->assertSee('<meta name="color-scheme" content="dark">', false)
+            ->assertSee('nvs-maquete-residencial.webp')
+            ->assertSee('nvs-maquete-comercial.webp')
             ->assertSee('id="solucoes"', false)
             ->assertSee('id="recursos"', false)
             ->assertSee('id="suporte"', false)
@@ -45,7 +49,9 @@ it('renders the reference landing page only for the tcc index', function (string
             ->assertDontSee('cdn.tailwindcss.com', false);
     } else {
         $response->assertSee('id="hero"', false)
+            ->assertDontSee('<meta name="color-scheme" content="dark">', false)
             ->assertDontSee('nvs-index', false)
+            ->assertDontSee('nvs-maquete-')
             ->assertDontSee('id="suporte"', false);
     }
 })->with(['tcc', 'client']);
@@ -53,6 +59,7 @@ it('renders the reference landing page only for the tcc index', function (string
 it('connects the tcc landing actions and serves local images with valid section anchors', function () {
     config([
         'features.public_index_enabled' => true,
+        'features.insurance_analysis.enabled' => true,
         'branding.active' => 'tcc',
     ]);
 
@@ -62,14 +69,13 @@ it('connects the tcc landing actions and serves local images with valid section 
     $xpath = new DOMXPath($document);
 
     foreach ([
-        'Começar agora' => 'empresa.register.form',
-        'Cadastrar beneficiário' => 'simulation.start',
-        'Ir para o painel' => 'empresa.login',
+        'Cadastrar minha imobiliária' => 'empresa.register.form',
+        'Iniciar simulação' => 'simulation.start',
+        'Acessar meu painel' => 'empresa.login',
         'Entrar' => 'empresa.login',
-        'Entrar como administrador' => 'tcc.admin.access',
-        'Área do Cliente' => 'empresa.login',
+        'Administração' => 'tcc.admin.access',
     ] as $label => $routeName) {
-        $link = $xpath->query('//a[normalize-space(.)="'.$label.'"]')->item(0);
+        $link = $xpath->query('//a[normalize-space(.)="'.$label.'" or .//h3[normalize-space(.)="'.$label.'"]]')->item(0);
 
         expect($link)->not->toBeNull()
             ->and($link->getAttribute('href'))->toBe(route($routeName));
@@ -89,18 +95,27 @@ it('connects the tcc landing actions and serves local images with valid section 
             ->and(is_file(public_path(ltrim($path, '/'))))->toBeTrue();
     }
 
+    foreach (['residencial', 'comercial'] as $type) {
+        $field = $xpath->query('//fieldset//input[@id="modelo-'.$type.'"]')->item(0);
+
+        expect($field)->not->toBeNull()
+            ->and($xpath->query('//fieldset//label[@for="modelo-'.$type.'"]')->length)->toBe(1)
+            ->and($xpath->query('//fieldset//img[@id="'.$field->getAttribute('aria-controls').'" and @class="nvs-model-'.$type.'"]')->length)->toBe(1);
+    }
+
     $navigation = $xpath->query('//header/nav | //header//nav')->item(0);
 
     expect($xpath->query('//header//button')->length)->toBe(0)
         ->and($xpath->query('//header//nav')->length)->toBe(1)
         ->and($navigation->getAttribute('class'))->not->toContain('hidden')
-        ->and($navigation->getAttribute('class'))->toContain('lg:gap-8', 'xl:gap-16', '2xl:gap-20')
-        ->and($navigation->parentNode->getAttribute('class'))->toContain('w-full', 'max-w-none', 'lg:px-[4vw]')
+        ->and($xpath->query('//h1')->length)->toBe(1)
+        ->and($xpath->query('//fieldset//input[@type="radio"]')->length)->toBe(2)
+        ->and($xpath->query('//input[@id="modelo-residencial" and @checked]')->length)->toBe(1)
         ->and($xpath->query('.//a[starts-with(@href, "#")]', $navigation)->length)->toBe(4)
         ->and($xpath->query('//*[@id="nvs-mobile-menu"]')->length)->toBe(0);
 });
 
-it('opens index access links safely in a new tab only for tcc', function (string $profile) {
+it('opens index access and simulation links safely in a new tab only for tcc', function (string $profile) {
     config([
         'features.public_index_enabled' => true,
         'branding.active' => $profile,
@@ -110,18 +125,21 @@ it('opens index access links safely in a new tab only for tcc', function (string
     $document = new DOMDocument;
     @$document->loadHTML('<?xml encoding="UTF-8">'.$html);
     $xpath = new DOMXPath($document);
-    $accessLinks = $xpath->query('//a[@href="'.route('empresa.login').'" or @href="'.route('empresa.register.form').'" or @href="'.route('tcc.admin.access').'"]');
+    $simulationUrl = route('simulation.start');
+    $accessLinks = $xpath->query('//a[@href="'.route('empresa.login').'" or @href="'.route('empresa.register.form').'" or @href="'.route('tcc.admin.access').'" or @href="'.$simulationUrl.'"]');
 
     expect($accessLinks->length)->toBeGreaterThan(0);
     expect($xpath->query('//header//a[@href="'.route('tcc.admin.access').'"]')->length)
-        ->toBe($profile === 'tcc' ? 1 : 0);
+        ->toBe($profile === 'tcc' ? 1 : 0)
+        ->and($xpath->query('//a[@href="'.$simulationUrl.'"]')->length)
+        ->toBe($profile === 'tcc' ? 2 : 1);
 
     foreach ($accessLinks as $link) {
         if ($profile === 'tcc') {
-            $label = trim($link->textContent);
+            $label = trim(($xpath->query('.//h3', $link)->item(0) ?? $link)->textContent);
 
             expect($link->getAttribute('target'))->toBe('_blank')
-                ->and($link->hasAttribute('data-auth-access'))->toBeTrue()
+                ->and($link->hasAttribute('data-auth-access'))->toBe($link->getAttribute('href') !== $simulationUrl)
                 ->and(explode(' ', $link->getAttribute('rel')))->toContain('noopener', 'noreferrer')
                 ->and($link->getAttribute('aria-label'))->toBe($label.' (abre em nova guia)');
         } else {
@@ -129,7 +147,7 @@ it('opens index access links safely in a new tab only for tcc', function (string
         }
     }
 
-    foreach ($xpath->query('//a[starts-with(@href, "#") or @href="'.route('simulation.start').'"]') as $link) {
+    foreach ($xpath->query('//a[starts-with(@href, "#")]') as $link) {
         expect($link->getAttribute('target'))->not->toBe('_blank');
     }
 })->with(['tcc', 'client']);
@@ -609,26 +627,27 @@ it('renders the dashboard header composition for each brand profile', function (
     foreach ([$adminHeader, $companyHeader] as $html) {
         expect($html)
             ->toContain('data-dashboard-header="'.$profile.'"')
-            ->toContain('x-data="{ isCompact: window.scrollY > 24 }"')
-            ->toContain('x-on:scroll.window.throttle.100ms="isCompact = window.scrollY > 24"')
-            ->toContain('x-bind:class="{ \'is-compact\': isCompact }"')
             ->toContain('dashboard-client-header__rail')
             ->toContain('dashboard-client-header__primary')
-            ->toContain('dashboard-client-header__secondary')
-            ->toContain('dashboard-header-nav')
             ->toContain('dashboard-header-status')
             ->toContain($operationLabel)
-            ->toContain('dashboard-notification-count')
-            ->toContain('aria-label="Localização atual"')
-            ->toContain($expectedLogo);
+            ->toContain('dashboard-notification-count');
     }
 
     expect($adminHeader)
         ->toContain('Painel do CEO')
         ->toContain('Carlos Alves')
-        ->toContain('Central de leads')
+        ->toContain($profile === 'tcc' ? 'imgs/Logo_NVS-transparent.png' : $expectedLogo)
+        ->not->toContain('dashboard-client-header__secondary')
         ->and($companyHeader)
-        ->toContain('Painel da imobiliária')
+        ->toContain($profile === 'tcc' ? 'Painel da empresa' : 'Painel da imobiliária')
+        ->toContain('x-data="{ isCompact: window.scrollY > 24 }"')
+        ->toContain('x-on:scroll.window.throttle.100ms="isCompact = window.scrollY > 24"')
+        ->toContain('x-bind:class="{ \'is-compact\': isCompact }"')
+        ->toContain('dashboard-client-header__secondary')
+        ->toContain('dashboard-header-nav')
+        ->toContain('aria-label="Localização atual"')
+        ->toContain($expectedLogo)
         ->toContain('Simulação');
 })->with([
     'NVS' => ['tcc', 'Sistema operacional', 'imgs/Logo_NVS.png'],

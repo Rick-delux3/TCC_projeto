@@ -51,8 +51,8 @@ it('offers the shared theme control on every admin page for both brands', functi
     }
 })->with(['tcc', 'client']);
 
-it('keeps header and sidebar navigation consistent for each brand', function (string $route, string $title, string $active, string $brand): void {
-    config(['branding.active' => $brand]);
+it('uses the sidebar for navigation across admin workspace pages', function (string $route, string $title, string $active, string $brand): void {
+    config(['branding.active' => $brand, 'features.insurance_analysis.enabled' => true]);
     if ($route === 'admin.imobiliarias.index' && $brand === 'tcc') {
         $title = 'Empresas cadastradas';
         $active = 'Empresas';
@@ -62,23 +62,20 @@ it('keeps header and sidebar navigation consistent for each brand', function (st
     $response = $this->get(route($route))->assertOk()->assertSee($title);
     $xpath = workspaceDocument($response->getContent());
     $navigation = '//div[@id="dashboardAdminSidebar"]//nav';
-    $headerNavigation = '//header//nav[@aria-label="Seções do painel"]';
-    $activeHeaderRoute = $route === 'Dashboard-Admin' ? 'admin.leads.index' : $route;
 
-    expect($xpath->query('//header//div[contains(@class, "dashboard-client-header__secondary")]')->length)->toBe(1)
-        ->and($xpath->query('//header//div[contains(@class, "dashboard-header-breadcrumb")]')->length)->toBe(1)
-        ->and($xpath->query('//header//button[@data-bs-target="#dashboardAdminSidebar"]')->length)->toBe(1)
-        ->and($xpath->query($headerNavigation)->length)->toBe(1)
-        ->and($xpath->query($navigation)->length)->toBe(1);
+    expect($xpath->query('//header//div[contains(@class, "dashboard-client-header__secondary")]')->length)->toBe(0)
+        ->and($xpath->query('//header//*[@aria-label="Localização atual"]')->length)->toBe(0)
+        ->and($xpath->query('//header//button[@data-bs-toggle="offcanvas"][@data-bs-target="#dashboardAdminSidebar"][@aria-controls="dashboardAdminSidebar"]')->length)->toBe(1)
+        ->and($xpath->query('//header//nav[@aria-label="Seções do painel"]')->length)->toBe(0)
+        ->and($xpath->query($navigation)->length)->toBe(1)
+        ->and($xpath->query($navigation.'//a[normalize-space(.)="Visualizar análises"]')->length)->toBe(0)
+        ->and($xpath->query('//header//a[normalize-space(.)="Visualizar análises"]')->length)->toBe(1);
 
     foreach (['Dashboard-Admin', 'admin.leads.index', 'admin.imobiliarias.index', 'admin.config-equipe.index'] as $destination) {
-        expect($xpath->query($navigation.'//a[@href="'.route($destination).'"]')->length)->toBe(1)
-            ->and($xpath->query($headerNavigation.'//a[@href="'.route($destination).'"]')->length)->toBe(1);
+        expect($xpath->query($navigation.'//a[@href="'.route($destination).'"]')->length)->toBe(1);
     }
 
     expect(trim($xpath->query($navigation.'//a[contains(concat(" ", normalize-space(@class), " "), " active ")]')->item(0)->textContent))->toBe($active)
-        ->and($xpath->query($headerNavigation.'//a[@href="'.route($activeHeaderRoute).'"][@aria-current="page"]')->length)->toBe(1)
-        ->and($xpath->query($headerNavigation.'//a[@aria-current="page"]')->length)->toBe(1)
         ->and($xpath->query('//header//a[@href="#"]')->length)->toBe(0)
         ->and($xpath->query('//form[@action="'.route('admin.logout').'"][@method="POST"]//input[@name="_token"]')->length)->toBe(2);
 

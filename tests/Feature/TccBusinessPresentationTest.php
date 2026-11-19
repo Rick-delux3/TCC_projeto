@@ -50,17 +50,19 @@ it('changes commercial display labels without changing persisted tags', function
         ->and(\App\Support\ManualLeadResultTags::leadloversKey($result))->toBe('fechado_aluguel');
 })->with(['tcc', 'client']);
 
-it('presents the tcc home as a crm without fictitious performance promises', function () {
-    config(['branding.active' => 'tcc', 'features.public_index_enabled' => true, 'features.insurance_analysis.enabled' => false]);
+it('presents the tcc home with offers only when quoting is enabled', function (bool $enabled) {
+    config(['branding.active' => 'tcc', 'features.public_index_enabled' => true, 'features.insurance_analysis.enabled' => $enabled]);
 
-    $this->get(route('index'))->assertOk()
-        ->assertSee('CRM empresarial')
-        ->assertSee('concessionária responsável')
-        ->assertSee('Cadastrar beneficiário')
-        ->assertDontSee('NVS Seguros')
-        ->assertDontSee('menos de 3 minutos')
-        ->assertDontSee('R$ 2,4 mi');
-});
+    $response = $this->get(route('index'))->assertOk()
+        ->assertSee('Seguro para aluguel')
+        ->assertSee('Cadastrar minha imobiliária');
+
+    if ($enabled) {
+        $response->assertSee('Exemplo')->assertSee('Menor parcela aprovada')->assertSee('Iniciar simulação');
+    } else {
+        $response->assertSee('Iniciar solicitação')->assertSee('Resumo da solicitação')->assertDontSee('Menor parcela aprovada');
+    }
+})->with([true, false]);
 
 it('keeps company login presentation isolated by brand', function (string $profile) {
     config(['branding.active' => $profile]);
