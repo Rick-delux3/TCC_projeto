@@ -322,6 +322,7 @@ it('renders Tokio installments and manual guidance for each viewer', function (s
 })->with([['admin', 'approved'], ['company', 'approved'], ['admin', 'manual_required'], ['company', 'manual_required']]);
 
 it('renders saved coverages and highlights the confirmed best total only after consolidation', function () {
+    config(['branding.active' => 'tcc']);
     $batch = $this->lead->insuranceAnalysesBatches()->create(['status' => 'processing', 'total_providers' => 2]);
     $batch->analyses()->create([
         'lead_id' => $this->lead->id, 'provider' => 'pottencial', 'product' => 'fianca_locaticia',
@@ -357,6 +358,7 @@ it('renders saved coverages and highlights the confirmed best total only after c
     $document = new DOMDocument;
     @$document->loadHTML('<?xml encoding="UTF-8">'.$response->getContent());
     $best = (new DOMXPath($document))->query('//article[div[text()="Melhor preço"]]');
+    expect((new DOMXPath($document))->evaluate('string(//div[@data-progress-metric="approved"]/dd)'))->toBe('2');
     expect($best->length)->toBe(1)
         ->and($best->item(0)->textContent)->toContain('Too Seguros')->toContain('R$ 900,00');
 });

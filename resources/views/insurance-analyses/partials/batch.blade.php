@@ -12,12 +12,23 @@
                 <div class="progress" role="progressbar" aria-labelledby="batch-title" aria-valuenow="{{ $progress['percent'] }}" aria-valuemin="0" aria-valuemax="100">
                     <div class="progress-bar" style="width: {{ $progress['percent'] }}%"></div>
                 </div>
+                @if ($nvs)
+                    <dl class="ia-ledger">
+                        @foreach (['approved' => 'Aprovadas', 'rejected' => 'Recusadas', 'failed' => 'Com falha', 'pending' => 'Em aberto'] as $state => $label)
+                            <div data-progress-metric="{{ $state }}">
+                                <dt>{{ $label }}</dt>
+                                <dd>{{ $progress[$state] }}</dd>
+                            </div>
+                        @endforeach
+                    </dl>
+                @else
                 <div class="d-flex flex-wrap gap-2 mb-3">
                     <span class="badge text-bg-success">{{ $progress['approved'] }} aprovadas</span>
                     <span class="badge text-bg-danger">{{ $progress['rejected'] }} recusadas</span>
                     <span class="badge text-bg-warning">{{ $progress['failed'] }} com falha</span>
                     <span class="badge text-bg-secondary">{{ $progress['pending'] }} aguardando finalização</span>
                 </div>
+                @endif
                 <p class="mb-2"><strong>Resultado consolidado:</strong>
                     <span class="ia-result" data-result="{{ $result['is_final'] ? $result['status'] : 'pending' }}">{{ $result['is_final'] ? (['approved' => 'Aprovado', 'rejected' => 'Recusado', 'failed' => 'Falha na análise'][$result['status']] ?? 'Indisponível') : 'Aguardando conclusão' }}</span>
                 </p>

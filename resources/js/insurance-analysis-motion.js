@@ -45,6 +45,13 @@ export function createAnalysisMotion({ root = document, view = globalThis.window
         const before = percent(previous);
         const after = percent(next);
         const animations = [];
+        for (const metric of next.querySelectorAll('[data-progress-metric]')) {
+            const previousValue = previous.querySelector(`[data-progress-metric="${metric.dataset.progressMetric}"] dd`);
+            const value = metric.querySelector('dd');
+            if (previousValue && value && previousValue.textContent !== value.textContent) {
+                animations.push(rise(value, { distance: 4, duration: 240 }));
+            }
+        }
         const bar = next.querySelector('.progress-bar');
         if (bar && before !== null && after > before) {
             animations.push(bar.animate(
