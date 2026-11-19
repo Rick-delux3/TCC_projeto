@@ -1172,6 +1172,8 @@
                                     @endif
                                 </div>
 
+                                @include('partials.lead-analysis-processing')
+
                                 @include('partials.manual-lead-result-tag-processing', [
                                     'lead' => $lead,
                                     'processingState' => $manualLeadTagProcessingStates[(int) $lead->id] ?? null,

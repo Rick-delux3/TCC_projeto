@@ -100,16 +100,17 @@
         </div>
         <div class="nvs-directory">
             @foreach ([
-                ['title' => $analysisEnabled ? 'Quero solicitar uma simulação' : 'Enviar uma solicitação', 'text' => 'Para quem vai alugar, é proprietário ou representa uma imobiliária.', 'route' => 'simulation.start'],
-                ['title' => 'Cadastrar minha imobiliária', 'text' => 'Crie o acesso da empresa e receba solicitações pelo seu formulário.', 'route' => 'empresa.register.form'],
-                ['title' => 'Acessar meu painel', 'text' => 'Entre para acompanhar os atendimentos da sua imobiliária.', 'route' => 'empresa.login'],
+                ['title' => 'Seguro para aluguel', 'action' => $simulationActionLabel, 'text' => 'Para quem vai alugar, é proprietário ou representa uma imobiliária.', 'route' => 'simulation.start'],
+                ['title' => 'Primeiro acesso', 'action' => 'Cadastrar minha imobiliária', 'text' => 'Crie o acesso da empresa e receba solicitações pelo seu formulário.', 'route' => 'empresa.register.form'],
+                ['title' => 'Imobiliária cadastrada', 'action' => 'Acessar meu painel', 'text' => 'Acompanhe as solicitações e os resultados da sua imobiliária.', 'route' => 'empresa.login'],
             ] as $entry)
-                <a href="{{ route($entry['route']) }}" class="nvs-directory-link" aria-describedby="descricao-acesso-{{ $loop->index }}"
-                   target="_blank" rel="noopener noreferrer" aria-label="{{ $entry['title'] }} (abre em nova guia)"
-                   @if ($entry['route'] !== 'simulation.start') data-auth-access @endif>
-                    <div><h3>{{ $entry['title'] }}</h3><p id="descricao-acesso-{{ $loop->index }}">{{ $entry['text'] }}</p></div>
-                    <span aria-hidden="true">↗</span>
-                </a>
+                <div class="nvs-directory-row">
+                    <h3>{{ $entry['title'] }}</h3>
+                    <p id="descricao-acesso-{{ $loop->index }}">{{ $entry['text'] }}</p>
+                    <a href="{{ route($entry['route']) }}" class="nvs-button nvs-out{{ $loop->first ? '' : ' nvs-button-outline' }}"
+                       aria-describedby="descricao-acesso-{{ $loop->index }}" aria-label="{{ $entry['action'] }} (abre em nova guia)"
+                       target="_blank" rel="noopener noreferrer" @if ($entry['route'] !== 'simulation.start') data-auth-access @endif>{{ $entry['action'] }}</a>
+                </div>
             @endforeach
         </div>
     </div>

@@ -14,14 +14,20 @@ beforeEach(function (): void {
 });
 
 it('preserves dashboard actions and real metrics in both visual profiles', function (string $role, string $brand): void {
-    config(['branding.active' => $brand]);
+    config(['branding.active' => $brand, 'features.insurance_analysis.enabled' => true]);
     foreach (['Aprovado', 'Recusado', 'Novo'] as $index => $result) {
-        Lead::query()->forceCreate([
+        $lead = Lead::query()->forceCreate([
             'company_id' => $this->company->id, 'nome' => ['Marina Lopes', 'Rafael Pires', 'Bianca Reis'][$index],
             'email' => 'contato'.$index.'@example.test', 'tel' => '11981724630', 'status' => 'novo',
             'tipo_solicitante' => 'imobiliaria_cadastrada', 'origem' => 'imobiliaria_cadastrada',
             'tags_originais' => $result, 'leadlovers_status' => 'sent', 'sent_to_leadlovers_at' => now(),
         ]);
+        if ($index < 2) {
+            $lead->latestInsuranceAnalysisBatch()->create([
+                'company_id' => $this->company->id,
+                'status' => $index === 0 ? 'processing' : 'completed',
+            ]);
+        }
     }
     $foreign = Lead::query()->forceCreate([
         'nome' => 'Contato de outra carteira', 'email' => 'outra-carteira@example.test',
@@ -43,6 +49,8 @@ it('preserves dashboard actions and real metrics in both visual profiles', funct
     $document = new DOMDocument;
     @$document->loadHTML('<?xml encoding="UTF-8">'.$response->getContent());
     $xpath = new DOMXPath($document);
+    expect($xpath->query('//article[.//div[@role="status" and contains(., "Análise em andamento")]]')->length)->toBe(1)
+        ->and($xpath->query('//article[contains(., "Marina Lopes")]//div[@role="status"]/span[contains(@class,"spinner-border")]')->length)->toBe(1);
     expect($xpath->query('//h1')->length)->toBe(1)
         ->and($xpath->query('//*[@data-dashboard-metric]')->length)->toBe(4)
         ->and($xpath->query('//form[@data-lead-filter-form]')->length)->toBe(1)

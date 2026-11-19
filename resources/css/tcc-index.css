@@ -140,12 +140,17 @@
     background-image: linear-gradient(112deg, #32142e 40%, transparent 40%);
 }
 .nvs-support { background: var(--surface); }
-.nvs-directory-link { display: flex; justify-content: space-between; align-items: center; gap: 20px; padding: 23px 0; border-top: 1px solid var(--line); }
-.nvs-directory-link:last-child { border-bottom: 1px solid var(--line); }
-.nvs-directory-link h3 { font-size: clamp(1.18rem, 1.6vw, 1.56rem); }
-.nvs-directory-link > span { font-size: 1.8rem; color: var(--section-accent); transition: transform .2s ease; }
-.nvs-directory-link:hover > span { transform: translate(3px,-3px); }
-.nvs-directory-link:hover h3 { text-decoration: underline; text-underline-offset: 4px; }
+.nvs-directory-row { padding: 20px 0; border-top: 1px solid var(--line); }
+.nvs-directory-row:last-child { border-bottom: 1px solid var(--line); }
+.nvs-directory-row h3 { font-size: clamp(1.18rem, 1.6vw, 1.56rem); }
+.nvs-directory-row .nvs-button { margin-top: 14px; min-height: 44px; }
+.nvs-button, .nvs-enter { border-radius: 5px 14px 5px 5px; }
+.nvs-button { box-shadow: inset 0 -2px 0 rgb(3 1 51 / 22%); }
+.nvs-button-outline { color: var(--rose); background: transparent; box-shadow: inset 0 0 0 1px #98647e; }
+.nvs-button-outline:hover { color: var(--ink); background: #46263e; }
+.nvs-link { text-decoration: underline; text-decoration-color: var(--section-accent); text-underline-offset: 5px; }
+.nvs-model-switch label:hover, .nvs-faq summary:hover { color: var(--blue); }
+.nvs-faq summary::after { display: grid; flex: 0 0 30px; height: 30px; place-items: center; border: 1px solid var(--line); border-radius: 50%; }
 .nvs-support .nvs-link { margin-top: 21px; color: var(--blue); }
 .nvs-faq details { border-top: 1px solid var(--line); }
 .nvs-faq details:last-child { border-bottom: 1px solid var(--line); }
@@ -237,5 +242,5 @@
 @media (prefers-reduced-motion: reduce) {
     html:has(.nvs-index) { scroll-behavior: auto; }
     .nvs-index *, .nvs-index *::before, .nvs-index *::after { transition: none !important; }
-    .nvs-index .nvs-button, .nvs-index .nvs-enter, .nvs-directory-link:hover > span { transform: none; }
+    .nvs-index .nvs-button, .nvs-index .nvs-enter { transform: none; }
 }

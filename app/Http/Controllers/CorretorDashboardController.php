@@ -62,6 +62,7 @@ class CorretorDashboardController extends Controller
         $leads = $canViewLeads
             ? $this->dashboardLeadQuery->approvedFirst($leadsQuery)
                 ->with([
+                    'latestInsuranceAnalysisBatch',
                     'endereco',
                     'despesas',
                     'conjuge',

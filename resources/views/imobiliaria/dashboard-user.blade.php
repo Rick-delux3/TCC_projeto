@@ -890,6 +890,8 @@
                                         ])
                                     </div>
 
+                                    @include('partials.lead-analysis-processing')
+
                                     @include('partials.rejected-lead-retention-notice', [
                                         'lead' => $lead,
                                     ])

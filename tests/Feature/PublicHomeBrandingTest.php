@@ -95,6 +95,8 @@ it('connects the tcc landing actions and serves local images with valid section 
             ->and(is_file(public_path(ltrim($path, '/'))))->toBeTrue();
     }
 
+    expect($xpath->query('//section[@id="recursos"]//a[contains(concat(" ", normalize-space(@class), " "), " nvs-button ")]')->length)->toBe(3);
+
     foreach (['residencial', 'comercial'] as $type) {
         $field = $xpath->query('//fieldset//input[@id="modelo-'.$type.'"]')->item(0);
 

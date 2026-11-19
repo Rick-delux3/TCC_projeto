@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Events\DashboardActivityChanged;
 use App\Models\InsuranceAnalysis;
 use App\Models\InsuranceAnalysisBatch;
 use App\Models\Lead;
@@ -141,6 +142,8 @@ class StartInsuranceAnalysesBatchJob implements ShouldQueue
             ]);
 
             $analysisIds = [];
+
+            DashboardActivityChanged::dispatch('lead', $lead->id, $lead->company_id, 'lead.analysis.started');
 
             foreach ($providers as $provider) {
                 /*

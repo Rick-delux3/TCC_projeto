@@ -105,6 +105,7 @@ class DashboardController extends Controller
         $leadsQuery = $company->leads()
             ->createdThroughSystem()
             ->with([
+                'latestInsuranceAnalysisBatch',
                 'endereco',
                 'despesas',
                 'conjuge',
