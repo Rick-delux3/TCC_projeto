@@ -37,6 +37,8 @@ it('renders the access and recovery forms for each brand', function (string $bra
     config(['branding.active' => $brand]);
     $this->get(route('simulation.registered-company.access'))
         ->assertOk()
+        ->assertSeeText('Voltar à escolha de perfil')
+        ->assertSee('href="'.route('simulation.start').'"', false)
         ->assertSee('Esqueci meu código')
         ->assertSee('registered-access__visual', false)
         ->assertSee('imgs/seguro-aluguel-acesso.webp', false)

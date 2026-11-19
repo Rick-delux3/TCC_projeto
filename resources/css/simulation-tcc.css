@@ -1,108 +1,217 @@
+body.auth-layout-body.simulation-public[data-brand="tcc"] {
+    --start-ink: #f6f5fc;
+    --start-muted: #b8c2d9;
+    --start-surface: #0b1033;
+    --start-line: #343c60;
+    --start-blue: #88d2ff;
+    --start-pink: #fc1b6b;
+    --flow-raised: #151d42;
+    --flow-field-line: #68779a;
+    --flow-danger: #ff9db1;
+    --simulation-ink: var(--start-ink);
+    --simulation-muted: var(--start-muted);
+    --simulation-line: var(--start-line);
+    --simulation-blue: var(--start-blue);
+    --simulation-red: var(--start-pink);
+    font-family: "Sansation", "Segoe UI", sans-serif;
+}
+
+body.auth-layout-body.simulation-public[data-brand="tcc"] .auth-layout-main.simulation-start-main {
+    display: grid;
+    align-items: center;
+    background: #030133;
+    color: var(--start-ink);
+    font-family: "Sansation", "Segoe UI", sans-serif;
+}
+
+[data-brand="tcc"] .simulation-start-main .simulation-start__shell { max-width: 1040px; }
+[data-brand="tcc"] .simulation-start .simulation-progress { max-width: 410px; margin-bottom: 20px; }
+[data-brand="tcc"] .simulation-start .simulation-progress ol { grid-template-columns: minmax(0, 1fr) minmax(20px, .55fr) minmax(0, 1fr); }
+[data-brand="tcc"] .simulation-start .simulation-progress__step { color: var(--start-muted); }
+[data-brand="tcc"] .simulation-start .simulation-progress__step strong { color: var(--start-ink); }
+[data-brand="tcc"] .simulation-start .simulation-progress__number { background: var(--start-surface); color: var(--start-muted); border-color: #7283a5; }
+[data-brand="tcc"] .simulation-start .is-active .simulation-progress__number { background: var(--start-pink); color: #030133; border-color: var(--start-pink); }
+
+body.auth-layout-body[data-brand="tcc"] .simulation-start-main .simulation-start .simulation-journey {
+    min-height: 0;
+    grid-template-columns: minmax(0, 4fr) minmax(0, 6fr);
+    background: var(--start-surface);
+    border: 1px solid var(--start-line);
+    border-radius: 8px;
+}
+
+[data-brand="tcc"] .simulation-start .simulation-journey__aside {
+    min-height: 0;
+    padding: clamp(24px, 3vw, 42px);
+    justify-content: space-between;
+    background: linear-gradient(155deg, #111942, #030133 80%);
+}
+[data-brand="tcc"] .simulation-start__intro-brand { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
+[data-brand="tcc"] .simulation-start__intro-brand .simulation-start__brand { margin: 0; }
+[data-brand="tcc"] .simulation-start .simulation-eyebrow { color: var(--start-blue); margin: 0; }
+[data-brand="tcc"] .simulation-start .simulation-eyebrow::before { content: ""; display: inline-block; width: 24px; height: 2px; background: var(--start-pink); vertical-align: middle; margin-right: 10px; }
+[data-brand="tcc"] .simulation-start .simulation-title { font-size: clamp(2rem, 3.4vw, 3.1rem); letter-spacing: -.05em; text-wrap: balance; }
+[data-brand="tcc"] .simulation-start__model { width: 100%; max-height: 220px; object-fit: contain; margin-top: 14px; }
+[data-brand="tcc"] .simulation-start .simulation-journey__content { padding: clamp(20px, 3vw, 38px); background: var(--start-surface); }
+[data-brand="tcc"] .simulation-start :is(.simulation-journey__content-header h2, .simulation-option__copy strong) { color: var(--start-ink); }
+[data-brand="tcc"] .simulation-start :is(.simulation-journey__content-header p, .simulation-option__copy > span, .simulation-journey__review-note, .simulation-start__footer) { color: var(--start-muted); }
+[data-brand="tcc"] .simulation-start .simulation-options { gap: 8px; }
+[data-brand="tcc"] .simulation-start .simulation-option__card {
+    min-height: 72px;
+    grid-template-columns: 36px minmax(0, 1fr) 18px;
+    gap: 12px;
+    padding: 12px 14px;
+    border: 1px solid var(--start-line);
+    border-radius: 5px;
+    background: #151d42;
+}
+[data-brand="tcc"] .simulation-start .simulation-option__card:hover { border-color: var(--start-blue); transform: none; }
+[data-brand="tcc"] .simulation-start .simulation-option input:focus-visible + label { outline: 3px solid var(--start-blue); }
+[data-brand="tcc"] .simulation-start .simulation-option input:checked + label { background: #182b50; border-color: var(--start-blue); }
+[data-brand="tcc"] .simulation-start .simulation-option__card .simulation-option__icon { width: 36px; height: 36px; color: var(--start-blue); background: transparent; border: 0; }
+[data-brand="tcc"] .simulation-start .simulation-option__icon svg { width: 25px; height: 25px; }
+[data-brand="tcc"] .simulation-start .simulation-option__copy { gap: 3px; }
+[data-brand="tcc"] .simulation-start .simulation-option__indicator { width: 18px; height: 18px; border-color: #91a1c3; }
+[data-brand="tcc"] .simulation-start input:checked + label .simulation-option__indicator { border-color: var(--start-blue); background: var(--start-blue); box-shadow: inset 0 0 0 4px #182b50; }
+[data-brand="tcc"] .simulation-start .simulation-journey__footer { margin-top: 18px; gap: 14px; border-color: var(--start-line); }
+[data-brand="tcc"] .simulation-start .simulation-journey__review-note svg { color: var(--start-blue); width: 19px; flex-basis: 19px; }
+[data-brand="tcc"] .simulation-start .simulation-journey__continue { min-width: 140px; color: #030133; background: var(--start-pink); border-color: transparent; }
+[data-brand="tcc"] .simulation-start .simulation-journey__continue:hover { background: #ff6299; }
+[data-brand="tcc"] .simulation-start .simulation-journey__continue:focus-visible { outline: 3px solid var(--start-blue); outline-offset: 3px; }
+[data-brand="tcc"] .simulation-start .simulation-start__footer { padding-top: 16px; }
+
+@media (max-width: 767.98px) {
+    body.auth-layout-body[data-brand="tcc"] .simulation-start-main .simulation-start .simulation-journey { grid-template-columns: 1fr; }
+    [data-brand="tcc"] .simulation-start .simulation-journey__aside { display: grid; grid-template-columns: 1fr min(22%, 100px); align-items: center; gap: 8px; padding: 18px 20px; }
+    [data-brand="tcc"] .simulation-start__intro-brand { margin-bottom: 8px; }
+    [data-brand="tcc"] .simulation-start .simulation-start__brand { height: 26px; }
+    [data-brand="tcc"] .simulation-start .simulation-eyebrow::before { display: none; }
+    [data-brand="tcc"] .simulation-start .simulation-title { font-size: 1.65rem; }
+    [data-brand="tcc"] .simulation-start__model { margin: 0; }
+}
+
+/* A mesma página de simulação atende os formulários públicos e os internos. */
+body.auth-layout-body.simulation-public[data-brand="tcc"] .auth-layout-main:has(.simulation-wizard, .registered-access, .simulation-success) {
+    color-scheme: dark;
+    min-height: 100dvh;
+    background: #030133;
+    color: var(--start-ink);
+}
+
 body.simulation-public[data-brand="tcc"] {
-    --simulation-ink: var(--brand-primary);
-    --simulation-muted: var(--brand-text-muted);
-    --simulation-line: var(--brand-border);
-    --simulation-blue: var(--brand-primary-hover);
-    --simulation-red: var(--brand-accent);
-}
-
-body.auth-layout-body.simulation-public[data-brand="tcc"] .auth-layout-main:has(.simulation-start, .simulation-wizard) {
-    background: var(--brand-background);
-}
-
-body.simulation-public[data-brand="tcc"] .auth-layout-main:has(.simulation-success) {
-    background: var(--brand-primary-dark);
-}
-
-body.simulation-public[data-brand="tcc"] .auth-topbar {
-    border-bottom: 1px solid var(--brand-border);
-    border-image: none;
-}
-
-body.simulation-public[data-brand="tcc"] .auth-topbar__brand-mark {
-    background: var(--brand-primary);
-}
-
-body.simulation-public[data-brand="tcc"] :is(.simulation-progress, .simulation-start__footer) {
-    color: var(--brand-text-muted);
-}
-
-body.simulation-public[data-brand="tcc"] .simulation-journey__aside .simulation-eyebrow {
-    color: var(--brand-surface);
-}
-
-body.simulation-public[data-brand="tcc"] :is(.simulation-option__card, .simulation-progress__number) {
-    border-color: var(--brand-border);
-}
-
-body.simulation-public[data-brand="tcc"] .simulation-option input:checked + .simulation-option__card {
-    border-color: var(--brand-accent);
-    box-shadow: 0 0 0 4px rgba(253, 30, 110, 0.17), 0 22px 44px rgba(3, 1, 51, 0.16);
-}
-
-body.simulation-public[data-brand="tcc"] .simulation-progress__step.is-active .simulation-progress__number {
-    border-color: var(--brand-accent);
-}
-
-body.simulation-public[data-brand="tcc"] :is(.simulation-sidebar, .simulation-form-card, .simulation-money, .simulation-remove-expense) {
-    border-color: var(--brand-border);
-    background-color: var(--brand-surface);
-}
-
-body.simulation-public[data-brand="tcc"] :is(.simulation-step[aria-current="step"], .simulation-context, .simulation-expense-info, .simulation-wizard #company-fields > div) {
-    background: var(--brand-primary-soft);
-}
-
-body.simulation-public[data-brand="tcc"] :is(.simulation-expense-info, .simulation-consent, .simulation-remove-expense) {
-    color: var(--brand-text-muted);
-}
-
-body.simulation-public[data-brand="tcc"] .simulation-wizard :is(input:not([type="radio"]):not([type="checkbox"]):not([type="hidden"]), select) {
-    border-color: var(--brand-border);
-}
-
-body.simulation-public[data-brand="tcc"] .simulation-wizard input::placeholder {
-    color: var(--brand-text-muted);
-}
-
-body.simulation-public[data-brand="tcc"] .simulation-wizard :is(input, select):focus,
-body.simulation-public[data-brand="tcc"] .simulation-money:focus-within {
-    border-color: var(--simulation-blue);
-    box-shadow: 0 0 0 2px var(--brand-focus-ring);
-}
-
-body.simulation-public[data-brand="tcc"] .simulation-wizard input[readonly] {
-    background: var(--brand-background);
-}
-
-body.simulation-public[data-brand="tcc"] .simulation-requester-choice:has(input:checked) {
-    background: var(--brand-primary-soft);
-    box-shadow: 0 0 0 1px var(--brand-focus-ring);
-}
-
-body.simulation-public[data-brand="tcc"] :is(.simulation-button, .simulation-step):focus-visible,
-body.simulation-public[data-brand="tcc"] .simulation-requester-choice:has(input:focus-visible) {
-    outline-color: var(--simulation-blue);
-}
-
-body.simulation-public[data-brand="tcc"] .simulation-wizard .simulation-button-primary:hover {
-    border-color: var(--brand-accent-hover);
-    background: var(--brand-accent-hover);
-}
-
-body.simulation-public[data-brand="tcc"] .simulation-wizard .simulation-button-back {
-    color: var(--brand-text-muted);
-    border-color: var(--brand-border);
-}
-
-@media (hover: hover) and (pointer: fine) {
-    body.simulation-public[data-brand="tcc"] .simulation-wizard :is(input, select):not(:disabled):not([readonly]):not(:focus):not([aria-invalid="true"]):hover,
-    body.simulation-public[data-brand="tcc"] .simulation-money:not(:focus-within):hover {
-        border-color: var(--simulation-blue);
+    & .registered-access, & .simulation-success, & .simulation-form-card, & .simulation-sidebar {
+        border: 1px solid var(--start-line);
+        border-radius: 8px;
+        background: var(--start-surface);
+        color: var(--start-ink);
+        box-shadow: none;
     }
-
-    body.simulation-public[data-brand="tcc"] :is(.simulation-requester-choice:hover, .simulation-step:not([aria-current="step"]):hover, .simulation-wizard .simulation-button-back:hover, .simulation-wizard .simulation-button-outline:hover) {
-        background: var(--brand-primary-soft);
-        border-color: var(--simulation-blue);
+    & .registered-access { max-width: 1040px; min-height: 0; }
+    & .registered-access__content { gap: 20px; padding: clamp(22px, 4vw, 48px); }
+    & .registered-access__logo { height: 36px; }
+    & .registered-access__intro h1, & .simulation-success h1 {
+        color: var(--start-ink);
+        font-size: clamp(1.7rem, 3vw, 2.4rem);
+        letter-spacing: -.04em;
+        line-height: 1.12;
     }
+    & .registered-access__intro p { color: var(--start-muted); }
+    & .registered-access__intro .registered-access__context, & .simulation-sidebar .simulation-eyebrow {
+        padding: 0;
+        background: transparent;
+        color: var(--start-blue);
+        text-transform: uppercase;
+        font-size: .7rem;
+        font-weight: 700;
+        letter-spacing: .12em;
+    }
+    & .registered-access__context::before, & .simulation-sidebar .simulation-eyebrow::before {
+        content: "";
+        display: inline-block;
+        width: 22px;
+        height: 2px;
+        margin-right: 8px;
+        vertical-align: middle;
+        background: var(--start-pink);
+    }
+    & .registered-access__form input,
+    & .simulation-wizard input:not([type="radio"]):not([type="checkbox"]):not([type="hidden"]),
+    & .simulation-wizard select, & .simulation-money {
+        background-color: var(--flow-raised);
+        border: 1px solid var(--flow-field-line);
+        border-radius: 5px;
+        color: var(--start-ink);
+    }
+    & .registered-access__form input { min-height: 46px; }
+    & .registered-access__form input::placeholder, & .simulation-wizard input::placeholder { color: #a1aecb; }
+    & .registered-access__form input[aria-invalid="true"] { border-color: var(--flow-danger); }
+    & .simulation-wizard input[readonly]:not([type="hidden"]) { background-color: var(--start-surface); color: var(--start-muted); }
+    & .registered-access :is(a, button, input):focus-visible,
+    & .simulation-wizard :is(input, select):focus-visible, & .simulation-money:focus-within,
+    & .simulation-success a:focus-visible { outline: 2px solid var(--start-blue); outline-offset: 2px; }
+    & .registered-access__submit, & .simulation-wizard .simulation-button-primary, & .simulation-success .simulation-btn {
+        min-height: 46px;
+        border: 1px solid transparent;
+        border-radius: 5px;
+        background: var(--start-pink);
+        color: #030133;
+        box-shadow: none;
+    }
+    & .simulation-success .simulation-btn { color: #030133 !important; }
+    & :is(.registered-access__submit, .simulation-wizard .simulation-button-primary, .simulation-success .simulation-btn):hover:not(:disabled) {
+        color: #030133;
+        background: #ff6299;
+    }
+    & .registered-access__footer a, & .simulation-wizard :is(.simulation-button-outline, .simulation-button-back, .simulation-remove-expense) {
+        min-height: 44px;
+        border: 1px solid var(--flow-field-line);
+        border-radius: 5px;
+        background: transparent;
+        color: var(--start-blue);
+    }
+    & :is(.registered-access__footer a, .simulation-button-back, .simulation-button-outline, .simulation-remove-expense):hover {
+        background: var(--flow-raised);
+        border-color: var(--start-blue);
+    }
+    & .registered-access__intro .registered-access__notice { border-color: var(--start-blue); background: #182b50; color: var(--start-ink); }
+    & [data-recovery-state="limited"] .registered-access__notice { border-color: #f6c481; background: #33293a; color: #ffdfaf; }
+    & .auth-layout-main:has(.simulation-success) { display: grid; align-items: center; }
+    & .simulation-success__mark { background: #163c3d; color: #8deac6; }
+    & .simulation-success { --descr-color: var(--start-muted); }
+    & .simulation-wizard { max-width: 1160px; }
+    & .simulation-sidebar { background: linear-gradient(155deg, #111942, var(--start-surface) 75%); }
+    & .simulation-sidebar-heading { overflow-wrap: anywhere; }
+    & .simulation-step-number, & .simulation-requester-choice { background: var(--flow-raised); }
+    & .simulation-step[aria-current="step"], & .simulation-step:hover,
+    & .simulation-requester-choice:has(input:checked), & .simulation-requester-choice:hover {
+        background: #182b50;
+        color: var(--start-blue);
+    }
+    & .simulation-step:is([aria-current="step"], .is-complete) .simulation-step-number {
+        background: var(--start-blue);
+        border-color: var(--start-blue);
+        color: #030133;
+    }
+    & .simulation-wizard .simulation-form-card { min-height: 0; padding: clamp(18px, 3vw, 36px); }
+    & .simulation-wizard .simulation-form-heading { margin-bottom: 20px; }
+    & .simulation-wizard .simulation-form-heading p { font-size: 1rem; }
+    & .simulation-fields { row-gap: 16px; }
+    & .simulation-context, & .simulation-wizard #company-fields > div, & .simulation-expense-info { background: var(--flow-raised); color: var(--start-muted); }
+    & .simulation-consent, & [data-activity-picker] :is(#activity-help, #activity-status) { color: var(--start-muted); }
+    & [data-activity-options], & .simulation-constitution-modal { color: var(--start-ink); background: var(--flow-raised); border-color: var(--flow-field-line); }
+    & [data-activity-options] [role="option"] { color: var(--start-ink); }
+    & [data-activity-options] [role="option"]:is(:hover, [aria-selected="true"]) { background: #234167; }
+    & .simulation-constitution-modal::backdrop { background: rgb(1 3 25 / 78%); }
+    & .simulation-form-errors { background: #371a32; color: #ffb2c9; border-color: #99506e; }
+    & .registered-access__error, & .simulation-field-error, & #activity-error, & .simulation-required { color: var(--flow-danger); }
+    & .simulation-field .text-danger, & .simulation-wizard .form-label .text-danger { color: var(--flow-danger) !important; }
+    & .simulation-requester-choice:has(input:focus-visible) { outline-color: var(--start-blue); }
+}
+
+@media (min-width: 768px) {
+    body.simulation-public[data-brand="tcc"] .registered-access { grid-template-columns: minmax(0, 4fr) minmax(0, 6fr); }
+}
+@media (max-width: 767.98px) {
+    body.simulation-public[data-brand="tcc"] .registered-access__visual { height: clamp(100px, 29vw, 145px); aspect-ratio: auto; }
+    body.simulation-public[data-brand="tcc"] .simulation-sidebar-heading .simulation-start__brand { float: right; margin: 0 0 6px 10px; height: 30px; }
 }

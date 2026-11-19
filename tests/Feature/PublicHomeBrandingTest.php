@@ -255,31 +255,20 @@ it('isolates the client logo palette and preserves the original tcc tokens', fun
         ->toMatch('/\[data-brand="client"\] \.btn-primary\s*\{.*?--bs-btn-bg: #00288f;.*?background-image: none !important;/s');
 });
 
-it('keeps the public header visual and opens one accessible unavailable-access modal', function () {
+it('opens the profile selector directly when the client landing is disabled', function () {
     config([
         'features.public_index_enabled' => false,
         'branding.active' => 'client',
     ]);
 
     $response = $this->get(route('index'));
-    $html = $response->getContent();
-
     $response
         ->assertOk()
-        ->assertSeeText('Acesso indisponível')
-        ->assertSeeText('O acesso ao portal das imobiliárias está indisponível nesta versão.')
-        ->assertSeeText('Os formulários de simulação continuam disponíveis normalmente.');
-
-    expect($html)
-        ->toMatch('/<div class="auth-topbar__brand">.*data-brand-logo="client"/s')
-        ->not->toMatch('/<a[^>]*class="auth-topbar__brand"/s')
-        ->toContain('Seguro fiança locatícia')
-        ->toContain('Precisa de ajuda?')
-        ->toContain('auth-topbar__access')
-        ->toContain('border-bottom: 1px solid var(--brand-border')
-        ->toContain('background: #ffffff !important;')
-        ->and(substr_count($html, 'id="companyAccessUnavailableModal"'))->toBe(1)
-        ->and(substr_count($html, 'data-bs-target="#companyAccessUnavailableModal"'))->toBe(1);
+        ->assertViewIs('simulation.start')
+        ->assertDontSee('class="auth-topbar', false)
+        ->assertDontSee('id="companyAccessUnavailableModal"', false)
+        ->assertSee('data-brand-logo="client"', false)
+        ->assertSee(route('simulation.profile'));
 });
 
 it('renders the public simulation gateway with the reference composition', function (string $profile) {
@@ -293,17 +282,16 @@ it('renders the public simulation gateway with the reference composition', funct
         ->assertViewIs('simulation.start')
         ->assertSeeText('Escolha seu perfil')
         ->assertSeeText('Dados da solicitação')
-        ->assertSeeText($profile === 'tcc' ? 'É Online, é Simples, é Rápido' : 'É Online, é Simples, é Seguro')
+        ->assertSeeText($profile === 'tcc' ? 'Simule seu seguro para aluguel' : 'É Online, é Simples, é Seguro')
         ->assertSeeText('Qual opção descreve você?')
-        ->assertSeeText('Leva menos de 1 minuto')
-        ->assertSeeText('Ambiente seguro')
+        ->assertDontSee('class="auth-topbar', false)
         ->assertSeeText('Você poderá revisar os dados antes de enviar.');
 
     expect($html)
         ->toContain('data-simulation-start')
         ->toContain('simulation-progress')
         ->toContain('simulation-journey__aside')
-        ->toContain('simulation-journey__city')
+        ->toContain($profile === 'tcc' ? 'nvs-maquete-residencial-680.webp' : 'simulation-journey__city')
         ->toContain('simulation-option__indicator')
         ->toContain('aria-live="polite"')
         ->toContain('name="_token"')
@@ -330,17 +318,19 @@ it('shares public simulation forms between brands with the correct brand identit
         $document = new DOMDocument;
         @$document->loadHTML('<?xml encoding="UTF-8">'.$response->getContent());
         $xpath = new DOMXPath($document);
-        if (in_array($routeName, ['simulation.registered-company.access', 'simulation.registered-company.code.request'], true)) {
-            expect($xpath->query('//header')->length)->toBe(0);
-            $logo = $xpath->query('//main//img[@data-brand-logo]')->item(0);
-        } else {
-            $logo = $xpath->query('//header//img[@data-brand-logo]')->item(0);
-        }
+        expect($xpath->query('//body/header')->length)->toBe(0);
+        $logo = $xpath->query('//main//img[@data-brand-logo]')->item(0);
 
         expect($logo)->not->toBeNull()
             ->and($logo->getAttribute('data-brand-logo'))->toBe($profile)
             ->and($logo->getAttribute('src'))->toBe(asset(config("branding.profiles.{$profile}.logo_header")))
             ->and($logo->getAttribute('alt'))->toBe(config("branding.profiles.{$profile}.name"));
+
+        if ($routeName === 'simulation.registered-company.form') {
+            $profileLink = $xpath->query('//aside//a[normalize-space(.)="Voltar à escolha de perfil"]')->item(0);
+            expect($profileLink?->getAttribute('href'))->toBe(route('simulation.start'))
+                ->and($xpath->query('//main//a[@href="'.route('simulation.start').'"]')->length)->toBe(1);
+        }
 
         $formContracts[$profile] = [];
 

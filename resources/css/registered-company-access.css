@@ -44,6 +44,12 @@ body[data-brand] .auth-layout-main.registered-access-main {
     @apply grid gap-2.5;
 }
 
+.registered-access__back {
+    @apply inline-flex min-h-11 items-center gap-2 justify-self-start rounded-sm text-sm font-bold no-underline hover:underline;
+    color: var(--start-blue, var(--access-action));
+    text-underline-offset: 3px;
+}
+
 .registered-access__intro h1 {
     @apply m-0 text-3xl font-bold leading-tight tracking-tight sm:text-4xl lg:text-[2.625rem];
 }

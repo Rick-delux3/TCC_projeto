@@ -1,6 +1,5 @@
 @extends('layout-inicial.simulation')
 
-@section('hide-header', 'true')
 @section('main-class', 'registered-access-main')
 @section('inline-feedback', 'true')
 

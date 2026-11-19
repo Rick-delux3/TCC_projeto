@@ -1,16 +1,7 @@
 @push('styles')
 <style>
     body:has(.simulation-wizard) { --simulation-ink: #080c59; --simulation-muted: #6676a3; --simulation-line: #d6dff0; --simulation-blue: #0644f7; --simulation-red: #f00020; font-family: 'TASA Explorer', Arial, sans-serif; }
-    body.auth-layout-body[data-brand]:has(.simulation-wizard) .auth-layout-main { padding: 30px 3% 26px; min-height: calc(100dvh - 72px); background: #f2f6fd; }
-    body:has(.simulation-wizard) .auth-topbar { --auth-topbar-height: 72px; box-shadow: none; }
-    body:has(.simulation-wizard) .auth-topbar__inner { padding-inline: 3.4%; }
-    body:has(.simulation-wizard) .auth-topbar__product { color: var(--simulation-ink); }
-    body:has(.simulation-wizard) .auth-topbar__help { color: var(--simulation-blue); }
-    body:has(.simulation-wizard) .auth-topbar__access { min-height: 44px; color: var(--simulation-blue); border-color: var(--simulation-blue); border-radius: 5px; }
-    body.auth-layout-body[data-brand='client']:has(.simulation-wizard) .auth-topbar__brand-mark { width: 120px; height: 50px; flex-basis: 120px; }
-    body.auth-layout-body[data-brand]:has(.simulation-wizard) .auth-topbar__nav .auth-topbar__link.auth-topbar__access { min-height: 44px; min-width: 114px; box-shadow: none !important; color: var(--simulation-blue) !important; border-color: var(--simulation-blue) !important; }
-    body:has(.simulation-wizard) .auth-topbar__divider { height: 36px; }
-    body.auth-layout-body[data-brand]:has(.simulation-wizard) .auth-topbar__surface { box-shadow: none !important; }
+    body.auth-layout-body[data-brand]:has(.simulation-wizard) .auth-layout-main { padding: 30px 3% 26px; min-height: 100dvh; background: #f2f6fd; }
     .simulation-wizard { max-width: 1360px; margin-inline: auto; color: var(--simulation-ink); align-items: stretch; gap: 18px !important; }
     .simulation-wizard [hidden] { display: none !important; }
     .simulation-constitution-modal { width: calc(100% - 32px); max-height: calc(100dvh - 32px); margin: auto; color: var(--simulation-ink); border-color: var(--simulation-line); background: #fff; }

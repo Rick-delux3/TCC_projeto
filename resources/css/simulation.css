@@ -32,7 +32,7 @@ body.auth-layout-body {
 }
 
 body.auth-layout-body[data-brand] .auth-layout-main:has(.simulation-start) {
-    min-height: calc(100vh - clamp(76px, 6.4vw, 108px));
+    min-height: 100svh;
     padding: 18px clamp(18px, 3vw, 44px) 20px;
     background:
         radial-gradient(circle at 50% 10%, rgba(var(--brand-primary-rgb, 3, 1, 51), 0.045), transparent 34%),
@@ -52,6 +52,15 @@ body.auth-layout-body[data-brand] .auth-layout-main:has(.simulation-start) {
 .simulation-start__shell {
     width: min(100%, 1240px);
     margin: 0 auto;
+}
+
+.simulation-start__brand {
+    display: block;
+    width: auto;
+    max-width: 150px;
+    height: 36px;
+    margin-bottom: 18px;
+    object-fit: contain;
 }
 
 .simulation-progress {
@@ -551,7 +560,6 @@ body.auth-layout-body[data-brand] .simulation-start .simulation-journey {
 
 @media (max-width: 575.98px) {
     body.auth-layout-body[data-brand] .auth-layout-main:has(.simulation-start) {
-        min-height: calc(100vh - 68px);
         padding: 20px 12px;
     }
 
@@ -815,20 +823,18 @@ body.auth-layout-body[data-brand] .simulation-start .simulation-journey {
     background: #d9185d;
 }
 
-.simulation-success::before {
-    display: block;
-    width: 58px;
-    height: 58px;
-    margin: 2rem auto -1rem;
-    color: #ffffff;
+.simulation-success { max-width: 620px; }
+.simulation-success__mark {
+    display: grid;
+    place-items: center;
+    width: 40px;
+    height: 40px;
+    margin-block: 20px 16px;
     border-radius: 50%;
-    background: linear-gradient(135deg, var(--secundary-color), var(--primary-color));
-    box-shadow: 0 10px 22px rgba(20, 111, 182, 0.24);
-    content: "✓";
-    font-size: 1.7rem;
-    font-weight: 800;
-    line-height: 58px;
+    background: #d9f4e7;
+    color: #126647;
 }
+
 
 @media (max-width: 575.98px) {
     .auth-layout-main {

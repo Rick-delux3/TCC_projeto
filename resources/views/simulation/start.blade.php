@@ -1,5 +1,7 @@
 @extends('layout-inicial.simulation')
 
+@section('main-class', 'simulation-start-main')
+
 @section('content')
 @php
     $simulationBrandProfile = config('branding.active', 'tcc');
@@ -27,15 +29,17 @@
         <section class="simulation-journey" aria-labelledby="simulation-title">
             <aside class="simulation-journey__aside">
                 <div class="simulation-journey__intro">
-                    @if($simulationBrandProfile === 'tcc')
-                        <span class="simulation-eyebrow">Seguro Aluguel</span>
-                    @else
-                        <span class="simulation-eyebrow">Seguro Fiança</span>
+                    <div class="simulation-start__intro-brand">
+                        <x-brand-logo variant="logo_header" class="simulation-start__brand" />
+                        <span class="simulation-eyebrow">{{ $simulationBrandProfile === 'tcc' ? 'Seguro Aluguel' : 'Seguro Fiança' }}</span>
+                    </div>
+                    <h1 id="simulation-title" class="simulation-title">{{ $simulationBrandProfile === 'tcc' ? 'Simule seu seguro para aluguel' : 'É Online, é Simples, é Seguro' }}</h1>
+                    @if($simulationBrandProfile !== 'tcc')
+                        <p>Escolha o perfil que melhor representa esta solicitação.</p>
                     @endif
-                    <h1 id="simulation-title" class="simulation-title">É Online, é Simples, é Seguro</h1>
-                    <p>Escolha o perfil que melhor representa esta solicitação.</p>
                 </div>
 
+                @if($simulationBrandProfile !== 'tcc')
                 <ul class="simulation-journey__benefits" role="list">
                     <li>
                         <span class="simulation-journey__benefit-icon" aria-hidden="true">
@@ -57,10 +61,15 @@
                         <span>Ambiente seguro</span>
                     </li>
                 </ul>
+                @endif
 
+                @if($simulationBrandProfile === 'tcc')
+                    <img class="simulation-start__model" src="{{ asset('imgs/nvs-maquete-residencial-680.webp') }}" width="680" height="521" alt="">
+                @else
                 <svg class="simulation-journey__city" viewBox="0 0 500 240" fill="none" aria-hidden="true">
                     <path d="M8 224h484M28 224v-72h54v72M46 224v-46h56v46M71 171h9M71 188h9M71 205h9M105 224l85-64 82 64M133 224v-37h114v37M171 224v-31h37v31M178 181h22M214 181h10M286 224V96l79-42v170M312 121h14v17h-14zM340 121h14v17h-14zM312 150h14v17h-14zM340 150h14v17h-14zM312 179h14v17h-14zM340 179h14v17h-14zM366 224h103V120H366M400 150h38M400 179h38M400 207h38M28 152c0-14-10-25-22-25s-22 11-22 25 10 25 22 25v47M190 160l-24-18-74 56" stroke="currentColor" stroke-width="2"></path>
                 </svg>
+                @endif
             </aside>
 
             <div class="simulation-journey__content">
@@ -136,7 +145,7 @@
                                     <span class="simulation-option__copy">
                                         @if($simulationBrandProfile === 'tcc')
                                             <strong>Imobiliária ou consumidor</strong>
-                                            <span>Imobiliária sem cadastro ou consumidor: cadastre um beneficiário, sem dashboard.</span>
+                                            <span>Quero cadastrar um beneficiário sem chave de acesso.</span>
                                         @else
                                             <strong>Imobiliária ou proprietário</strong>
                                             <span>Vou solicitar uma análise sem uma chave de acesso.</span>
@@ -168,8 +177,8 @@
                                     <span class="simulation-option__copy">
                                         @if($simulationBrandProfile === 'tcc')
                                             <strong>Beneficiário</strong>
-                                            <span>Quero contratar um seguro aluguel sem vinculo com uma imobiliária.</span>
-                                            @else
+                                            <span>Quero simular meu seguro sem vínculo com uma imobiliária.</span>
+                                        @else
                                             <strong>Locatário</strong>
                                             <span>Quero alugar um imóvel e solicitar meu seguro fiança.</span>
                                         @endif
@@ -203,7 +212,9 @@
 
         <footer class="simulation-start__footer" aria-label="Informações institucionais">
             <p><strong>{{ $simulationBrandName }}</strong><span aria-hidden="true">·</span>Portal Imobiliário</p>
-            <p><span>Privacidade</span><i aria-hidden="true"></i><span>Termos</span></p>
+            @if($simulationBrandProfile !== 'tcc')
+                <p><span>Privacidade</span><i aria-hidden="true"></i><span>Termos</span></p>
+            @endif
         </footer>
     </div>
 </div>

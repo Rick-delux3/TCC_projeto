@@ -159,53 +159,6 @@
 .dashboard-admin-body .dashboard-profile-chevron { font-size: 0.625rem; }
 .dashboard-admin-body .dashboard-profile-menu { max-width: calc(100vw - 24px); overflow-wrap: anywhere; }
 
-.dashboard-admin-body .dashboard-client-header[data-dashboard-header] .dashboard-client-header__secondary {
-    display: block;
-    min-height: 50px;
-    padding: 0;
-    margin: 0;
-    background: #fff;
-    border-bottom: 1px solid #e2e8f0;
-}
-
-.dashboard-header-secondary-inner {
-    @apply mx-auto flex items-center justify-between gap-4;
-    max-width: 1280px;
-    min-height: 50px;
-    padding: 4px 32px;
-}
-
-.dashboard-admin-body .dashboard-client-header[data-dashboard-header] .dashboard-header-nav {
-    position: static;
-    display: flex;
-    min-width: 0;
-    width: auto;
-    height: auto;
-    min-height: 0;
-    padding: 0;
-    margin: 0;
-    gap: 4px;
-    overflow-x: auto;
-    color: #475569;
-    background: transparent;
-    transform: none;
-}
-
-.dashboard-admin-body .dashboard-header-nav__link {
-    flex-shrink: 0;
-    padding: 10px 14px;
-    border-bottom: 2px solid transparent;
-    border-radius: 6px 6px 0 0;
-    font-size: 0.75rem;
-    font-weight: 500;
-    line-height: 1.25;
-}
-
-.dashboard-admin-body .dashboard-header-nav__link::after { content: none; }
-.dashboard-admin-body .dashboard-client-header[data-dashboard-header] .dashboard-header-nav__link:hover { color: #1d4ed8; background: #f8fafc; transform: none; }
-.dashboard-admin-body .dashboard-client-header[data-dashboard-header] .dashboard-header-nav__link.active { color: #1d4ed8; background: #eff6ff; border-bottom-color: #2563eb; font-weight: 700; }
-.dashboard-admin-body .dashboard-header-breadcrumb { color: #64748b; font-size: 0.75rem; }
-.dashboard-admin-body .dashboard-header-breadcrumb strong { color: #334155; }
 .dashboard-admin-body .dashboard-client-sidebar { max-width: 85vw; width: 320px; font-family: 'Inter', sans-serif; font-size: 0.8125rem; }
 .dashboard-admin-body .dashboard-sidebar-profile .min-w-0 { min-width: 0; }
 .dashboard-admin-body .dashboard-sidebar-link { font-size: 0.8125rem; }
@@ -481,8 +434,6 @@
 
 @media (max-width: 767.98px) {
     .dashboard-admin-body .dashboard-client-header[data-dashboard-header] .dashboard-client-header__primary { padding-inline: 8px 16px; gap: 12px; }
-    .dashboard-admin-body .dashboard-header-secondary-inner { flex-direction: column; align-items: stretch; gap: 2px; padding: 4px 16px 8px; }
-    .dashboard-admin-body .dashboard-header-breadcrumb { justify-content: flex-end; font-size: 0.625rem; }
     .dashboard-admin-body .dashboard-header-actions { gap: 8px; }
     .dashboard-admin-body .dashboard-header-status,
     .dashboard-admin-body .dashboard-header-separator { display: none; }
@@ -521,44 +472,6 @@
 
 .dashboard-admin-body[data-brand="tcc"] .real-estate-index-page:not([data-dashboard-theme="dark"]) :is(.company-summary-card__label, .company-summary-card__hint) {
     color: #334155;
-}
-
-.dashboard-admin-body[data-brand="tcc"] .dashboard-header-breadcrumb {
-    color: #334155;
-}
-
-.dashboard-admin-body[data-brand="tcc"] .dashboard-client-header[data-dashboard-header] .dashboard-header-nav {
-    color: #334155;
-}
-
-.dashboard-admin-body[data-brand][data-dashboard-theme="dark"] .dashboard-client-header .dashboard-client-header__secondary {
-    background: #1e293b;
-    border-bottom-color: #475569;
-    box-shadow: 0 4px 12px rgb(0 0 0 / 20%);
-}
-
-.dashboard-admin-body[data-brand][data-dashboard-theme="dark"] .dashboard-client-header .dashboard-header-nav,
-.dashboard-admin-body[data-brand][data-dashboard-theme="dark"] .dashboard-client-header .dashboard-header-nav__link {
-    color: #e2e8f0;
-}
-
-.dashboard-admin-body[data-brand][data-dashboard-theme="dark"] .dashboard-header-breadcrumb {
-    color: #cbd5e1;
-}
-
-.dashboard-admin-body[data-brand][data-dashboard-theme="dark"] .dashboard-header-breadcrumb strong {
-    color: #f8fafc;
-}
-
-.dashboard-admin-body[data-brand][data-dashboard-theme="dark"] .dashboard-client-header .dashboard-header-nav__link:hover {
-    color: #ffffff;
-    background: #334155;
-}
-
-.dashboard-admin-body[data-brand][data-dashboard-theme="dark"] .dashboard-client-header .dashboard-header-nav__link.active {
-    color: #bfdbfe;
-    background: #1e3a5f;
-    border-bottom-color: #60a5fa;
 }
 
 .dashboard-admin-body .dashboard-header-theme-toggle {

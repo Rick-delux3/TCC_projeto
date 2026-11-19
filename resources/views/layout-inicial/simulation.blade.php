@@ -28,11 +28,7 @@
     @stack('styles')
 </head>
 
-<body class="auth-layout-body{{ request()->routeIs('simulation.*') ? ' simulation-public' : '' }}" data-brand="{{ config('branding.active', 'tcc') }}">
-
-    @unless (View::hasSection('hide-header'))
-        @include('layout-inicial.partials.header_simulation')
-    @endunless
+<body class="auth-layout-body simulation-public" data-brand="{{ config('branding.active', 'tcc') }}">
 
     <main class="auth-layout-main @yield('main-class')">
         @yield('content')

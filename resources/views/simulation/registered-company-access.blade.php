@@ -1,13 +1,14 @@
 @extends('layout-inicial.simulation')
 
-@section('hide-header', 'true')
 @section('main-class', 'registered-access-main')
 @section('inline-feedback', 'true')
 
 @section('content')
     <x-company-access-panel illustration="imgs/seguro-aluguel-acesso.webp" title-id="registered-access-title">
         <div class="registered-access__intro">
-            <p class="registered-access__context">Simulação de seguro aluguel</p>
+            <a class="registered-access__back" href="{{ route('simulation.start') }}">
+                <span aria-hidden="true">←</span> Voltar à escolha de perfil
+            </a>
             <h1 id="registered-access-title">
                 {{ \App\Support\BrandingText::choose('Acesso da imobiliária', 'Acesso da empresa') }}
             </h1>

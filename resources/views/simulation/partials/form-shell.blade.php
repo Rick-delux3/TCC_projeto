@@ -19,10 +19,14 @@
 <div class="simulation-wizard grid gap-4 lg:grid-cols-[330px_minmax(0,1fr)]" data-simulation-wizard data-initial-step="{{ $initialStep }}">
     <aside class="simulation-sidebar flex flex-col">
         <div class="simulation-sidebar-heading">
+            <x-brand-logo variant="logo_header" class="simulation-start__brand" />
             <p class="simulation-eyebrow">{{ $isAdminSimulation ? 'Preenchimento interno' : 'Nova solicitação' }}</p>
             <h2>{{ \App\Support\BrandingText::choose('Seguro fiança', 'Cadastro de beneficiário') }}</h2>
             <p>{{ $profileLabel }}</p>
-            @if ($isRegistered)<p class="simulation-company-name">{{ $company->name }}</p>@endif
+            @if ($isRegistered)
+                <p class="simulation-company-name">{{ $company->name }}</p>
+                <a class="simulation-button simulation-button-back mt-3" href="{{ route('simulation.start') }}">Voltar à escolha de perfil</a>
+            @endif
         </div>
         <nav aria-label="Etapas da solicitação" class="simulation-step-nav">
             <ol class="flex flex-col gap-3">
@@ -114,8 +118,10 @@
                     @include('simulation.partials.requester-fields')
                 @endif
                 <footer class="simulation-step-footer flex flex-wrap items-start justify-between gap-4">
-                    <a class="simulation-button simulation-button-back" href="{{ $isAdminSimulation ? route('Dashboard-Admin') : route('simulation.start') }}">Voltar</a>
-                    <div class="flex flex-col items-end gap-2">
+                    @if ($isAdminSimulation || ! $isRegistered)
+                        <a class="simulation-button simulation-button-back" href="{{ $isAdminSimulation ? route('Dashboard-Admin') : route('simulation.start') }}">Voltar</a>
+                    @endif
+                    <div class="ms-auto flex flex-col items-end gap-2">
                         <button type="button" class="simulation-button simulation-button-primary" data-step-next>Continuar @include('simulation.partials.form-icon', ['icon' => 'arrow'])</button>
                         <span class="simulation-next-hint">Próximo: imóvel e valores da locação</span>
                     </div>
