@@ -97,11 +97,9 @@
 .nvs-model-switch label { display: grid; place-items: center; min-height: 44px; padding: 0 18px; border-radius: 30px; font-size: .84rem; font-weight: 700; cursor: pointer; }
 #modelo-residencial:checked ~ .nvs-model-switch [for="modelo-residencial"],
 #modelo-comercial:checked ~ .nvs-model-switch [for="modelo-comercial"] { color: #d3efff; }
-.nvs-carriers { border-block: 1px solid var(--line); background: var(--surface); }
-.nvs-carrier-grid { min-height: 98px; display: grid; grid-template-columns: 1.05fr 3fr; align-items: center; gap: 26px; }
-.nvs-carrier-grid p { font-size: .86rem; color: var(--muted); }
-.nvs-carrier-grid ul { display: flex; justify-content: space-between; align-items: center; gap: 16px; color: #d4ddf0; }
-.nvs-carrier-grid li { font-size: clamp(1rem, 1.56vw, 1.5rem); font-weight: 700; letter-spacing: -.045em; }
+.nvs-comparison-strip { border-block: 1px solid var(--line); background: var(--surface); }
+.nvs-comparison-strip p { margin-block: 0; padding-block: clamp(20px, 3vw, 36px); font-size: clamp(1.35rem, 2.4vw, 2.25rem); font-weight: 700; letter-spacing: -.035em; }
+.nvs-comparison-strip em { color: var(--blue); font-family: Georgia, serif; font-weight: 400; white-space: nowrap; }
 .nvs-workflow, .nvs-support, .nvs-access { padding-block: clamp(80px, 9vw, 148px); }
 .nvs-workflow { background: #091a34; }
 .nvs-workflow .nvs-kicker::before { background: var(--azure); }
@@ -170,7 +168,6 @@
     .nvs-model { width: min(100%, 610px); justify-self: center; }
     .nvs-hero-grid h1 { font-size: clamp(3.2rem, 8.1vw, 5rem); }
     .nvs-split { grid-template-columns: 1fr; gap: 35px; }
-    .nvs-carrier-grid { grid-template-columns: 1fr; gap: 10px; padding-block: 19px; }
     .nvs-preview { min-height: 330px; }
     .nvs-workflow, .nvs-support, .nvs-access { padding-block: clamp(52px, 9vw, 80px); }
 }
@@ -189,7 +186,6 @@
     .nvs-hero-actions .nvs-button { gap: 12px; padding-inline: 17px; }
     .nvs-lede { margin-top: 17px; }
     .nvs-kicker { margin-bottom: 15px; }
-    .nvs-carrier-grid ul { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 16px; }
     .nvs-sheet-head { padding-inline: 15px; }
 }
 @media (prefers-reduced-motion: no-preference) {

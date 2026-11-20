@@ -64,6 +64,8 @@ it('connects the tcc landing actions and serves local images with valid section 
     ]);
 
     $html = $this->get(route('index'))->assertOk()->getContent();
+    expect(strip_tags($html))->toContain('Compare as parcelas lado a lado.')
+        ->not->toContain('Seguradoras integradas', 'Pottencial', 'Too Seguros', 'Porto Seguro', 'Tokio Marine');
     $document = new DOMDocument;
     @$document->loadHTML('<?xml encoding="UTF-8">'.$html);
     $xpath = new DOMXPath($document);

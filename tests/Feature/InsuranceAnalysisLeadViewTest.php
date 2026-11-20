@@ -282,7 +282,8 @@ it('renders the bootstrap structure using the same contract as the refresh endpo
     $this->getJson($response->viewData('refreshUrl'))->assertOk()->assertExactJson(['data' => $page]);
 })->with(['company', 'admin']);
 
-it('renders four company cards and keeps providers disabled in the environment blocked', function () {
+it('renders four company cards and keeps providers disabled in the environment blocked', function (string $brand) {
+    config(['branding.active' => $brand]);
     config(['services.pottencial.enabled' => true, 'services.too.enabled' => true, 'services.tokio.enabled' => true, 'services.porto.enabled' => false]);
     $response = $this->actingAs($this->user)->withSession(['2fa_passed' => true])
         ->get(route('insurance-analyses.lead', $this->lead))->assertOk();
@@ -291,6 +292,13 @@ it('renders four company cards and keeps providers disabled in the environment b
     $xpath = new DOMXPath($document);
 
     expect($xpath->query('//article[@data-provider]')->length)->toBe(4);
+    $headings = $xpath->query('//article[@data-provider]//h3');
+    $expected = $brand === 'tcc'
+        ? ['Seguradora A', 'Seguradora B', 'Seguradora C', 'Seguradora D']
+        : ['Pottencial', 'Too Seguros', 'Porto Seguro', 'Tokio Marine'];
+    foreach ($expected as $index => $name) {
+        expect(trim($headings->item($index)->lastChild->textContent))->toBe($name);
+    }
     foreach (['porto'] as $provider) {
         $card = $xpath->query('//article[@data-provider="'.$provider.'"]')->item(0);
         expect($card->textContent)->toContain('Bloqueada')->toContain('Aguardando testes e validação');
@@ -301,7 +309,7 @@ it('renders four company cards and keeps providers disabled in the environment b
     expect($tokio->textContent)->not->toContain('Bloqueada')->toContain('Aguardando análise desta companhia.');
     expect($xpath->query('//form')->length)->toBe(0)
         ->and($xpath->query('//button[not(@disabled)]')->length)->toBe(0);
-});
+})->with(['tcc', 'client']);
 
 it('renders Tokio installments and manual guidance for each viewer', function (string $viewer, string $status) {
     $batch = $this->lead->insuranceAnalysesBatches()->create(['status' => 'completed', 'total_providers' => 1, 'finished_at' => now()]);
@@ -360,7 +368,7 @@ it('renders saved coverages and highlights the confirmed best total only after c
     $best = (new DOMXPath($document))->query('//article[div[text()="Melhor preço"]]');
     expect((new DOMXPath($document))->evaluate('string(//div[@data-progress-metric="approved"]/dd)'))->toBe('2');
     expect($best->length)->toBe(1)
-        ->and($best->item(0)->textContent)->toContain('Too Seguros')->toContain('R$ 900,00');
+        ->and($best->item(0)->textContent)->toContain('Seguradora B')->toContain('R$ 900,00');
 });
 
 it('does not advertise failed rejected or unpriced quotes as offers', function (string $status, ?float $premium) {
@@ -560,6 +568,7 @@ it('hides an unavailable Pottencial plan from the card and the details', functio
 });
 
 it('places the cheapest confirmed offer between the next two prices', function () {
+    config(['branding.active' => 'client']);
     $batch = $this->lead->insuranceAnalysesBatches()->create(['status' => 'completed', 'total_providers' => 3, 'finished_at' => now()]);
     foreach (['pottencial' => 150, 'too' => 120, 'tokio' => 100] as $provider => $amount) {
         $batch->analyses()->create([
@@ -839,6 +848,7 @@ it('keeps the Porto Fiança on the card with a notice when it has no confirmed p
 });
 
 it('marks the cheapest Porto plan on the card and names it in the best offers', function (bool $fiancaPriced) {
+    config(['branding.active' => 'client']);
     $xpath = portoViewQuote($this, $fiancaPriced, current: true);
 
     $plans = $xpath->query('//article[@data-provider="porto"]//li[@data-porto-plan]');

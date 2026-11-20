@@ -39,13 +39,8 @@
         </fieldset>
     </div>
     @if ($analysisEnabled)
-        <div class="nvs-carriers">
-            <div class="nvs-wrap nvs-carrier-grid">
-                <p>Seguradoras integradas</p>
-                <ul role="list">
-                    <li>Porto Seguro</li><li>Tokio Marine</li><li>Pottencial</li><li>Too Seguros</li>
-                </ul>
-            </div>
+        <div class="nvs-comparison-strip">
+            <p class="nvs-wrap">Compare as parcelas <em>lado a lado.</em></p>
         </div>
     @endif
 </section>
