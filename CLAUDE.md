@@ -1,70 +1,31 @@
-# Diretrizes do Projeto — NVS / Aki Aluga (Laravel 12)
+# NVS / Aki Aluga (Laravel 12)
+Plataforma de gestão de leads, imobiliárias e seguro fiança (Pottencial, Too, Tokio Marine, Porto Seguro).
 
-Plataforma de gestão de leads, imobiliárias e orquestração de seguro fiança locatícia (Pottencial, Too Seguros, Tokio Marine e Porto Seguro).
+## Stack & Comandos
+- PHP 8.2+ (XAMPP/Windows), Laravel 12, MySQL (prod) / SQLite `:memory:` (testes), Queue `database`, Reverb, Echo 2, Blade, Alpine 3, Tailwind 3, Bootstrap 5.3.8 (CDN), Vite 7, Pest 3, Pint.
+- Dev: `composer dev` | Assets: `npm run build` | Teste: `php artisan test --filter NomeDoTeste` | Lint: `php vendor/bin/pint --dirty`
 
----
+## Arquitetura (`app/Services/Insurance/`)
+- Fluxo: `StartInsuranceAnalysesBatchJob` -> `InsuranceQuoteCoordinator` -> `RunInsuranceQuoteJob`.
+- Hierarquia: `InsuranceAnalysisBatch` -> `InsuranceAnalysis` -> `InsuranceAnalysisRound` -> `InsuranceProviderRun` -> `InsuranceQuote`.
+- Use apenas adapters em `Providers/` e builders em `Payloads/` (sem orquestradores paralelos).
+- Cenários: PF roda `primary` + `spouse` em paralelo; `joint` só se ambas recusarem na mesma cia/rodada. PJ roda só `primary` (CNPJ).
+- Reanálise = gerar nova rodada e novas cotações mantendo histórico.
 
-## 1. Stack Tecnológica & Ambiente
-- **Backend:** PHP 8.2+ (XAMPP/Windows), Laravel 12.
-- **Banco de Dados:** MySQL em execução real; SQLite `:memory:` para testes automatizados.
-- **Filas & Realtime:** Laravel Queue (`QUEUE_CONNECTION=database` na mesma conexão da aplicação), Laravel Reverb, Echo 2.
-- **Frontend:** Blade, Alpine.js 3, Tailwind CSS 3 e Bootstrap 5.3.8 (via CDN em telas do dashboard), Vite 7.
-- **Testes & Estilo:** Pest 3, PHPUnit 11, Laravel Pint.
+## Regras de Negócio
+- Vigência: 30 meses sem overflow. Parcelas: 29 (sem entrada) ou 30 (com entrada).
+- Comissão padrão: 15% (0.15 Pottencial; 15 pts Too/Tokio/Porto). Adicionais = 0.
+- Pagamento: Pottencial (Invoice se cadastrada, senão Boleto); Too (`tipoPagamento=2` Fatura se cadastrada, senão `1` Boleto); Tokio (Faturado com código parceiro, senão CC); Porto (FAT com `porto_partner_code`, senão CC).
+- Form Locatário: só valor do aluguel. Demais forms: despesas preenchidas + pintura/danos/multa (se água/luz removidos, persistir 0).
+- Catálogo CNAE/Atividades: busca apenas por descrição, nunca por código.
 
----
+## Regras por Seguradora
+- **Pottencial:** Rota única (`participants[].documentNumber`), 3 planos (`Basic`, `Complete`, `Traditional`).
+- **Too:** Status 8 e 16 liberam cotação; 5 = análise. Limite `TOO_STATUS_CHECK_MAX_PENDING_CHECKS` -> `awaiting_provider` (nunca recusa).
+- **Tokio:** Apenas PF via API; PJ -> `manual_required`. `cdSitucCotac = CAL` aprova; resto recusa.
+- **Porto (`PORTO_ENABLED`):** Ver detalhes técnicos em `docs/porto-seguro.md` antes de editar `Porto*`.
 
-## 2. Comandos de Desenvolvimento
-- **Dev Server completo:** `composer dev` (inicia HTTP, Vite, Reverb e workers).
-- **Compilação de Assets:** `npm run dev` (dev) ou `npm run build` (produção/teste).
-- **Testes Pontuais:** `php artisan test --filter NomeDoTeste` (sempre rode testes direcionados).
-- **Formatação de Código:** `php vendor/bin/pint --dirty` (apenas nos arquivos alterados).
-- **Seed de Catálogo:** `php artisan db:seed --class=TokioCnaeSeeder --no-interaction`.
-
----
-
-## 3. Arquitetura de Seguros (`app/Services/Insurance/`)
-- **Orquestração central:** O fluxo passa por `StartInsuranceAnalysesBatchJob` -> `InsuranceQuoteCoordinator` -> `RunInsuranceQuoteJob`.
-- **Hierarquia:** Pacote (`InsuranceAnalysisBatch`) -> Análise da Cia (`InsuranceAnalysis`) -> Rodada (`InsuranceAnalysisRound`) -> Execução (`InsuranceProviderRun`) -> Cotação (`InsuranceQuote`).
-- **Não crie orquestradores paralelos.** Use os adapters existentes em `Providers/` e os construtores em `Payloads/`.
-- **Cenários de Pretendentes:**
-  - `primary` e `spouse` rodam em paralelo para PF.
-  - Análise conjunta (`joint`) **só é disparada se ambas as individuais forem recusadas** na mesma companhia/rodada.
-  - PJ usa exclusivamente o cenário `primary` com o CNPJ (sem análise de cônjuge).
-- **Reanálise:** Não existe endpoint de reanálise de negócio; ela consiste em **gerar uma nova rodada e novas cotações**, mantendo o histórico intacto.
-
----
-
-## 4. Regras Gerais de Negócio
-- **Vigência:** 30 meses a partir da rodada, sem overflow de mês.
-- **Pagamento padrão:** Sem entrada = 29 parcelas (base 30 meses). Com entrada = 30 parcelas.
-- **Comissão padrão:** 15% (fração 0.15 na Pottencial; 15 pontos percentuais na Too, Tokio e Porto). Demais adicionais = 0.
-- **Formas de Pagamento por Companhia:**
-  - **Pottencial:** Invoice (Fatura) se imobiliária cadastrada; Boleto para as demais.
-  - **Too Seguros:** Fatura (`tipoPagamento=2`) se cadastrada; Boleto (`tipoPagamento=1`) para as demais (ambas Mensal).
-  - **Tokio Marine:** Faturado somente com código parceiro válido; caso contrário, Cartão de Crédito.
-  - **Porto Seguro:** FAT se cadastrada com código Porto; CC para as demais.
-- **Formulário Locatário:** Envia exclusivamente o valor do aluguel (sem encargos ou coberturas acessórias).
-- **Demais Formulários:** Incluem despesas preenchidas e coberturas de pintura/danos/multa. Se água/luz forem removidas pelo usuário, persistir zero (não reinjetar valores padrão).
-- **Catálogo de Atividades:** Pesquisa é feita exclusivamente por **descrição** (nunca por código CNAE).
-
----
-
-## 5. Regras Específicas das Seguradoras
-- **Pottencial:** Usa a rota única que aceita CPF/CNPJ em `participants[].documentNumber`. Executa 3 planos (`Basic`, `Complete`, `Traditional`).
-- **Too Seguros:** Status 8 e 16 liberam cotação; status 5 indica em análise. Limite de polling definido em `TOO_STATUS_CHECK_MAX_PENDING_CHECKS` (se atingido, estado vira `awaiting_provider`, sem transformar em recusa).
-- **Tokio Marine:** Aceita apenas **PF** via API. Se PJ, marcar `manual_required` (não enviar o CPF do responsável como se fosse PF). Decisão via API: `cdSitucCotac = CAL` aprova; qualquer outro código recusa.
-- **Porto Seguro:** Provider `porto` registrado no resolver, desativado por padrão (`PORTO_ENABLED=false`) até concluir a homologação. Arquivos: `PortoService` (HTTP), `PortoQuoteResponse` (interpretação), `Payloads/PortoQuotePayloadBuilder` e `Providers/PortoInsuranceProvider`.
-  - **Transporte:** `PORTO_BASE_URL` guarda só a base; o service completa `emissao/aluguel-essencial/v1`. Token OAuth reutilizado em cache cifrado (`PortoAuthentication::token()`), enviado em `Authorization: Bearer` e `access_token`. Um 401 renova o token e reenvia uma única vez.
-  - **Fluxo:** POST `/orcamentos` (uma criação por cenário) -> **um único PUT de comissão, somente da Fiança** (`{"ofertas":[{"seguro":"0008","comissao":{"codComissao":15}}]}`; PUTs concorrentes no mesmo orçamento recebem 501) -> GET de ofertas após o PUT. O 200 do PUT confirma a comissão; se o GET de ofertas não trouxer `comissao.codComissao = 15` na 0008, os preços vêm do GET do orçamento atualizado (`/orcamentos/{orcamento}/{susep}`). `PORTO_PRICE_SOURCE=budget` vai direto ao GET do orçamento. Essenciais não recebem PUT (só aceitam 10%). Falha na etapa de preços é repetida sem recriar o orçamento.
-  - **Decisão:** HTTP 201 aprova; 409 recusa, com o orçamento em `detailedMessage`. 400/401/500/502 e timeout são falha técnica, nunca recusa, e não autorizam a conjunta. Orçamento é string de 15 dígitos.
-  - **Payload:** `susep` (`PORTO_SUSEP`), `cpfCotador` (`CPF_COTADOR`), reajuste "002", vigência "1". CPF residencial = `tipoLocacao` "1" e renda 4× aluguel; comercial e todo CNPJ = "2", renda 10× aluguel e capital de abertura 100× aluguel. PJ: só a empresa (CNPJ + razão social), capital social 450000, motivo "A" fixo no residencial; comercial usa `motivo_contratacao` ("1" a "9"). Cônjuge usa os contatos do principal.
-  - **Coberturas:** locatário só 001; demais formulários 001 + encargos 002–006 positivos (até o aluguel) + 007–010 com IS igual ao aluguel.
-  - **Preço:** **FAT** somente com `porto_partner_code` (enviado em `imobiliaria`); **CC** para as demais. A quantidade não vai no request (a Porto devolve condições fixas por forma): seleciona `valorParcela` da condição com a quantidade de `services.porto.installments` — **FAT 029 = 29X** (Fatura sem entrada) e **CC 030 = 30X** (cartão só existe em 30X). BFT (Fatura com entrada, 229 = 29X, mesmo valor da FAT) e CP não são selecionados. Card da Porto: **Fiança** (com comissão confirmada) **+ Essencial mais barato** (0001, 0005, 0007, comissão padrão de 10%). O preço da Porto na comparação entre companhias é o **mais barato dos dois** (`payment.selection`; empate fica com a Fiança); sem Fiança precificada, entra o Essencial. Aprovação sem Fiança elegível continua aprovada, com preço indisponível.
-  - **Documentos:** carta de recusa via `ProviderRefusalLetterService`, uma por cenário recusado com orçamento válido; PDF da cotação via `PortoInsuranceProvider::quotePdf()` para a oferta, forma e condição selecionadas (ainda não anexado ao e-mail/painel). `data.file` em Base64 validado como PDF; falha documental não altera a decisão.
-
----
-
-## 6. Convenções e Cuidados
-- **Não vaze dados sensíveis:** Payloads, tokens e logs de transporte devem passar por sanitização via `InsuranceDiagnosticSanitizer`.
-- **Fila Database:** Manter o coordenador sob fila `database` transacional. Não mudar para Redis/SQS sem validação.
-- **Escopo Cirúrgico:** Ao implementar uma tarefa, altere apenas os arquivos diretamente envolvidos e teste-os individualmente para evitar regressões nas outras seguradoras.
+## Cuidados
+- Sanitizar payloads/tokens/logs via `InsuranceDiagnosticSanitizer`.
+- Manter `QUEUE_CONNECTION=database` transacional.
+- Escopo cirúrgico: altere e teste apenas os arquivos da seguradora alvo.

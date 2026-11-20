@@ -361,139 +361,37 @@
 
         <details class="ops-secondary">
             <summary><i class="bi bi-bar-chart-line" aria-hidden="true"></i>Resumo e tags da base <span>Contatos, segmentação e guia rápido</span></summary>
-        {{-- Cards operacionais superiores --}}
-        <div class="row g-4 mb-4 company-operations">
-
-            {{-- Resumo operacional --}}
-            <div class="col-12 col-xl-4">
-                <div class="card border-0 shadow-sm rounded-5 h-100">
-                    <div class="card-body p-4">
-                        <span class="badge text-bg-dark mb-2">
-                            Operação
-                        </span>
-
-                        <h2 class="h5 fw-bold mb-3">
-                            Resumo da base
-                        </h2>
-
-                        <div class="vstack gap-3">
-                            <div class="d-flex justify-content-between align-items-center border-bottom pb-3">
-                                <div>
-                                    <div class="fw-semibold">Com telefone</div>
-                                    <div class="small text-muted">Prontos para contato direto</div>
-                                </div>
-                                <span class="badge text-bg-success rounded-pill">{{ $withPhone }}</span>
-                            </div>
-
-                            <div class="d-flex justify-content-between align-items-center border-bottom pb-3">
-                                <div>
-                                    <div class="fw-semibold">Sem telefone</div>
-                                    <div class="small text-muted">Precisam de complemento</div>
-                                </div>
-                                <span class="badge text-bg-warning rounded-pill">{{ $withoutPhone }}</span>
-                            </div>
-
-                            <div class="d-flex justify-content-between align-items-center">
-                                <div>
-                                    <div class="fw-semibold">Últimos 7 dias</div>
-                                    <div class="small text-muted">Entradas recentes</div>
-                                </div>
-                                <span class="badge text-bg-primary rounded-pill">{{ $recentLeads }}</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+            <div class="base-summary">
+                <section>
+                    <h2>Contatos da base</h2>
+                    <dl class="base-summary__metrics">
+                        @foreach (['Com telefone' => $withPhone, 'Sem telefone' => $withoutPhone, 'Entradas em 7 dias' => $recentLeads] as $label => $value)
+                            <div><dt>{{ $label }}</dt><dd>{{ $value }}</dd></div>
+                        @endforeach
+                    </dl>
+                </section>
+                <section>
+                    <h2>Tags com maior volume</h2>
+                    @forelse ($topTags as $tag => $count)
+                        <a class="base-summary__tag" href="{{ request()->fullUrlWithQuery(['tag' => $tag, 'page' => 1]) }}#leads-section"
+                            @if ($selectedTag === $tag) aria-current="true" @endif>
+                            <span>{{ $tag }}</span>
+                            <strong>{{ $count }} {{ $count == 1 ? 'lead' : 'leads' }}</strong>
+                            <i class="bi bi-arrow-right-short" aria-hidden="true"></i>
+                        </a>
+                    @empty
+                        <p>As tags aparecerão aqui assim que existirem leads segmentados.</p>
+                    @endforelse
+                </section>
+                <section class="base-summary__guide">
+                    <h2>Guia rápido</h2>
+                    <ol>
+                        <li><strong>Compartilhe a chave</strong><span>Envie a chave e o link da simulação para sua equipe.</span></li>
+                        <li><strong>Acompanhe novos leads</strong><span>Consulte as solicitações recebidas na lista abaixo.</span></li>
+                        <li><strong>Filtre por tag ou nome</strong><span>Use os filtros da lista para localizar um contato.</span></li>
+                    </ol>
+                </section>
             </div>
-
-            {{-- Tags principais --}}
-            <div class="col-12 col-xl-4">
-                <div class="card border-0 shadow-sm rounded-5 h-100">
-                    <div class="card-body p-4">
-                        <span class="badge text-bg-secondary mb-2">
-                            Segmentação
-                        </span>
-
-                        <h2 class="h5 fw-bold mb-3">
-                            Tags com maior volume
-                        </h2>
-
-                        <div class="list-group list-group-flush">
-                            @forelse ($topTags as $tag => $count)
-                                <a
-                                    href="{{ request()->fullUrlWithQuery(['tag' => $tag, 'page' => 1]) }}#leads-section"
-                                    class="list-group-item list-group-item-action d-flex justify-content-between align-items-center px-0 {{ $selectedTag === $tag ? 'active px-3 rounded-3' : '' }}"
-                                >
-                                    <div>
-                                        <div class="fw-semibold">{{ $tag }}</div>
-                                        <div class="small {{ $selectedTag === $tag ? 'text-white-50' : 'text-muted' }}">
-                                            Leads desta origem
-                                        </div>
-                                    </div>
-
-                                    <span class="badge {{ $selectedTag === $tag ? 'text-bg-light text-primary' : 'text-bg-primary' }} rounded-pill">
-                                        {{ $count }}
-                                    </span>
-                                </a>
-                            @empty
-                                <p class="company-tags-empty text-muted small mb-0">
-                                    As tags aparecerão aqui assim que existirem leads segmentados.
-                                </p>
-                            @endforelse
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            {{-- Ajuda rápida --}}
-            <div class="col-12 col-xl-4">
-                <div class="card border-0 shadow-sm rounded-5 h-100">
-                    <div class="card-body p-4">
-                        <span class="badge text-bg-info mb-2">
-                            Guia rápido
-                        </span>
-
-                        <h2 class="h5 fw-bold mb-3">
-                            Como usar este painel
-                        </h2>
-
-                        <div class="vstack gap-3">
-                            <div class="d-flex gap-3">
-                                <span class="badge rounded-circle text-bg-primary d-flex align-items-center justify-content-center" style="width: 28px; height: 28px;">
-                                    1
-                                </span>
-                                <div>
-                                    <div class="fw-semibold">Compartilhe a chave</div>
-                                    <div class="small text-muted">Envie a chave e o link da simulação para sua equipe.</div>
-                                </div>
-                            </div>
-
-                            <div class="d-flex gap-3">
-                                <span class="badge rounded-circle text-bg-primary d-flex align-items-center justify-content-center" style="width: 28px; height: 28px;">
-                                    2
-                                </span>
-                                <div>
-                                    <div class="fw-semibold">Acompanhe novos leads</div>
-                                    <div class="small text-muted">Os leads captados aparecerão nesta fila comercial.</div>
-                                </div>
-                            </div>
-
-                            <div class="d-flex gap-3">
-                                <span class="badge rounded-circle text-bg-primary d-flex align-items-center justify-content-center" style="width: 28px; height: 28px;">
-                                    3
-                                </span>
-                                <div>
-                                    <div class="fw-semibold">Filtre por tag ou nome</div>
-                                    <div class="small text-muted">Use os filtros para localizar leads rapidamente.</div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-
-        {{-- Área principal da lista de leads --}}
         </details>
 
         <div class="row g-4 company-directory">

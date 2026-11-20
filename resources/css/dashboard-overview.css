@@ -65,9 +65,33 @@ body[data-brand] .dashboard-overview .ops-metrics { @apply grid grid-cols-2 gap-
 .dashboard-overview .ops-secondary > summary > span { margin-left: auto; color: var(--dash-muted); font-size: 0.8125rem; font-weight: 400; }
 .dashboard-overview .ops-secondary > summary::after { content: '+'; color: var(--ops-accent); font-size: 1.25rem; }
 .dashboard-overview .ops-secondary[open] > summary::after { content: '−'; }
-.dashboard-overview .ops-secondary .company-operations { padding: 0 20px 20px; margin: 0; }
-.dashboard-overview .ops-secondary .company-operations .card { box-shadow: none !important; border-radius: 8px !important; }
-.dashboard-overview .ops-secondary .company-operations .card-body { padding: 16px !important; }
+.base-summary {
+    display: grid;
+    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+    gap: 1.25rem 2rem;
+    padding: 1.25rem clamp(1rem, 2vw, 1.5rem);
+    border-top: 1px solid var(--dash-border);
+}
+.base-summary h2 { margin: 0 0 .875rem; font-size: 1rem; font-weight: 700; }
+.base-summary__metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin: 0; }
+.base-summary__metrics div { display: flex; flex-direction: column-reverse; justify-content: end; gap: .25rem; padding-inline: .875rem; border-inline-start: 1px solid var(--dash-border); }
+.base-summary__metrics div:first-child { border: 0; padding-inline-start: 0; }
+.base-summary dt, .base-summary p, .base-summary li span { color: var(--dash-muted); font-size: .875rem; font-weight: 400; }
+.base-summary dd { margin: 0; font-size: clamp(1.5rem, 3vw, 2rem); line-height: 1.1; font-weight: 700; font-variant-numeric: tabular-nums; }
+.base-summary__tag { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: .65rem; min-height: 44px; padding: .5rem .75rem; border-bottom: 1px solid var(--dash-border); color: inherit; text-decoration: none; }
+.base-summary__tag span { overflow-wrap: anywhere; }
+.base-summary__tag strong, .base-summary__tag i { color: var(--ops-accent); }
+.base-summary__tag:is(:hover, :focus-visible, [aria-current]) { background: var(--dash-bg); text-decoration: underline; }
+.base-summary__guide { grid-column: 1 / -1; padding-top: 1rem; border-top: 1px solid var(--dash-border); }
+.base-summary ol { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem 2rem; margin: 0; padding-inline-start: 1.35rem; }
+.base-summary li { padding-inline-start: .25rem; }
+.base-summary li::marker { color: var(--ops-accent); font-weight: 700; }
+.base-summary li span { display: block; }
+@media (max-width: 767px) {
+    .base-summary, .base-summary ol { grid-template-columns: minmax(0, 1fr); }
+    .base-summary__metrics div { padding-inline: .5rem; }
+}
+
 body[data-brand] .dashboard-overview :is(.admin-lead-directory, .company-directory) { border: 1px solid var(--dash-border); border-radius: 12px; box-shadow: none; overflow: hidden; margin-inline: 0; }
 body[data-brand] .dashboard-overview .company-directory > .col-12 { padding: 0; }
 body[data-brand] .dashboard-overview .lead-filter-panel { border: 0; border-radius: 0; background: var(--dash-surface); box-shadow: none; margin: 0; }

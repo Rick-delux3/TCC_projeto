@@ -1934,3 +1934,65 @@
         flex-basis: 48px;
     }
 }
+
+.company-leads-page .ops-secondary > summary::after,
+.company-leads-page .ops-secondary[open] > summary::after {
+    content: '';
+    width: .55rem;
+    height: .55rem;
+    border: solid var(--ops-accent);
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+    margin-inline-end: .25rem;
+}
+
+.company-leads-page .ops-secondary[open] > summary::after {
+    transform: rotate(225deg);
+}
+
+.company-leads-page .ops-secondary > summary:focus-visible {
+    background-color: var(--dash-surface-soft);
+}
+
+@media (hover: hover) and (pointer: fine) {
+    .company-leads-page .ops-secondary > summary:hover {
+        background-color: var(--dash-surface-soft);
+        border-radius: inherit;
+    }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+    .company-leads-page {
+        --company-motion-ease: cubic-bezier(.2, 0, 0, 1);
+    }
+
+    .company-leads-page .ops-secondary > summary,
+    .company-leads-page .base-summary__tag {
+        transition: background-color 100ms ease-out;
+    }
+
+    .company-leads-page .ops-secondary > summary::after,
+    .company-leads-page .base-summary__tag i {
+        transition: transform 160ms var(--company-motion-ease);
+    }
+
+    .company-leads-page .base-summary__tag:focus-visible i {
+        transform: translateX(3px);
+    }
+
+    @media (hover: hover) and (pointer: fine) {
+        .company-leads-page .base-summary__tag:hover i {
+            transform: translateX(3px);
+        }
+    }
+
+    .company-leads-page .ops-secondary[open] > .base-summary,
+    .company-leads-page #dashboardLeadFormCopyStatus:is(.text-success, .text-danger) {
+        animation: company-feedback-in 200ms var(--company-motion-ease);
+    }
+}
+
+@keyframes company-feedback-in {
+    from { opacity: .6; transform: translateY(3px); }
+    to { opacity: 1; transform: translateY(0); }
+}

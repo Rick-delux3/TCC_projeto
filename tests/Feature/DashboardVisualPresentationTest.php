@@ -58,6 +58,8 @@ it('preserves dashboard actions and real metrics in both visual profiles', funct
     if ($role === 'company') {
         $response->assertDontSee($foreign->email)->assertSee('Compartilhar formulário');
         expect($xpath->query('//details[contains(@class,"ops-secondary")]/summary')->length)->toBe(1)
+            ->and($xpath->query('//dl[@class="base-summary__metrics"]/div/dd')->length)->toBe(3)
+            ->and($xpath->query('//section[@class="base-summary__guide"]/ol/li')->length)->toBe(3)
             ->and($xpath->query('//*[@id="dashboardLeadAccessCode" and @value="DEMO24"]')->length)->toBe(1)
             ->and($xpath->query('//*[@id="dashboardLeadFormCopyButton" and @type="button"]')->length)->toBe(1)
             ->and($xpath->query('//*[@data-dashboard-metric][1]/*[contains(@class,"ops-metric__value")]')->item(0)->textContent)->toBe('3');
