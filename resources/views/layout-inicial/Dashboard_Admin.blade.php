@@ -26,31 +26,9 @@
 </head>
 <body class="dashboard-admin-body" data-brand="{{ config('branding.active', 'tcc') }}">
     @if (session('success'))
-            <div
-                class="modal fade"
-                id="ModalSucess"
-                tabindex="-1"
-                role="dialog"
-                aria-modal="true"
-                aria-labelledby="dashboardSuccessModalLabel"
-                aria-describedby="dashboardSuccessModalMessage"
-                aria-hidden="true"
-            >
-                <div class="modal-dialog modal-dialog-centered">
-                    <div class="modal-content">
-                    <div class="modal-header">
-                        <h2 class="modal-title fs-5" id="dashboardSuccessModalLabel">Sucesso</h2>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
-                    </div>
-                    <div class="modal-body" id="dashboardSuccessModalMessage" role="status">
-                       {{ session('success') }}
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
-                    </div>
-                    </div>
-                </div>
-            </div>  
+        <x-task-message id="ModalSucess" title="Sucesso" tone="success" action="Fechar">
+            {{ session('success') }}
+        </x-task-message>
     @endif
     @include('layout-inicial.partials.header_admin')
 
@@ -59,14 +37,6 @@
     </main>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js" integrity="sha384-FKyoEForCGlyvwx9Hj09JcYn3nv7wiPVlz7YYwJrWVcXK/BmnVDxM+D2scQbITxI" crossorigin="anonymous"></script>
-    <script>
-        document.addEventListener('DOMContentLoaded', function () {
-            @if (session('success'))
-                let ModalSuccess = new bootstrap.Modal(document.getElementById('ModalSucess'));
-                ModalSuccess.show();
-            @endif
-        });
-    </script>
     @stack('scripts')
 
 </body>

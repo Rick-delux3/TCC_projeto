@@ -34,70 +34,20 @@
         @yield('content')
     </main>
 
-    {{-- Modal de erros de validação --}}
     @if ($errors->any() && ! View::hasSection('inline-feedback'))
-        <div class="modal fade" id="modalErrors" tabindex="-1" aria-hidden="true">
-            <div class="modal-dialog modal-dialog-centered">
-                <div class="modal-content">
-
-                    <div class="modal-header bg-danger text-white">
-                        <h5 class="modal-title">Erro no formulário</h5>
-
-                        <button 
-                            type="button" 
-                            class="btn-close btn-close-white" 
-                            data-bs-dismiss="modal" 
-                            aria-label="Fechar"
-                        ></button>
-                    </div>
-
-                    <div class="modal-body">
-                        @foreach ($errors->all() as $erro)
-                            <p class="mb-2">• {{ $erro }}</p>
-                        @endforeach
-                    </div>
-
-                    <div class="modal-footer">
-                        <button class="btn btn-secondary" data-bs-dismiss="modal">
-                            Entendi
-                        </button>
-                    </div>
-
-                </div>
-            </div>
-        </div>
+        <x-task-message id="modalErrors" title="Erro no formulário" tone="error" header-class="bg-danger text-white">
+            <ul class="mb-0 ps-3">
+                @foreach ($errors->all() as $error)
+                    <li>{{ $error }}</li>
+                @endforeach
+            </ul>
+        </x-task-message>
     @endif
 
-    {{-- Modal de sucesso --}}
     @if (session('success'))
-        <div class="modal fade" id="modalSuccess" tabindex="-1" aria-hidden="true">
-            <div class="modal-dialog modal-dialog-centered">
-                <div class="modal-content">
-
-                    <div class="modal-header bg-success text-white">
-                        <h5 class="modal-title">Sucesso</h5>
-
-                        <button 
-                            type="button" 
-                            class="btn-close btn-close-white" 
-                            data-bs-dismiss="modal" 
-                            aria-label="Fechar"
-                        ></button>
-                    </div>
-
-                    <div class="modal-body">
-                        {{ session('success') }}
-                    </div>
-
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
-                            Fechar
-                        </button>
-                    </div>
-
-                </div>
-            </div>
-        </div>
+        <x-task-message id="modalSuccess" title="Sucesso" tone="success" action="Fechar" header-class="bg-success text-white">
+            {{ session('success') }}
+        </x-task-message>
     @endif
 
     @include('partials.page-loader')
@@ -108,22 +58,6 @@
         crossorigin="anonymous">
     </script>
 
-    <script>
-        document.addEventListener('DOMContentLoaded', function () {
-            const modalErrorsElement = document.getElementById('modalErrors');
-            const modalSuccessElement = document.getElementById('modalSuccess');
-
-            if (modalErrorsElement) {
-                const modalErrors = new bootstrap.Modal(modalErrorsElement);
-                modalErrors.show();
-            }
-
-            if (modalSuccessElement) {
-                const modalSuccess = new bootstrap.Modal(modalSuccessElement);
-                modalSuccess.show();
-            }
-        });
-    </script>
     @stack('scripts')
 </body>
 </html>

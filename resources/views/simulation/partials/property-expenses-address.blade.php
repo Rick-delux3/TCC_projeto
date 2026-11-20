@@ -208,11 +208,28 @@ document.addEventListener('DOMContentLoaded', function () {
     
 
     if (cepInput) {
+        const cepStatus = document.getElementById('cep-status');
+        const brandedFeedback = document.body.dataset.brand === 'tcc';
+        const cepHint = cepStatus.textContent;
+
+        function showCepError(message) {
+            if (!brandedFeedback) {
+                window.alert(message);
+                return;
+            }
+
+            cepStatus.classList.add('alert', 'alert-danger');
+            cepStatus.textContent = message;
+        }
 
         cepInput.value = formatarCep(cepInput.value);
 
         cepInput.addEventListener('input', function () {
             cepInput.value = formatarCep(cepInput.value);
+            if (brandedFeedback) {
+                cepStatus.classList.remove('alert', 'alert-danger');
+                cepStatus.textContent = cepHint;
+            }
         });
         
         cepInput.addEventListener('blur', async function () {
@@ -252,7 +269,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     if (cidadeInput) cidadeInput.value = '';
                     if (estadoInput) estadoInput.value = '';
 
-                    alert(result.message ?? 'CEP não encontrado.');
+                    showCepError(result.message ?? 'CEP não encontrado.');
                     return;
                 }
 
@@ -271,7 +288,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 if (cidadeInput) cidadeInput.value = '';
                 if (estadoInput) estadoInput.value = '';
 
-                alert('Não foi possível consultar o CEP agora. Preencha o endereço manualmente.');
+                showCepError('Não foi possível consultar o CEP agora. Preencha o endereço manualmente.');
             }
         });
     }

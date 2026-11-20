@@ -462,6 +462,33 @@ it('uses active brand tokens in the shared loader without legacy palette leakage
         ->toMatch('/\[data-brand="tcc"\]\s*\{.*?--brand-primary-rgb:\s*3,\s*1,\s*51;/s');
 });
 
+it('renders accessible task feedback in the active brand on access and simulation screens', function (string $profile, string $layout, string $successId, string $errorId): void {
+    config(['branding.active' => $profile]);
+    session()->flash('success', 'Operação concluída.');
+    $errors = new ViewErrorBag;
+    $errors->put('default', new \Illuminate\Support\MessageBag(['email' => ['Revise <email>.']]));
+
+    $html = view($layout, ['errors' => $errors])->render();
+    $document = new DOMDocument;
+    $document->loadHTML('<?xml encoding="UTF-8">'.$html, LIBXML_NOERROR | LIBXML_NOWARNING);
+    $xpath = new DOMXPath($document);
+
+    foreach ([$successId => 'success', $errorId => 'error'] as $id => $tone) {
+        $modal = '//*[@id="'.$id.'" and @data-task-message-auto]';
+        $panel = $profile === 'tcc' ? '//*[@data-tone="'.$tone.'"]' : '//*[@class="modal-content"]';
+        expect($xpath->query($modal.$panel)->length)->toBe(1)
+            ->and($xpath->query($modal.'//button[@data-bs-dismiss="modal"]')->length)->toBeGreaterThan(0)
+            ->and($xpath->query($modal)->item(0)->getAttribute('aria-labelledby'))->toBe($id.'-title');
+    }
+
+    expect($html)->toContain('Revise &lt;email&gt;.', 'Operação concluída.', 'id="page-loader-modal"')
+        ->and($xpath->query('//*[@data-task-message-auto]//*[@class="task-dialog"]')->length)->toBe($profile === 'tcc' ? 2 : 0)
+        ->and($xpath->query('//*[@id="companyAccessUnavailableModal" and @data-task-message-auto]')->length)->toBe(0);
+})->with(['tcc', 'client'])->with([
+    ['layout-inicial.app', 'ModalSucess', 'modalErros'],
+    ['layout-inicial.simulation', 'modalSuccess', 'modalErrors'],
+]);
+
 it('uses the company access layout for admin verification only on tcc', function (string $profile) {
     config(['branding.active' => $profile]);
     $this->withSession(['info' => 'Código reenviado para seu e-mail.']);

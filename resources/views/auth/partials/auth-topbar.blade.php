@@ -307,45 +307,7 @@
     </div>
 </header>
 
-<div
-    class="modal fade"
-    id="companyAccessUnavailableModal"
-    tabindex="-1"
-    aria-labelledby="companyAccessUnavailableModalLabel"
-    aria-hidden="true"
->
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h2
-                    class="modal-title fs-5"
-                    id="companyAccessUnavailableModalLabel"
-                >
-                    Acesso indisponível
-                </h2>
-
-                <button
-                    type="button"
-                    class="btn-close"
-                    data-bs-dismiss="modal"
-                    aria-label="Fechar"
-                ></button>
-            </div>
-
-            <div class="modal-body">
-                O acesso ao portal das imobiliárias está indisponível nesta versão.
-                Os formulários de simulação continuam disponíveis normalmente.
-            </div>
-
-            <div class="modal-footer">
-                <button
-                    type="button"
-                    class="btn btn-primary"
-                    data-bs-dismiss="modal"
-                >
-                    Entendi
-                </button>
-            </div>
-        </div>
-    </div>
-</div>
+<x-task-message id="companyAccessUnavailableModal" title="Acesso indisponível" button-class="btn-primary" :auto-show="false">
+    O acesso ao portal das imobiliárias está indisponível nesta versão.
+    Os formulários de simulação continuam disponíveis normalmente.
+</x-task-message>

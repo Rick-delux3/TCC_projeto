@@ -17,64 +17,25 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400..900&family=Press+Start+2P&family=Roboto+Condensed:ital,wght@0,100..900;1,100..900&family=Sansation:ital,wght@0,300;0,400;0,700;1,300;1,400;1,700&family=TASA+Explorer:wght@400..800&display=swap" rel="stylesheet">
     <title>{{ config('branding.profiles.'.config('branding.active', 'tcc').'.name', 'NVS Seguros') }}</title>
-    <script>
-        document.addEventListener('DOMContentLoaded', function () {
-            @if ($errors->any())
-                var modalErros = new bootstrap.Modal(document.getElementById('modalErros'));
-                modalErros.show();
-            @endif
-
-            @if (session('success'))
-                let ModalSuccess = new bootstrap.Modal(document.getElementById('ModalSucess'));
-                ModalSuccess.show();
-            @endif
-        });
-    </script>
 </head>
 
 <body class="auth-layout-body @yield('body-class')" data-brand="{{ config('branding.active', 'tcc') }}">
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js" integrity="sha384-FKyoEForCGlyvwx9Hj09JcYn3nv7wiPVlz7YYwJrWVcXK/BmnVDxM+D2scQbITxI" crossorigin="anonymous"></script>
 
     @if ($errors->any())
-        <div class="modal-error modal fade" id="modalErros" tabindex="-1">
-            <div class="modal-dialog modal-dialog-centered">
-                <div class="modal-content">
-
-                <div class="modal-header bg-danger text-white">
-                    <h5 class="modal-title">Erro no formulário</h5>
-                </div>
-
-                <div class="modal-body">
-                    @foreach ($errors->all() as $erro)
-                        <p>• {{ $erro }}</p>
-                    @endforeach
-                </div>
-
-                <div class="modal-footer">
-                    <button class="btn btn-secondary" data-bs-dismiss="modal">Entendi</button>
-                </div>
-
-                </div>
-            </div>
-        </div>
+        <x-task-message id="modalErros" title="Erro no formulário" tone="error" header-class="bg-danger text-white" :show-close="false">
+            <ul class="mb-0 ps-3">
+                @foreach ($errors->all() as $error)
+                    <li>{{ $error }}</li>
+                @endforeach
+            </ul>
+        </x-task-message>
     @endif
+
     @if (session('success'))
-            <div class="modal fade" id="ModalSucess" tabindex="-1">
-                <div class="modal-dialog modal-dialog-centered">
-                    <div class="modal-content">
-                    <div class="modal-header">
-                        <h1 class="modal-title fs-5" id="staticBackdropLabel">Sucesso</h1>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
-                    </div>
-                    <div class="modal-body">
-                       {{ session('success') }}
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
-                    </div>
-                    </div>
-                </div>
-            </div>  
+        <x-task-message id="ModalSucess" title="Sucesso" tone="success" action="Fechar">
+            {{ session('success') }}
+        </x-task-message>
     @endif
 
     @unless (trim($__env->yieldContent('hide-header')) === 'true')
