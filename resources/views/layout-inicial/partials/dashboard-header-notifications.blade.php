@@ -4,7 +4,6 @@
         ?? 'Acompanhe as novidades do painel.';
     $notificationItemLabel = $notificationItemLabel
         ?? 'nova(s) notificação(ões)';
-    $leadsRoute = $leadsRoute ?? '#';
 @endphp
 
 <div class="dropdown dashboard-notification">
@@ -44,9 +43,12 @@
                         <div class="small text-muted">
                             Existem leads recentes aguardando acompanhamento.
                         </div>
-                        <a href="{{ $leadsRoute }}" class="small fw-semibold text-decoration-none">
-                            Ver leads
-                        </a>
+                        <form method="POST" action="{{ $readNotificationsRoute }}">
+                            @csrf
+                            <button type="submit" class="btn-link small fw-semibold text-decoration-none bg-transparent border-0 p-0">
+                                Ver leads
+                            </button>
+                        </form>
                     </div>
                 </div>
             @else

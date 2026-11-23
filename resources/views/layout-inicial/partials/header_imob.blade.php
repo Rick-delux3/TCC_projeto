@@ -32,14 +32,9 @@
         ->map(fn ($part) => mb_strtoupper(mb_substr($part, 0, 1)))
         ->implode('');
 
-    /*
-    |--------------------------------------------------------------------------
-    | Notificações simples
-    |--------------------------------------------------------------------------
-    | Por enquanto usamos a quantidade de leads novos já calculada no dashboard.
-    | Depois isso pode evoluir para uma tabela real de notificações.
-    */
-    $notificationCount = $dashboardStats['newLeads'] ?? 0;
+    $notificationCount = $dashboardUser?->company_id
+        ? app(\App\Services\Dashboard\LeadNotifications::class)->count($dashboardUser)
+        : 0;
 
     $insuranceAnalysisEnabled = (bool) config(
         'features.insurance_analysis.enabled',
@@ -52,7 +47,6 @@
         'NVS Seguros'
     );
     $dashboardRoute = route('company.dashboard');
-    $leadsRoute = $dashboardRoute.'#leads-section';
     $simulationRoute = route('simulation.registered-company.access');
     $panelLabel = \App\Support\BrandingText::choose('Painel da imobiliária', 'Painel da empresa');
     $operationLabel = $brandProfile === 'client'
@@ -60,7 +54,6 @@
         : 'Sistema operacional';
     $isProfilePage = request()->routeIs('profile.edit');
     $currentSectionLabel = match (true) {
-        $isProfilePage => 'Minha conta',
         request()->routeIs('insurance-analyses.*') => 'Análises',
         default => 'Central de leads',
     };
@@ -113,7 +106,7 @@
                 @if ($brandProfile === 'tcc')
                     @include('layout-inicial.partials.dashboard-header-notifications', [
                         'notificationCount' => $notificationCount,
-                        'leadsRoute' => $leadsRoute,
+                        'readNotificationsRoute' => route('dashboard.lead-notifications.read'),
                         'notificationDescription' => 'Acompanhe os novos leads recebidos.',
                         'notificationItemLabel' => 'lead(s) novo(s)',
                     ])
@@ -130,7 +123,7 @@
                 @if ($brandProfile !== 'tcc')
                     @include('layout-inicial.partials.dashboard-header-notifications', [
                         'notificationCount' => $notificationCount,
-                        'leadsRoute' => $leadsRoute,
+                        'readNotificationsRoute' => route('dashboard.lead-notifications.read'),
                         'notificationDescription' => 'Acompanhe os novos leads recebidos.',
                         'notificationItemLabel' => 'lead(s) novo(s)',
                     ])
@@ -199,7 +192,7 @@
         </div>
     </div>
 
-    @unless (request()->routeIs('company.dashboard'))
+    @unless (request()->routeIs('company.dashboard', 'profile.edit'))
     <div class="dashboard-client-header__secondary">
         @if ($companyWorkspace ?? false)
         <div class="company-header-secondary-inner">

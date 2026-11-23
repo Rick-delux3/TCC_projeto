@@ -754,18 +754,14 @@ class SimulationController extends Controller
             ])->saveQuietly();
         }
 
-        $companyId = $lead->company_id !== null ? (int) $lead->company_id : null;
-
-        $leadId = (int) $lead->id;
-
-        DashboardActivityChanged::dispatch(
-            'lead',
-            $leadId,
-            $companyId,
-            $wasRecentlyCreated
-                ? 'lead.created'
-                : 'lead.updated',
-        );
+        if (! $wasRecentlyCreated) {
+            DashboardActivityChanged::dispatch(
+                'lead',
+                (int) $lead->id,
+                $lead->company_id !== null ? (int) $lead->company_id : null,
+                'lead.updated',
+            );
+        }
 
         return $lead;
 

@@ -1201,8 +1201,8 @@ it('does no HTTP while disabled and preserves an already known remote id', funct
 
 it('does not broadcast disabled twice when the initial send is already disabled', function () {
     config(['services.leadlovers.enabled' => false]);
-    Queue::fake();
     $lead = leadForInitialLeadLoversSend();
+    Queue::fake();
 
     initialSendJob($lead)->handle(app(LeadLoversApiClient::class));
 
@@ -1366,7 +1366,6 @@ it('broadcasts a newly created unlinked lead only to the admin dashboard', funct
 
 it('does not change or redispatch a confirmed lead when the public form is submitted again', function () {
     Bus::fake();
-    Queue::fake();
     config(['features.insurance_analysis.enabled' => false]);
     $company = Imobiliaria::query()->create([
         'name' => 'Imobiliaria Formulario',
@@ -1388,6 +1387,8 @@ it('does not change or redispatch a confirmed lead when the public form is submi
         'leadlovers_lead_id' => 501,
         'sent_to_leadlovers_at' => now(),
     ]);
+
+    Queue::fake();
 
     $this->post(route('simulation.registered-company.verify'), [
         'lead_access_code' => $company->lead_access_code,

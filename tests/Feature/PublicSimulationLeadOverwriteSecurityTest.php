@@ -129,6 +129,7 @@ it('does not let a public registered-company form overwrite an existing lead', f
         'imobiliaria_cadastrada',
         $company
     );
+    Queue::fake();
 
     $this->post(route('simulation.registered-company.verify'), [
         'lead_access_code' => $company->lead_access_code,
@@ -159,6 +160,7 @@ it('does not let an unlinked public form overwrite an existing lead', function (
     ?string $responsibleType
 ) {
     $lead = publicOverwriteProtectedLead($email, $origin);
+    Queue::fake();
 
     if ($origin === 'locador') {
         $lead->locador()->create([
@@ -313,6 +315,7 @@ it('does not expose existing-lead updates through an unauthenticated admin route
         'imobiliaria_cadastrada',
         $company
     );
+    Queue::fake();
 
     $this->post(
         route('admin.simulations.registered-company.store', $company),

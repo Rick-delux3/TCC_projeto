@@ -20,8 +20,6 @@ use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Http;
 
 beforeEach(function () {
-    Bus::fake();
-    Event::fake([DashboardActivityChanged::class]);
     Http::preventStrayRequests();
     Http::fake();
     config(['services.leadlovers.enabled' => true, 'features.insurance_analysis.enabled' => false]);
@@ -54,6 +52,8 @@ beforeEach(function () {
         'leadlovers_lead_id' => 901,
         'sent_to_leadlovers_at' => now()->subMinutes(5),
     ]);
+    Bus::fake();
+    Event::fake([DashboardActivityChanged::class]);
 });
 
 function requestCompanyLink(Tests\TestCase $test): int

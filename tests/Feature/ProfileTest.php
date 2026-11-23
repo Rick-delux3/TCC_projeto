@@ -18,6 +18,9 @@ test('profile page is displayed', function () {
 
     $response->assertOk()
         ->assertSee('Minha conta')
+        ->assertSee('Voltar ao painel')
+        ->assertSee('data-bs-target="#dashboardClientSidebar"', false)
+        ->assertDontSee('class="dashboard-client-header__secondary"', false)
         ->assertSee('action="'.route('profile.update').'"', false)
         ->assertSee('action="'.route('password.update').'"', false)
         ->assertSee('action="'.route('profile.destroy').'"', false)

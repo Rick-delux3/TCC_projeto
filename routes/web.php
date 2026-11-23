@@ -16,6 +16,7 @@ use App\Http\Controllers\DashboardLeadController;
 use App\Http\Controllers\ImobiliariaAuthController;
 use App\Http\Controllers\ImobiliariaRegistrationController;
 use App\Http\Controllers\InsuranceAnalysisController;
+use App\Http\Controllers\LeadNotificationController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\PublicHomeController;
 use App\Http\Controllers\SimulationController;
@@ -47,6 +48,9 @@ Route::prefix('/Dashboard')->group(function () {
 
         Route::get('/User', [DashboardController::class, 'index'])
             ->name('company.dashboard');
+
+        Route::post('/notificacoes/leads/ler', LeadNotificationController::class)
+            ->name('dashboard.lead-notifications.read');
 
         Route::put('/leads/{lead}', [DashboardLeadController::class, 'update'])
             ->name('dashboard.leads.update');
@@ -100,6 +104,10 @@ Route::prefix('/Dashboard')->group(function () {
         Route::get('/', [CorretorDashboardController::class, 'index'])
             ->middleware('can:access-dashboard')
             ->name('Dashboard-Admin');
+
+        Route::post('/notificacoes/leads/ler', LeadNotificationController::class)
+            ->middleware('can:view-leads')
+            ->name('admin.lead-notifications.read');
 
         Route::prefix('simulacoes')->name('admin.simulations.')->middleware(['can:access-simulation-forms'])
             ->group(function () {

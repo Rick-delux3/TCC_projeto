@@ -29,14 +29,9 @@
         ->map(fn ($part) => mb_strtoupper(mb_substr($part, 0, 1)))
         ->implode('');
 
-    /*
-    |--------------------------------------------------------------------------
-    | Notificações
-    |--------------------------------------------------------------------------
-    | Por enquanto usa os leads novos enviados pelo CorretorDashboardController.
-    */
-
-    $notificationCount = $dashboardStats['newLeads'] ?? 0;
+    $notificationCount = $adminUser && \Illuminate\Support\Facades\Gate::forUser($adminUser)->allows('view-leads')
+        ? app(\App\Services\Dashboard\LeadNotifications::class)->count($adminUser)
+        : 0;
 
     $insuranceAnalysisEnabled = (bool) config(
         'features.insurance_analysis.enabled',
@@ -182,7 +177,7 @@
                 @if ($brandProfile === 'tcc')
                     @include('layout-inicial.partials.dashboard-header-notifications', [
                         'notificationCount' => $notificationCount,
-                        'leadsRoute' => $leadsRoute,
+                        'readNotificationsRoute' => route('admin.lead-notifications.read'),
                         'notificationDescription' => \App\Support\BrandingText::choose('Acompanhe novos clientes recebidos pelas imobiliárias.', 'Acompanhe novos beneficiários recebidos pelas empresas.'),
                         'notificationItemLabel' => 'novo(s) cliente(s)',
                     ])
@@ -199,7 +194,7 @@
                 @if ($brandProfile !== 'tcc')
                     @include('layout-inicial.partials.dashboard-header-notifications', [
                         'notificationCount' => $notificationCount,
-                        'leadsRoute' => $leadsRoute,
+                        'readNotificationsRoute' => route('admin.lead-notifications.read'),
                         'notificationDescription' => \App\Support\BrandingText::choose('Acompanhe novos clientes recebidos pelas imobiliárias.', 'Acompanhe novos beneficiários recebidos pelas empresas.'),
                         'notificationItemLabel' => 'novo(s) cliente(s)',
                     ])
