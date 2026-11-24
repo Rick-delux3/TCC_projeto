@@ -241,6 +241,58 @@ it('creates an absent lead after outage recovery and stops once machine membersh
     Queue::assertPushed(RetryLeadLoversOutageJob::class, 1);
 });
 
+it('retries edited data with the manual tag and stops scheduled retries after remote confirmation', function () {
+    $lead = leadForInitialLeadLoversSend([
+        'leadlovers_status' => 'failed',
+        'leadlovers_initial_error_code' => 'CONNECTION_FAILED',
+        'leadlovers_response' => ['phase' => 'failed', 'operation' => 'lead_creation'],
+    ]);
+    $lead->forceFill([
+        'analysis_final_status' => 'approved',
+        'analysis_final_tag_key' => 'aprovados',
+        'leadlovers_contact_overrides' => ['tel' => '11922223333'],
+    ])->save();
+    $tag = LeadLoversTag::query()->create(['key' => 'em_negociacao', 'title' => 'Em negociação', 'leadlovers_tag_id' => 107, 'active' => true]);
+    $lead->leadLoversTagOperation()->create(['version' => 1, 'desired_source' => 'manual', 'desired_tag_key' => $tag->key, 'phase' => 'pending']);
+    $client = app(LeadLoversApiClient::class);
+    $searches = 0;
+    Http::fake([
+        '*/leads/search' => function () use (&$searches) {
+            if (++$searches === 1) {
+                throw new \Illuminate\Http\Client\ConnectionException;
+            }
+
+            return Http::response(searchResultForInitialSend([]));
+        },
+        '*/leads/' => Http::response(['success' => true, 'leadId' => 501], 200),
+        '*/leads/move' => Http::response(['actionId' => 42, 'status' => 'pending', 'total' => 1], 202),
+        '*/leads/501/machines' => Http::response([machineAssociationForInitialSend()], 200),
+    ]);
+
+    app(LeadReanalysisService::class)->updateLeadData($lead, ['nome' => 'Nome atualizado', 'tel' => '11912345678']);
+    $immediate = Queue::pushed(RetryLeadLoversOutageJob::class)->sole();
+    expect($immediate->delay)->toBeNull();
+    $immediate->withFakeQueueInteractions()->handle($client);
+    $scheduled = Queue::pushed(RetryLeadLoversOutageJob::class)->first(fn ($job) => $job->delay !== null);
+    expect($scheduled->delay->equalTo(now()->addMinutes(10)))->toBeTrue();
+    $this->travel(10)->minutes();
+    $scheduled->withFakeQueueInteractions()->handle($client);
+    Http::assertSent(fn (Request $request) => str_ends_with($request->url(), '/leads/')
+        && $request['staticFields']['name'] === 'Nome atualizado'
+        && $request['staticFields']['phone'] === '11912345678'
+        && $request['tags'] === [123, 107]);
+
+    $this->travel(1)->minute();
+    Queue::pushed(ConfirmLeadLoversMachineJob::class)->sole()->withFakeQueueInteractions()->handle($client);
+    expect($lead->refresh()->leadlovers_status)->toBe('sent')
+        ->and($lead->leadlovers_recovery['next_retry_at'])->toBeNull();
+    $calls = count(Http::recorded());
+    $scheduled->handle($client);
+    $immediate->handle($client);
+    expect(Http::recorded())->toHaveCount($calls);
+    Queue::assertPushed(RetryLeadLoversOutageJob::class, 2);
+});
+
 it('does not start outage recovery for data authentication or other server errors', function (int $status) {
     Queue::fake();
     $lead = leadForInitialLeadLoversSend();

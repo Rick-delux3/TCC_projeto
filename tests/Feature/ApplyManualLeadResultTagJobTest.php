@@ -168,12 +168,12 @@ function handleManualLeadTagJob(ApplyManualLeadResultTagJob $job): void
     );
 }
 
-it('stores the latest manual result locally during an initial outage without dispatching a tag request', function (int $status) {
+it('stores the latest manual result locally during an initial outage without dispatching a tag request', function (int $status, string $initialStatus) {
     Queue::fake();
     manualLeadTagCatalog();
     $corretor = manualLeadTagCorretor(['permissions' => ['leads.visualizar', 'leads.editar', 'tags.visualizar', 'tags.gerenciar']]);
     $lead = manualLeadTagLead([
-        'leadlovers_status' => 'processing', 'leadlovers_lead_id' => null,
+        'leadlovers_status' => $initialStatus, 'leadlovers_lead_id' => null,
         'sent_to_leadlovers_at' => null, 'leadlovers_initial_error_status' => $status,
     ]);
     $this->withoutVite()->actingAs($corretor, 'admin')->get(route('Dashboard-Admin'))
@@ -187,6 +187,7 @@ it('stores the latest manual result locally during an initial outage without dis
     $state = app(LeadLoversTagOperationCoordinator::class)->snapshot($lead->id);
     expect($state->desired_result)->toBe(ManualLeadResultTags::IN_NEGOTIATION)->and($state->version)->toBe(2);
     Queue::assertNotPushed(ApplyManualLeadResultTagJob::class);
+    Queue::assertPushed(\App\Jobs\RetryLeadLoversOutageJob::class, fn ($job) => $job->delay === null);
     Http::assertNothingSent();
 
     config(['services.leadlovers.machine' => 456, 'services.leadlovers.sequence_2' => 654, 'services.leadlovers.step' => 2]);
@@ -196,7 +197,7 @@ it('stores the latest manual result locally during an initial outage without dis
         'registerDate' => '2026-09-25T12:00:00Z', 'status' => 'active',
         'sequence' => ['id' => 654, 'name' => 'Test'],
     ]])]);
-    (new \App\Jobs\RetryLeadLoversOutageJob($lead->id))->withFakeQueueInteractions()->handle(app(LeadLoversApiClient::class));
+    Queue::pushed(\App\Jobs\RetryLeadLoversOutageJob::class)->first()->withFakeQueueInteractions()->handle(app(LeadLoversApiClient::class));
     expect($lead->refresh()->leadlovers_status)->toBe('sent');
     Queue::assertPushed(ApplyManualLeadResultTagJob::class, fn ($job) => $job->result === ManualLeadResultTags::IN_NEGOTIATION && $job->version === 2);
     Queue::assertPushed(ApplyManualLeadResultTagJob::class, 1);
@@ -206,7 +207,7 @@ it('stores the latest manual result locally during an initial outage without dis
     $tagJob = Queue::pushed(ApplyManualLeadResultTagJob::class)->first();
     handleManualLeadTagJob($tagJob->withFakeQueueInteractions());
     expect($lead->refresh()->leadlovers_confirmed_final_tag_key)->toBe('em_negociacao');
-})->with([500, 502, 503, 504]);
+})->with([[500, 'failed'], [500, 'processing'], [502, 'processing'], [503, 'processing'], [504, 'processing']]);
 
 it('keeps manual tags blocked for leads with data failures or without an outage', function (string $status, ?int $error) {
     Queue::fake();
@@ -220,7 +221,7 @@ it('keeps manual tags blocked for leads with data failures or without an outage'
         ->assertSessionHasErrors('result');
     Queue::assertNotPushed(ApplyManualLeadResultTagJob::class);
     Http::assertNothingSent();
-})->with([['failed', 400], ['processing', null], ['processing', 501], ['processing', 505], ['failed', 500]]);
+})->with([['failed', 400], ['processing', null], ['processing', 501], ['processing', 505], ['failed', 401]]);
 
 it('allows an active member with permission to request each commercial result', function (string $result) {
     Queue::fake();
@@ -435,9 +436,9 @@ it('rejects an unknown result before dispatching the job', function () {
 });
 
 it('rejects a controller request when the remote lead id is absent', function () {
-    Queue::fake();
     $corretor = manualLeadTagCorretor();
     $lead = manualLeadTagLead(['leadlovers_lead_id' => null]);
+    Queue::fake();
 
     $this
         ->actingAs($corretor, 'admin')

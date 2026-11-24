@@ -1704,7 +1704,7 @@
             $leadResultIsEligible = $manualResultRouteExists
                 && $leadLoversIntegrationEnabled
                 && (($leadWasConfirmedByLeadLovers && $leadHasRemoteId)
-                    || $lead->awaitingLeadLoversOutageRecovery());
+                    || $lead->canRetryLeadLoversAfterEdit());
 
             $leadResultUnavailableMessage = match (true) {
                 $leadResultIsEligible => null,
