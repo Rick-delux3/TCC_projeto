@@ -341,9 +341,24 @@ class Lead extends Model
     public function awaitingLeadLoversOutageRecovery(): bool
     {
         return $this->leadlovers_status === 'processing'
-            && (in_array((int) $this->leadlovers_initial_error_status, LeadLoversApiException::RECOVERABLE_SERVER_STATUSES, true)
+            && ($this->hasLeadLoversCommunicationFailure()
                 || (data_get($this->leadlovers_recovery, 'mode') === 'machine_confirmation'
                     && in_array(data_get($this->leadlovers_recovery, 'status'), ['scheduled', 'processing'], true)));
+    }
+
+    public function canRetryLeadLoversAfterEdit(): bool
+    {
+        return $this->sent_to_leadlovers_at === null
+            && ($this->awaitingLeadLoversOutageRecovery()
+                || ($this->leadlovers_status === 'failed' && $this->hasLeadLoversCommunicationFailure()));
+    }
+
+    private function hasLeadLoversCommunicationFailure(): bool
+    {
+        $status = $this->leadlovers_initial_error_status ?? data_get($this->leadlovers_response, 'status_code');
+        $code = $this->leadlovers_initial_error_code ?? data_get($this->leadlovers_response, 'error_code');
+
+        return LeadLoversApiException::isCommunicationFailure($status === null ? null : (int) $status, $code);
     }
 
     public function scopeExpiredRejectedRetention(Builder $query): Builder

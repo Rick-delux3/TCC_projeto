@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Events\DashboardActivityChanged;
 use App\Http\Requests\UpdateLeadResultTagRequest;
 use App\Jobs\ApplyManualLeadResultTagJob;
+use App\Jobs\RetryLeadLoversOutageJob;
 use App\Models\Corretor;
 use App\Models\CorretorActivityLog;
 use App\Models\Lead;
@@ -40,7 +41,7 @@ class AdminLeadTagController extends Controller
         }
 
         if (
-            ! $lead->awaitingLeadLoversOutageRecovery()
+            ! $lead->canRetryLeadLoversAfterEdit()
             && ($lead->leadlovers_status !== 'sent'
             || $lead->sent_to_leadlovers_at === null)
         ) {
@@ -50,7 +51,7 @@ class AdminLeadTagController extends Controller
                 ->withInput();
         }
 
-        if (! $lead->awaitingLeadLoversOutageRecovery() && (int) $lead->leadlovers_lead_id <= 0) {
+        if (! $lead->canRetryLeadLoversAfterEdit() && (int) $lead->leadlovers_lead_id <= 0) {
             return back()->withErrors([
                 'result' => 'O lead não possui um ID remoto válido da LeadLovers.',
             ])->withInput();
@@ -152,7 +153,7 @@ class AdminLeadTagController extends Controller
                 ->lockForUpdate()
                 ->findOrFail($lead->id);
 
-            $deferRemoteTag = $lockedLead->awaitingLeadLoversOutageRecovery();
+            $deferRemoteTag = $lockedLead->canRetryLeadLoversAfterEdit();
             if (! $deferRemoteTag && ($lockedLead->leadlovers_status !== 'sent'
                 || $lockedLead->sent_to_leadlovers_at === null
                 || (int) $lockedLead->leadlovers_lead_id <= 0)) {
@@ -218,6 +219,7 @@ class AdminLeadTagController extends Controller
                     ),
                     'updated_by_corretor_id' => $corretor->id,
                 ])->save();
+                RetryLeadLoversOutageJob::dispatch($lockedLead->id, afterEdit: true)->afterCommit();
             } else {
                 ApplyManualLeadResultTagJob::dispatch(
                     $lockedLead->id,

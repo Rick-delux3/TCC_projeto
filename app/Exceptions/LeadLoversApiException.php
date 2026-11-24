@@ -8,6 +8,14 @@ final class LeadLoversApiException extends RuntimeException
 {
     public const RECOVERABLE_SERVER_STATUSES = [500, 502, 503, 504];
 
+    public static function isCommunicationFailure(?int $httpStatus, ?string $code): bool
+    {
+        return in_array($httpStatus, self::RECOVERABLE_SERVER_STATUSES, true)
+            || $httpStatus === 408
+            || ($httpStatus === null && in_array($code, ['CONNECTION_FAILED', 'LOCAL_RATE_LIMIT'], true))
+            || ($code === 'INVALID_RESPONSE' && ($httpStatus === null || ($httpStatus >= 200 && $httpStatus < 300)));
+    }
+
     public readonly ?int $httpStatus;
 
     public readonly bool $transient;

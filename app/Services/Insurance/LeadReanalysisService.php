@@ -4,6 +4,7 @@ namespace App\Services\Insurance;
 
 use App\Events\DashboardActivityChanged;
 use App\Jobs\CompleteInsuranceAnalysesBatchJob;
+use App\Jobs\RetryLeadLoversOutageJob;
 use App\Jobs\RunProviderAnalysisJob;
 use App\Jobs\SendLeadToLeadLoversJob;
 use App\Jobs\UpdateLeadOnLeadLoversJob;
@@ -169,6 +170,12 @@ class LeadReanalysisService
 
             $additionalDetailsChanged = $corretor !== null
                 && $this->updateAdminSimulationDetails($lead, $data);
+            if ($lead->isDirty('tel') && $lead->canRetryLeadLoversAfterEdit()
+                && array_key_exists('tel', $lead->leadlovers_contact_overrides ?? [])) {
+                $overrides = $lead->leadlovers_contact_overrides;
+                unset($overrides['tel']);
+                $lead->leadlovers_contact_overrides = $overrides;
+            }
             $removeSpouse = $corretor !== null
                 && array_key_exists('estado_civil', $data)
                 && ! in_array($lead->estado_civil, ['casado', 'uniao_estavel', 'divorciado', 'viuvo'], true);
@@ -410,8 +417,9 @@ class LeadReanalysisService
                 === 'failed';
             $syncStatus = 'idle';
             $dispatch = null;
+            $retryAfterEdit = $integrationEnabled && $lead->canRetryLeadLoversAfterEdit();
 
-            if ($requestedLeadLoversFields === []) {
+            if ($requestedLeadLoversFields === [] && ! $retryAfterEdit) {
                 // A alteracao foi apenas local; nao existe dado remoto a enviar.
                 $syncStatus = 'idle';
             } elseif (! $integrationEnabled) {
@@ -428,7 +436,7 @@ class LeadReanalysisService
                         'requested_fields' => $requestedLeadLoversFields,
                     ],
                 ])->saveQuietly();
-            } elseif ($initialSendNeedsReconciliation) {
+            } elseif ($initialSendNeedsReconciliation && ! $retryAfterEdit) {
                 $syncStatus = 'failed';
                 $requestedLeadLoversFields = $this->normalizeLeadLoversUpdateFields([
                     ...$this->pendingLeadLoversUpdateFields($lead),
@@ -449,15 +457,19 @@ class LeadReanalysisService
                     ...$requestedLeadLoversFields,
                 ]);
 
-                $lead->forceFill([
-                    'leadlovers_update_status' => $syncStatus,
-                    'leadlovers_update_error' => null,
-                    'leadlovers_update_response' => [
-                        'requested_fields' => $requestedLeadLoversFields,
-                    ],
-                ])->saveQuietly();
+                if ($requestedLeadLoversFields !== []) {
+                    $lead->forceFill([
+                        'leadlovers_update_status' => $syncStatus,
+                        'leadlovers_update_error' => null,
+                        'leadlovers_update_response' => [
+                            'requested_fields' => $requestedLeadLoversFields,
+                        ],
+                    ])->saveQuietly();
+                }
 
-                if ($initialSendCanRetry) {
+                if ($retryAfterEdit) {
+                    RetryLeadLoversOutageJob::dispatch($lead->id, afterEdit: true)->afterCommit();
+                } elseif ($initialSendCanRetry) {
                     $lead->forceFill([
                         'leadlovers_status' => 'pending',
                     ])->saveQuietly();

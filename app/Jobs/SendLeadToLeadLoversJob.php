@@ -51,6 +51,8 @@ class SendLeadToLeadLoversJob implements ShouldQueue
 
     protected bool $recoveringOutage = false;
 
+    protected bool $afterEdit = false;
+
     protected bool $confirmingMachine = false;
 
     public function __construct(
@@ -75,6 +77,7 @@ class SendLeadToLeadLoversJob implements ShouldQueue
         $batch = InsuranceAnalysisBatch::with('analyses')->where('lead_id', $this->leadId)->latest('id')->first();
         if ($batch && ! InsuranceBatchResult::readyForLeadLovers($lead, $batch)
             && (int) $lead->leadlovers_lead_id <= 0
+            && ! ($this->recoveringOutage && $lead->canRetryLeadLoversAfterEdit())
             && ! in_array($this->currentPhase($lead), [self::PHASE_CREATE_STARTED, self::PHASE_RECONCILIATION_PENDING], true)) {
             if ($lead->leadlovers_status === 'processing') {
                 $this->release($this->confirmationDelay());
@@ -82,6 +85,17 @@ class SendLeadToLeadLoversJob implements ShouldQueue
 
             return;
         }
+
+        if (! config('services.leadlovers.enabled', false)) {
+            $this->disableInitialSend();
+
+            return;
+        }
+
+        if (! $this->claimInitialSend()) {
+            return;
+        }
+
         try {
             $this->send($leadLovers);
         } finally {
@@ -107,16 +121,6 @@ class SendLeadToLeadLoversJob implements ShouldQueue
 
     private function send(LeadLoversApiClient $leadLovers): void
     {
-        if (! config('services.leadlovers.enabled', false)) {
-            $this->disableInitialSend();
-
-            return;
-        }
-
-        if (! $this->claimInitialSend()) {
-            return;
-        }
-
         $lead = $this->loadLead();
         $machine = $this->machineConfigurationForLead($lead);
 
@@ -843,8 +847,9 @@ class SendLeadToLeadLoversJob implements ShouldQueue
     private function creationPayload(Lead $lead, ?int $mainTagId): array
     {
         $tagIds = $mainTagId === null ? [] : [$mainTagId];
-        if (in_array($lead->analysis_final_status, ['approved', 'rejected'], true)) {
-            $finalTag = LeadLoversTag::query()->where('key', $lead->analysis_final_tag_key)->where('active', true)->first();
+        $manualTagKey = $lead->leadLoversTagOperation()->where('desired_source', 'manual')->value('desired_tag_key');
+        if ($manualTagKey !== null || in_array($lead->analysis_final_status, ['approved', 'rejected'], true)) {
+            $finalTag = LeadLoversTag::query()->where('key', $manualTagKey ?? $lead->analysis_final_tag_key)->where('active', true)->first();
             if (! $finalTag || (int) $finalTag->leadlovers_tag_id <= 0) {
                 throw new PermanentLeadTagException('A tag do resultado da análise precisa estar configurada e ativa.');
             }
@@ -1152,7 +1157,8 @@ class SendLeadToLeadLoversJob implements ShouldQueue
             return;
         }
 
-        if (in_array($exception?->statusCode, LeadLoversApiException::RECOVERABLE_SERVER_STATUSES, true) && ! $exception->isConfigurationError) {
+        if ($exception && ! $exception->isConfigurationError
+            && LeadLoversApiException::isCommunicationFailure($exception->statusCode, $exception->errorCode)) {
             DB::transaction(function () use ($exception, $operation): void {
                 $lead = Lead::query()->whereKey($this->leadId)
                     ->where('leadlovers_status', 'processing')->lockForUpdate()->first();
@@ -1253,6 +1259,11 @@ class SendLeadToLeadLoversJob implements ShouldQueue
                 ->where('leadlovers_status', 'processing')->lockForUpdate()->first();
 
             if ($lead === null || (int) $lead->leadlovers_lead_id <= 0) {
+                return;
+            }
+
+            if ($this->afterEdit && data_get($lead->leadlovers_recovery, 'mode') === 'machine_confirmation'
+                && data_get($lead->leadlovers_recovery, 'status') === 'scheduled') {
                 return;
             }
 
@@ -1394,29 +1405,46 @@ class SendLeadToLeadLoversJob implements ShouldQueue
             });
         }
 
-        $allowedStatuses = $this->attempts() > 1
-            ? ['pending', 'processing']
-            : ['pending', 'tag_failed', 'sequence_failed', 'disabled'];
-
         if ($this->recoveringOutage) {
-            $allowedStatuses = ['processing'];
+            return DB::transaction(function (): bool {
+                $lead = Lead::query()->whereKey($this->leadId)->lockForUpdate()->first();
+                if (! $lead || ! $lead->canRetryLeadLoversAfterEdit()) {
+                    return false;
+                }
+                if (! $this->afterEdit && ($lead->leadlovers_status !== 'processing'
+                    || data_get($lead->leadlovers_recovery, 'mode') === 'machine_confirmation')) {
+                    return false;
+                }
+
+                if ($lead->leadlovers_status === 'failed') {
+                    $response = $lead->leadlovers_response ?? [];
+                    if ((int) $lead->leadlovers_lead_id <= 0) {
+                        $response['phase'] = self::PHASE_RECONCILIATION_PENDING;
+                        $response['creation_email_encrypted'] ??= Crypt::encryptString((string) $lead->leadLoversContact('email'));
+                    } else {
+                        $response['phase'] = isset($response['action']) ? self::PHASE_MACHINE_PENDING : self::PHASE_MACHINE_STARTED;
+                    }
+                    $lead->forceFill(['leadlovers_status' => 'processing', 'leadlovers_response' => $response])->save();
+                }
+
+                return true;
+            });
         }
 
-        return Lead::query()
-            ->whereKey($this->leadId)
-            ->where(function ($query): void {
-                $query->whereNull('leadlovers_recovery->mode')
-                    ->orWhere('leadlovers_recovery->mode', '!=', 'machine_confirmation')
-                    ->orWhereNotIn('leadlovers_recovery->status', ['scheduled', 'processing']);
-            })
-            ->when($this->recoveringOutage, fn ($query) => $query->whereIn('leadlovers_initial_error_status', LeadLoversApiException::RECOVERABLE_SERVER_STATUSES))
-            ->when(! $this->recoveringOutage, fn ($query) => $query->where(function ($query): void {
-                $query->whereNull('leadlovers_initial_error_status')->orWhereNotIn('leadlovers_initial_error_status', LeadLoversApiException::RECOVERABLE_SERVER_STATUSES);
-            }))
-            ->whereIn('leadlovers_status', $allowedStatuses)
-            ->update([
-                'leadlovers_status' => 'processing',
-            ]) === 1;
+        return DB::transaction(function (): bool {
+            $lead = Lead::query()->whereKey($this->leadId)->lockForUpdate()->first();
+            $allowedStatuses = $this->attempts() > 1
+                ? ['pending', 'processing']
+                : ['pending', 'tag_failed', 'sequence_failed', 'disabled'];
+            if (! $lead || ! in_array($lead->leadlovers_status, $allowedStatuses, true)
+                || $lead->awaitingLeadLoversOutageRecovery()) {
+                return false;
+            }
+
+            $lead->forceFill(['leadlovers_status' => 'processing'])->save();
+
+            return true;
+        });
     }
 
     private function disableInitialSend(): void

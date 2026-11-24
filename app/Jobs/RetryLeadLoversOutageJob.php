@@ -8,8 +8,14 @@ class RetryLeadLoversOutageJob extends SendLeadToLeadLoversJob implements Should
 {
     protected bool $recoveringOutage = true;
 
+    public function __construct(int $leadId, bool $afterEdit = false)
+    {
+        parent::__construct($leadId);
+        $this->afterEdit = $afterEdit;
+    }
+
     public function uniqueId(): string
     {
-        return 'leadlovers-outage:'.$this->leadId;
+        return ($this->afterEdit ? 'leadlovers-outage-edit:' : 'leadlovers-outage:').$this->leadId;
     }
 }
