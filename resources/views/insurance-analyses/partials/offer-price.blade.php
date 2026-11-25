@@ -17,14 +17,27 @@
         @if ($displayState['processing'] ?? false)
             <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
         @endif
-        {{ ($displayState['state'] ?? null) === 'manual_required' ? ($manualMessage ?: 'Entre em contato com o corretor.') : ($displayState['label'] ?? match ($offerStatus) {
-            'rejected' => 'Cotação recusada',
-            'failed' => 'Não foi possível concluir a cotação.',
-            'manual_required' => $manualMessage ?: 'Entre em contato com o corretor.',
-            'approved' => 'Aprovada. Aguardando confirmação do preço.',
-            default => 'Em análise',
-        }) }}
+        @if ($offerStatus === 'failed' && ! empty($dangerMessages))
+            Falha na cotação
+        @else
+            {{ ($displayState['state'] ?? null) === 'manual_required' ? ($manualMessage ?: 'Entre em contato com o corretor.') : ($displayState['label'] ?? match ($offerStatus) {
+                'rejected' => 'Cotação recusada',
+                'failed' => 'Não foi possível concluir a cotação.',
+                'manual_required' => $manualMessage ?: 'Entre em contato com o corretor.',
+                'approved' => 'Aprovada. Aguardando confirmação do preço.',
+                default => 'Em análise',
+            }) }}
+        @endif
     </p>
 @endif
-
+@if (! empty($dangerMessages))
+    @unless (in_array($offerStatus, ['failed', 'rejected'], true))
+        <p class="small fw-semibold mt-2 mb-0">Outras tentativas sem cotação</p>
+    @endunless
+    <ul class="small text-start text-break ps-3 mt-2 mb-0" aria-label="Motivos informados pela seguradora">
+        @foreach ($dangerMessages as $reason)
+            <li>{{ $reason }}</li>
+        @endforeach
+    </ul>
+@endif
 </div>

@@ -29,8 +29,29 @@ final class InsuranceDiagnosticSanitizer
 
     public function extract(array $payload, array $sources = []): array
     {
+        $secrets = $this->sensitiveValues([$payload, ...$sources]);
+        $entries = [];
+        $remaining = 500;
+        $this->extractNodes($payload, $secrets, $entries, $remaining);
+
+        return $entries;
+    }
+
+    /**
+     * @param  list<string>  $messages
+     * @return list<string>
+     */
+    public function sanitizeMessages(array $messages, array $sources): array
+    {
+        $secrets = $this->sensitiveValues($sources);
+
+        return array_map(fn (string $message): string => $this->text($message, $secrets), $messages);
+    }
+
+    private function sensitiveValues(array $sources): array
+    {
         $secrets = [];
-        foreach (array_merge([$payload], $sources) as $source) {
+        foreach ($sources as $source) {
             if (is_array($source)) {
                 $this->collectSensitiveValues($source, $secrets);
             }
@@ -42,11 +63,8 @@ final class InsuranceDiagnosticSanitizer
             }
         }
         usort($secrets, fn (string $a, string $b): int => strlen($b) <=> strlen($a));
-        $entries = [];
-        $remaining = 500;
-        $this->extractNodes($payload, $secrets, $entries, $remaining);
 
-        return $entries;
+        return $secrets;
     }
 
     private function extractNodes(array $payload, array $secrets, array &$entries, int &$remaining, string $path = '', int $depth = 0): void

@@ -1,7 +1,7 @@
 <header class="ia-lead border-bottom pb-4 mb-4">
     <div class="row g-3 align-items-start">
         <div class="col-md-7 min-w-0">
-            <p class="ia-lead__context text-body-secondary mb-1">Análise de fiança locatícia do lead #{{ $leadData['id'] }}</p>
+            <p class="ia-lead__context text-body-secondary mb-1">Análise de Seguro Aluguel do lead #{{ $leadData['id'] }}</p>
             <h1 class="h3">{{ $leadData['nome'] }}</h1>
             <div class="ia-lead__contacts d-flex flex-wrap column-gap-4 row-gap-1 text-break">
                 <span>@if ($nvs)<i class="bi bi-envelope" aria-hidden="true"></i>@endif{{ $leadData['email'] ?: 'E-mail não informado' }}</span>

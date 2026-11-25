@@ -12,6 +12,7 @@
                     'installments' => $analysis['quote']['price']['installments'] ?? null,
                     'payment_type' => $analysis['quote']['price']['payment_type'] ?? null,
                     'payment_status' => 'ready',
+                    'danger_messages' => $dangerMessages,
                 ]]);
                 // Porto: cada orçamento aprovado traz a Fiança e os Essenciais, cada
                 // um com preço, totais e coberturas próprios. Cada oferta vira uma
@@ -46,7 +47,7 @@
                 <section class="card mb-3">
                     <div class="card-body">
                         <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
-                            <h3 class="h6 mb-0">{{ $detail['title'] ?? ($planNames[$detail['plan_key']] ?? $detail['plan_key'] ?: 'Fiança locatícia') }}</h3>
+                            <h3 class="h6 mb-0">{{ $detail['title'] ?? ($planNames[$detail['plan_key']] ?? $detail['plan_key'] ?: 'Seguro Aluguel') }}</h3>
                             @if ($provider === 'porto')
                                 @if ($detail['porto_best'] ?? false)
                                     <span class="badge text-bg-primary">Mais barato</span>
@@ -63,7 +64,7 @@
                         @if (array_filter($detail['applicants']))
                             <p class="text-body-secondary">{{ implode(' e ', array_filter($detail['applicants'])) }}</p>
                         @endif
-                        @include('insurance-analyses.partials.offer-price', ['offerStatus' => $detail['status'], 'amount' => $detail['payment_status'] === 'ready' ? $detail['installment_amount'] : null, 'count' => $detail['installments'], 'recurring' => $detail['recurring_installment'] ?? null, 'manualMessage' => $analysis['manual_message'], 'displayState' => $detail['display_state'] ?? $analysis['display_state']])
+                        @include('insurance-analyses.partials.offer-price', ['offerStatus' => $detail['status'], 'amount' => $detail['payment_status'] === 'ready' ? $detail['installment_amount'] : null, 'count' => $detail['installments'], 'recurring' => $detail['recurring_installment'] ?? null, 'manualMessage' => $analysis['manual_message'], 'displayState' => $detail['display_state'] ?? $analysis['display_state'], 'dangerMessages' => $detail['danger_messages'] ?? []])
                         @if ($detail['status'] === 'approved')
                             @if ($provider === 'porto' && ! empty($detail['entry_options']))
                                 <div class="row g-2 mt-2" aria-label="Valores por condição de entrada" data-porto-entry-options>

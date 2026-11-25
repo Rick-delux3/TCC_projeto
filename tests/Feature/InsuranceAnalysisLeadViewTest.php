@@ -58,6 +58,60 @@ it('renders the same analysis view for the requested lead without requiring a ba
     expect($this->lead->insuranceAnalysesBatches()->exists())->toBeFalse();
 })->with(['company', 'admin']);
 
+it('exposes the Tokio danger reasons for the current quote and company', function (int $http, string $status, array $expected) {
+    $batch = $this->lead->insuranceAnalysesBatches()->create(['status' => 'processing', 'total_providers' => 1]);
+    $analysis = $batch->analyses()->create(['lead_id' => $this->lead->id, 'provider' => 'tokio', 'product' => 'fianca_locaticia', 'status' => 'processing']);
+    $analysis->events()->create(['event_type' => 'analysis_started', 'payload' => ['attempt_id' => 'tokio-danger']]);
+    $run = app(\App\Services\Insurance\InsuranceQuoteCoordinator::class)->prepare($analysis, 'tokio-danger', false);
+    $quote = $run->scenarios()->firstOrFail()->quotes()->firstOrFail();
+    $response = ['mensagens' => [
+        'danger' => ['Valor de Aluguel sem aceitação [idLog = 98765]', 'Verifique contato@example.test.', null, '', ['detail' => 'privado']],
+        'success' => ['Dados salvos.'],
+    ]];
+    if ($http === 200) {
+        $response['cotacaoInfo'] = ['sqCdCotac' => 123, 'cdSitucCotac' => 'REC'];
+    }
+    if ($http === 503) {
+        unset($response['mensagens']['danger']);
+    }
+    app(\App\Services\Insurance\TokioQuoteResponse::class)->apply($quote, [
+        'success' => $http === 200, 'http_status' => $http, 'response' => $response,
+    ]);
+    expect($quote->fresh()->status)->toBe($status)
+        ->and(data_get($quote->fresh()->response_payload, 'messages.danger'))->toBe($expected);
+
+    // Rodadas antigas também podem conter o idLog no motivo gravado.
+    $quote->update(['response_payload' => ['response' => $response], 'rejection_reason' => 'Texto antigo [idLog = 98765]']);
+    $api = $this->actingAs($this->user)->withSession(['2fa_passed' => true])
+        ->getJson(route('insurance-analyses.data', $this->lead), ['X-Analysis-Components' => '1'])->assertOk();
+    $api->assertJsonPath('data.analyses.0.messages.danger', $expected)
+        ->assertJsonPath('data.analyses.0.quote_attempts.0.danger_messages', $expected)
+        ->assertJsonPath('data.analyses.0.quote_attempts.0.message', $expected ? implode(' ', $expected) : 'Não foi possível concluir esta cotação.');
+
+    $page = $this->get(route('insurance-analyses.lead', $this->lead))->assertOk()
+        ->assertSeeText('Análise de Seguro Aluguel')->assertDontSeeText('Fiança locatícia');
+    foreach ([$page->getContent(), $api->json('data.components')] as $html) {
+        $document = new DOMDocument;
+        @$document->loadHTML('<?xml encoding="UTF-8">'.$html);
+        $xpath = new DOMXPath($document);
+        foreach (['//article[@data-provider="tokio"]', '//dialog[@id="details-tokio"]'] as $section) {
+            $reasons = $xpath->query($section.'//ul[@aria-label="Motivos informados pela seguradora"]/li');
+            expect(array_map(fn ($node) => trim($node->textContent), iterator_to_array($reasons)))->toBe($expected);
+            $text = $xpath->evaluate('string('.$section.')');
+            expect($text)->toContain('Seguro Aluguel');
+            expect($text)->toContain(match (true) {
+                $status === 'rejected' => 'Cotação recusada',
+                $expected === [] => 'Não foi possível concluir a cotação.',
+                default => 'Falha na cotação',
+            })->not->toContain('idLog', 'contato@example.test');
+        }
+    }
+})->with([
+    'falha HTTP' => [412, 'failed', ['Valor de Aluguel sem aceitação', 'Verifique [REDACTED].']],
+    'recusa cadastral' => [200, 'rejected', ['Valor de Aluguel sem aceitação', 'Verifique [REDACTED].']],
+    'falha sem motivos' => [503, 'failed', []],
+]);
+
 it('loads only the latest lead batch with the current round for each company', function (string $viewer) {
     $old = $this->lead->insuranceAnalysesBatches()->create(['status' => 'completed', 'total_providers' => 1, 'finished_at' => now()]);
     $this->lead->forceFill(['last_analysis_batch_id' => $old->id])->save();
@@ -807,7 +861,7 @@ it('shows the Porto Fiança and the cheapest Essencial on the card and every off
         ->and($plans->item(0)->textContent)->toContain('Fiança', 'R$ 617,46', 'Por parcela · 29 parcelas')->not->toContain('Mais barato')
         ->and($plans->item(1)->getAttribute('data-porto-plan'))->toBe('0001')
         ->and($plans->item(1)->textContent)->toContain('Essencial 12', 'R$ 144,83', 'Mais barato');
-    expect($card->textContent)->not->toContain('Essencial 20', 'Fiança locatícia');
+    expect($card->textContent)->not->toContain('Essencial 20', 'Seguro Aluguel');
 
     $details = $xpath->query('//dialog[@id="details-porto"]')->item(0);
     $titles = $xpath->query('.//section//h3', $details);

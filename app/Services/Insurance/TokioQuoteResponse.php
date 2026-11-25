@@ -4,6 +4,34 @@ namespace App\Services\Insurance;
 
 class TokioQuoteResponse
 {
+    public function __construct(private readonly InsuranceDiagnosticSanitizer $sanitizer) {}
+
+    /** @return list<string> */
+    public function dangerMessages(array $payload, array $context = []): array
+    {
+        $items = data_get($payload, 'messages.danger', data_get($payload, 'response.mensagens.danger', []));
+        if (! is_array($items)) {
+            return [];
+        }
+
+        $messages = [];
+        foreach ($items as $item) {
+            if (is_string($item)) {
+                $message = trim(preg_replace('/\s*\[\s*idLog\s*=\s*(?:\[REDACTED\]|[^\]]*)\]/iu', '', $item) ?? '');
+                if ($message !== '') {
+                    $messages[] = $message;
+                }
+            }
+        }
+        if ($messages === []) {
+            return [];
+        }
+
+        $safe = $this->sanitizer->sanitizeMessages($messages, [$payload['response'] ?? [], $context]);
+
+        return array_values(array_unique(array_filter($safe, static fn (string $message): bool => ! in_array($message, ['', '[HTML OMITTED]', '[REDACTED]'], true))));
+    }
+
     public function apply(\App\Models\InsuranceExecution $execution, array $result): void
     {
         $response = is_array($result['response'] ?? null) ? $result['response'] : [];
@@ -14,10 +42,11 @@ class TokioQuoteResponse
         $manual = ($result['manual_required'] ?? false) === true;
         $status = $manual ? 'manual_required' : ($valid ? ($code === 'CAL' ? 'approved' : 'rejected') : 'failed');
         $messages = [];
-        foreach (['success', 'danger', 'warning', 'info'] as $category) {
+        foreach (['success', 'warning', 'info'] as $category) {
             $items = data_get($response, 'mensagens.'.$category, []);
             $messages[$category] = is_array($items) ? array_values(array_filter($items, 'is_string')) : [];
         }
+        $messages['danger'] = $this->dangerMessages(['response' => $response], $execution->request_payload ?? []);
         $reason = $status === 'rejected' ? (implode(' ', $messages['danger']) ?: 'Cotação recusada pela Tokio.') : null;
         $execution->forceFill([
             'status' => $status, 'result' => ProviderAnalysisStatus::result($status),

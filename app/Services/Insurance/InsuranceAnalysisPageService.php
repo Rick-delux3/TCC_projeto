@@ -17,6 +17,7 @@ class InsuranceAnalysisPageService
         private readonly AnalysisQuoteSummary $quotes,
         private readonly AnalysisQuoteComparison $comparison,
         private readonly RefusalLetterDownloadService $refusalLetters,
+        private readonly TokioQuoteResponse $tokio,
     ) {}
 
     /** @return array<string, mixed> */
@@ -99,9 +100,22 @@ class InsuranceAnalysisPageService
                 $letterQuote = $analyses->contains('status', 'approved') ? $this->refusalLetters->letterQuote($analysis) : null;
                 $providerEnabled = InsuranceProviderResolver::providerEnabled((string) $analysis->provider);
                 $allowed = $enabled && $providerEnabled;
-                $activeQuotes = ($analysis->currentProviderRun?->scenarios->flatMap(fn ($scenario) => $scenario->quotes) ?? collect())
-                    ->filter(fn ($quote) => ! ProviderAnalysisStatus::isTerminal($quote->status)
+                $currentQuotes = $analysis->currentProviderRun?->scenarios->flatMap(fn ($scenario) => $scenario->quotes) ?? collect();
+                $activeQuotes = $currentQuotes->filter(fn ($quote) => ! ProviderAnalysisStatus::isTerminal($quote->status)
                         || ($quote->status === 'approved' && $quote->payment_status === 'pending'));
+                $dangerByQuote = [];
+                $messages = [];
+                if ($analysis->provider === 'tokio') {
+                    $snapshot = $analysis->currentProviderRun?->round->lead_snapshot ?? [];
+                    foreach ($currentQuotes->whereIn('status', ['failed', 'rejected']) as $quote) {
+                        $dangerByQuote[$quote->id] = $this->tokio->dangerMessages($quote->providerResponsePayload(), $snapshot);
+                    }
+                    $stored = $analysis->providerResponsePayload();
+                    $messages = $stored['messages'] ?? [];
+                    $messages['danger'] = $analysis->currentProviderRun
+                        ? collect($dangerByQuote)->flatten(1)->unique()->values()->all()
+                        : (in_array($analysis->status, ['failed', 'rejected'], true) ? $this->tokio->dangerMessages($stored, $data['lead']->getAttributes()) : []);
+                }
 
                 return [
                     'id' => $analysis->id,
@@ -118,13 +132,13 @@ class InsuranceAnalysisPageService
                     'manual_required' => $analysis->status === 'manual_required',
                     'manual_message' => $analysis->status === 'manual_required'
                         ? ($admin ? 'realizar cotação manualmente' : 'entrar em contato com corretor') : null,
-                    'messages' => $analysis->provider === 'tokio' ? data_get($analysis->providerResponsePayload(), 'messages', []) : [],
+                    'messages' => $messages,
                     'attempt' => $attempt,
                     'premium_amount' => $analysis->premium_amount,
                     'gross_premium' => $analysis->gross_premium,
                     'total_monthly_amount' => $analysis->total_monthly_amount,
                     'quote' => $quotes[$analysis->id],
-                    'quote_attempts' => $analysis->currentProviderRun?->scenarios->flatMap(function ($scenario) use ($analysis, $admin): array {
+                    'quote_attempts' => $analysis->currentProviderRun?->scenarios->flatMap(function ($scenario) use ($analysis, $admin, $dangerByQuote): array {
                         $snapshot = $analysis->currentProviderRun->round->lead_snapshot;
                         $names = $scenario->kind === 'spouse'
                             ? [data_get($snapshot, 'relations.conjuge.nome')]
@@ -139,9 +153,14 @@ class InsuranceAnalysisPageService
                             'display_state' => $this->displayState($quote->status, $quote->payment_status,
                                 (bool) data_get($quote->providerResponsePayload(), 'too_status_check_stopped', false)),
                             'quote' => $this->quotes->summarize($quote),
-                            'message' => $quote->status === 'manual_required' ? ($admin ? 'realizar cotação manualmente' : 'entrar em contato com corretor') : ($quote->status === 'failed'
-                                ? 'Não foi possível concluir esta cotação.'
-                                : ($quote->rejection_reason ?? $quote->provider_status)),
+                            'danger_messages' => $dangerByQuote[$quote->id] ?? [],
+                            'message' => match (true) {
+                                ! empty($dangerByQuote[$quote->id]) => implode(' ', $dangerByQuote[$quote->id]),
+                                $quote->status === 'failed' => 'Não foi possível concluir esta cotação.',
+                                $quote->status === 'manual_required' => $admin ? 'realizar cotação manualmente' : 'entrar em contato com corretor',
+                                $analysis->provider === 'tokio' && $quote->status === 'rejected' => 'Cotação recusada.',
+                                default => $quote->rejection_reason ?? $quote->provider_status,
+                            },
                             'installment_amount' => $quote->installment_amount, 'installments' => $quote->installments,
                             // Pottencial: a 1ª parcela é o preço; as demais podem diferir pelo arredondamento.
                             'recurring_installment' => data_get($quote->providerResponsePayload(), 'payment.selection.recurring_installment'),

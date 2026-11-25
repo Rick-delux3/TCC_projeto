@@ -1,7 +1,7 @@
 @php
     $analysesByProvider = collect($companies)->keyBy('provider');
     $canEditExpenses = ($pageData['permissions']['edit_lead'] ?? false) && ($pageData['permissions']['create_analysis'] ?? false);
-    $planNames = ['Basic' => 'Básico', 'Complete' => 'Completo', 'Traditional' => 'Tradicional', 'Tradicional' => 'Tradicional', 'default' => 'Fiança locatícia'];
+    $planNames = ['Basic' => 'Básico', 'Complete' => 'Completo', 'Traditional' => 'Tradicional', 'Tradicional' => 'Tradicional', 'default' => 'Seguro Aluguel'];
 @endphp
 <section class="ia-companies border-top pt-4 mb-4" aria-labelledby="companies-title">
     <h2 id="companies-title" class="h5 mb-3">Todas as companhias</h2>
@@ -9,6 +9,7 @@
         @foreach ($providerNames as $provider => $providerName)
             @php
                 $analysis = $analysesByProvider->get($provider);
+                $dangerMessages = $provider === 'tokio' ? ($analysis['messages']['danger'] ?? []) : [];
                 // Desligada no .env: sem análise no pacote fica bloqueada; com análise
                 // anterior, mostra o resultado somente para leitura.
                 $readOnly = $analysis !== null && ! in_array($provider, $activeProviders, true);
@@ -96,7 +97,7 @@
                             <ul class="list-group list-group-flush">
                                 @foreach ($plans as $plan)
                                     <li class="list-group-item px-0">
-                                        <h4 class="h6">{{ $planNames[$plan['plan_key']] ?? $plan['plan_key'] ?: 'Fiança locatícia' }}</h4>
+                                        <h4 class="h6">{{ $planNames[$plan['plan_key']] ?? $plan['plan_key'] ?: 'Seguro Aluguel' }}</h4>
                                         @include('insurance-analyses.partials.offer-price', ['offerStatus' => $plan['status'], 'amount' => $plan['payment_status'] === 'ready' ? $plan['installment_amount'] : null, 'count' => $plan['installments'], 'recurring' => $plan['recurring_installment'] ?? null, 'manualMessage' => $analysis['manual_message'], 'displayState' => $plan['display_state']])
                                     </li>
                                 @endforeach
