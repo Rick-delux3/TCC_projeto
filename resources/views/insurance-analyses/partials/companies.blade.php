@@ -128,6 +128,34 @@
                             <p class="small text-body-secondary mb-0" role="status">Carta de recusa não disponivel</p>
                         </div>
                     @endif
+                    @php($quotePdf = $analysis['actions']['quote_pdf'] ?? ['state' => null, 'url' => null])
+                    {{-- PDF da cotação: só companhia aprovada; a cotação é a exibida no card. --}}
+                    @if ($analysis && ($quotePdf['state'] ?? null) === 'available' && filled($quotePdf['url']))
+                        <div class="px-3 pb-3 d-flex flex-column gap-2">
+                            <a href="{{ $quotePdf['url'] }}"
+                                class="ia-quote-download btn btn-outline-primary d-flex align-items-center justify-content-center gap-2 px-3 py-3 w-100"
+                                data-quote-pdf="{{ $provider }}" rel="nofollow" type="application/pdf"
+                                aria-label="Baixar cotação da {{ $providerName }}, em PDF"
+                                aria-describedby="quote-pdf-description-{{ $provider }}">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" focusable="false" class="flex-shrink-0" data-idle-icon>
+                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke-linejoin="round" />
+                                    <path d="M14 2v6h6M12 11v7m-3-3 3 3 3-3" stroke-linecap="round" stroke-linejoin="round" />
+                                </svg>
+                                <span class="spinner-border spinner-border-sm flex-shrink-0 d-none" aria-hidden="true" data-loading-indicator></span>
+                                <span data-button-label>Baixar cotação</span>
+                            </a>
+                            <p id="quote-pdf-description-{{ $provider }}" class="small text-body-secondary text-center mb-0">{{ ($quotePdf['scenario'] ?? null) === 'joint' ? 'PDF da análise conjunta.' : 'Documento em PDF.' }}</p>
+                            <p class="small text-danger text-center mb-0 d-none" role="alert" data-quote-pdf-error></p>
+                        </div>
+                    @elseif ($analysis && ($quotePdf['state'] ?? null) === 'expired')
+                        <div class="px-3 pb-3" data-quote-pdf-state="expired">
+                            <p class="small text-body-secondary text-center mb-0" role="status">Cotação expirada</p>
+                        </div>
+                    @elseif ($analysis && ($quotePdf['state'] ?? null) === 'unsupported')
+                        <div class="px-3 pb-3" data-quote-pdf-state="unsupported">
+                            <p class="small text-body-secondary text-center mb-0" role="status">PDF da cotação indisponível para esta companhia</p>
+                        </div>
+                    @endif
                     @if ($blocked)
                         {{-- Companhia desligada no .env: sem aviso de reanálise. --}}
                     @elseif ($reanalysisSupported)

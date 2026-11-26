@@ -97,6 +97,10 @@ Route::prefix('/Dashboard')->group(function () {
         Route::get('/analises/provider/{analysis}/cotacoes/{quote}/carta-recusa', [InsuranceAnalysisController::class, 'refusalLetter'])
             ->middleware('throttle:20,1')->whereNumber(['analysis', 'quote'])
             ->name('insurance-analyses.refusal-letter');
+
+        Route::get('/analises/provider/{analysis}/cotacoes/{quote}/pdf-cotacao', [InsuranceAnalysisController::class, 'quotePdf'])
+            ->middleware('throttle:20,1')->whereNumber(['analysis', 'quote'])
+            ->name('insurance-analyses.quote-pdf');
     });
 
     Route::prefix('/Admin')->middleware(['auth:admin', 'corretor.active', 'admin.2fa'])->group(function () {
@@ -203,6 +207,10 @@ Route::prefix('/Dashboard')->group(function () {
         Route::get('/analises/provider/{analysis}/cotacoes/{quote}/carta-recusa', [InsuranceAnalysisController::class, 'adminRefusalLetter'])
             ->middleware(['can:view-analyses', 'throttle:20,1'])->whereNumber(['analysis', 'quote'])
             ->name('admin.insurance-analyses.refusal-letter');
+
+        Route::get('/analises/provider/{analysis}/cotacoes/{quote}/pdf-cotacao', [InsuranceAnalysisController::class, 'adminQuotePdf'])
+            ->middleware(['can:view-analyses', 'throttle:20,1'])->whereNumber(['analysis', 'quote'])
+            ->name('admin.insurance-analyses.quote-pdf');
 
         Route::prefix('/equipe')
             ->name('admin.config-equipe.')

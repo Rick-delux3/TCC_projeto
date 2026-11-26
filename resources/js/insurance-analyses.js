@@ -2,6 +2,7 @@ import { createAnalysisRealtime } from './insurance-analysis-realtime';
 import { createAnalysisComponents } from './insurance-analysis-components';
 import { createReanalysisModes } from './insurance-analysis-reanalysis';
 import { createAnalysisMotion } from './insurance-analysis-motion';
+import { createQuotePdfDownloads } from './insurance-analysis-quote-pdf';
 
 const motion = createAnalysisMotion();
 motion.intro();
@@ -9,6 +10,7 @@ motion.intro();
 const reanalysisModes = createReanalysisModes({
     onRequested: () => window.insuranceAnalysis?.refresh(),
 });
+const quotePdfDownloads = createQuotePdfDownloads();
 
 document.addEventListener('click', (event) => {
     const opener = event.target.closest('[data-analysis-dialog]');
@@ -59,6 +61,7 @@ async function startInsuranceAnalyses() {
         onUpdated: () => {
             initializeExpenseForms();
             reanalysisModes.apply();
+            quotePdfDownloads.apply();
         },
     });
     document.addEventListener('close', () => components.flush(), true);

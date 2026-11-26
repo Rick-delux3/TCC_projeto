@@ -8,11 +8,11 @@ use RuntimeException;
 class ProviderDocumentDownload
 {
     /** @param list<string> $downloadHosts */
-    public function fetch(string $url, array $headers, array $downloadHosts = []): string
+    public function fetch(string $url, array $headers, array $downloadHosts = [], ?int $timeout = null): string
     {
         $host = parse_url($url, PHP_URL_HOST);
         $this->validateUrl($url, [$host]);
-        $body = $this->request($url, $headers);
+        $body = $this->request($url, $headers, $timeout);
         if (str_starts_with($body, '%PDF-')) {
             return $this->validatePdf($body);
         }
@@ -73,13 +73,13 @@ class ProviderDocumentDownload
         return $contents;
     }
 
-    private function request(string $url, array $headers): string
+    private function request(string $url, array $headers, ?int $timeout = null): string
     {
         $response = Http::withHeaders($headers)->accept('application/pdf, application/json')
-            ->connectTimeout(10)->timeout((int) config('analysis_documents.download_timeout'))
+            ->connectTimeout(10)->timeout($timeout ?? (int) config('analysis_documents.download_timeout'))
             ->withOptions(['allow_redirects' => false, 'stream' => true])->get($url);
         if (! $response->successful()) {
-            throw new RuntimeException('Não foi possível obter a carta da companhia. HTTP '.$response->status());
+            throw new RuntimeException('Não foi possível obter o documento da companhia. HTTP '.$response->status());
         }
 
         $stream = $response->toPsrResponse()->getBody();

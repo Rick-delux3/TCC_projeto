@@ -193,15 +193,7 @@ class CorretorDashboardController extends Controller
             : collect();
 
         $simulationCompanies = $canAcessSimulationForms
-            ? Imobiliaria::query()->where('lead_form_active', true)
-                ->orderBy('name')
-                ->get([
-                    'id',
-                    'name',
-                    'city',
-                    'state',
-                    'lead_form_active',
-                ]) : collect();
+            ? Imobiliaria::simulationOptions() : collect();
 
         return view('corretor.dashboard-admin', compact(
             'corretor',

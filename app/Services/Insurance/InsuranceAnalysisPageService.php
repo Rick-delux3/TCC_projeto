@@ -18,6 +18,7 @@ class InsuranceAnalysisPageService
         private readonly AnalysisQuoteComparison $comparison,
         private readonly RefusalLetterDownloadService $refusalLetters,
         private readonly TokioQuoteResponse $tokio,
+        private readonly QuotePdfDownloadService $quotePdfs,
     ) {}
 
     /** @return array<string, mixed> */
@@ -98,6 +99,7 @@ class InsuranceAnalysisPageService
                 $attempt = $data['analysisAttempts'][$analysis->id];
                 // Carta pela página só com outra companhia aprovada; recusa unânime vai por e-mail.
                 $letterQuote = $analyses->contains('status', 'approved') ? $this->refusalLetters->letterQuote($analysis) : null;
+                $quotePdf = $this->quotePdfs->state($analysis);
                 $providerEnabled = InsuranceProviderResolver::providerEnabled((string) $analysis->provider);
                 $allowed = $enabled && $providerEnabled;
                 $currentQuotes = $analysis->currentProviderRun?->scenarios->flatMap(fn ($scenario) => $scenario->quotes) ?? collect();
@@ -182,6 +184,17 @@ class InsuranceAnalysisPageService
                             'url' => $letterQuote ? route($prefix.'refusal-letter', ['analysis' => $analysis->id, 'quote' => $letterQuote->id]) : null,
                             'method' => 'GET',
                             'scenario' => $letterQuote?->scenario?->kind,
+                        ],
+                        // Companhia aprovada: available (botão), expired (cotação expirada)
+                        // ou unsupported (companhia sem PDF disponível). null fora disso.
+                        'quote_pdf' => [
+                            'state' => $quotePdf['state'] ?? null,
+                            'available' => ($quotePdf['state'] ?? null) === QuotePdfDownloadService::STATE_AVAILABLE,
+                            'url' => ($quotePdf['state'] ?? null) === QuotePdfDownloadService::STATE_AVAILABLE
+                                ? route($prefix.'quote-pdf', ['analysis' => $analysis->id, 'quote' => $quotePdf['quote']->id]) : null,
+                            'method' => 'GET',
+                            'expires_at' => ($quotePdf['expires_at'] ?? null)?->toIso8601String(),
+                            'scenario' => ($quotePdf['quote'] ?? null)?->scenario?->kind,
                         ],
                     ],
                 ];

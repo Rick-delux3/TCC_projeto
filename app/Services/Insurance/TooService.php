@@ -253,9 +253,11 @@ class TooService
             return $result;
         }
 
+        // Base64 estrita, limite de tamanho e conferência de %PDF-/%%EOF, como no parecer de crédito.
         $encoded = data_get($result, 'response.result.pdfCotacao');
-        $pdf = is_string($encoded) ? base64_decode($encoded, true) : false;
-        if ($pdf === false || ! str_starts_with($pdf, '%PDF-')) {
+        try {
+            $pdf = app(ProviderDocumentDownload::class)->decodeBase64Pdf(is_string($encoded) ? $encoded : '', 'Too');
+        } catch (\RuntimeException) {
             return array_replace($result, ['success' => false, 'error' => 'A Too retornou um PDF de cotação ausente ou inválido.']);
         }
 

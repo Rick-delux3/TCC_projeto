@@ -99,12 +99,23 @@ class TooRentalGuaranteePayloadBuilder
             throw new \App\Exceptions\InvalidInsuranceAnalysisPayload('Lead ou vínculo da imobiliária ausente para o PDF da Too.');
         }
 
+        // A Too exige a quantidade máxima permitida pela vigência (29x sem entrada em 30 meses),
+        // a mesma gravada na seleção exibida no card (HML 26/11/2026: 30 retorna 400).
+        $installments = filter_var(
+            data_get($analysis->providerResponsePayload(), 'payment.selection.count'),
+            FILTER_VALIDATE_INT,
+            ['options' => ['min_range' => 1, 'max_range' => 60]],
+        );
+        if ($installments === false) {
+            throw new \App\Exceptions\InvalidInsuranceAnalysisPayload('Condição de parcelamento da Too indisponível para o PDF da cotação.');
+        }
+
         return [
             'numeroFicha' => $this->proposalNumber($numeroFicha),
             'formaPagamento' => [
                 'tipoPagamento' => $lead->tipo_solicitante === 'imobiliaria_cadastrada' ? 2 : 1,
                 'tipoEntrada' => 2,
-                'opcaoParcelamento' => [['tipoOpcaoParcelamento' => 2, 'quantidadeParcelas' => 30]],
+                'opcaoParcelamento' => [['tipoOpcaoParcelamento' => 2, 'quantidadeParcelas' => $installments]],
             ],
         ];
     }

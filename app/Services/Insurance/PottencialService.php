@@ -140,6 +140,22 @@ class PottencialService
         );
     }
 
+    /**
+     * GET {rental_endpoint}/{quote_id}/draft — PDF da cotação (application/pdf binário),
+     * do plano da cotação informada. Homologação (26/11/2026): de 21 s a 45 s.
+     */
+    public function getRentalGuaranteeQuotePdf(string $quoteId): string
+    {
+        $this->ensureEnabled();
+
+        return app(\App\Services\Insurance\ProviderDocumentDownload::class)->fetch(
+            $this->baseUrl.$this->rentalEndpoint().'/'.rawurlencode($quoteId).'/draft',
+            $this->authHeaders(),
+            config('services.pottencial.document_download_hosts', []),
+            (int) config('analysis_documents.pottencial_quote_pdf_timeout', 60),
+        );
+    }
+
     private function postJson(string $endpoint, array $payload): array
     {
         $this->ensureEnabled();

@@ -38,6 +38,12 @@ class Imobiliaria extends Model implements CanResetPasswordContract
 
     ];
 
+    public static function simulationOptions(): \Illuminate\Database\Eloquent\Collection
+    {
+        return static::query()->where('lead_form_active', true)->orderBy('name')
+            ->get(['id', 'name', 'city', 'state', 'lead_form_active']);
+    }
+
     public function users()
     {
         return $this->usuarios();

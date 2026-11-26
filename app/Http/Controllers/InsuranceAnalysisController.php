@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Exceptions\InsuranceProviderDisabled;
+use App\Exceptions\QuotePdfUnavailable;
 use App\Exceptions\RefusalLetterUnavailable;
 use App\Http\Resources\InsuranceAnalysisLeadResource;
 use App\Jobs\SyncProviderAnalysisStatusJob;
@@ -13,6 +14,7 @@ use App\Models\InsuranceQuote;
 use App\Models\Lead;
 use App\Services\Insurance\InsuranceAnalysisPageService;
 use App\Services\Insurance\LeadReanalysisService;
+use App\Services\Insurance\QuotePdfDownloadService;
 use App\Services\Insurance\RefusalLetterDownloadService;
 use DomainException;
 use Illuminate\Contracts\Cache\LockTimeoutException;
@@ -167,6 +169,23 @@ class InsuranceAnalysisController extends Controller
         return $this->downloadRefusalLetter($analysis, $quote, $letters, 'admin.insurance-analyses.lead');
     }
 
+    /**
+     * Baixa o PDF da cotação de uma companhia aprovada (cotação exibida no card).
+     */
+    public function quotePdf(InsuranceAnalysis $analysis, InsuranceQuote $quote, QuotePdfDownloadService $pdfs): Response|RedirectResponse
+    {
+        $this->authorizeAnalysis($analysis, 'web', 'viewAnalyses');
+
+        return $this->downloadQuotePdf($analysis, $quote, $pdfs, 'insurance-analyses.lead');
+    }
+
+    public function adminQuotePdf(InsuranceAnalysis $analysis, InsuranceQuote $quote, QuotePdfDownloadService $pdfs): Response|RedirectResponse
+    {
+        $this->authorizeAnalysis($analysis, 'admin', 'viewAnalyses');
+
+        return $this->downloadQuotePdf($analysis, $quote, $pdfs, 'admin.insurance-analyses.lead');
+    }
+
     public function adminIndex(): RedirectResponse
     {
         $this->authorizeAdminAbility('view-analyses');
@@ -263,10 +282,37 @@ class InsuranceAnalysisController extends Controller
                 ->with('error', 'A companhia não disponibilizou a carta de recusa agora. Tente novamente em alguns minutos.');
         }
 
-        return response($letter['contents'], 200, [
+        return $this->pdfResponse($letter['contents'], $letter['name']);
+    }
+
+    private function downloadQuotePdf(InsuranceAnalysis $analysis, InsuranceQuote $quote, QuotePdfDownloadService $pdfs, string $pageRoute): Response|RedirectResponse
+    {
+        // A Pottencial pode levar perto de 1 minuto para gerar o PDF.
+        @set_time_limit(120);
+        try {
+            $pdf = $pdfs->download($analysis, $quote);
+        } catch (QuotePdfUnavailable) {
+            abort(404);
+        } catch (RuntimeException|LockTimeoutException|InsuranceProviderDisabled $exception) {
+            // Só a classe; nunca o corpo da companhia.
+            Log::warning('PDF da cotação indisponível para download.', [
+                'analysis_id' => $analysis->id, 'quote_id' => $quote->id,
+                'provider' => $analysis->provider, 'error' => $exception::class,
+            ]);
+
+            return redirect()->route($pageRoute, $analysis->lead_id)
+                ->with('error', 'Não foi possível obter o documento, tente novamente.');
+        }
+
+        return $this->pdfResponse($pdf['contents'], $pdf['name']);
+    }
+
+    private function pdfResponse(string $contents, string $name): Response
+    {
+        return response($contents, 200, [
             'Content-Type' => 'application/pdf',
-            'Content-Disposition' => HeaderUtils::makeDisposition(HeaderUtils::DISPOSITION_ATTACHMENT, $letter['name']),
-            'Content-Length' => (string) strlen($letter['contents']),
+            'Content-Disposition' => HeaderUtils::makeDisposition(HeaderUtils::DISPOSITION_ATTACHMENT, $name),
+            'Content-Length' => (string) strlen($contents),
             'Cache-Control' => 'private, no-store, max-age=0',
             'X-Content-Type-Options' => 'nosniff',
         ]);

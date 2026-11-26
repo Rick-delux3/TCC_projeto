@@ -150,17 +150,10 @@
                 @endcan
 
                 @can('access-simulation-forms')
-                    @if (request()->routeIs('Dashboard-Admin'))
-                        <button type="button" class="btn dashboard-header-new-lead" aria-label="Novo lead" title="Novo lead" data-bs-toggle="modal" data-bs-target="#adminSimulationModal">
-                            <i class="bi bi-plus-lg" aria-hidden="true"></i>
-                            <span>Novo lead</span>
-                        </button>
-                    @else
-                        <a href="{{ $dashboardRoute }}#new-lead-title" class="btn dashboard-header-new-lead" aria-label="Novo lead" title="Novo lead">
-                            <i class="bi bi-plus-lg" aria-hidden="true"></i>
-                            <span>Novo lead</span>
-                        </a>
-                    @endif
+                    <button type="button" class="btn dashboard-header-new-lead" aria-label="Novo lead" title="Novo lead" data-bs-toggle="modal" data-bs-target="#adminSimulationModal" aria-haspopup="dialog" aria-controls="adminSimulationModal">
+                        <i class="bi bi-plus-lg" aria-hidden="true"></i>
+                        <span>Novo lead</span>
+                    </button>
                 @endcan
 
                 <button

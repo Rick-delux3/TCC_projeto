@@ -1,5 +1,39 @@
 # Estudo das APIs de Fiança Locatícia
 
+## Regra geral — PDF da cotação ("Baixar cotação") na página — 26/11/2026
+
+**Decisões do usuário e testes em homologação com o lead 5.** Esta seção prevalece sobre trechos anteriores que previam PDF por plano (Pottencial, 26/10), PDF por oferta (Porto) ou envio de 30 parcelas no PDF da Too (23/10).
+
+### Regras de negócio
+
+- Botão no **card da companhia**, no mesmo lugar da carta de recusa, nas páginas do corretor e do admin. Aparece somente para companhia **aprovada** com preço pronto.
+- **Um PDF por companhia**, nunca por plano ou oferta: cada companhia identifica o documento por um único ID de cotação/orçamento.
+- **Cenário:** PDF do cenário cujo preço aparece no card. Se a conjunta foi aprovada, vale só ela (a conjunta só existe com as individuais recusadas).
+- **Reanálise:** o botão baixa sempre o PDF da cotação **nova**; o da rodada anterior fica no histórico.
+- **Validade:** cotação expirada mostra "Cotação expirada" no lugar do botão, sem download.
+- **Falha da companhia:** aviso "Não foi possível obter o documento, tente novamente."; o resultado da análise não muda.
+- **Nome do arquivo:** PF `cotacao-{companhia}-cliente-{nome}.pdf`; PJ `cotacao-{companhia}-cliente-pj-{razao-social}.pdf` (nome normalizado: minúsculo, sem acentos, hifens).
+- **Mecanismo:** igual ao da carta de recusa — busca no clique, cache privado com hash, evento `document_generated`, lock contra clique duplo.
+
+### Contratos e resultado dos testes (HML, 26/11/2026)
+
+| Companhia | Endpoint | Resultado |
+| --- | --- | --- |
+| Too | `POST /fianca/proposta/cotacao/{numeroCotacao}/pdf`, body `numeroFicha` + `formaPagamento` | **Funciona.** `quantidadeParcelas = 30` retorna 400: *"a opção de parcelamento informada (2 - Mensal) deve ter a quantidade de parcelas igual ao máximo permitido pela vigência da proposta (29x)"*. Com **29** retorna 200, Base64 em `result.pdfCotacao`, PDF "Fatura 0 + 29 — R$ 56,99", igual ao card |
+| Pottencial | `GET {rental_endpoint}/{quote_id}/draft` (também responde em `/fianca-locaticia/quotes/{quote_id}/draft`, arquivo idêntico) | **Funciona.** 200, `application/pdf` binário, 3 páginas, título "COTAÇÃO", plano da cotação. Há **um `quote_id` por plano**: baixar o da cotação vencedora (`selected_quote_id`). Respostas de **21 s a 45 s**: timeout próprio de 60 s e estado "Gerando PDF…" no botão |
+| Porto | `GET /orcamentos/{orc}/{susep}/pdf/cotacao` (geral, traz todas as ofertas) | **Bloqueado:** 400 *"Proposta em fase de orçamento"*. Documentado como "disponível para propostas em digitação" (status 3); o orçamento aprovado fica em status 5 (pré-aprovado). A variante específica por oferta falha igual |
+| Porto | `GET /orcamentos/{orc}/{susep}/pdf/carta-aprovacao` (carta de aprovação cadastral; indisponível para recusados) | **Bloqueado:** 400 *"Download não permitido para propostas sem biometria aprovada"*. Nenhum contrato recebido descreve a biometria Porto |
+| Tokio | `GET {base}/impressao/cotacao`, só headers: `Authorization` (APIM), `codigoCorretor`, `cpfUsuario`, `senhaOperadora`, `sqCdCotac`, `token` (= `cotacaoInfo.token` da resposta do `/cotar`, já gravada em `response_payload.response`) | **Funciona (26/11/2026, lead 6, cotação 856037772, CPF homologado 092.380.376-98, aluguel R$ 400, aceite W):** `GET {services.tokio.base_url}/impressao/cotacao` — mesma base do `/cotar` — retorna 200, `application/pdf` **binário**, 4 páginas, ~150 KB, em ~1,6 s. PDF "Cotação Seguro — Tokio Marine Aluguel Pessoa Física (Sem contratação)", marca d'água DRAFT, traz todas as formas de pagamento; Faturado 29x = R$ 62,71, igual ao card. Validade no PDF = `dtVldad` (10/01/2027) |
+
+### Too — correção da quantidade de parcelas no PDF
+
+O builder envia `quantidadeParcelas` igual à quantidade efetiva gravada na seleção exibida no card (`payment.selection.count`, 29 sem entrada no prazo-base de 30 meses). Sem seleção válida, o PDF é recusado localmente em vez de inventar um valor. Isso **revoga** a confirmação de 23/10 ("enviar sempre 30, a API aplica a redução") registrada nas seções da Too abaixo.
+
+### Pendências
+
+- **Porto:** obter da Porto como liberar um PDF na fase de orçamento (biometria aprovada? outro documento?). Até lá, o card da Porto mostra "PDF da cotação indisponível para esta companhia".
+- ~~**Tokio:** testar com uma cotação aprovada~~ — validado em 26/11/2026 (ver tabela).
+
 ## Regra geral — cartas de recusa na página e no e-mail — 13/11/2026
 
 **Decisão do usuário após a auditoria das quatro companhias.** Esta seção prevalece sobre trechos anteriores que tratavam a carta apenas como anexo da recusa unânime ou previam download de todas as cartas no painel.
@@ -280,7 +314,7 @@ Esta regra **substitui** a restrição anterior de aplicar 30/29 apenas à Too e
 
 **Porto — pendência de negócio encerrada:** como não há parâmetro específico de entrada no contrato estudado, identificar a condição retornada pela quantidade: 29 para Sem entrada na base 30 e 30 para Com entrada. Preservar orçamento, seguro, FAT/CC e código da condição da mesma alternativa, incluindo os identificadores usados no PDF. Não inventar tipoEntrada no payload Porto. Continua sendo validação técnica obter uma condição real utilizável e conferir o PDF; não é mais necessário confirmar a definição de Com/Sem entrada. Se a alternativa esperada não for retornada, indicar preço/condição indisponível, sem fabricar a opção ou transformar aprovação em recusa.
 
-**Envio versus retorno:** adaptar os campos de cada API conforme seus contratos, mantendo a base 30 onde o parâmetro representar a quantidade-base; esta decisão não manda substituir indiscriminadamente todos os campos 30 por 29. Permanece a confirmação específica Too: enviar quantidadeParcelas = 30 no POST do PDF e selecionar/exibir 29 pagamentos Sem entrada no retorno. Para as demais companhias, validar tecnicamente o campo de seleção da quantidade efetiva durante a implementação.
+**Envio versus retorno:** adaptar os campos de cada API conforme seus contratos, mantendo a base 30 onde o parâmetro representar a quantidade-base; esta decisão não manda substituir indiscriminadamente todos os campos 30 por 29. ~~Permanece a confirmação específica Too: enviar quantidadeParcelas = 30 no POST do PDF~~ **(revogado em 26/11/2026: a Too exige 29 no PDF; ver regra geral do PDF da cotação no topo)** e selecionar/exibir 29 pagamentos Sem entrada no retorno. Para as demais companhias, validar tecnicamente o campo de seleção da quantidade efetiva durante a implementação.
 
 **Escopo desta atualização:** somente documentação. Nenhum builder, service, seletor de pagamento, comando, comparação, banco ou formulário foi alterado; componentes atualmente implementados que ainda exigem 30 pagamentos Sem entrada precisam ser adaptados e validados em etapa própria.
 
@@ -899,7 +933,7 @@ Validação local registrada na entrega anterior: 25 testes de múltiplas cotaç
 3. Revisar a identidade e os dados de cada cenário no payload de ficha e cotação, usando os snapshots já implementados. Não recriar a orquestração nem usar endpoints de emissão/reanálise dedicada.
 4. **Nascimento do cônjuge:** o usuário propôs reutilizar a data do principal para evitar outro campo. A estrutura atual não possui data própria do cônjuge; o snapshot não copia a do principal e a validação Too exige nascimento. Registrar a proposta como pendente de validação contratual, pois a data reaproveitada não é um dado confirmado do cônjuge. Não declarar esse cenário homologado nem alterar silenciosamente a identidade enviada.
 5. Validar o GET de pagamentos já implementado com respostas reais de ambas as formas. A regra está encerrada: Mensal para todos, Fatura/Boleto por origem, Sem entrada e 29 parcelas efetivas. Catálogo ou preço indisponível não deve virar recusa cadastral.
-6. Implementar posteriormente o PDF 6.1 por **POST**, usando numeroFicha e formaPagamento: tipoPagamento 1/2, tipoEntrada 2, tipoOpcaoParcelamento 2 e quantidadeParcelas **30**. Decodificar `result.pdfCotacao` em Base64. O método atual `getQuotePdf` ainda usa GET e não implementa esse contrato; não marcá-lo como concluído. O passo 7 de atualização para emissão permanece fora do escopo.
+6. Implementar posteriormente o PDF 6.1 por **POST**, usando numeroFicha e formaPagamento: tipoPagamento 1/2, tipoEntrada 2, tipoOpcaoParcelamento 2 e quantidadeParcelas ~~**30**~~ **igual à quantidade efetiva da seleção (29) — correção de 26/11/2026, ver topo**. Decodificar `result.pdfCotacao` em Base64. O método atual `getQuotePdf` ainda usa GET e não implementa esse contrato; não marcá-lo como concluído. O passo 7 de atualização para emissão permanece fora do escopo.
 
 ### Passo 3 — refatoração Pottencial, aguardando autorização
 
@@ -1486,7 +1520,7 @@ formaPagamento:
     quantidadeParcelas: quantidade de parcelas
 ```
 
-A print traz dois itens ilustrativos em `opcaoParcelamento`; não estabelece que dois itens sejam obrigatórios. Para baixar a cotação exibida no card, preparar a opção correspondente à seleção real de 30 parcelas, sem entrada e ao meio definido pela origem. Aplicar a decisão posterior: Mensal (2) para todas as origens, Fatura (2) para imobiliária cadastrada e Boleto (1) para os demais, sempre quantidadeParcelas 30 no POST. Não escolher tipo 4 apenas porque 30 cabe em até 36x. Não reutilizar o shape plano do endpoint 7: aqui `tipoOpcaoParcelamento` e `quantidadeParcelas` ficam dentro de `formaPagamento.opcaoParcelamento[]`.
+A print traz dois itens ilustrativos em `opcaoParcelamento`; não estabelece que dois itens sejam obrigatórios. Para baixar a cotação exibida no card, preparar a opção correspondente à seleção real de 30 parcelas, sem entrada e ao meio definido pela origem. Aplicar a decisão posterior: Mensal (2) para todas as origens, Fatura (2) para imobiliária cadastrada e Boleto (1) para os demais, ~~sempre quantidadeParcelas 30 no POST~~ **quantidadeParcelas = quantidade efetiva da seleção (29), correção de 26/11/2026**. Não escolher tipo 4 apenas porque 30 cabe em até 36x. Não reutilizar o shape plano do endpoint 7: aqui `tipoOpcaoParcelamento` e `quantidadeParcelas` ficam dentro de `formaPagamento.opcaoParcelamento[]`.
 
 O usuário definiu download ao clicar em **Baixar cotação** no cartão Too, após visualizar a parcela. Fluxo pretendido: solicitar cotação → consultar formas de pagamento → selecionar/exibir condição de 30x → ao solicitar download, consultar PDF com os mesmos identificadores e condição. Card, comparação e PDF devem representar a mesma oferta da mesma rodada. Não criar nova cotação nem completar a proposta para obter esse documento.
 
@@ -1519,7 +1553,7 @@ As prints ilustram a mesma diferença em uma base de 24: `quantidadeParcelasPoss
 
 **Melhor negócio:** usar diretamente `opcoesParcelamento[].parcelas[].valor` como valor principal Too. A alternativa de 29 parcelas sem entrada no prazo-base de 30 meses participa da comparação; não excluí-la apenas por não ter 30 parcelas. Comparar o valor da parcela com as demais ofertas elegíveis, preservando moeda, vigência, cobertura, forma e composição dos valores. O destaque é de menor parcela, não garantia de menor custo total. Exibir a quantidade real (por exemplo, 29x sem entrada), sem rotular essa oferta como 30x. O padrão do sistema permanece Sem entrada; a explicação de Com entrada não autoriza trocá-lo silenciosamente para obter parcela menor.
 
-**PDF — passo 6.1:** somente consultar por **POST** `/fianca/proposta/cotacao/{NumeroCotacao}/pdf`, enviando `numeroFicha` e `formaPagamento`. A seleção do pagamento é necessária para localizar/gerar a cotação correspondente. Enviar `tipoPagamento` (1 Boleto, 2 Fatura), `tipoEntrada` (1 Com Entrada, 2 Sem Entrada) e `opcaoParcelamento[]` com `tipoOpcaoParcelamento` definido pela origem e `quantidadeParcelas = 30`, conforme confirmação posterior. A opção mensal das prints tem tipo 2. Não mandar GET sem body nem confundir ficha com cotação. Confirmação posterior: enviar quantidadeParcelas = 30 ao PDF, inclusive quando o GET retornar 29 sem entrada; a API aplica a redução. Não recalcular a parcela. O endpoint 7 de atualização para emissão permanece excluído.
+**PDF — passo 6.1:** somente consultar por **POST** `/fianca/proposta/cotacao/{NumeroCotacao}/pdf`, enviando `numeroFicha` e `formaPagamento`. A seleção do pagamento é necessária para localizar/gerar a cotação correspondente. Enviar `tipoPagamento` (1 Boleto, 2 Fatura), `tipoEntrada` (1 Com Entrada, 2 Sem Entrada) e `opcaoParcelamento[]` com `tipoOpcaoParcelamento` definido pela origem e `quantidadeParcelas = 30`, conforme confirmação posterior. A opção mensal das prints tem tipo 2. Não mandar GET sem body nem confundir ficha com cotação. ~~Confirmação posterior: enviar quantidadeParcelas = 30 ao PDF, inclusive quando o GET retornar 29 sem entrada; a API aplica a redução.~~ **Revogado em 26/11/2026:** a Too rejeita 30 (HTTP 400) e exige o máximo da vigência, 29; enviar a quantidade efetiva da seleção. Não recalcular a parcela. O endpoint 7 de atualização para emissão permanece excluído.
 
 Continuam válidos: origem imobiliaria_cadastrada → Fatura; demais formulários → Boleto; período indenitário 30; IGP_M; comissão 15.0. Persistir prazo-base e quantidade efetiva separadamente, além de entrada, valor da parcela, total, códigos e identificadores da rodada. Card, comparação e PDF devem consumir a mesma seleção.
 
@@ -1531,12 +1565,12 @@ Continuam válidos: origem imobiliaria_cadastrada → Fatura; demais formulário
 
 | Origem | `tipoPagamento` | `tipoEntrada` padrão | `tipoOpcaoParcelamento` | `quantidadeParcelas` enviada |
 | --- | --- | --- | --- | --- |
-| Imobiliária cadastrada | 2 — Fatura | 2 — Sem Entrada | **2 — Mensal** | **30** |
-| Todos os demais formulários | 1 — Boleto | 2 — Sem Entrada | **2 — Mensal** | **30** |
+| Imobiliária cadastrada | 2 — Fatura | 2 — Sem Entrada | **2 — Mensal** | ~~30~~ **29** (quantidade efetiva da seleção — 26/11/2026) |
+| Todos os demais formulários | 1 — Boleto | 2 — Sem Entrada | **2 — Mensal** | ~~30~~ **29** (quantidade efetiva da seleção — 26/11/2026) |
 
 Boleto é forma de pagamento, não sinônimo de pagamento à vista. Usar tipoOpcaoParcelamento 2 (Mensal) em ambos os cenários. Não selecionar À vista (1), Até 4x (3) ou Até 36x (4) como substitutos automáticos. Conferir no retorno real a condição e sua correspondência com o PDF.
 
-**Quantidade enviada versus quantidade retornada:** enviar sempre **30** ao PDF, mesmo que o GET de pagamentos tenha retornado **29 parcelas sem entrada**. O desconto da parcela é responsabilidade da API; não enviar 29 por inferência nem descontar novamente. Esta confirmação substitui expressamente a orientação anterior de copiar a quantidade efetiva para o payload do PDF. Manter a quantidade efetiva e o valor retornados para exibição/comparação; a configuração de envio não autoriza rotular um retorno de 29 como 30 pagamentos.
+**Revogado em 26/11/2026 — o teste em homologação retornou 400 com 30 e 200 com 29; vale a regra geral do PDF da cotação no topo.** Texto histórico: **Quantidade enviada versus quantidade retornada:** enviar sempre **30** ao PDF, mesmo que o GET de pagamentos tenha retornado **29 parcelas sem entrada**. O desconto da parcela é responsabilidade da API; não enviar 29 por inferência nem descontar novamente. Esta confirmação substitui expressamente a orientação anterior de copiar a quantidade efetiva para o payload do PDF. Manter a quantidade efetiva e o valor retornados para exibição/comparação; a configuração de envio não autoriza rotular um retorno de 29 como 30 pagamentos.
 
 **Fonte de entrada:** `C:\Users\Usuario\Downloads\payload-para-envio-opcao-pagamento-para-PDF-cotacao-TOO.txt`, lido nesta revisão. É um modelo documental com placeholders e comentários de domínio, não JSON diretamente executável (também há fechamentos incompletos). Preservar os nomes: `numeroFicha`, `formaPagamento.tipoPagamento`, `formaPagamento.tipoEntrada`, `formaPagamento.opcaoParcelamento[]`, com `tipoOpcaoParcelamento` e `quantidadeParcelas` em cada item. Os dois itens ilustrativos não comprovam obrigação de enviar duas opções; enviar a opção selecionada pela regra de origem.
 
@@ -1551,14 +1585,14 @@ Exemplo estrutural válido para imobiliária cadastrada, com número de ficha il
     "opcaoParcelamento": [
       {
         "tipoOpcaoParcelamento": 2,
-        "quantidadeParcelas": 30
+        "quantidadeParcelas": 29
       }
     ]
   }
 }
 ```
 
-Para os demais formulários, alterar somente `tipoPagamento` para 1; manter `tipoOpcaoParcelamento = 2`, entrada 2 e quantidade 30. Usar o identificador real de ficha/proposta no body e o número real da cotação no path, sem confundi-los.
+Para os demais formulários, alterar somente `tipoPagamento` para 1; manter `tipoOpcaoParcelamento = 2`, entrada 2 e quantidade 29 (corrigido em 26/11/2026; antes 30). Usar o identificador real de ficha/proposta no body e o número real da cotação no path, sem confundi-los.
 
 **Retorno confirmado pela documentação enviada:** `result.pdfCotacao` contém o PDF em **Base64**:
 

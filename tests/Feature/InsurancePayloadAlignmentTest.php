@@ -365,12 +365,21 @@ it('builds Too coverages and PDF conditions by origin with the frozen lease date
             expect($payload['coberturas'])->toMatchArray(['valorDanosAoImovel' => 1500.0, 'valorMultasContratuais' => 1500.0, 'valorPinturaExterna' => 1500.0, 'valorPinturaInterna' => 1500.0, 'valorAgua' => 150.0, 'valorLuz' => 150.0]);
         }
     }
+    $analysis->response_payload = ['payment' => ['selection' => ['amount' => '56.99', 'count' => 29, 'with_entry' => false]]];
     expect($builder->buildQuotePdfPayload($analysis, '123'))->toBe([
         'numeroFicha' => 123,
-        'formaPagamento' => ['tipoPagamento' => $origin === 'imobiliaria_cadastrada' ? 2 : 1, 'tipoEntrada' => 2, 'opcaoParcelamento' => [['tipoOpcaoParcelamento' => 2, 'quantidadeParcelas' => 30]]],
+        'formaPagamento' => ['tipoPagamento' => $origin === 'imobiliaria_cadastrada' ? 2 : 1, 'tipoEntrada' => 2, 'opcaoParcelamento' => [['tipoOpcaoParcelamento' => 2, 'quantidadeParcelas' => 29]]],
     ]);
     Http::assertNothingSent();
 })->with(['imobiliaria_cadastrada', 'imobiliaria_nao_cadastrada', 'locador', 'locatario']);
+
+it('refuses the Too PDF payload without the selected installment condition', function (mixed $count) {
+    $analysis = alignedInsuranceAnalysis();
+    $analysis->response_payload = ['payment' => ['selection' => ['count' => $count]]];
+    expect(fn () => app(TooRentalGuaranteePayloadBuilder::class)->buildQuotePdfPayload($analysis, 123))
+        ->toThrow(\App\Exceptions\InvalidInsuranceAnalysisPayload::class, 'Condição de parcelamento');
+    Http::assertNothingSent();
+})->with([null, 0, 'abc', 61]);
 
 it('rejects invalid Too commission settings before sending a quote', function (mixed $commission) {
     config(['services.too.default_commission_percentage' => $commission]);
@@ -389,7 +398,9 @@ it('posts the Too PDF payment payload and validates the base64 document', functi
     config(['services.too.base_url' => 'https://too.example.test', 'services.too.client_id' => 'test', 'services.too.client_secret' => 'test']);
     \Illuminate\Support\Facades\Cache::put('too_access_token', 'test-token', 60);
     Http::fake(['https://too.example.test/fianca/proposta/cotacao/456/pdf' => Http::response(['result' => ['pdfCotacao' => $encoded]])]);
-    $payload = app(TooRentalGuaranteePayloadBuilder::class)->buildQuotePdfPayload(alignedInsuranceAnalysis(), 123);
+    $analysis = alignedInsuranceAnalysis();
+    $analysis->response_payload = ['payment' => ['selection' => ['count' => 29]]];
+    $payload = app(TooRentalGuaranteePayloadBuilder::class)->buildQuotePdfPayload($analysis, 123);
     $result = app(TooService::class)->getQuotePdf(456, $payload);
     expect($result['success'])->toBe($valid);
     if ($valid) {

@@ -218,8 +218,13 @@ it('offers a real header search and a shortcut to the lead form', function (): v
         ->and($xpath->query('//div[@id="adminSimulationModal"]')->length)->toBe(1)
         ->and($xpath->query('//button[@id="dashboardThemeToggle"]')->length)->toBe(0);
 
-    $response = $this->get(route('admin.config-equipe.index'))->assertOk();
-    expect(workspaceDocument($response->getContent())->query('//header//a[@href="'.route('Dashboard-Admin').'#new-lead-title"]')->length)->toBe(1);
+    $company = Imobiliaria::factory()->create(['lead_form_active' => true]);
+    foreach (['admin.config-equipe.index', 'admin.config-equipe.create', 'admin.imobiliarias.index', 'admin.imobiliarias.create'] as $page) {
+        $xpath = workspaceDocument($this->get(route($page))->assertOk()->getContent());
+        expect($xpath->query('//header//button[@data-bs-target="#adminSimulationModal"]')->length)->toBe(1)
+            ->and($xpath->query('//*[@id="adminSimulationModal"]')->length)->toBe(1)
+            ->and($xpath->query('//form[@action="'.route('admin.simulations.open').'"]//select[@name="company_id"]/option[@value="'.$company->id.'"]')->length)->toBe(1);
+    }
 });
 
 it('uses the transparent NVS logo in the admin header and sidebar', function (): void {
