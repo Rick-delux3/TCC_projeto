@@ -52,3 +52,9 @@ Thumbs.db
 /.claude/skills/slides/
 /.claude/skills/ui-styling/
 /.claude/skills/ui-ux-pro-max/
+
+# Playwright (E2E)
+/tests/e2e/.auth/
+/tests/e2e/.results/
+/tests/e2e/.report/
+/playwright/.cache/
